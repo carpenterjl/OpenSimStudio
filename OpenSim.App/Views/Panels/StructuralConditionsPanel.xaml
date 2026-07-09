@@ -1,0 +1,24 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.StructuralConditionsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <GroupBox Header="Structural conditions (select faces first)"
+              Visibility="{Binding Session.IsStructuralAnalysis, Converter={StaticResource BoolToVis}}">
+        <StackPanel>
+            <Button Content="Add fixed support" Command="{Binding Conditions.AddFixedSupportCommand}"/>
+            <UniformGrid Columns="2" Margin="0,6,0,0">
+                <Label Content="Fx [N]"/>
+                <TextBox Text="{Binding Conditions.ForceX}"/>
+                <Label Content="Fy [N]"/>
+                <TextBox Text="{Binding Conditions.ForceY}"/>
+                <Label Content="Fz [N]"/>
+                <TextBox Text="{Binding Conditions.ForceZ}"/>
+            </UniformGrid>
+            <Button Content="Add force" Command="{Binding Conditions.AddForceCommand}"/>
+            <UniformGrid Columns="2" Margin="0,6,0,0">
+                <Label Content="Pressure [Pa]"/>
+                <TextBox Text="{Binding Conditions.PressureMagnitude}"/>
+            </UniformGrid>
+            <Button Content="Add pressure" Command="{Binding Conditions.AddPressureCommand}"/>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

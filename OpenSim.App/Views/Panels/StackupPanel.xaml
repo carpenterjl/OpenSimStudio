@@ -1,0 +1,44 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.StackupPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <GroupBox Header="PCB stackup">
+        <StackPanel>
+            <UniformGrid Columns="2">
+                <Label Content="Copper [m]"/>
+                <TextBox Text="{Binding Pcb.PcbCopperThickness}" ToolTip="Default 35 µm (1 oz); used when a layer has no override"/>
+                <Label Content="Board [m]"/>
+                <TextBox Text="{Binding Pcb.PcbBoardThickness}" ToolTip="Default 1.6 mm; used only with a board outline"/>
+                <Label Content="Via wall [µm]"/>
+                <TextBox Text="{Binding Pcb.ViaPlatingMicrons}"
+                         ToolTip="Plated via barrel wall thickness; the drilled bore stays open (IPC Class 2 ≈ 25 µm)"/>
+            </UniformGrid>
+            <TextBlock Text="Per-layer copper [µm]:" Margin="0,4,0,2"
+                       Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}"/>
+            <ItemsControl ItemsSource="{Binding Pcb.LayerFilters}"
+                          Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,1">
+                            <Label Content="{Binding Label}" DockPanel.Dock="Left" Width="34"/>
+                            <TextBox Text="{Binding ThicknessMicrons}"/>
+                        </DockPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="Dielectric between layers [µm]:" Margin="0,4,0,2"
+                       Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}"/>
+            <ItemsControl ItemsSource="{Binding Pcb.DielectricGaps}"
+                          Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,1">
+                            <Label Content="{Binding Label}" DockPanel.Dock="Left" Width="60"/>
+                            <TextBox Text="{Binding ThicknessMicrons}"
+                                     ToolTip="Dielectric thickness = the via-barrel height between these layers"/>
+                        </DockPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

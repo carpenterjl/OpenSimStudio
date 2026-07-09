@@ -1,0 +1,10 @@
+G04 A quarter-circle arc trace, radius 5 mm, drawn counter-clockwise with G75*
+%FSLAX46Y46*%
+%MOMM*%
+%ADD10C,0.400000*%
+G75*
+D10*
+X5000000Y0D02*
+G03*
+X0Y5000000I-5000000J0D01*
+M02*

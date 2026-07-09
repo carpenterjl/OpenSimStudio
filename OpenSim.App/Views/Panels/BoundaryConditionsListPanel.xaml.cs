@@ -1,0 +1,8 @@
+using System.Windows.Controls;
+
+namespace OpenSim.App.Views.Panels;
+
+public partial class BoundaryConditionsListPanel : UserControl
+{
+    public BoundaryConditionsListPanel() => InitializeComponent();
+}

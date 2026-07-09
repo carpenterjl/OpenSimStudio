@@ -1,0 +1,125 @@
+<UserControl x:Class="OpenSim.App.Views.HomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="#1E1E24">
+    <UserControl.Resources>
+        <!-- Big action tiles, KiCad-launcher style -->
+        <Style x:Key="Tile" TargetType="Button">
+            <Setter Property="Background" Value="#2A2A34"/>
+            <Setter Property="Foreground" Value="#EAEAEA"/>
+            <Setter Property="BorderBrush" Value="#4A4A58"/>
+            <Setter Property="Padding" Value="14,12"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="900">
+            <TextBlock Text="OpenSim Studio" FontSize="34" FontWeight="Bold"
+                       Foreground="#EAEAEA" Margin="0,0,0,2"/>
+            <TextBlock Text="Offline-first engineering simulation — geometry to post-processing"
+                       FontSize="13" Foreground="#8A8A96" Margin="0,0,0,24"/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="360"/>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="360"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Recent projects -->
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Recent projects" FontSize="16" FontWeight="Bold"
+                               Foreground="#C9C9D2" Margin="0,0,0,8"/>
+                    <TextBlock Text="Nothing here yet — projects you open or save appear here."
+                               FontSize="12" Foreground="#8A8A96" TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding RecentProjects.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding RecentProjects}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource Tile}" Padding="10,8" Margin="0,0,0,6"
+                                        Command="{Binding DataContext.OpenRecentCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                                        <TextBlock Text="{Binding Path}" FontSize="11" Foreground="#8A8A96"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Actions -->
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="Start" FontSize="16" FontWeight="Bold"
+                               Foreground="#C9C9D2" Margin="0,0,0,8"/>
+                    <Button Style="{StaticResource Tile}" Command="{Binding NewProjectCommand}">
+                        <StackPanel>
+                            <TextBlock Text="🗋  New project" FontWeight="Bold"/>
+                            <TextBlock Text="Start in the Mechanical workspace with an empty project"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Tile}" Command="{Binding OpenProjectCommand}">
+                        <StackPanel>
+                            <TextBlock Text="📂  Open project…" FontWeight="Bold"/>
+                            <TextBlock Text="Load an .ossproj file" FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Tile}" Command="{Binding HomeImportStlCommand}">
+                        <StackPanel>
+                            <TextBlock Text="⛰  Import STL…" FontWeight="Bold"/>
+                            <TextBlock Text="Mesh and analyze a part (Mechanical workspace)"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Tile}" Command="{Binding HomeImportStepCommand}">
+                        <StackPanel>
+                            <TextBlock Text="⚙  Import STEP…" FontWeight="Bold"/>
+                            <TextBlock Text="CAD solid (AP203/AP214): mesh and analyze (Mechanical workspace)"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Tile}" Command="{Binding HomeImportPcbCommand}">
+                        <StackPanel>
+                            <TextBlock Text="🖳  Import PCB…" FontWeight="Bold"/>
+                            <TextBlock Text="Gerber/IPC-2581 board: nets, resistance, Joule heating (Electrical workspace)"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+
+                    <TextBlock Text="Workspaces" FontSize="16" FontWeight="Bold"
+                               Foreground="#C9C9D2" Margin="0,14,0,8"/>
+                    <Button Style="{StaticResource Tile}" Command="{Binding EnterMechanicalCommand}">
+                        <StackPanel>
+                            <TextBlock Text="🔧  Mechanical" FontWeight="Bold"/>
+                            <TextBlock Text="Structural + thermal analysis on primitives and STL parts"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Tile}" Command="{Binding EnterElectricalCommand}">
+                        <StackPanel>
+                            <TextBlock Text="⚡  Electrical" FontWeight="Bold"/>
+                            <TextBlock Text="PCB import, DC conduction and Joule heating"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</UserControl>

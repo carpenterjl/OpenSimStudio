@@ -1,0 +1,39 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.MeshingPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- THE meshing panel: every mesh control lives here, adapting to context.
+         The detail slider drives both the generic mesher and the PCB net mesher. -->
+    <GroupBox Header="Meshing">
+        <StackPanel>
+            <DockPanel>
+                <Label Content="Detail" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" MinWidth="72"
+                           TextAlignment="Right" Text="{Binding Meshing.EdgeLengthDisplay}"/>
+                <Slider Minimum="0.00005" Maximum="0.002" SmallChange="0.00005"
+                        LargeChange="0.0002" TickFrequency="0.00005"
+                        Value="{Binding Meshing.EdgeLengthSlider}" Margin="4,0"
+                        ToolTip="Fine (left) → coarse (right); moving this turns off Auto"/>
+            </DockPanel>
+            <CheckBox Content="Auto edge length" IsChecked="{Binding Meshing.AutoEdgeLength}"
+                      Foreground="#C9C9D2" Margin="2,2"/>
+
+            <!-- Generic geometry context -->
+            <StackPanel Visibility="{Binding Session.IsPcbMode, Converter={StaticResource InverseBoolToVis}}">
+                <CheckBox Content="Quadratic elements (TET10)" IsChecked="{Binding Meshing.QuadraticElements}"
+                          Foreground="#C9C9D2" Margin="2,2"
+                          ToolTip="10-node tets fix TET4's bending stiffness. Structural solves only — electrical/thermal need linear meshes."/>
+                <Button Content="Generate mesh" Command="{Binding Meshing.GenerateMeshCommand}"/>
+            </StackPanel>
+
+            <!-- PCB net context -->
+            <StackPanel Visibility="{Binding Session.IsPcbMode, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding Pcb.SelectedNet.Label, FallbackValue='No net selected — pick one in the PCB nets list or click copper in the view.'}"
+                           TextWrapping="Wrap" Margin="0,2,0,2"/>
+                <Button Content="Mesh selected net" Command="{Binding Pcb.MeshSelectedNetCommand}"/>
+            </StackPanel>
+
+            <TextBlock Text="{Binding Meshing.MeshInfo}" TextWrapping="Wrap" Margin="0,6,0,0"
+                       Foreground="#8A8A96"/>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

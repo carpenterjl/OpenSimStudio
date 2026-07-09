@@ -1,0 +1,7 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.GeometryInfoPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <GroupBox Header="Geometry">
+        <TextBlock Text="{Binding Geometry.GeometryInfo}" TextWrapping="Wrap"/>
+    </GroupBox>
+</UserControl>

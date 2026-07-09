@@ -1,0 +1,25 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.ResultsFieldsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <GroupBox Header="Results">
+        <StackPanel>
+            <ListBox ItemsSource="{Binding Results.ResultFields}" SelectedItem="{Binding Results.SelectedField}"
+                     MinHeight="60" MaxHeight="150" DisplayMemberPath="Name"/>
+            <!-- Frame scrubber: only for multi-frame solves (time steps / modes / frequencies). -->
+            <StackPanel Visibility="{Binding Results.HasFrames, Converter={StaticResource BoolToVis}}"
+                        Margin="0,6,0,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding Results.FrameAxis}" FontWeight="Bold"/>
+                    <TextBlock Text="{Binding Results.SelectedFrameLabel}" TextAlignment="Right"
+                               Foreground="#C9C9D2"/>
+                </DockPanel>
+                <Slider x:Name="FrameSlider" Minimum="0" Maximum="{Binding Results.FrameMaxIndex}"
+                        Value="{Binding Results.SelectedFrameIndex}"
+                        IsSnapToTickEnabled="True" TickFrequency="1"/>
+                <ComboBox x:Name="FrameCombo" ItemsSource="{Binding Results.Frames}"
+                          SelectedIndex="{Binding Results.SelectedFrameIndex}"
+                          DisplayMemberPath="Label"/>
+            </StackPanel>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

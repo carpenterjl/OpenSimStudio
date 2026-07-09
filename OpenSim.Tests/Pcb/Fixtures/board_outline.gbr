@@ -1,0 +1,12 @@
+G04 A 12 x 8 mm rectangular board outline as a filled G36 region*
+%FSLAX46Y46*%
+%MOMM*%
+G01*
+G36*
+X0Y0D02*
+X12000000Y0D01*
+X12000000Y8000000D01*
+X0Y8000000D01*
+X0Y0D01*
+G37*
+M02*

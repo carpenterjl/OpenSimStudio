@@ -1,0 +1,69 @@
+<UserControl x:Class="OpenSim.App.Views.Viewport3DView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:helix="http://helix-toolkit.org/wpf">
+    <Grid>
+        <helix:HelixViewport3D x:Name="Viewport"
+                               Background="#26262E"
+                               ShowCoordinateSystem="True"
+                               ShowViewCube="True"
+                               Orthographic="True"
+                               ZoomExtentsWhenLoaded="True"
+                               IsInertiaEnabled="True"
+                               MouseDown="Viewport_MouseDown"
+                               PreviewMouseRightButtonDown="Viewport_PreviewMouseRightButtonDown"
+                               ContextMenuOpening="Viewport_ContextMenuOpening">
+            <helix:HelixViewport3D.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Show mesh" IsCheckable="True"
+                              IsChecked="{Binding Scene.ShowMeshEdges}"/>
+                    <MenuItem Header="Show 3D body" IsCheckable="True"
+                              IsChecked="{Binding Scene.ShowBody}"/>
+                    <Separator/>
+                    <MenuItem Header="Fit to view" Click="FitToView_Click"/>
+                    <Separator/>
+                    <MenuItem Header="View">
+                        <MenuItem Header="Top" Click="ViewTop_Click"/>
+                        <MenuItem Header="Bottom" Click="ViewBottom_Click"/>
+                        <MenuItem Header="Front" Click="ViewFront_Click"/>
+                        <MenuItem Header="Back" Click="ViewBack_Click"/>
+                        <MenuItem Header="Left" Click="ViewLeft_Click"/>
+                        <MenuItem Header="Right" Click="ViewRight_Click"/>
+                    </MenuItem>
+                    <MenuItem Header="Isometric" Click="ViewIso_Click"/>
+                </ContextMenu>
+            </helix:HelixViewport3D.ContextMenu>
+            <helix:DefaultLights/>
+            <!-- Solid body / result skin: content is pushed from code-behind so the
+                 "Show 3D body" toggle can swap it to null (ModelVisual3D has no
+                 Visibility in WPF 3D — the content swap IS the hide mechanism). -->
+            <ModelVisual3D x:Name="BodyVisual"/>
+            <!-- Whole-board copper preview: frozen ribbon meshes recomposed per toggle
+                 in the viewmodel (camera moves cost no geometry work, unlike lines). -->
+            <ModelVisual3D Content="{Binding Pcb.CopperPreviewModel}"/>
+            <helix:LinesVisual3D x:Name="BoardOutlineLines" Color="#7BA05B" Thickness="1.2"/>
+            <helix:LinesVisual3D x:Name="SelectedNetLines" Color="#FFB000" Thickness="2.0"/>
+            <helix:LinesVisual3D x:Name="MeshEdgeLines" Color="#66D9EF" Thickness="0.6"/>
+            <helix:LinesVisual3D x:Name="ContourLineVisual" Color="#101014" Thickness="1.0"/>
+            <!-- RF / antenna overlays: free-space field visuals from the Antenna panel. -->
+            <ModelVisual3D Content="{Binding Antenna.VectorFieldModel}"/>
+            <ModelVisual3D Content="{Binding Antenna.FieldSliceModel}"/>
+            <ModelVisual3D Content="{Binding Antenna.FarFieldLobeModel}"/>
+            <helix:LinesVisual3D x:Name="AntennaWireLines" Color="#FF7BE0" Thickness="1.6"/>
+        </helix:HelixViewport3D>
+
+        <!-- Legend overlay -->
+        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,12,12"
+                Background="#CC1E1E24" CornerRadius="4" Padding="8"
+                x:Name="LegendPanel" Visibility="Collapsed">
+            <StackPanel Width="160">
+                <TextBlock Text="{Binding Results.SelectedField.Name}" FontWeight="Bold" Margin="0,0,0,4"/>
+                <Rectangle Height="14" Fill="{Binding Scene.LegendBrush}" RadiusX="2" RadiusY="2"/>
+                <DockPanel Margin="0,2,0,0">
+                    <TextBlock Text="{Binding Scene.LegendMin}" DockPanel.Dock="Left" FontSize="11"/>
+                    <TextBlock Text="{Binding Scene.LegendMax}" DockPanel.Dock="Right" FontSize="11" HorizontalAlignment="Right"/>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

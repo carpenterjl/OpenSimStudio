@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSim.Core\OpenSim.Core.csproj" />
+    <ProjectReference Include="..\OpenSim.Geometry\OpenSim.Geometry.csproj" />
+    <ProjectReference Include="..\OpenSim.Meshing\OpenSim.Meshing.csproj" />
+    <ProjectReference Include="..\OpenSim.Solvers\OpenSim.Solvers.csproj" />
+    <ProjectReference Include="..\OpenSim.Pcb\OpenSim.Pcb.csproj" />
+    <ProjectReference Include="..\OpenSim.Rf\OpenSim.Rf.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Dirkster.AvalonDock" Version="4.74.1" />
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.74.1" />
+    <PackageReference Include="HelixToolkit.Wpf" Version="3.1.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+</Project>

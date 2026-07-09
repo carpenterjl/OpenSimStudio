@@ -1,0 +1,56 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.AnalysisSettingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <!-- Transient thermal (also the Joule study's optional transient leg) -->
+        <GroupBox Header="Transient settings"
+                  Visibility="{Binding Session.ShowsTransientSettings, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <CheckBox x:Name="JouleTransientCheck" Content="Transient thermal leg (constant DC power)"
+                          IsChecked="{Binding Solve.JouleTransient}" Foreground="#C9C9D2" Margin="2,1,2,3"
+                          Visibility="{Binding Session.IsJouleAnalysis, Converter={StaticResource BoolToVis}}"
+                          ToolTip="Unchecked: steady-state temperature. Checked: time history of the heat-up at the DC solve's constant power."/>
+                <UniformGrid Columns="2">
+                    <Label Content="Initial temperature [K]"/>
+                    <TextBox x:Name="InitialTemperatureBox" Text="{Binding Solve.InitialTemperature}"/>
+                    <Label Content="Duration [s]"/>
+                    <TextBox x:Name="TransientDurationBox" Text="{Binding Solve.TransientDuration}"/>
+                    <Label Content="Time step [s]"/>
+                    <TextBox x:Name="TransientTimeStepBox" Text="{Binding Solve.TransientTimeStep}"/>
+                </UniformGrid>
+                <TextBlock Text="Backward Euler — stable at any step size; smaller steps sharpen the early transient. Results appear as scrubbable time frames."
+                           TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Modal -->
+        <GroupBox Header="Modal settings"
+                  Visibility="{Binding Session.IsModalAnalysis, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <UniformGrid Columns="2">
+                    <Label Content="Modes (lowest first)"/>
+                    <TextBox x:Name="ModeCountBox" Text="{Binding Solve.ModeCount}"/>
+                </UniformGrid>
+                <TextBlock Text="Needs at least one fixed support (a free body has zero-frequency rigid modes). Loads are ignored. Pick modes in the Results panel; the deform scale sets the displayed amplitude."
+                           TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- AC electrical sweep -->
+        <GroupBox Header="AC sweep settings"
+                  Visibility="{Binding Session.IsAcElectricalAnalysis, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <UniformGrid Columns="2">
+                    <Label Content="Min frequency [Hz]"/>
+                    <TextBox x:Name="AcMinFrequencyBox" Text="{Binding Solve.AcMinFrequency}"/>
+                    <Label Content="Max frequency [Hz]"/>
+                    <TextBox x:Name="AcMaxFrequencyBox" Text="{Binding Solve.AcMaxFrequency}"/>
+                    <Label Content="Points (geometric)"/>
+                    <TextBox x:Name="AcPointCountBox" Text="{Binding Solve.AcPointCount}"/>
+                </UniformGrid>
+                <TextBlock Text="Electro-quasistatic (σ + jωε) — for dielectric/capacitive studies. Conductor+dielectric composites are rejected (same conditioning ban as DC); use the trace R + jωL estimate for copper. Scrub frequencies in the Results panel."
+                           TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+            </StackPanel>
+        </GroupBox>
+    </StackPanel>
+</UserControl>

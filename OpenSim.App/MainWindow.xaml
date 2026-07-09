@@ -1,0 +1,162 @@
+<Window x:Class="OpenSim.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:avalonDock="https://github.com/Dirkster99/AvalonDock"
+        xmlns:adThemes="clr-namespace:AvalonDock.Themes;assembly=AvalonDock.Themes.VS2013"
+        xmlns:views="clr-namespace:OpenSim.App.Views"
+        xmlns:panels="clr-namespace:OpenSim.App.Views.Panels"
+        xmlns:vm="clr-namespace:OpenSim.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="OpenSim Studio" Height="820" Width="1360"
+        Background="#1E1E24" Foreground="#EAEAEA">
+    <Window.Resources>
+        <!-- Shows its content only in the given workspace. Panels shared by both
+             workspaces sit outside these styles. -->
+        <Style x:Key="MechanicalOnly" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Mechanical">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="ElectricalOnly" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Electrical">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <!-- Workspace UI (toolbar + dockable panes + status bar) -->
+        <Grid Visibility="{Binding Session.IsHomeActive, Converter={StaticResource InverseBoolToVis}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Toolbar -->
+            <DockPanel Grid.Row="0" Margin="6,4">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Label Content="Workspace:" VerticalAlignment="Center"/>
+                    <Button Content="Mechanical" Command="{Binding EnterMechanicalCommand}" Margin="0,0,2,0"/>
+                    <Button Content="Electrical" Command="{Binding EnterElectricalCommand}"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="⌂ Home" Command="{Binding GoHomeCommand}" Margin="0,0,12,0"/>
+                    <Button Content="Open project…" Command="{Binding OpenProjectCommand}" Margin="0,0,4,0"/>
+                    <Button Content="Save project…" Command="{Binding SaveProjectCommand}" Margin="0,0,16,0"/>
+                    <Button Content="Import STL…" Command="{Binding Geometry.ImportStlCommand}" Margin="0,0,4,0"/>
+                    <Button Content="Import STEP…" Command="{Binding Geometry.ImportStepCommand}" Margin="0,0,4,0"/>
+                    <Button Content="Import PCB…" Command="{Binding Pcb.ImportPcbCommand}" Margin="0,0,16,0"/>
+                    <Label Content="Analysis:" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="AnalysisCombo"
+                              ItemsSource="{Binding Session.AnalysisOptions}" SelectedItem="{Binding Session.SelectedAnalysis}"
+                              DisplayMemberPath="Label" MinWidth="220" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <Button Content="Solve" Command="{Binding Solve.SolveCommand}" FontWeight="Bold" Margin="0,0,16,0"/>
+                    <Button Content="Clear face selection" Command="{Binding Conditions.ClearSelectionCommand}"/>
+                    <CheckBox Content="Show mesh" IsChecked="{Binding Scene.ShowMeshEdges}"
+                              Foreground="#C9C9D2" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                    <CheckBox Content="Show 3D body" IsChecked="{Binding Scene.ShowBody}"
+                              Foreground="#C9C9D2" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Dockable panel layout: panes can float, dock, and resize; the arrangement
+                 is saved per workspace and restored on start/switch (ContentId is the key). -->
+            <avalonDock:DockingManager Grid.Row="1" x:Name="DockManager" Background="#1E1E24">
+                <avalonDock:DockingManager.Theme>
+                    <adThemes:Vs2013DarkTheme/>
+                </avalonDock:DockingManager.Theme>
+                <avalonDock:LayoutRoot>
+                    <avalonDock:LayoutPanel Orientation="Vertical">
+                        <avalonDock:LayoutPanel Orientation="Horizontal">
+                            <avalonDock:LayoutAnchorablePane DockWidth="280">
+                                <avalonDock:LayoutAnchorable Title="Project" ContentId="explorer"
+                                                             CanClose="False" CanHide="False">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="6,0">
+                                        <StackPanel>
+                                            <StackPanel Style="{StaticResource MechanicalOnly}">
+                                                <panels:GeometryInfoPanel/>
+                                            </StackPanel>
+                                            <StackPanel Style="{StaticResource ElectricalOnly}">
+                                                <panels:PcbNetsPanel/>
+                                                <panels:GeometryInfoPanel/>
+                                            </StackPanel>
+                                            <panels:BoundaryConditionsListPanel/>
+                                            <panels:ResultsFieldsPanel/>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </avalonDock:LayoutAnchorable>
+                            </avalonDock:LayoutAnchorablePane>
+
+                            <avalonDock:LayoutDocumentPane>
+                                <avalonDock:LayoutDocument Title="3D View" ContentId="viewport" CanClose="False">
+                                    <views:Viewport3DView/>
+                                </avalonDock:LayoutDocument>
+                            </avalonDock:LayoutDocumentPane>
+
+                            <avalonDock:LayoutAnchorablePane DockWidth="300">
+                                <avalonDock:LayoutAnchorable Title="Properties" ContentId="properties"
+                                                             CanClose="False" CanHide="False">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="6,0">
+                                        <StackPanel>
+                                            <StackPanel Style="{StaticResource MechanicalOnly}">
+                                                <panels:PrimitivesPanel/>
+                                                <panels:MeshingPanel/>
+                                                <panels:MaterialPanel/>
+                                                <panels:StructuralConditionsPanel/>
+                                                <panels:ThermalConditionsPanel/>
+                                                <panels:AnalysisSettingsPanel/>
+                                                <panels:ResultDisplayPanel/>
+                                            </StackPanel>
+                                            <StackPanel Style="{StaticResource ElectricalOnly}">
+                                                <panels:PrimitivesPanel/>
+                                                <panels:MeshingPanel/>
+                                                <panels:StackupPanel/>
+                                                <panels:MaterialPanel/>
+                                                <panels:ElectricalConditionsPanel/>
+                                                <panels:ElectricalSetupPanel/>
+                                                <panels:ThermalConditionsPanel/>
+                                                <panels:AnalysisSettingsPanel/>
+                                                <panels:ResultDisplayPanel/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </avalonDock:LayoutAnchorable>
+                            </avalonDock:LayoutAnchorablePane>
+                        </avalonDock:LayoutPanel>
+
+                        <avalonDock:LayoutAnchorablePane DockHeight="170">
+                            <avalonDock:LayoutAnchorable Title="Log" ContentId="log"
+                                                         CanClose="False" CanHide="False">
+                                <ListBox ItemsSource="{Binding Log.Entries}" Margin="6,2"
+                                         FontFamily="Consolas" FontSize="12"
+                                         x:Name="LogList"/>
+                            </avalonDock:LayoutAnchorable>
+                        </avalonDock:LayoutAnchorablePane>
+                    </avalonDock:LayoutPanel>
+                </avalonDock:LayoutRoot>
+            </avalonDock:DockingManager>
+
+            <!-- Status bar -->
+            <DockPanel Grid.Row="2" Margin="6,2,6,4">
+                <ProgressBar DockPanel.Dock="Right" Width="180" Height="14"
+                             Value="{Binding Session.ProgressFraction, Mode=OneWay}" Maximum="1"
+                             x:Name="SolveProgress" Visibility="Collapsed"/>
+                <TextBlock Text="{Binding Session.StatusText}" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Grid>
+
+        <!-- Home / start screen overlays the workspace; the dock manager and viewport
+             stay alive underneath so loaded state survives navigation. -->
+        <views:HomeView Visibility="{Binding Session.IsHomeActive, Converter={StaticResource BoolToVis}}"/>
+    </Grid>
+</Window>

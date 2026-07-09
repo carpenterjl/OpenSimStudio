@@ -1,0 +1,92 @@
+<Window x:Class="OpenSim.App.MaterialEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Material editor" Width="640" Height="480"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E24">
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="230"/>
+            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <DockPanel Grid.Column="0">
+            <TextBlock DockPanel.Dock="Top" Text="Library" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ListBox ItemsSource="{Binding Materials}" SelectedItem="{Binding SelectedMaterial}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"
+                                    Background="{Binding Color}"/>
+                            <TextBlock Text="{Binding Name}"/>
+                            <TextBlock Text=" (built-in)" Foreground="#8A8A96">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+
+        <DockPanel Grid.Column="2">
+            <TextBlock DockPanel.Dock="Top" Text="Properties (SI units)" FontWeight="Bold" Margin="0,0,0,4"/>
+
+            <StackPanel DockPanel.Dock="Bottom">
+                <TextBlock Text="{Binding ErrorText}" Foreground="#E06C75" TextWrapping="Wrap"
+                           Margin="0,4"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="New from selected" Command="{Binding NewFromSelectedCommand}"
+                            Margin="0,0,6,0"/>
+                    <Button Content="Save to user library" Command="{Binding SaveCommand}" Margin="0,0,6,0"/>
+                    <Button Content="Delete" Command="{Binding DeleteCommand}" Margin="0,0,6,0"/>
+                    <Button Content="Close" Click="Close_Click"/>
+                </StackPanel>
+                <TextBlock Text="Built-in materials cannot be edited in place — 'New from selected' copies one; saving under a built-in name overrides it."
+                           Foreground="#8A8A96" TextWrapping="Wrap" Margin="0,6,0,0"/>
+            </StackPanel>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Name"/>
+                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="1" Content="Young's modulus E [Pa]"/>
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding YoungsModulus, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="2" Content="Poisson's ratio ν [-]"/>
+                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding PoissonRatio, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="3" Content="Density ρ [kg/m³]"/>
+                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Density, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="4" Content="Thermal conductivity k [W/(m·K)]"/>
+                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding ThermalConductivity, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="5" Content="Specific heat c_p [J/(kg·K)]"/>
+                <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SpecificHeat, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="6" Content="Electrical conductivity σ [S/m]"/>
+                <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding ElectricalConductivity, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="7" Content="Relative permittivity ε_r [-]"/>
+                <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding RelativePermittivity, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="8" Content="Color [#RRGGBB]"/>
+                <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding Color, UpdateSourceTrigger=PropertyChanged}"/>
+            </Grid>
+        </DockPanel>
+    </Grid>
+</Window>
