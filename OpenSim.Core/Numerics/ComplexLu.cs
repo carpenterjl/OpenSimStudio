@@ -22,14 +22,25 @@ public sealed class ComplexLu
 
     public int Order => _lu.Rows;
 
-    /// <summary>Factors a copy of <paramref name="matrix"/> (the input is not mutated).</summary>
-    public static ComplexLu Factor(ComplexDenseMatrix matrix)
+    /// <summary>Below this trailing-block size the per-step Parallel.For overhead
+    /// exceeds the update work; the serial path runs instead. The result is bitwise
+    /// identical either way, so the value is purely a tuning constant.</summary>
+    private const int ParallelThreshold = 64;
+
+    /// <summary>Factors a copy of <paramref name="matrix"/> (the input is not mutated).
+    /// The trailing update is parallel over ROWS: each row's multiplier and its j-sweep
+    /// are exactly the serial arithmetic in the serial order, and rows write disjoint
+    /// storage, so the factorization is bitwise identical at any thread count
+    /// (<paramref name="maxDegreeOfParallelism"/> null = unbounded). The pivot search
+    /// and row swaps — the only order-sensitive steps — stay serial.</summary>
+    public static ComplexLu Factor(ComplexDenseMatrix matrix, int? maxDegreeOfParallelism = null)
     {
         if (matrix.Rows != matrix.Columns)
             throw new ArgumentException($"LU requires a square matrix, got {matrix.Rows}×{matrix.Columns}.");
         int n = matrix.Rows;
         var lu = matrix.Clone();
         var pivots = new int[n];
+        var options = new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 };
 
         for (int k = 0; k < n; k++)
         {
@@ -54,13 +65,29 @@ public sealed class ComplexLu
                     (lu[k, j], lu[pivotRow, j]) = (lu[pivotRow, j], lu[k, j]);
 
             Complex pivot = lu[k, k];
-            for (int i = k + 1; i < n; i++)
+            int first = k + 1;
+            if (n - first >= ParallelThreshold && (maxDegreeOfParallelism ?? -1) != 1)
             {
-                Complex factor = lu[i, k] / pivot;
-                lu[i, k] = factor;
-                if (factor == Complex.Zero) continue;
-                for (int j = k + 1; j < n; j++)
-                    lu[i, j] -= factor * lu[k, j];
+                int kLocal = k;
+                Parallel.For(first, n, options, i =>
+                {
+                    Complex factor = lu[i, kLocal] / pivot;
+                    lu[i, kLocal] = factor;
+                    if (factor == Complex.Zero) return;
+                    for (int j = kLocal + 1; j < n; j++)
+                        lu[i, j] -= factor * lu[kLocal, j];
+                });
+            }
+            else
+            {
+                for (int i = first; i < n; i++)
+                {
+                    Complex factor = lu[i, k] / pivot;
+                    lu[i, k] = factor;
+                    if (factor == Complex.Zero) continue;
+                    for (int j = k + 1; j < n; j++)
+                        lu[i, j] -= factor * lu[k, j];
+                }
             }
         }
         return new ComplexLu(lu, pivots);

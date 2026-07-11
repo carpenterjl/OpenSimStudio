@@ -27,7 +27,7 @@ namespace OpenSim.Rf.Layered;
 /// partitions of J₀ with iterated averaging of the partial sums, the deterministic
 /// ~15-line form of the classic tail accelerator.
 /// </summary>
-internal static class SommerfeldIntegrator
+internal static partial class SommerfeldIntegrator
 {
     private static readonly (double[] Nodes, double[] Weights) Gauss = GaussLegendre.Rule(15);
 
@@ -43,6 +43,19 @@ internal static class SommerfeldIntegrator
     public static (Complex A, Complex Phi) Remainder(SubstrateStackup substrate, double k0,
         IReadOnlyList<SurfaceWavePole> poles, double rho, int refinement = 1)
     {
+        var (a, phi, _) = RemainderAll(substrate, k0, poles, rho, refinement);
+        return (a, phi);
+    }
+
+    /// <summary>All three kernels — G_A, K_Φ, and the Stage D voltage kernel K_V —
+    /// in ONE integration pass (they share every path/panel/tail decision, and K̃_V
+    /// shares K̃_Φ's quasi-static images exactly: their difference is the A_z leg,
+    /// which decays a full 1/k_ρ² faster and needs no extraction of its own). K_V's
+    /// pole residues come from the exact multiplicative identity in
+    /// <see cref="VoltageKernel.ResidueFromPhi"/>, precomputed once per call.</summary>
+    public static (Complex A, Complex Phi, Complex V) RemainderAll(SubstrateStackup substrate,
+        double k0, IReadOnlyList<SurfaceWavePole> poles, double rho, int refinement = 1)
+    {
         if (rho <= 0) throw new ArgumentOutOfRangeException(nameof(rho),
             "The remainder is tabulated for ρ > 0 (the ρ → 0 limit is flat on the scale of d).");
         if (refinement < 1) throw new ArgumentOutOfRangeException(nameof(refinement));
@@ -51,8 +64,12 @@ internal static class SommerfeldIntegrator
         var epsC = SpectralKernels.ComplexPermittivity(substrate);
         var (c0Phi, c1Phi) = PhiImageCoefficients(epsC);
         double k1Real = k0 * Math.Sqrt(substrate.RelativePermittivity);
+        var vResidues = new Complex[poles.Count];
+        for (int p = 0; p < poles.Count; p++)
+            vResidues[p] = VoltageKernel.ResidueFromPhi(substrate, k0,
+                poles[p].KRho, poles[p].ResiduePhi);
 
-        Complex sumA = Complex.Zero, sumPhi = Complex.Zero;
+        Complex sumA = Complex.Zero, sumPhi = Complex.Zero, sumV = Complex.Zero;
 
         // ---- Segment 1: k_ρ = k₀ sin t, t ∈ [0, π/2], k_z0 = k₀ cos t. ----
         int n1 = refinement * (4 + (int)Math.Ceiling(k0 * rho / Math.PI));
@@ -65,11 +82,12 @@ internal static class SommerfeldIntegrator
                 double t = mid + half * Gauss.Nodes[i];
                 var (sin, cos) = Math.SinCos(t);
                 double kRho = k0 * sin;
-                var (fA, fPhi) = Integrand(substrate, k0, kRho, k0 * cos,
-                    poles, c0Phi, c1Phi, rho, d);
+                var (fA, fPhi, fV) = Integrand(substrate, k0, kRho, k0 * cos,
+                    poles, vResidues, c0Phi, c1Phi, rho, d);
                 double w = Gauss.Weights[i] * half * k0 * cos;
                 sumA += w * fA;
                 sumPhi += w * fPhi;
+                sumV += w * fV;
             }
         }
 
@@ -106,12 +124,13 @@ internal static class SommerfeldIntegrator
                 {
                     double s = mid + half * Gauss.Nodes[i];
                     double kRho = Math.Sqrt(k0 * k0 + s * s);
-                    var (fA, fPhi) = Integrand(substrate, k0, kRho, new Complex(0, -s),
-                        poles, c0Phi, c1Phi, rho, d);
+                    var (fA, fPhi, fV) = Integrand(substrate, k0, kRho, new Complex(0, -s),
+                        poles, vResidues, c0Phi, c1Phi, rho, d);
                     // dk_ρ = (s/k_ρ) ds — the Jacobi factor that cancels 1/k_z0.
                     double w = Gauss.Weights[i] * half * s / kRho;
                     sumA += w * fA;
                     sumPhi += w * fPhi;
+                    sumV += w * fV;
                 }
             }
         }
@@ -121,9 +140,11 @@ internal static class SommerfeldIntegrator
         double l1A = sumA.Magnitude, l1Phi = sumPhi.Magnitude;
         for (int doubling = 0; doubling < 60 && b * rho < 3; doubling++)
         {
-            var (vA, vPhi) = TailPanel(substrate, k0, b, 2 * b, poles, c0Phi, c1Phi, rho, refinement);
+            var (vA, vPhi, vV) = TailPanel(substrate, k0, b, 2 * b, poles, vResidues,
+                c0Phi, c1Phi, rho, refinement);
             sumA += vA;
             sumPhi += vPhi;
+            sumV += vV;
             b *= 2;
             if (vA.Magnitude < 1e-16 * (l1A + 1e-300) && vPhi.Magnitude < 1e-16 * (l1Phi + 1e-300))
             {
@@ -141,15 +162,18 @@ internal static class SommerfeldIntegrator
                 12 * refinement + (int)Math.Ceiling(6.0 / d / delta));
             var partialA = new Complex[partitions];
             var partialPhi = new Complex[partitions];
-            Complex accA = Complex.Zero, accPhi = Complex.Zero;
+            var partialV = new Complex[partitions];
+            Complex accA = Complex.Zero, accPhi = Complex.Zero, accV = Complex.Zero;
             for (int n = 0; n < partitions; n++)
             {
-                var (vA, vPhi) = TailPanel(substrate, k0, b + n * delta, b + (n + 1) * delta,
-                    poles, c0Phi, c1Phi, rho, refinement);
+                var (vA, vPhi, vV) = TailPanel(substrate, k0, b + n * delta, b + (n + 1) * delta,
+                    poles, vResidues, c0Phi, c1Phi, rho, refinement);
                 accA += vA;
                 accPhi += vPhi;
+                accV += vV;
                 partialA[n] = accA;
                 partialPhi[n] = accPhi;
+                partialV[n] = accV;
             }
             // Iterated averaging of partial sums — the alternating tail's Euler limit.
             for (int m = 1; m < partitions; m++)
@@ -157,20 +181,22 @@ internal static class SommerfeldIntegrator
                 {
                     partialA[i] = 0.5 * (partialA[i] + partialA[i + 1]);
                     partialPhi[i] = 0.5 * (partialPhi[i] + partialPhi[i + 1]);
+                    partialV[i] = 0.5 * (partialV[i] + partialV[i + 1]);
                 }
             sumA += partialA[0];
             sumPhi += partialPhi[0];
+            sumV += partialV[0];
         }
 
         double norm = 1 / (4 * Math.PI);
-        return (norm * sumA, norm * sumPhi);
+        return (norm * sumA, norm * sumPhi, norm * sumV);
     }
 
-    private static (Complex A, Complex Phi) TailPanel(SubstrateStackup substrate, double k0,
-        double lo, double hi, IReadOnlyList<SurfaceWavePole> poles,
-        Complex c0Phi, Complex c1Phi, double rho, int refinement)
+    private static (Complex A, Complex Phi, Complex V) TailPanel(SubstrateStackup substrate,
+        double k0, double lo, double hi, IReadOnlyList<SurfaceWavePole> poles,
+        Complex[] vResidues, Complex c0Phi, Complex c1Phi, double rho, int refinement)
     {
-        Complex vA = Complex.Zero, vPhi = Complex.Zero;
+        Complex vA = Complex.Zero, vPhi = Complex.Zero, vV = Complex.Zero;
         int sub = refinement;
         for (int p = 0; p < sub; p++)
         {
@@ -181,30 +207,36 @@ internal static class SommerfeldIntegrator
                 double kRho = mid + half * Gauss.Nodes[i];
                 // Far past the branch point — the direct k_z0 loses nothing out here.
                 var kz0 = new Complex(0, -Math.Sqrt(kRho * kRho - k0 * k0));
-                var (fA, fPhi) = Integrand(substrate, k0, kRho, kz0,
-                    poles, c0Phi, c1Phi, rho, substrate.ThicknessMeters);
+                var (fA, fPhi, fV) = Integrand(substrate, k0, kRho, kz0,
+                    poles, vResidues, c0Phi, c1Phi, rho, substrate.ThicknessMeters);
                 double w = Gauss.Weights[i] * half;
                 vA += w * fA;
                 vPhi += w * fPhi;
+                vV += w * fV;
             }
         }
-        return (vA, vPhi);
+        return (vA, vPhi, vV);
     }
 
     /// <summary>The full remainder integrand at one real k_ρ, including the J₀·k_ρ
-    /// transform measure: (F̃ − T̃_images − Σ P̃_poles)·J₀(k_ρρ)·k_ρ.</summary>
-    private static (Complex A, Complex Phi) Integrand(SubstrateStackup substrate, double k0,
-        double kRho, Complex kz0, IReadOnlyList<SurfaceWavePole> poles,
-        Complex c0Phi, Complex c1Phi, double rho, double d)
+    /// transform measure: (F̃ − T̃_images − Σ P̃_poles)·J₀(k_ρρ)·k_ρ. K̃_V subtracts
+    /// K̃_Φ's OWN image asymptote (their difference decays 1/k_ρ² faster) and its own
+    /// pole residues.</summary>
+    private static (Complex A, Complex Phi, Complex V) Integrand(SubstrateStackup substrate,
+        double k0, double kRho, Complex kz0, IReadOnlyList<SurfaceWavePole> poles,
+        Complex[] vResidues, Complex c0Phi, Complex c1Phi, double rho, double d)
     {
         var (gA, kPhi) = SpectralKernels.Evaluate(substrate, k0, kRho, kz0);
+        var kV = VoltageKernel.Evaluate(substrate, k0, kRho, kz0);
         var jKz0 = Complex.ImaginaryOne * kz0;
         var x = 2 * jKz0 * d;
         var oneMinusE = OneMinusExpNeg(x);
         var e2 = 1 - oneMinusE; // e^{−2jk_z0 d} without a second Exp call
 
         var remA = gA - RfConstants.Mu0 * oneMinusE / jKz0;
-        var remPhi = kPhi - (c0Phi + c1Phi * e2) / (jKz0 * RfConstants.Eps0);
+        var imagePhi = (c0Phi + c1Phi * e2) / (jKz0 * RfConstants.Eps0);
+        var remPhi = kPhi - imagePhi;
+        var remV = kV - imagePhi;
 
         for (int p = 0; p < poles.Count; p++)
         {
@@ -213,10 +245,11 @@ internal static class SommerfeldIntegrator
             var factor = 2 * pole.KRho / denom;
             if (pole.ResidueA != Complex.Zero) remA -= pole.ResidueA * factor;
             remPhi -= pole.ResiduePhi * factor;
+            remV -= vResidues[p] * factor;
         }
 
         double measure = Bessel.J0(kRho * rho) * kRho;
-        return (measure * remA, measure * remPhi);
+        return (measure * remA, measure * remPhi, measure * remV);
     }
 
     /// <summary>1 − e^{−x} without cancellation for small |x| (the k_z0 → 0 branch

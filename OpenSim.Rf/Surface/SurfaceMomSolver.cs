@@ -37,6 +37,12 @@ public sealed record SurfaceMomSolution(double FrequencyHz, Complex InputImpedan
 /// </summary>
 public sealed partial class SurfaceMomSolver
 {
+    /// <summary>Thread count for the parallel triangle-pair fill (null = unbounded).
+    /// The assembled matrix is bitwise identical for ANY value — pair moments compute
+    /// into pre-sized slots and scatter in canonical serial order (see
+    /// <see cref="PairMomentSchedule"/>) — so this is purely a resource knob.</summary>
+    public int? MaxDegreeOfParallelism { get; init; }
+
     /// <summary>Kernel facts every consumer must surface next to results.</summary>
     public static IReadOnlyList<string> Assumptions { get; } = new[]
     {
@@ -65,7 +71,7 @@ public sealed partial class SurfaceMomSolver
         // the port drives edges whose T⁺→T⁻ crossing agrees with the port direction
         // at +V·l, the rest at −V·l; a grounded rim edge's minus side is the image,
         // crossing INTO the plane.
-        var z = AssembleImpedanceMatrix(surface, k, omega);
+        var z = AssembleImpedanceMatrix(surface, k, omega, MaxDegreeOfParallelism);
         return SolveAssembled(surface, port, gapVolts, frequencyHz, z);
     }
 
@@ -74,50 +80,54 @@ public sealed partial class SurfaceMomSolver
     // ------------------------------------------------------------------
 
     internal static ComplexDenseMatrix AssembleImpedanceMatrix(SurfaceStructure surface,
-        double k, double omega)
+        double k, double omega, int? maxDegreeOfParallelism = null)
     {
         int n = surface.BasisCount;
         var z = new ComplexDenseMatrix(n, n);
         Complex vectorFactor = Complex.ImaginaryOne * omega * RfConstants.Mu0 / (4 * Math.PI);
         Complex chargeFactor = -Complex.ImaginaryOne / (4 * Math.PI * RfConstants.Eps0 * omega);
-        int triangleCount = surface.Triangles.Count;
+        var pairs = PairMomentSchedule.Build(surface);
 
-        for (int p = 0; p < triangleCount; p++)
+        // Parallel moment computation into slots, sequential scatter in the exact
+        // order of the historical serial double loop — bitwise-identical Z at any DOP.
+        var direct = PairMomentSchedule.Compute(pairs, maxDegreeOfParallelism, (p, q) =>
         {
-            if (surface.TriangleSupports[p].Count == 0) continue;
-            for (int q = p; q < triangleCount; q++)
-            {
-                if (surface.TriangleSupports[q].Count == 0) continue;
-                var moments = PairMoments(surface, p, q, k);
-                if (p == q) moments = moments.Symmetrized();
-                ScatterPair(z, surface, p, q, moments, QVertices(surface, q),
-                    vectorFactor, chargeFactor, imageSign: 1.0);
-            }
+            var moments = PairMoments(surface, p, q, k);
+            return p == q ? moments.Symmetrized() : moments;
+        });
+        for (int i = 0; i < pairs.Length; i++)
+        {
+            var (p, q) = pairs[i];
+            ScatterPair(z, surface, p, q, direct[i], QVertices(surface, q),
+                vectorFactor, chargeFactor, imageSign: 1.0);
         }
 
         if (surface.Ground is { } ground)
         {
             double z0 = ground.SurfaceZ;
-            for (int p = 0; p < triangleCount; p++)
+            // Image geometry: mirrored Q vertices, SAME barycentric indexing.
+            // The image basis is −(RWG on the mirrored triangle): one −1 here.
+            var image = PairMomentSchedule.Compute(pairs, maxDegreeOfParallelism, (p, q) =>
             {
-                if (surface.TriangleSupports[p].Count == 0) continue;
-                for (int q = p; q < triangleCount; q++)
-                {
-                    if (surface.TriangleSupports[q].Count == 0) continue;
-                    // Image geometry: mirrored Q vertices, SAME barycentric indexing.
-                    // The image basis is −(RWG on the mirrored triangle): one −1 here.
-                    var (qa, qb, qc) = QVertices(surface, q);
-                    var image = (ThinWireMomSolver.Mirror(qa, z0),
-                                 ThinWireMomSolver.Mirror(qb, z0),
-                                 ThinWireMomSolver.Mirror(qc, z0));
-                    var moments = GeometricPairMoments(PVertices(surface, p), image, k);
-                    if (p == q) moments = moments.Symmetrized();
-                    ScatterPair(z, surface, p, q, moments, image,
-                        vectorFactor, chargeFactor, imageSign: -1.0);
-                }
+                var moments = GeometricPairMoments(PVertices(surface, p), MirroredQ(surface, q, z0), k);
+                return p == q ? moments.Symmetrized() : moments;
+            });
+            for (int i = 0; i < pairs.Length; i++)
+            {
+                var (p, q) = pairs[i];
+                ScatterPair(z, surface, p, q, image[i], MirroredQ(surface, q, z0),
+                    vectorFactor, chargeFactor, imageSign: -1.0);
             }
         }
         return z;
+    }
+
+    private static (Vector3D, Vector3D, Vector3D) MirroredQ(SurfaceStructure s, int q, double z0)
+    {
+        var (qa, qb, qc) = QVertices(s, q);
+        return (ThinWireMomSolver.Mirror(qa, z0),
+                ThinWireMomSolver.Mirror(qb, z0),
+                ThinWireMomSolver.Mirror(qc, z0));
     }
 
     internal static (Vector3D, Vector3D, Vector3D) PVertices(SurfaceStructure s, int t)

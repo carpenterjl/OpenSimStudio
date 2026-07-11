@@ -1,0 +1,216 @@
+using System.Numerics;
+
+namespace OpenSim.Rf.Layered;
+
+/// <summary>
+/// The per-observation-height remainder integrals behind the Stage D near-field maps:
+/// the four field kernels (A, W, Φ, ∂zΦ) at one (ρ, z), minus their per-z quasi-static
+/// images (<see cref="LayeredFieldKernels.Images"/>) and per-z pole terms
+/// (<see cref="LayeredFieldKernels.PoleResidues"/>). Same path, same panel rules,
+/// same partition–extrapolation tail as the z = d machinery — kept as a SEPARATE
+/// method rather than a generic driver so the proven boundary-kernel path (which the
+/// bitwise regression pins protect) is never re-touched. W gets no image extraction
+/// (its spectral decay is already 1/k_ρ² × exponentials; the tail machinery carries
+/// it — the measured-decay gate in the tests polices this choice).
+/// </summary>
+internal static partial class SommerfeldIntegrator
+{
+    public static (Complex A, Complex W, Complex Phi, Complex DzPhi) FieldRemainder(
+        SubstrateStackup substrate, double k0, IReadOnlyList<SurfaceWavePole> poles,
+        double rho, double z, int refinement = 1)
+    {
+        if (rho <= 0) throw new ArgumentOutOfRangeException(nameof(rho));
+        if (z < 0) throw new ArgumentOutOfRangeException(nameof(z),
+            "Field kernels live above the PEC ground (z ≥ 0); below it E ≡ 0.");
+        if (refinement < 1) throw new ArgumentOutOfRangeException(nameof(refinement));
+
+        double d = substrate.ThicknessMeters;
+        var images = LayeredFieldKernels.Images(substrate, z);
+        var residues = new (Complex A, Complex W, Complex Phi, Complex DzPhi)[poles.Count];
+        for (int p = 0; p < poles.Count; p++)
+            residues[p] = LayeredFieldKernels.PoleResidues(substrate, k0, poles[p].KRho, z);
+        double k1Real = k0 * Math.Sqrt(substrate.RelativePermittivity);
+
+        Complex sumA = Complex.Zero, sumW = Complex.Zero;
+        Complex sumPhi = Complex.Zero, sumDz = Complex.Zero;
+
+        void Accumulate(double kRho, Complex kz0, double weight)
+        {
+            var (fA, fW, fPhi, fDz) = FieldIntegrand(substrate, k0, kRho, kz0, z,
+                images, poles, residues, rho);
+            sumA += weight * fA;
+            sumW += weight * fW;
+            sumPhi += weight * fPhi;
+            sumDz += weight * fDz;
+        }
+
+        // ---- Segment 1: k_ρ = k₀ sin t (k_z0 = k₀ cos t in closed form). ----
+        int n1 = refinement * (4 + (int)Math.Ceiling(k0 * rho / Math.PI));
+        for (int p = 0; p < n1; p++)
+        {
+            double t0 = Math.PI / 2 * p / n1, t1 = Math.PI / 2 * (p + 1) / n1;
+            double mid = 0.5 * (t0 + t1), half = 0.5 * (t1 - t0);
+            for (int i = 0; i < Gauss.Nodes.Length; i++)
+            {
+                double t = mid + half * Gauss.Nodes[i];
+                var (sin, cos) = Math.SinCos(t);
+                Accumulate(k0 * sin, k0 * cos, Gauss.Weights[i] * half * k0 * cos);
+            }
+        }
+
+        // ---- Segment 2: k_ρ = √(k₀² + s²), panels broken at poles. ----
+        // The exponential reach per z is set by the SHORTEST image height (the
+        // nearest singularity above/below): for z near the metal that is |z−d| → the
+        // remainder decays like e^{−k_ρ·(3d−z−…)}-scale at worst, so keep the z = d
+        // head reach (6/d) — the measured-decay tests police the choice.
+        double a = Math.Max(2 * k1Real,
+            k1Real + Math.Min(6.0 * refinement / d, 3 * Math.PI / rho));
+        double sMax = Math.Sqrt(a * a - k0 * k0);
+        var breaks = new List<double> { 0 };
+        foreach (var pole in poles)
+        {
+            double re = pole.KRho.Real;
+            if (re > k0 && re * re - k0 * k0 < sMax * sMax)
+                breaks.Add(Math.Sqrt(re * re - k0 * k0));
+        }
+        breaks.Add(sMax);
+        breaks.Sort();
+        double widthTarget = Math.Min(Math.Min(0.5 / d, sMax / 8), Math.PI / rho);
+        for (int seg = 0; seg + 1 < breaks.Count; seg++)
+        {
+            double lo = breaks[seg], hi = breaks[seg + 1];
+            if (hi - lo <= 0) continue;
+            int panels = refinement * Math.Max(1, (int)Math.Ceiling((hi - lo) / widthTarget));
+            for (int p = 0; p < panels; p++)
+            {
+                double s0 = lo + (hi - lo) * p / panels, s1 = lo + (hi - lo) * (p + 1) / panels;
+                double mid = 0.5 * (s0 + s1), half = 0.5 * (s1 - s0);
+                for (int i = 0; i < Gauss.Nodes.Length; i++)
+                {
+                    double s = mid + half * Gauss.Nodes[i];
+                    double kRho = Math.Sqrt(k0 * k0 + s * s);
+                    Accumulate(kRho, new Complex(0, -s), Gauss.Weights[i] * half * s / kRho);
+                }
+            }
+        }
+
+        // ---- Tail: geometric doubling, then partition–extrapolation. ----
+        double b = a;
+        double headScale = sumA.Magnitude + sumW.Magnitude + sumPhi.Magnitude + sumDz.Magnitude;
+        for (int doubling = 0; doubling < 60 && b * rho < 3; doubling++)
+        {
+            var (vA, vW, vPhi, vDz) = FieldTailPanel(substrate, k0, b, 2 * b, z,
+                images, poles, residues, rho, refinement);
+            sumA += vA;
+            sumW += vW;
+            sumPhi += vPhi;
+            sumDz += vDz;
+            b *= 2;
+            if (vA.Magnitude + vW.Magnitude + vPhi.Magnitude + vDz.Magnitude
+                < 1e-16 * (headScale + 1e-300))
+            {
+                b = double.PositiveInfinity;
+                break;
+            }
+        }
+        if (!double.IsPositiveInfinity(b))
+        {
+            double delta = Math.PI / rho;
+            int partitions = Math.Min(400 * refinement,
+                12 * refinement + (int)Math.Ceiling(6.0 / d / delta));
+            var partial = new (Complex A, Complex W, Complex Phi, Complex Dz)[partitions];
+            Complex accA = Complex.Zero, accW = Complex.Zero, accPhi = Complex.Zero, accDz = Complex.Zero;
+            for (int n = 0; n < partitions; n++)
+            {
+                var (vA, vW, vPhi, vDz) = FieldTailPanel(substrate, k0,
+                    b + n * delta, b + (n + 1) * delta, z, images, poles, residues, rho, refinement);
+                accA += vA;
+                accW += vW;
+                accPhi += vPhi;
+                accDz += vDz;
+                partial[n] = (accA, accW, accPhi, accDz);
+            }
+            for (int m = 1; m < partitions; m++)
+                for (int i = 0; i < partitions - m; i++)
+                    partial[i] = (0.5 * (partial[i].A + partial[i + 1].A),
+                                  0.5 * (partial[i].W + partial[i + 1].W),
+                                  0.5 * (partial[i].Phi + partial[i + 1].Phi),
+                                  0.5 * (partial[i].Dz + partial[i + 1].Dz));
+            sumA += partial[0].A;
+            sumW += partial[0].W;
+            sumPhi += partial[0].Phi;
+            sumDz += partial[0].Dz;
+        }
+
+        double norm = 1 / (4 * Math.PI);
+        return (norm * sumA, norm * sumW, norm * sumPhi, norm * sumDz);
+    }
+
+    private static (Complex A, Complex W, Complex Phi, Complex Dz) FieldTailPanel(
+        SubstrateStackup substrate, double k0, double lo, double hi, double z,
+        LayeredFieldKernels.KernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
+        (Complex A, Complex W, Complex Phi, Complex DzPhi)[] residues,
+        double rho, int refinement)
+    {
+        Complex vA = Complex.Zero, vW = Complex.Zero, vPhi = Complex.Zero, vDz = Complex.Zero;
+        for (int p = 0; p < refinement; p++)
+        {
+            double x0 = lo + (hi - lo) * p / refinement, x1 = lo + (hi - lo) * (p + 1) / refinement;
+            double mid = 0.5 * (x0 + x1), half = 0.5 * (x1 - x0);
+            for (int i = 0; i < Gauss.Nodes.Length; i++)
+            {
+                double kRho = mid + half * Gauss.Nodes[i];
+                var kz0 = new Complex(0, -Math.Sqrt(kRho * kRho - k0 * k0));
+                var (fA, fW, fPhi, fDz) = FieldIntegrand(substrate, k0, kRho, kz0, z,
+                    images, poles, residues, rho);
+                double w = Gauss.Weights[i] * half;
+                vA += w * fA;
+                vW += w * fW;
+                vPhi += w * fPhi;
+                vDz += w * fDz;
+            }
+        }
+        return (vA, vW, vPhi, vDz);
+    }
+
+    private static (Complex A, Complex W, Complex Phi, Complex DzPhi) FieldIntegrand(
+        SubstrateStackup substrate, double k0, double kRho, Complex kz0, double z,
+        LayeredFieldKernels.KernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
+        (Complex A, Complex W, Complex Phi, Complex DzPhi)[] residues, double rho)
+    {
+        var (fA, fW, fPhi, fDz) = LayeredFieldKernels.EvaluateAll(substrate, k0, kRho, kz0, z);
+        var jKz0 = Complex.ImaginaryOne * kz0;
+
+        // Quasi-static image subtraction (spectral form Σc·e^{−jk_z0h}/(jk_z0); the
+        // path Jacobians cancel the 1/k_z0 exactly — the z = d precedent). ∂zΦ's
+        // subtraction carries the ∂z of each exponential: −c·(dh/dz)·e^{−jk_z0h}
+        // — no 1/k_z0 at all. Heights are ordered so dh/dz alternates −1, +1 in-slab
+        // and is +1 throughout above the slab.
+        double d = substrate.ThicknessMeters;
+        Complex imgA = Complex.Zero, imgPhi = Complex.Zero, imgDz = Complex.Zero;
+        for (int m = 0; m < images.Length; m++)
+        {
+            var image = images[m];
+            var e = Complex.Exp(-jKz0 * image.Height);
+            imgA += image.CoefficientA * e;
+            imgPhi += image.CoefficientPhi * e;
+            double dhdz = z >= d ? 1 : (m % 2 == 0 ? -1 : 1);
+            imgDz += -image.CoefficientPhi * dhdz * e;
+        }
+        fA -= RfConstants.Mu0 * imgA / jKz0;
+        fPhi -= imgPhi / (jKz0 * RfConstants.Eps0);
+        fDz -= imgDz / RfConstants.Eps0;
+
+        for (int p = 0; p < poles.Count; p++)
+        {
+            var factor = 2 * poles[p].KRho / (kRho * kRho - poles[p].KRho * poles[p].KRho);
+            fA -= residues[p].A * factor;
+            fW -= residues[p].W * factor;
+            fPhi -= residues[p].Phi * factor;
+            fDz -= residues[p].DzPhi * factor;
+        }
+
+        double measure = Bessel.J0(kRho * rho) * kRho;
+        return (measure * fA, measure * fW, measure * fPhi, measure * fDz);
+    }
+}

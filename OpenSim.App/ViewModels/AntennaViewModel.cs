@@ -678,15 +678,33 @@ public partial class AntennaViewModel : ObservableObject
             var (sweep, display) = await Task.Run(() =>
             {
                 var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                double FrequencyAt(int k) => points == 1
+                    ? fMin
+                    : fMin * Math.Pow(fMax / fMin, (double)k / (points - 1));
+
+                // Sweep points are independent (each is its own table + fill + LU),
+                // so they compute into pre-sized slots in parallel and assemble in
+                // frequency order — every point is deterministic on its own, so the
+                // sweep results and log lines match the serial loop exactly.
+                var results = new OpenSim.Rf.Surface.SurfaceMomSolution[points];
+                var pointTiming = new List<string>[points];
+                try
+                {
+                    Parallel.For(0, points, k =>
+                    {
+                        pointTiming[k] = new List<string>();
+                        results[k] = SolveSurfacePoint(solver, surface, port, FrequencyAt(k),
+                            substrate, pointTiming[k]);
+                    });
+                }
+                catch (AggregateException e) { throw e.InnerExceptions[0]; }
+
                 var list = new List<AntennaZinPoint>(points);
                 for (int k = 0; k < points; k++)
                 {
-                    double f = points == 1
-                        ? fMin
-                        : fMin * Math.Pow(fMax / fMin, (double)k / (points - 1));
-                    var point = SolveSurfacePoint(solver, surface, port, f, substrate, timing);
-                    list.Add(new AntennaZinPoint(f,
-                        point.InputImpedance.Real, point.InputImpedance.Imaginary));
+                    list.Add(new AntennaZinPoint(FrequencyAt(k),
+                        results[k].InputImpedance.Real, results[k].InputImpedance.Imaginary));
+                    timing.AddRange(pointTiming[k]);
                 }
                 return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, timing));
             });
@@ -744,17 +762,8 @@ public partial class AntennaViewModel : ObservableObject
             FieldResult = $"Not computable: {failure}";
             return;
         }
-        if (substrate is not null)
-        {
-            // The free-space probe's kernels are wrong inside/near a slab, and the
-            // in-slab layered field kernels are named future work — never a silently
-            // wrong map.
-            FieldResult = "Not computable: near-field maps over a dielectric substrate are not "
-                          + "available in v1 (the in-slab field kernels are future work). The far-field "
-                          + "lobe and the surface-current map are available; εr = 1 restores the air-gap probe.";
-            return;
-        }
-        FieldResult = $"Computing ({surface.BasisCount} RWG unknowns)…";
+        FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
+                      + (substrate is null ? "" : ", layered field kernels") + ")…";
         try
         {
             var (center, diagonal) = SurfaceBounds(surface);
@@ -765,25 +774,37 @@ public partial class AntennaViewModel : ObservableObject
 
             var (map, solution) = await Task.Run(() =>
             {
-                var solved = new OpenSim.Rf.Surface.SurfaceMomSolver().Solve(surface, frequency, port);
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
                 var points = new List<Vector3D>(n * n * n);
                 for (int z = 0; z < n; z++)
                     for (int y = 0; y < n; y++)
                         for (int x = 0; x < n; x++)
                             points.Add(center + new Vector3D(
                                 x * spacing - span / 2, y * spacing - span / 2, z * spacing - span / 2));
-                return (OpenSim.Rf.Surface.SurfaceFieldProbe.Evaluate(surface, solved, points), solved);
+                if (substrate is null)
+                {
+                    var solvedFree = solver.Solve(surface, frequency, port);
+                    return (OpenSim.Rf.Surface.SurfaceFieldProbe.Evaluate(surface, solvedFree, points),
+                        solvedFree);
+                }
+                // The Stage D layered field kernels: per-z tables (in-slab AND
+                // above-slab points; at/below the ground E = 0 exactly).
+                var table = BuildKernelTable(surface, substrate, frequency);
+                var solved = solver.Solve(surface, table, port);
+                return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
+                    surface, table, solved, points), solved);
             });
 
             VectorFieldModel = SceneBuilder.BuildVectorFieldModel(
                 map, ColormapKind.Viridis, arrowLength: 0.8 * spacing);
             SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, solution, ColormapKind.Viridis);
-            GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate: null);
+            GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
 
             double peak = map.Magnitude.Max();
             FieldResult = $"Near field at {FrequencyMHz:g4} MHz: peak |E| = {peak:g4} V/m " +
-                          $"(1 V feed, {n}³ grid; arrows are the t = 0 snapshot; " +
-                          "the sheet is colored by log₁₀|J|)";
+                          $"(1 V feed, {n}³ grid" +
+                          (substrate is null ? "" : $", εr = {substrate.RelativePermittivity:g3} layered kernels") +
+                          "; arrows are the t = 0 snapshot; the sheet is colored by log₁₀|J|)";
             _log.Append($"Antenna: {FieldResult}");
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }

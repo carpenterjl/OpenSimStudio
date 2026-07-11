@@ -83,7 +83,7 @@ public sealed partial class SurfaceMomSolver
                 nameof(surface));
 
         double omega = 2 * Math.PI * kernel.FrequencyHz;
-        var z = AssembleLayeredImpedanceMatrix(surface, kernel, omega);
+        var z = AssembleLayeredImpedanceMatrix(surface, kernel, omega, MaxDegreeOfParallelism);
         return SolveAssembled(surface, port, gapVolts, kernel.FrequencyHz, z);
     }
 
@@ -116,30 +116,35 @@ public sealed partial class SurfaceMomSolver
     }
 
     internal static ComplexDenseMatrix AssembleLayeredImpedanceMatrix(
-        SurfaceStructure surface, LayeredKernelTable kernel, double omega)
+        SurfaceStructure surface, LayeredKernelTable kernel, double omega,
+        int? maxDegreeOfParallelism = null)
     {
         int n = surface.BasisCount;
         var z = new ComplexDenseMatrix(n, n);
         Complex vectorFactor = Complex.ImaginaryOne * omega * RfConstants.Mu0 / (4 * Math.PI);
         Complex chargeFactor = -Complex.ImaginaryOne / (4 * Math.PI * RfConstants.Eps0 * omega);
-        int triangleCount = surface.Triangles.Count;
         var split = new LayeredKernelSplit(kernel);
+        var pairs = PairMomentSchedule.Build(surface);
 
-        for (int p = 0; p < triangleCount; p++)
+        // Parallel dual-kernel moments into slots (all three tracks of one pair —
+        // singular primary, shifted image, tabulated smooth — compute inside its
+        // slot; the table's spline evaluation is immutable-read thread-safe), then
+        // the sequential canonical-order scatter: bitwise-identical Z at any DOP.
+        var slots = PairMomentSchedule.Compute(pairs, maxDegreeOfParallelism, (p, q) =>
         {
-            if (surface.TriangleSupports[p].Count == 0) continue;
-            for (int q = p; q < triangleCount; q++)
+            var (momentsA, momentsPhi) = LayeredPairMoments(surface, p, q, split);
+            if (p == q)
             {
-                if (surface.TriangleSupports[q].Count == 0) continue;
-                var (momentsA, momentsPhi) = LayeredPairMoments(surface, p, q, split);
-                if (p == q)
-                {
-                    momentsA = momentsA.Symmetrized();
-                    momentsPhi = momentsPhi.Symmetrized();
-                }
-                ScatterLayeredPair(z, surface, p, q, momentsA, momentsPhi,
-                    vectorFactor, chargeFactor);
+                momentsA = momentsA.Symmetrized();
+                momentsPhi = momentsPhi.Symmetrized();
             }
+            return (momentsA, momentsPhi);
+        });
+        for (int i = 0; i < pairs.Length; i++)
+        {
+            var (p, q) = pairs[i];
+            ScatterLayeredPair(z, surface, p, q, slots[i].momentsA, slots[i].momentsPhi,
+                vectorFactor, chargeFactor);
         }
         return z;
     }

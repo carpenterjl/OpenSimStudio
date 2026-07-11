@@ -32,11 +32,12 @@ public sealed class LayeredKernelTable
     private const int FarKnotsPerWavelength = 64;
 
     private readonly SurfaceWavePole[] _poles;
+    private readonly Complex[] _voltageResidues;
     private readonly double _rhoCross;
     private readonly double _rhoMin;
     private readonly double _rhoMax;
-    private readonly ComplexSpline _nearA, _nearPhi;
-    private readonly ComplexSpline? _farA, _farPhi;
+    private readonly ComplexSpline _nearA, _nearPhi, _nearV;
+    private readonly ComplexSpline? _farA, _farPhi, _farV;
 
     public SubstrateStackup Substrate { get; }
     public double FrequencyHz { get; }
@@ -51,7 +52,12 @@ public sealed class LayeredKernelTable
     /// <summary>Number of surface-wave poles extracted (TM0 is always present).</summary>
     public int PoleCount => _poles.Length;
 
-    public LayeredKernelTable(SubstrateStackup substrate, double frequencyHz, double rhoMax)
+    /// <param name="maxDegreeOfParallelism">Thread count for the knot evaluations
+    /// (null = unbounded). Every knot is an independent Sommerfeld integral written to
+    /// its own slot and the splines are constructed sequentially afterwards, so the
+    /// table is bitwise identical for ANY value — purely a resource knob.</param>
+    public LayeredKernelTable(SubstrateStackup substrate, double frequencyHz, double rhoMax,
+        int? maxDegreeOfParallelism = null)
     {
         if (frequencyHz <= 0) throw new ArgumentOutOfRangeException(nameof(frequencyHz));
         var stopwatch = Stopwatch.StartNew();
@@ -61,6 +67,10 @@ public sealed class LayeredKernelTable
         PhiImages = SommerfeldIntegrator.PhiImageCoefficients(
             SpectralKernels.ComplexPermittivity(substrate));
         _poles = SurfaceWavePoles.Find(substrate, K0).ToArray();
+        _voltageResidues = new Complex[_poles.Length];
+        for (int p = 0; p < _poles.Length; p++)
+            _voltageResidues[p] = VoltageKernel.ResidueFromPhi(substrate, K0,
+                _poles[p].KRho, _poles[p].ResiduePhi);
 
         if (rhoMax <= 0) throw new ArgumentOutOfRangeException(nameof(rhoMax));
         double k1 = K0 * Math.Sqrt(substrate.RelativePermittivity);
@@ -77,18 +87,24 @@ public sealed class LayeredKernelTable
         _rhoCross = rhoMax > 2 / k1 ? 1 / k1 : rhoMax;
 
         // NEAR: Smooth = poles + remainder, one spline. FAR: remainder only.
+        // Every knot is an independent Sommerfeld integral → the import pipeline's
+        // slot-array recipe (parallel compute, sequential spline construction after)
+        // keeps the build bitwise deterministic at any thread count.
         var nearGrid = LogGrid(_rhoMin, Math.Min(_rhoCross * 1.02, _rhoMax));
         var nearA = new Complex[nearGrid.Length];
         var nearPhi = new Complex[nearGrid.Length];
-        for (int i = 0; i < nearGrid.Length; i++)
+        var nearV = new Complex[nearGrid.Length];
+        ForKnots(nearGrid.Length, maxDegreeOfParallelism, i =>
         {
-            var (a, phi) = SommerfeldIntegrator.Remainder(substrate, K0, _poles, nearGrid[i]);
+            var (a, phi, v) = SommerfeldIntegrator.RemainderAll(substrate, K0, _poles, nearGrid[i]);
             var (poleA, polePhi) = PoleTerms(nearGrid[i]);
             nearA[i] = a + poleA;
             nearPhi[i] = phi + polePhi;
-        }
+            nearV[i] = v + VoltagePoleTerms(nearGrid[i]);
+        });
         _nearA = new ComplexSpline(nearGrid, nearA);
         _nearPhi = new ComplexSpline(nearGrid, nearPhi);
+        _nearV = new ComplexSpline(nearGrid, nearV);
 
         if (_rhoCross < _rhoMax)
         {
@@ -101,10 +117,13 @@ public sealed class LayeredKernelTable
                 2 * Math.PI / K0 / FarKnotsPerWavelength);
             var farA = new Complex[farGrid.Length];
             var farPhi = new Complex[farGrid.Length];
-            for (int i = 0; i < farGrid.Length; i++)
-                (farA[i], farPhi[i]) = SommerfeldIntegrator.Remainder(substrate, K0, _poles, farGrid[i]);
+            var farV = new Complex[farGrid.Length];
+            ForKnots(farGrid.Length, maxDegreeOfParallelism, i =>
+                (farA[i], farPhi[i], farV[i]) =
+                    SommerfeldIntegrator.RemainderAll(substrate, K0, _poles, farGrid[i]));
             _farA = new ComplexSpline(farGrid, farA, logAbscissa: false);
             _farPhi = new ComplexSpline(farGrid, farPhi, logAbscissa: false);
+            _farV = new ComplexSpline(farGrid, farV, logAbscissa: false);
         }
         BuildMilliseconds = stopwatch.Elapsed.TotalMilliseconds;
     }
@@ -151,6 +170,44 @@ public sealed class LayeredKernelTable
                 (PhiImages.C0 * g0 + PhiImages.C1 * g1) / RfConstants.Eps0);
     }
 
+    /// <summary>The tabulated smooth part of the Stage D VOLTAGE kernel K_V — the
+    /// patch-to-ground V = −∫₀^d E_z dz per unit surface charge, both gauge legs
+    /// (see <see cref="VoltageKernel"/>). K_V shares K̃_Φ's quasi-static images
+    /// exactly, so the full kernel is <c>ImageTerms(ρ).ImagePhi + EvaluateVoltageSmooth(ρ)</c>.</summary>
+    public Complex EvaluateVoltageSmooth(double rho)
+    {
+        if (rho > _rhoMax)
+            throw new ArgumentOutOfRangeException(nameof(rho),
+                $"ρ = {rho:g6} exceeds the table's build radius {_rhoMax:g6} — build the table for the structure's true diameter.");
+        double clamped = Math.Max(rho, _rhoMin);
+        if (clamped <= _rhoCross || _farV is null)
+            return _nearV.Evaluate(clamped);
+        return _farV.Evaluate(clamped) + VoltagePoleTerms(clamped);
+    }
+
+    /// <summary>The full spatial voltage kernel at lateral distance ρ (gates +
+    /// diagnostics; the probe consumes the image and smooth parts separately).</summary>
+    public Complex EvaluateVoltageKernel(double rho) =>
+        ImageTerms(rho).ImagePhi + EvaluateVoltageSmooth(rho);
+
+    /// <summary>Spline-free reference for the voltage kernel — the gate comparator.</summary>
+    public Complex EvaluateVoltageKernelDirect(double rho, int refinement = 1)
+    {
+        var (_, _, v) = SommerfeldIntegrator.RemainderAll(Substrate, K0, _poles, rho, refinement);
+        return ImageTerms(rho).ImagePhi + v + VoltagePoleTerms(rho);
+    }
+
+    /// <summary>Σ −(j/4)·Res_V·k_p·H₀⁽²⁾(k_pρ) — the voltage kernel's surface-wave
+    /// content, residues from the exact Res_V/Res_Φ identity.</summary>
+    internal Complex VoltagePoleTerms(double rho)
+    {
+        Complex v = Complex.Zero;
+        for (int p = 0; p < _poles.Length; p++)
+            v += _voltageResidues[p]
+                 * new Complex(0, -0.25) * _poles[p].KRho * Bessel.H02(_poles[p].KRho * rho);
+        return v;
+    }
+
     /// <summary>Σ −(j/4)·Res·k_p·H₀⁽²⁾(k_pρ) over the extracted poles, per kernel —
     /// the closed-form surface-wave content (public: the power ledger reports it).</summary>
     public (Complex A, Complex Phi) PoleTerms(double rho)
@@ -172,6 +229,22 @@ public sealed class LayeredKernelTable
         var (sin, cos) = Math.SinCos(K0 * r);
         double scale = 1 / (4 * Math.PI * r);
         return new Complex(scale * cos, -scale * sin);
+    }
+
+    /// <summary>Parallel per-knot evaluation, each iteration writing only its own
+    /// slots; a worker exception surfaces as the first inner exception.</summary>
+    private static void ForKnots(int count, int? maxDegreeOfParallelism, Action<int> body)
+    {
+        try
+        {
+            Parallel.For(0, count,
+                new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 },
+                body);
+        }
+        catch (AggregateException e)
+        {
+            throw e.InnerExceptions[0];
+        }
     }
 
     private static double[] LogGrid(double from, double to)
