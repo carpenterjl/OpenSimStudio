@@ -49,6 +49,8 @@
             <ModelVisual3D Content="{Binding Antenna.VectorFieldModel}"/>
             <ModelVisual3D Content="{Binding Antenna.FieldSliceModel}"/>
             <ModelVisual3D Content="{Binding Antenna.FarFieldLobeModel}"/>
+            <ModelVisual3D Content="{Binding Antenna.GroundPlaneModel}"/>
+            <ModelVisual3D Content="{Binding Antenna.SurfaceCurrentModel}"/>
             <helix:LinesVisual3D x:Name="AntennaWireLines" Color="#FF7BE0" Thickness="1.6"/>
         </helix:HelixViewport3D>
 

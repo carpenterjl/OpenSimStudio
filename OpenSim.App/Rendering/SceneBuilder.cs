@@ -422,6 +422,94 @@ public static class SceneBuilder
         return new GeometryModel3D(geometry3D, material) { BackMaterial = material };
     }
 
+    /// <summary>The RWG surface colored by log₁₀|J| at each triangle centroid over
+    /// three decades (the near-field arrows' normalization, one mental legend for
+    /// both). Flat-shaded — vertices are duplicated per triangle so each carries one
+    /// texture coordinate into the colormap brush; frozen, both faces drawn.</summary>
+    public static GeometryModel3D BuildSurfaceCurrentModel(
+        OpenSim.Rf.Surface.SurfaceStructure surface,
+        OpenSim.Rf.Surface.SurfaceMomSolution solution, ColormapKind colormap)
+    {
+        const int decades = 3;
+        int count = surface.Triangles.Count;
+        var magnitudes = new double[count];
+        double peak = 0;
+        for (int t = 0; t < count; t++)
+        {
+            var centroid = surface.TriangleCentroids[t];
+            double area = surface.TriangleAreas[t];
+            System.Numerics.Complex jx = default, jy = default, jz = default;
+            foreach (var (basis, sign, opposite) in surface.TriangleSupports[t])
+            {
+                var coefficient = solution.EdgeCurrents[basis]
+                    * (sign * surface.Edges[basis].Length / (2 * area));
+                var rho = centroid - surface.Vertices[opposite];
+                jx += coefficient * rho.X;
+                jy += coefficient * rho.Y;
+                jz += coefficient * rho.Z;
+            }
+            magnitudes[t] = Math.Sqrt(jx.Magnitude * jx.Magnitude
+                + jy.Magnitude * jy.Magnitude + jz.Magnitude * jz.Magnitude);
+            peak = Math.Max(peak, magnitudes[t]);
+        }
+        if (peak <= 0) peak = 1;
+
+        var geometry3D = new MeshGeometry3D();
+        for (int t = 0; t < count; t++)
+        {
+            double normalized = magnitudes[t] <= 0
+                ? 0
+                : Math.Clamp(1 + Math.Log10(magnitudes[t] / peak) / decades, 0, 1);
+            var (a, b, c) = surface.Triangles[t];
+            foreach (var v in new[] { surface.Vertices[a], surface.Vertices[b], surface.Vertices[c] })
+            {
+                geometry3D.TriangleIndices.Add(geometry3D.Positions.Count);
+                geometry3D.Positions.Add(new Point3D(v.X, v.Y, v.Z));
+                geometry3D.TextureCoordinates.Add(new System.Windows.Point(normalized, 0.5));
+            }
+        }
+        geometry3D.Freeze();
+        var material = new DiffuseMaterial(Colormap.CreateBrush(colormap));
+        material.Freeze();
+        var model = new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+        model.Freeze();
+        return model;
+    }
+
+    /// <summary>A translucent disk marking the antenna solver's infinite PEC ground
+    /// plane — the modeling assumption made visible. The disk is display-only (the
+    /// plane itself is infinite and never meshed); frozen, both faces drawn.</summary>
+    public static GeometryModel3D BuildGroundPlaneModel(double centerX, double centerY,
+        double surfaceZ, double radius)
+    {
+        const int segments = 48;
+        var geometry3D = new MeshGeometry3D();
+        geometry3D.Positions.Add(new Point3D(centerX, centerY, surfaceZ));
+        for (int i = 0; i < segments; i++)
+        {
+            double angle = 2 * Math.PI * i / segments;
+            geometry3D.Positions.Add(new Point3D(
+                centerX + radius * Math.Cos(angle),
+                centerY + radius * Math.Sin(angle),
+                surfaceZ));
+        }
+        for (int i = 0; i < segments; i++)
+        {
+            geometry3D.TriangleIndices.Add(0);
+            geometry3D.TriangleIndices.Add(1 + i);
+            geometry3D.TriangleIndices.Add(1 + (i + 1) % segments);
+        }
+        geometry3D.Freeze();
+
+        var brush = new SolidColorBrush(Color.FromArgb(56, 0x7B, 0xA0, 0x5B));
+        brush.Freeze();
+        var material = new DiffuseMaterial(brush);
+        material.Freeze();
+        var model = new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+        model.Freeze();
+        return model;
+    }
+
     /// <summary>
     /// The far-field lobe: a spherical surface r(θ,φ) = scale·U/U_max around the
     /// structure center, colored by the same normalized gain. The pattern's θ grid

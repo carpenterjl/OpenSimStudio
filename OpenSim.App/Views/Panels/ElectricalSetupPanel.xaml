@@ -120,9 +120,10 @@
             <TextBlock Text="{Binding Inductance.InductanceAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
 
-            <!-- Step 6: antenna simulator (thin-wire MoM, free space) -->
-            <TextBlock Text="6. Antenna (RF, thin-wire MoM)" FontWeight="Bold" Margin="0,8,0,2"/>
-            <TextBlock Text="Free-space method of moments — the board dielectric is not modeled. Works from the imported board's centerlines or a wizard shape; no meshing needed."
+            <!-- Step 6: antenna simulator (thin-wire + RWG surface MoM; free space,
+                 PEC ground, or a dielectric substrate via the layered Green's function) -->
+            <TextBlock Text="6. Antenna (RF, method of moments)" FontWeight="Bold" Margin="0,8,0,2"/>
+            <TextBlock Text="Thin wires and RWG surfaces in free space or over an infinite PEC ground (image theory). Surface metal can sit on a dielectric substrate (εr, tanδ): a rigorous layered-media Green's function with surface waves — set εr = 1 for air. Works from the imported board's centerlines, a copper island, or a wizard shape; no meshing needed."
                        TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,0,0,2"/>
             <UniformGrid Columns="2">
                 <Label Content="Geometry"/>
@@ -138,16 +139,47 @@
                 <TextBox Text="{Binding Antenna.DipoleLengthMm}"/>
                 <Label Content="Loop radius [mm]"/>
                 <TextBox Text="{Binding Antenna.LoopRadiusMm}"/>
+                <Label Content="Monopole height [mm]"/>
+                <TextBox Text="{Binding Antenna.MonopoleHeightMm}"/>
                 <Label Content="Wire radius [mm]"/>
                 <TextBox Text="{Binding Antenna.WireRadiusMm}"/>
+                <Label Content="Plate/patch W×L [mm]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding Antenna.PlateWidthMm}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding Antenna.PlateLengthMm}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Patch height [mm]"/>
+                <TextBox Text="{Binding Antenna.PatchHeightMm}"
+                         ToolTip="Gap between the patch metal and the ground plane (RWG patch mode). With a substrate εr &gt; 1 this is the dielectric slab thickness."/>
+                <Label Content="Substrate εr / tanδ"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="SubstrateEpsRBox" Text="{Binding Antenna.SubstrateEpsR}" Margin="0,0,2,0"
+                             ToolTip="Dielectric constant of the slab filling the gap under surface (RWG) metal. εr = 1 = air (PEC image theory); εr &gt; 1 engages the rigorous layered-media Green's function, surface waves included."/>
+                    <TextBox Text="{Binding Antenna.SubstrateTanD}" Margin="2,0,0,0"
+                             ToolTip="Substrate loss tangent (0 = lossless)"/>
+                </UniformGrid>
+                <Label Content="Island (RWG)"/>
+                <ComboBox x:Name="AntennaIslandCombo"
+                          ItemsSource="{Binding Antenna.AntennaIslands}"
+                          SelectedItem="{Binding Antenna.AntennaIsland}"
+                          DisplayMemberPath="Label"/>
+                <CheckBox x:Name="GroundPlaneCheck" Content="Ground plane (PEC)"
+                          IsChecked="{Binding Antenna.UseGroundPlane}"
+                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Infinite perfect-conductor ground via image theory. The monopole always uses it."/>
+                <TextBox Text="{Binding Antenna.GroundZMm}"
+                         ToolTip="Ground plane z [mm]"/>
+                <Label Content="Height above ground [mm]"/>
+                <TextBox Text="{Binding Antenna.HeightAboveGroundMm}"
+                         ToolTip="Wizard dipole/loop shapes are lifted this far above the plane; net geometry keeps its board coordinates."/>
                 <Label Content="f [MHz]"/>
                 <TextBox Text="{Binding Antenna.FrequencyMHz}"/>
                 <Label Content="Sweep f min [MHz]"/>
                 <TextBox Text="{Binding Antenna.SweepFMinMHz}"/>
                 <Label Content="Sweep f max [MHz]"/>
-                <TextBox Text="{Binding Antenna.SweepFMaxMHz}"/>
+                <TextBox x:Name="SweepFMaxBox" Text="{Binding Antenna.SweepFMaxMHz}"/>
                 <Label Content="Sweep points"/>
-                <TextBox Text="{Binding Antenna.SweepPoints}"/>
+                <TextBox x:Name="SweepPointsBox" Text="{Binding Antenna.SweepPoints}"/>
             </UniformGrid>
             <Button x:Name="SolveAntennaButton" Content="Solve antenna (Zin sweep)"
                     Command="{Binding Antenna.SolveAntennaCommand}"/>

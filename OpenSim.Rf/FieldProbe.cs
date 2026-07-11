@@ -43,14 +43,20 @@ public static class FieldProbe
             Complex gx = Complex.Zero, gy = Complex.Zero, gz = Complex.Zero;   // ∇Φ integrals
             var point = points[p];
 
-            for (int e = 0; e < wire.ElementCount; e++)
+            // Inside a PEC (at or below a ground plane) the field is identically zero —
+            // the honest value, returned exactly rather than summing near-cancelling
+            // real/image contributions.
+            if (wire.Ground is { } plane && point.Z <= plane.SurfaceZ)
             {
-                var start = wire.ElementStart(e);
-                double length = wire.ElementLength(e);
-                var tangent = wire.ElementDirection(e);
-                double c = wire.ElementRadii[e];
-                Complex startCurrent = nodeCurrents[e];
-                Complex endCurrent = nodeCurrents[(e + 1) % wire.Nodes.Count];
+                fields[p] = (Complex.Zero, Complex.Zero, Complex.Zero);
+                magnitudes[p] = 0;
+                snapshots[p] = new Vector3D(0, 0, 0);
+                continue;
+            }
+
+            void AddSegment(Vector3D start, Vector3D tangent, double length, double c,
+                Complex startCurrent, Complex endCurrent)
+            {
                 // Piecewise-constant line charge from current continuity.
                 Complex charge = (startCurrent - endCurrent) / (Complex.ImaginaryOne * omega * length);
 
@@ -84,6 +90,28 @@ public static class FieldProbe
                         gy += wPhi * separation.Y;
                         gz += wPhi * separation.Z;
                     }
+                }
+            }
+
+            for (int e = 0; e < wire.ElementCount; e++)
+            {
+                var start = wire.ElementStart(e);
+                var end = wire.ElementEnd(e);
+                double length = wire.ElementLength(e);
+                var tangent = wire.ElementDirection(e);
+                double c = wire.ElementRadii[e];
+                Complex startCurrent = nodeCurrents[e];
+                Complex endCurrent = nodeCurrents[(e + 1) % wire.Nodes.Count];
+                AddSegment(start, tangent, length, c, startCurrent, endCurrent);
+
+                // Ground plane: the image element (mirrored + endpoint-swapped, current
+                // running end→start) contributes too — the solver's image mapping.
+                if (wire.Ground is { } ground)
+                {
+                    var imageStart = ThinWireMomSolver.Mirror(end, ground.SurfaceZ);
+                    var imageEnd = ThinWireMomSolver.Mirror(start, ground.SurfaceZ);
+                    AddSegment(imageStart, (imageEnd - imageStart) / length, length, c,
+                        endCurrent, startCurrent);
                 }
             }
 

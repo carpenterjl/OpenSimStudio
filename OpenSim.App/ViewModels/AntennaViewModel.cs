@@ -30,6 +30,10 @@ public partial class AntennaViewModel : ObservableObject
     public const string NetMode = "Selected net (PCB)";
     public const string DipoleMode = "Dipole (wizard)";
     public const string LoopMode = "Loop (wizard)";
+    public const string MonopoleMode = "Monopole (wizard)";
+    public const string PlateMode = "Plate (wizard, RWG)";
+    public const string PatchMode = "Patch over ground (wizard, RWG)";
+    public const string IslandMode = "Copper island (PCB, RWG)";
 
     private readonly ILogService _log;
     private readonly ElectrodesViewModel _electrodes;
@@ -45,7 +49,14 @@ public partial class AntennaViewModel : ObservableObject
         session.GeometryReplaced += (_, _) => ClearOverlays();
     }
 
-    public ObservableCollection<string> SourceModes { get; } = new() { NetMode, DipoleMode, LoopMode };
+    public ObservableCollection<string> SourceModes { get; } =
+        new() { NetMode, DipoleMode, LoopMode, MonopoleMode, PlateMode, PatchMode, IslandMode };
+
+    /// <summary>Surface (RWG) modes solve sheets; the others solve thin wires. Mixing
+    /// the two in one structure is not supported in v1 — the modes are disjoint by
+    /// construction, so no combined request can even be expressed.</summary>
+    private bool IsSurfaceMode =>
+        SourceMode is PlateMode or PatchMode or IslandMode;
 
     /// <summary>Nullable so the ComboBox's transient null push lands harmlessly.</summary>
     [ObservableProperty] private string? _sourceMode = DipoleMode;
@@ -56,7 +67,32 @@ public partial class AntennaViewModel : ObservableObject
     // Wizard dimensions [mm] — defaults sit near λ/2 resonance at the default frequency.
     [ObservableProperty] private double _dipoleLengthMm = 500;
     [ObservableProperty] private double _loopRadiusMm = 80;
+    [ObservableProperty] private double _monopoleHeightMm = 250;
     [ObservableProperty] private double _wireRadiusMm = 0.5;
+
+    // Infinite PEC ground plane (image theory). The monopole and patch modes always
+    // use it (they are meaningless without); other modes opt in. Wizard shapes are
+    // lifted HeightAboveGroundMm above the plane; a net keeps its board coordinates.
+    [ObservableProperty] private bool _useGroundPlane;
+    [ObservableProperty] private double _groundZMm;
+    [ObservableProperty] private double _heightAboveGroundMm = 250;
+
+    // Surface (RWG) wizard dimensions [mm]. The plate doubles as the patch metal;
+    // the patch height is the gap to the ground plane.
+    [ObservableProperty] private double _plateWidthMm = 300;
+    [ObservableProperty] private double _plateLengthMm = 500;
+    [ObservableProperty] private double _patchHeightMm = 50;
+
+    // Dielectric substrate filling the gap under surface metal (the layered-media
+    // Green's-function path). εr = 1 keeps the Stage B PEC-image path — the default
+    // changes nothing. The slab thickness IS the patch height / height above ground:
+    // v1 metal sits on the slab's top surface. A board import seeds these (editable).
+    [ObservableProperty] private double _substrateEpsR = 1.0;
+    [ObservableProperty] private double _substrateTanD;
+
+    /// <summary>Copper islands of the selected net, for the island (RWG) mode.</summary>
+    public ObservableCollection<IslandChoice> AntennaIslands { get; } = new();
+    [ObservableProperty] private IslandChoice? _antennaIsland;
 
     // Frequency [MHz]: the field/lobe frequency plus the impedance sweep range.
     [ObservableProperty] private double _frequencyMHz = 300;
@@ -77,6 +113,8 @@ public partial class AntennaViewModel : ObservableObject
     [ObservableProperty] private Model3D? _vectorFieldModel;
     [ObservableProperty] private Model3D? _fieldSliceModel;
     [ObservableProperty] private Model3D? _farFieldLobeModel;
+    [ObservableProperty] private Model3D? _groundPlaneModel;
+    [ObservableProperty] private Model3D? _surfaceCurrentModel;
     [ObservableProperty] private Point3DCollection _wirePoints = new();
 
     /// <summary>Installs an imported board (same sanctioned edge as the inductance panel).</summary>
@@ -87,6 +125,19 @@ public partial class AntennaViewModel : ObservableObject
         _options = meshOptions;
         foreach (var net in board.Nets) Nets.Add(net);
         SourceMode = NetMode;
+
+        // Seed the island-antenna substrate from the board stackup (editable; only
+        // when the user hasn't already set one — a re-import must not clobber edits).
+        var options = meshOptions();
+        if (options.DefaultDielectricThickness > 0)
+            HeightAboveGroundMm = options.DefaultDielectricThickness * 1e3;
+        if (SubstrateEpsR == 1.0)
+        {
+            SubstrateEpsR = 4.4; // FR4 — the board material the rest of the app assumes
+            SubstrateTanD = 0.02;
+            _log.Append("Antenna: substrate seeded from the board (FR4 εr 4.4, tanδ 0.02, "
+                + $"thickness {HeightAboveGroundMm:g3} mm) — edit in the panel; εr = 1 restores the air/PEC path.");
+        }
     }
 
     /// <summary>Follows the PCB panel's net selection until the user picks one here.</summary>
@@ -115,7 +166,20 @@ public partial class AntennaViewModel : ObservableObject
         VectorFieldModel = null;
         FieldSliceModel = null;
         FarFieldLobeModel = null;
+        GroundPlaneModel = null;
+        SurfaceCurrentModel = null;
         WirePoints = new Point3DCollection();
+    }
+
+    partial void OnAntennaNetChanged(CopperNet? value)
+    {
+        AntennaIslands.Clear();
+        AntennaIsland = null;
+        if (value is null) return;
+        foreach (var island in value.Islands.OrderByDescending(
+                     i => Math.Abs(OpenSim.Core.Geometry2D.Polygon2.RingArea(i.Shape.Outer))))
+            AntennaIslands.Add(new IslandChoice(island));
+        AntennaIsland = AntennaIslands.FirstOrDefault();
     }
 
     // ------------------------------------------------------------------
@@ -123,7 +187,7 @@ public partial class AntennaViewModel : ObservableObject
     // ------------------------------------------------------------------
 
     [RelayCommand]
-    private void SolveAntenna()
+    private async Task SolveAntenna()
     {
         ZinSweep.Clear();
         AntennaResult = "";
@@ -131,6 +195,14 @@ public partial class AntennaViewModel : ObservableObject
         if (SweepFMinMHz <= 0 || SweepFMaxMHz < SweepFMinMHz || SweepPoints < 1 || FrequencyMHz <= 0)
         {
             AntennaResult = "Not solvable: the frequency range is invalid.";
+            return;
+        }
+
+        if (IsSurfaceMode)
+        {
+            // Surface fills are O(N²·quadrature) and can take tens of seconds — run
+            // off-thread so the UI stays live (wire solves are sub-second and inline).
+            await SolveSurfaceAntennaAsync();
             return;
         }
 
@@ -158,7 +230,7 @@ public partial class AntennaViewModel : ObservableObject
                             $"{(display.InputImpedance.Imaginary >= 0 ? "+" : "−")} " +
                             $"j{Math.Abs(display.InputImpedance.Imaginary):g4} Ω at {FrequencyMHz:g4} MHz " +
                             $"({wire.BasisCount} unknowns)";
-            AntennaAssumptions = "Assumptions: " + string.Join(" ", ThinWireMomSolver.Assumptions)
+            AntennaAssumptions = "Assumptions: " + string.Join(" ", BuildAssumptions(wire))
                 + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
             _log.Append($"Antenna: {AntennaResult}");
         }
@@ -166,9 +238,14 @@ public partial class AntennaViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ComputeNearField()
+    private async Task ComputeNearField()
     {
         FieldResult = "";
+        if (IsSurfaceMode)
+        {
+            await ComputeSurfaceNearFieldAsync();
+            return;
+        }
         if (!TryDiscretize(out var wire, out var feedBasis, out _, out string? failure))
         {
             FieldResult = $"Not computable: {failure}";
@@ -205,6 +282,7 @@ public partial class AntennaViewModel : ObservableObject
             FieldSliceModel = SceneBuilder.BuildFieldSliceModel(slice, sliceN, sliceN, ColormapKind.Viridis);
 
             WirePoints = BuildWireOverlay(wire);
+            GroundPlaneModel = BuildGroundOverlay(wire);
             double peak = map.Magnitude.Concat(slice.Magnitude).Max();
             FieldResult = $"Near field at {FrequencyMHz:g4} MHz: peak |E| = {peak:g4} V/m " +
                           $"(1 V feed, {n}³ grid + mid-plane slice; arrows are the t = 0 snapshot, " +
@@ -215,9 +293,14 @@ public partial class AntennaViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ShowFarField()
+    private async Task ShowFarField()
     {
         FieldResult = "";
+        if (IsSurfaceMode)
+        {
+            await ShowSurfaceFarFieldAsync();
+            return;
+        }
         if (!TryDiscretize(out var wire, out var feedBasis, out _, out string? failure))
         {
             FieldResult = $"Not computable: {failure}";
@@ -232,6 +315,7 @@ public partial class AntennaViewModel : ObservableObject
             FarFieldLobeModel = SceneBuilder.BuildFarFieldLobe(
                 pattern, center, scale: 1.25 * diagonal, ColormapKind.Viridis);
             WirePoints = BuildWireOverlay(wire);
+            GroundPlaneModel = BuildGroundOverlay(wire);
 
             double dbi = 10 * Math.Log10(pattern.MaxDirectivity);
             FieldResult = $"Far field at {FrequencyMHz:g4} MHz: P_rad = " +
@@ -259,6 +343,14 @@ public partial class AntennaViewModel : ObservableObject
         warnings = Array.Empty<string>();
         failure = null;
 
+        var ground = ActiveGround();
+        double groundZ = ground?.SurfaceZ ?? 0;
+        // Wizard shapes are generated around the origin; with a ground plane active they
+        // are lifted so the LOWEST point sits HeightAboveGroundMm above it (a dipole
+        // straddling the plane would rightly be a typed failure). Net geometry keeps its
+        // board coordinates — the user places the plane relative to the board.
+        double lift = groundZ + HeightAboveGroundMm * 1e-3;
+
         IReadOnlyList<WireSegment> wires;
         Vector3D feedHint;
         switch (SourceMode)
@@ -271,6 +363,12 @@ public partial class AntennaViewModel : ObservableObject
                 }
                 wires = CanonicalAntennas.Dipole(DipoleLengthMm * 1e-3, WireRadiusMm * 1e-3);
                 feedHint = Vector3D.Zero;
+                if (ground is not null)
+                {
+                    var offset = new Vector3D(0, 0, lift + DipoleLengthMm * 1e-3 / 2);
+                    wires = Translate(wires, offset);
+                    feedHint += offset;
+                }
                 break;
 
             case LoopMode:
@@ -281,6 +379,25 @@ public partial class AntennaViewModel : ObservableObject
                 }
                 wires = CanonicalAntennas.Loop(LoopRadiusMm * 1e-3, WireRadiusMm * 1e-3);
                 feedHint = new Vector3D(LoopRadiusMm * 1e-3, 0, 0);
+                if (ground is not null)
+                {
+                    var offset = new Vector3D(0, 0, lift);
+                    wires = Translate(wires, offset);
+                    feedHint += offset;
+                }
+                break;
+
+            case MonopoleMode:
+                if (MonopoleHeightMm <= 0 || WireRadiusMm <= 0)
+                {
+                    failure = "the monopole needs a positive height and wire radius";
+                    return false;
+                }
+                // The base sits ON the plane (that grounds it and puts the feed there).
+                wires = Translate(
+                    CanonicalAntennas.Monopole(MonopoleHeightMm * 1e-3, WireRadiusMm * 1e-3),
+                    new Vector3D(0, 0, groundZ));
+                feedHint = new Vector3D(0, 0, groundZ);
                 break;
 
             case NetMode:
@@ -294,7 +411,7 @@ public partial class AntennaViewModel : ObservableObject
 
         double maxFrequency = Math.Max(FrequencyMHz, Math.Max(SweepFMinMHz, SweepFMaxMHz)) * 1e6;
         double lambdaMin = 299_792_458.0 / maxFrequency;
-        var grid = WireGridBuilder.Build(wires, maxElementLength: lambdaMin / 10);
+        var grid = WireGridBuilder.Build(wires, maxElementLength: lambdaMin / 10, ground: ground);
         if (grid.Structure is null)
         {
             failure = grid.FailureReason;
@@ -305,6 +422,15 @@ public partial class AntennaViewModel : ObservableObject
         feedBasis = wire.NearestBasis(feedHint);
         return true;
     }
+
+    /// <summary>The ground plane in effect: the monopole always images against one (it
+    /// is meaningless without), other modes opt in via the checkbox.</summary>
+    private GroundPlane? ActiveGround() =>
+        SourceMode == MonopoleMode || UseGroundPlane ? new GroundPlane(GroundZMm * 1e-3) : null;
+
+    private static IReadOnlyList<WireSegment> Translate(IReadOnlyList<WireSegment> segments,
+        Vector3D offset) =>
+        segments.Select(s => s with { A = s.A + offset, B = s.B + offset }).ToArray();
 
     private bool TryBuildNetWires(out IReadOnlyList<WireSegment> wires, out Vector3D feedHint,
         out string? failure)
@@ -351,6 +477,22 @@ public partial class AntennaViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>The solver's assumption list, adjusted for an active ground plane: the
+    /// free-space line is replaced by the image-theory statement (both at once would
+    /// contradict each other).</summary>
+    private IReadOnlyList<string> BuildAssumptions(WireStructure wire)
+    {
+        if (wire.Ground is not { } ground)
+            return ThinWireMomSolver.Assumptions;
+        var list = ThinWireMomSolver.Assumptions
+            .Where(a => !a.StartsWith("Free space")).ToList();
+        list.Insert(1,
+            $"Infinite PEC ground plane at z = {ground.SurfaceZ * 1e3:g4} mm (image theory): " +
+            "fields below the plane are zero; a real finite ground smaller than ~λ will differ. " +
+            "Board dielectric is still not modeled.");
+        return list;
+    }
+
     private static (Vector3D Center, double Diagonal) BoundingSphere(WireStructure wire)
     {
         double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
@@ -366,6 +508,16 @@ public partial class AntennaViewModel : ObservableObject
         return (center, diagonal > 0 ? diagonal : 1e-3);
     }
 
+    /// <summary>A translucent disk at the ground plane's z so the modeling assumption is
+    /// VISIBLE in the viewport (null when no ground is active).</summary>
+    private static Model3D? BuildGroundOverlay(WireStructure wire)
+    {
+        if (wire.Ground is not { } ground) return null;
+        var (center, diagonal) = BoundingSphere(wire);
+        return SceneBuilder.BuildGroundPlaneModel(center.X, center.Y, ground.SurfaceZ,
+            radius: 1.5 * diagonal);
+    }
+
     private static Point3DCollection BuildWireOverlay(WireStructure wire)
     {
         var points = new Point3DCollection(wire.ElementCount * 2);
@@ -378,5 +530,383 @@ public partial class AntennaViewModel : ObservableObject
         }
         points.Freeze();
         return points;
+    }
+
+    // ------------------------------------------------------------------
+    // Surface (RWG) pipeline — plates, air-spaced patches, copper islands
+    // ------------------------------------------------------------------
+
+    /// <summary>Whether the current surface configuration engages the layered-media
+    /// (substrate) path: metal over the ground with a dielectric filling the gap.
+    /// εr = 1 means air — the Stage B PEC-image path, byte-for-byte.</summary>
+    private bool UseSubstrate => SubstrateEpsR > 1.0
+        && (SourceMode == PatchMode || UseGroundPlane);
+
+    private bool TryDiscretizeSurface(out OpenSim.Rf.Surface.SurfaceStructure surface,
+        out OpenSim.Rf.Surface.SurfacePort port, out IReadOnlyList<string> warnings,
+        out string? failure, out OpenSim.Rf.Layered.SubstrateStackup? substrate)
+    {
+        surface = null!;
+        port = null!;
+        warnings = Array.Empty<string>();
+        failure = null;
+        substrate = null;
+
+        if (SubstrateEpsR < 1)
+        {
+            failure = "the substrate εr must be ≥ 1 (εr = 1 is an air gap)";
+            return false;
+        }
+        double maxFrequency = Math.Max(FrequencyMHz, Math.Max(SweepFMinMHz, SweepFMaxMHz)) * 1e6;
+        // The kernel varies on the DIELECTRIC wavelength — the λ/10 element ceiling
+        // must resolve λ_d, not λ₀, when a substrate is engaged.
+        double lambdaMin = 299_792_458.0 / maxFrequency
+                           / (UseSubstrate ? Math.Sqrt(SubstrateEpsR) : 1.0);
+        double groundZ = GroundZMm * 1e-3;
+
+        OpenSim.Rf.Surface.SurfaceGridResult grid;
+        switch (SourceMode)
+        {
+            case PlateMode:
+            {
+                if (PlateWidthMm <= 0 || PlateLengthMm <= 0)
+                {
+                    failure = "the plate needs a positive width and length";
+                    return false;
+                }
+                if (UseSubstrate && HeightAboveGroundMm <= 0)
+                {
+                    failure = "the substrate thickness (height above ground) must be positive";
+                    return false;
+                }
+                // Substrate: the ground lives inside the layered kernel, so the
+                // structure is built bare at the slab's top surface.
+                var ground = UseGroundPlane && !UseSubstrate ? new GroundPlane(groundZ) : null;
+                double z = UseGroundPlane ? groundZ + HeightAboveGroundMm * 1e-3 : 0;
+                grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
+                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10, z, 0.5, ground);
+                if (UseSubstrate)
+                    substrate = new OpenSim.Rf.Layered.SubstrateStackup(
+                        SubstrateEpsR, Math.Max(SubstrateTanD, 0), HeightAboveGroundMm * 1e-3);
+                break;
+            }
+            case PatchMode:
+                if (PlateWidthMm <= 0 || PlateLengthMm <= 0 || PatchHeightMm <= 0)
+                {
+                    failure = "the patch needs positive width, length, and height above ground";
+                    return false;
+                }
+                if (UseSubstrate)
+                {
+                    grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
+                        PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10,
+                        z: groundZ + PatchHeightMm * 1e-3, portFraction: 0);
+                    substrate = new OpenSim.Rf.Layered.SubstrateStackup(
+                        SubstrateEpsR, Math.Max(SubstrateTanD, 0), PatchHeightMm * 1e-3);
+                }
+                else
+                {
+                    grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildPatchOverGround(
+                        PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, PatchHeightMm * 1e-3,
+                        groundZ, lambdaMin / 10);
+                }
+                break;
+
+            case IslandMode:
+            {
+                if (AntennaIsland is not { } choice)
+                {
+                    failure = "import a board and pick a net + island first";
+                    return false;
+                }
+                var shape = choice.Island.Shape;
+                double minX = shape.Outer.Min(p => p.X), maxX = shape.Outer.Max(p => p.X);
+                double minY = shape.Outer.Min(p => p.Y), maxY = shape.Outer.Max(p => p.Y);
+                double diagonal = Math.Sqrt((maxX - minX) * (maxX - minX) + (maxY - minY) * (maxY - minY));
+                // Boards are usually far smaller than λ: the element size must resolve
+                // the ISLAND, not just the wavelength.
+                double element = Math.Min(lambdaMin / 10, diagonal / 8);
+                var ground = UseGroundPlane && !UseSubstrate ? new GroundPlane(groundZ) : null;
+                double z = UseGroundPlane ? groundZ + HeightAboveGroundMm * 1e-3 : 0;
+                if (UseSubstrate && HeightAboveGroundMm <= 0)
+                {
+                    failure = "the substrate thickness (height above ground) must be positive";
+                    return false;
+                }
+                OpenSim.Core.Geometry2D.Point2? hint = _electrodes.SelectedSource is { } pad
+                    ? new OpenSim.Core.Geometry2D.Point2(pad.Center.X, pad.Center.Y)
+                    : null;
+                grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildFromPolygon(
+                    shape, element, z, hint, ground);
+                if (UseSubstrate)
+                    substrate = new OpenSim.Rf.Layered.SubstrateStackup(
+                        SubstrateEpsR, Math.Max(SubstrateTanD, 0), HeightAboveGroundMm * 1e-3);
+                break;
+            }
+            default:
+                failure = "pick a surface geometry source";
+                return false;
+        }
+
+        if (grid.Structure is null)
+        {
+            failure = grid.FailureReason;
+            return false;
+        }
+        surface = grid.Structure;
+        port = grid.Port!;
+        warnings = grid.Warnings;
+        return true;
+    }
+
+    private async Task SolveSurfaceAntennaAsync()
+    {
+        if (!TryDiscretizeSurface(out var surface, out var port, out var warnings,
+                out string? failure, out var substrate))
+        {
+            AntennaResult = $"Not solvable: {failure}";
+            return;
+        }
+        AntennaResult = $"Solving ({surface.BasisCount} RWG unknowns"
+                        + (substrate is null ? "" : ", layered substrate") + ")…";
+        try
+        {
+            double frequency = FrequencyMHz * 1e6;
+            double fMin = SweepFMinMHz * 1e6, fMax = SweepFMaxMHz * 1e6;
+            int points = SweepPoints;
+            var timing = new List<string>();
+            var (sweep, display) = await Task.Run(() =>
+            {
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                var list = new List<AntennaZinPoint>(points);
+                for (int k = 0; k < points; k++)
+                {
+                    double f = points == 1
+                        ? fMin
+                        : fMin * Math.Pow(fMax / fMin, (double)k / (points - 1));
+                    var point = SolveSurfacePoint(solver, surface, port, f, substrate, timing);
+                    list.Add(new AntennaZinPoint(f,
+                        point.InputImpedance.Real, point.InputImpedance.Imaginary));
+                }
+                return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, timing));
+            });
+
+            foreach (var point in sweep) ZinSweep.Add(point);
+            SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, display, ColormapKind.Viridis);
+            GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
+            AntennaResult = $"Zin = {display.InputImpedance.Real:g4} " +
+                            $"{(display.InputImpedance.Imaginary >= 0 ? "+" : "−")} " +
+                            $"j{Math.Abs(display.InputImpedance.Imaginary):g4} Ω at {FrequencyMHz:g4} MHz " +
+                            $"({surface.BasisCount} RWG unknowns, {surface.Triangles.Count} triangles" +
+                            (substrate is null ? ")" : $", εr = {substrate.RelativePermittivity:g3} substrate)");
+            AntennaAssumptions = "Assumptions: "
+                + string.Join(" ", BuildSurfaceAssumptions(surface, substrate))
+                + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
+            // A slow sweep names its own bottleneck: the layered path rebuilds the
+            // kernel table per frequency point (a table IS one (f, stackup) pair).
+            foreach (string line in timing) _log.Append(line);
+            _log.Append($"Antenna: {AntennaResult}");
+        }
+        catch (Exception ex) { AntennaResult = $"Not solvable: {ex.Message}"; }
+    }
+
+    /// <summary>One frequency point through the right kernel path. The layered table
+    /// is built fresh per point (deterministic, ~0.2 s) and its cost logged.</summary>
+    private OpenSim.Rf.Surface.SurfaceMomSolution SolveSurfacePoint(
+        OpenSim.Rf.Surface.SurfaceMomSolver solver, OpenSim.Rf.Surface.SurfaceStructure surface,
+        OpenSim.Rf.Surface.SurfacePort port, double frequencyHz,
+        OpenSim.Rf.Layered.SubstrateStackup? substrate, List<string> timing)
+    {
+        if (substrate is null) return solver.Solve(surface, frequencyHz, port);
+        var table = BuildKernelTable(surface, substrate, frequencyHz);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var solution = solver.Solve(surface, table, port);
+        timing.Add($"Antenna: layered point {frequencyHz / 1e6:g4} MHz — table "
+                   + $"{table.BuildMilliseconds:F0} ms ({table.PoleCount} surface-wave pole(s)), "
+                   + $"solve {stopwatch.Elapsed.TotalMilliseconds:F0} ms.");
+        return solution;
+    }
+
+    private static OpenSim.Rf.Layered.LayeredKernelTable BuildKernelTable(
+        OpenSim.Rf.Surface.SurfaceStructure surface,
+        OpenSim.Rf.Layered.SubstrateStackup substrate, double frequencyHz)
+    {
+        var (_, diagonal) = SurfaceBounds(surface);
+        return new OpenSim.Rf.Layered.LayeredKernelTable(substrate, frequencyHz,
+            rhoMax: 1.2 * diagonal);
+    }
+
+    private async Task ComputeSurfaceNearFieldAsync()
+    {
+        if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
+                out var substrate))
+        {
+            FieldResult = $"Not computable: {failure}";
+            return;
+        }
+        if (substrate is not null)
+        {
+            // The free-space probe's kernels are wrong inside/near a slab, and the
+            // in-slab layered field kernels are named future work — never a silently
+            // wrong map.
+            FieldResult = "Not computable: near-field maps over a dielectric substrate are not "
+                          + "available in v1 (the in-slab field kernels are future work). The far-field "
+                          + "lobe and the surface-current map are available; εr = 1 restores the air-gap probe.";
+            return;
+        }
+        FieldResult = $"Computing ({surface.BasisCount} RWG unknowns)…";
+        try
+        {
+            var (center, diagonal) = SurfaceBounds(surface);
+            double span = 1.6 * diagonal;
+            int n = Math.Clamp(GridResolution, 3, 17);
+            double spacing = span / (n - 1);
+            double frequency = FrequencyMHz * 1e6;
+
+            var (map, solution) = await Task.Run(() =>
+            {
+                var solved = new OpenSim.Rf.Surface.SurfaceMomSolver().Solve(surface, frequency, port);
+                var points = new List<Vector3D>(n * n * n);
+                for (int z = 0; z < n; z++)
+                    for (int y = 0; y < n; y++)
+                        for (int x = 0; x < n; x++)
+                            points.Add(center + new Vector3D(
+                                x * spacing - span / 2, y * spacing - span / 2, z * spacing - span / 2));
+                return (OpenSim.Rf.Surface.SurfaceFieldProbe.Evaluate(surface, solved, points), solved);
+            });
+
+            VectorFieldModel = SceneBuilder.BuildVectorFieldModel(
+                map, ColormapKind.Viridis, arrowLength: 0.8 * spacing);
+            SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, solution, ColormapKind.Viridis);
+            GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate: null);
+
+            double peak = map.Magnitude.Max();
+            FieldResult = $"Near field at {FrequencyMHz:g4} MHz: peak |E| = {peak:g4} V/m " +
+                          $"(1 V feed, {n}³ grid; arrows are the t = 0 snapshot; " +
+                          "the sheet is colored by log₁₀|J|)";
+            _log.Append($"Antenna: {FieldResult}");
+        }
+        catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
+    }
+
+    private async Task ShowSurfaceFarFieldAsync()
+    {
+        if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
+                out var substrate))
+        {
+            FieldResult = $"Not computable: {failure}";
+            return;
+        }
+        FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
+                      + (substrate is null ? "" : ", layered substrate") + ")…";
+        try
+        {
+            double frequency = FrequencyMHz * 1e6;
+            var (pattern, solution, surfaceWavePower, inputPower) = await Task.Run(() =>
+            {
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                if (substrate is null)
+                {
+                    var solvedFree = solver.Solve(surface, frequency, port);
+                    return (OpenSim.Rf.Surface.SurfaceFarFieldEvaluator.Compute(surface, solvedFree),
+                        solvedFree, 0.0, 0.0);
+                }
+                var table = BuildKernelTable(surface, substrate, frequency);
+                var solved = solver.Solve(surface, table, port);
+                double pin = 0.5 * (System.Numerics.Complex.One / solved.InputImpedance).Real;
+                return (OpenSim.Rf.Layered.LayeredFarField.Compute(surface, table, solved),
+                    solved,
+                    OpenSim.Rf.Layered.LayeredFarField.SurfaceWavePowerWatts(surface, table, solved),
+                    pin);
+            });
+
+            var (center, diagonal) = SurfaceBounds(surface);
+            FarFieldLobeModel = SceneBuilder.BuildFarFieldLobe(
+                pattern, center, scale: 1.25 * diagonal, ColormapKind.Viridis);
+            SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, solution, ColormapKind.Viridis);
+            GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
+
+            double dbi = 10 * Math.Log10(pattern.MaxDirectivity);
+            FieldResult = $"Far field at {FrequencyMHz:g4} MHz: P_rad = " +
+                          $"{pattern.TotalRadiatedPowerWatts:g4} W (1 V feed), " +
+                          $"D_max = {pattern.MaxDirectivity:g4} ({dbi:g3} dBi); " +
+                          "lobe radius ∝ radiation intensity";
+            if (substrate is not null && inputPower > 0)
+            {
+                // The Stage C power ledger, shown to the user: what the surface wave
+                // takes is real power the pattern never sees.
+                FieldResult += $"; surface wave P_sw = {surfaceWavePower:g3} W " +
+                               $"({surfaceWavePower / inputPower:P0} of input; " +
+                               $"P_rad + P_sw = {(pattern.TotalRadiatedPowerWatts + surfaceWavePower) / inputPower:P1} of input)";
+            }
+            _log.Append($"Antenna: {FieldResult}");
+        }
+        catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
+    }
+
+    private IReadOnlyList<string> BuildSurfaceAssumptions(
+        OpenSim.Rf.Surface.SurfaceStructure surface,
+        OpenSim.Rf.Layered.SubstrateStackup? substrate)
+    {
+        if (substrate is not null)
+        {
+            var layered = OpenSim.Rf.Surface.SurfaceMomSolver.LayeredAssumptions.ToList();
+            layered.Insert(1,
+                $"Substrate: εr = {substrate.RelativePermittivity:g3}, tanδ = {substrate.LossTangent:g3}, " +
+                $"thickness {substrate.ThicknessMeters * 1e3:g4} mm; the reported power ledger counts " +
+                "only the extracted surface-wave modes (TM0 always; higher modes above cutoff).");
+            return layered;
+        }
+        if (surface.Ground is not { } ground)
+            return OpenSim.Rf.Surface.SurfaceMomSolver.Assumptions;
+        var list = OpenSim.Rf.Surface.SurfaceMomSolver.Assumptions
+            .Where(a => !a.StartsWith("Free space")).ToList();
+        list.Insert(1,
+            $"Infinite PEC ground plane at z = {ground.SurfaceZ * 1e3:g4} mm (image theory): " +
+            "fields below the plane are zero; an air gap only — set a substrate εr for a dielectric.");
+        return list;
+    }
+
+    private Model3D? BuildSurfaceGroundOverlay(OpenSim.Rf.Surface.SurfaceStructure surface,
+        OpenSim.Rf.Layered.SubstrateStackup? substrate)
+    {
+        // A layered structure is built bare — its ground lives inside the kernel at
+        // (metal z − thickness); the overlay must still show it.
+        double? groundZ = surface.Ground?.SurfaceZ;
+        if (groundZ is null && substrate is not null)
+            groundZ = surface.Vertices[0].Z - substrate.ThicknessMeters;
+        if (groundZ is null) return null;
+        var (center, diagonal) = SurfaceBounds(surface);
+        return SceneBuilder.BuildGroundPlaneModel(center.X, center.Y, groundZ.Value,
+            radius: 1.5 * diagonal);
+    }
+
+    private static (Vector3D Center, double Diagonal) SurfaceBounds(
+        OpenSim.Rf.Surface.SurfaceStructure surface)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        foreach (var v in surface.Vertices)
+        {
+            minX = Math.Min(minX, v.X); maxX = Math.Max(maxX, v.X);
+            minY = Math.Min(minY, v.Y); maxY = Math.Max(maxY, v.Y);
+            minZ = Math.Min(minZ, v.Z); maxZ = Math.Max(maxZ, v.Z);
+        }
+        var center = new Vector3D(0.5 * (minX + maxX), 0.5 * (minY + maxY), 0.5 * (minZ + maxZ));
+        double diagonal = new Vector3D(maxX - minX, maxY - minY, maxZ - minZ).Length;
+        return (center, diagonal > 0 ? diagonal : 1e-3);
+    }
+}
+
+/// <summary>A copper island offered as RWG patch metal, labeled for the picker.</summary>
+public sealed record IslandChoice(OpenSim.Pcb.Import.CopperIsland Island)
+{
+    public string Label
+    {
+        get
+        {
+            double area = Math.Abs(OpenSim.Core.Geometry2D.Polygon2.RingArea(Island.Shape.Outer));
+            return $"L{Island.LayerOrder} · {area * 1e6:g3} mm²";
+        }
     }
 }

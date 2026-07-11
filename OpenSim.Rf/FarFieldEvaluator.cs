@@ -34,10 +34,24 @@ public static class FarFieldEvaluator
     {
         double omega = 2 * Math.PI * solution.FrequencyHz;
         double k = omega / RfConstants.SpeedOfLight;
-        double eta = Math.Sqrt(RfConstants.Mu0 / RfConstants.Eps0);
+        return IntegratePattern(omega, wire.Ground is not null, thetaCount, phiCount,
+            direction => RadiationVector(wire, solution, k, direction));
+    }
 
-        // Gauss–Legendre in u = cosθ carries the sphere weights exactly.
-        var (uNodes, uWeights) = GaussLegendre.Rule(thetaCount, -1, 1);
+    /// <summary>The (θ, φ) grid + intensity + power + directivity machinery, shared by
+    /// the wire and surface evaluators (one radiation-vector callback each).
+    /// Gauss–Legendre in u = cosθ carries the sphere weights exactly. Over a ground
+    /// plane only the upper hemisphere radiates (u ∈ [0, 1]) — the intensity below is
+    /// identically zero and is not sampled, and Directivity = 4πU/P then correctly
+    /// reports the image-theory doubling (a λ/4 monopole shows D ≈ 3.28, not 1.64).</summary>
+    internal static FarFieldPattern IntegratePattern(double omega, bool hemisphere,
+        int thetaCount, int phiCount,
+        Func<Vector3D, (Complex X, Complex Y, Complex Z)> radiationVector)
+    {
+        double eta = Math.Sqrt(RfConstants.Mu0 / RfConstants.Eps0);
+        var (uNodes, uWeights) = hemisphere
+            ? GaussLegendre.Rule(thetaCount, 0, 1)
+            : GaussLegendre.Rule(thetaCount, -1, 1);
         var theta = uNodes.Select(Math.Acos).ToArray();
         var phi = Enumerable.Range(0, phiCount).Select(i => 2 * Math.PI * i / phiCount).ToArray();
         double phiWeight = 2 * Math.PI / phiCount;
@@ -56,7 +70,7 @@ public static class FarFieldEvaluator
                     sinTheta * Math.Cos(phi[pi]),
                     sinTheta * Math.Sin(phi[pi]),
                     cosTheta);
-                var n = RadiationVector(wire, solution, k, direction);
+                var n = radiationVector(direction);
 
                 // Transverse part |N|² − |N·r̂|²  (with complex N·r̂).
                 Complex radial = n.X * direction.X + n.Y * direction.Y + n.Z * direction.Z;
@@ -101,14 +115,10 @@ public static class FarFieldEvaluator
     {
         var nodeCurrents = NodeCurrents(wire, solution);
         Complex nx = Complex.Zero, ny = Complex.Zero, nz = Complex.Zero;
-        for (int e = 0; e < wire.ElementCount; e++)
-        {
-            var start = wire.ElementStart(e);
-            double length = wire.ElementLength(e);
-            var tangent = wire.ElementDirection(e);
-            Complex startCurrent = nodeCurrents[e];
-            Complex endCurrent = nodeCurrents[(e + 1) % wire.Nodes.Count];
 
+        void AddSegment(Vector3D start, Vector3D tangent, double length,
+            Complex startCurrent, Complex endCurrent)
+        {
             var (nodes, weights) = GaussLegendre.Rule(8, 0, length);
             Complex integral = Complex.Zero;
             for (int i = 0; i < nodes.Length; i++)
@@ -123,11 +133,34 @@ public static class FarFieldEvaluator
             ny += integral * tangent.Y;
             nz += integral * tangent.Z;
         }
+
+        for (int e = 0; e < wire.ElementCount; e++)
+        {
+            var start = wire.ElementStart(e);
+            var end = wire.ElementEnd(e);
+            double length = wire.ElementLength(e);
+            var tangent = wire.ElementDirection(e);
+            Complex startCurrent = nodeCurrents[e];
+            Complex endCurrent = nodeCurrents[(e + 1) % wire.Nodes.Count];
+            AddSegment(start, tangent, length, startCurrent, endCurrent);
+
+            // Ground plane: the image element (mirrored + endpoint-swapped, so its
+            // current runs end→start) radiates too — same mapping as the solver's
+            // image pass, no hand signs.
+            if (wire.Ground is { } ground)
+            {
+                var imageStart = ThinWireMomSolver.Mirror(end, ground.SurfaceZ);
+                var imageEnd = ThinWireMomSolver.Mirror(start, ground.SurfaceZ);
+                AddSegment(imageStart, (imageEnd - imageStart) / length, length,
+                    endCurrent, startCurrent);
+            }
+        }
         return (nx, ny, nz);
     }
 
     /// <summary>Current phasor per NODE (basis coefficients at basis nodes, exactly zero
-    /// at open ends) — the rooftop expansion is linear between nodes, so this is the
+    /// at open ends — a GROUNDED end carries its basis coefficient, peak current at a
+    /// monopole base) — the rooftop expansion is linear between nodes, so this is the
     /// whole current distribution. Shared by the far-field and near-field evaluators.</summary>
     internal static Complex[] NodeCurrents(WireStructure wire, MomSolution solution)
     {

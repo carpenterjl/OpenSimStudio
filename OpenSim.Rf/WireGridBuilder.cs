@@ -23,7 +23,7 @@ public static class WireGridBuilder
     private const double MaxMergeTurn = 0.035;
 
     public static WireGridResult Build(IReadOnlyList<WireSegment> wires, double maxElementLength,
-        int maxUnknowns = 2000)
+        int maxUnknowns = 2000, GroundPlane? ground = null)
     {
         if (wires.Count == 0)
             return WireGridResult.Failure("no wire segments to discretize");
@@ -118,6 +118,41 @@ public static class WireGridBuilder
         if (isLoop && current != start)
             return WireGridResult.Failure("the wires form disconnected pieces — one connected run is required");
 
+        // ---- Ground-plane validation: strictly above, except open ENDS on the plane. ----
+        // A grounded end is snapped to exactly z0 so its image shares the node bitwise
+        // (2·z0 − z0 = z0 exactly), which is what routes the real/image element pair into
+        // the shared-corner NEAR quadrature.
+        bool startGrounded = false, endGrounded = false;
+        if (ground is not null)
+        {
+            double z0 = ground.SurfaceZ;
+            for (int i = 0; i < orderedNodes.Count; i++)
+            {
+                var node = orderedNodes[i];
+                bool onPlane = Math.Abs(node.Z - z0) <= tolerance;
+                if (!onPlane && node.Z < z0)
+                    return WireGridResult.Failure(
+                        $"the wire goes below the ground plane at ({node.X:g4}, {node.Y:g4}, {node.Z:g4}) — " +
+                        "image theory needs the structure strictly above it");
+                if (!onPlane) continue;
+                if (isLoop)
+                    return WireGridResult.Failure(
+                        $"the loop touches the ground plane at ({node.X:g4}, {node.Y:g4}) — " +
+                        "image theory needs a loop strictly above the plane; only an open wire END may be grounded");
+                if (i != 0 && i != orderedNodes.Count - 1)
+                    return WireGridResult.Failure(
+                        $"the wire touches the ground plane mid-run at ({node.X:g4}, {node.Y:g4}) — " +
+                        "image theory needs the structure strictly above it; end a wire ON the plane to ground it");
+                orderedNodes[i] = new Vector3D(node.X, node.Y, z0);
+                if (i == 0) startGrounded = true; else endGrounded = true;
+            }
+            for (int i = 0; i + 1 < orderedNodes.Count; i++)
+                if (orderedNodes[i].Z == z0 && orderedNodes[i + 1].Z == z0)
+                    return WireGridResult.Failure(
+                        "a wire segment lies IN the ground plane — image theory needs the run " +
+                        "strictly above it (only the end point may touch)");
+        }
+
         // ---- Merge near-collinear slivers (equal radius only). ----
         var warnings = new List<string>();
         MergeSlivers(orderedNodes, orderedRadii, isLoop, maxElementLength);
@@ -153,7 +188,9 @@ public static class WireGridBuilder
             warnings.Add("Some elements are shorter than twice their wire radius; the thin-wire " +
                          "kernel loses accuracy there (typical for very short, wide traces).");
 
-        int basisCount = isLoop ? nodes.Count : nodes.Count - 2;
+        int basisCount = isLoop
+            ? nodes.Count
+            : nodes.Count - 2 + (startGrounded ? 1 : 0) + (endGrounded ? 1 : 0);
         if (basisCount < 1)
             return WireGridResult.Failure(
                 "the discretized wire has no interior nodes — it is too short relative to " +
@@ -163,7 +200,8 @@ public static class WireGridBuilder
                 $"{basisCount} current unknowns exceed the {maxUnknowns} cap (dense LU is O(N³)) — " +
                 "raise the maximum element length or lower the frequency");
 
-        return WireGridResult.Success(new WireStructure(nodes, radii, isLoop)) with
+        return WireGridResult.Success(
+            new WireStructure(nodes, radii, isLoop, ground, startGrounded, endGrounded)) with
         {
             Warnings = warnings
         };

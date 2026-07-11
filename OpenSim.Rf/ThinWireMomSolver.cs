@@ -73,13 +73,17 @@ public sealed class ThinWireMomSolver
         Complex vectorFactor = Complex.ImaginaryOne * omega * RfConstants.Mu0 / (4 * Math.PI);
         Complex chargeFactor = -Complex.ImaginaryOne / (4 * Math.PI * RfConstants.Eps0 * omega);
 
-        // Element → the (≤2) bases it supports, with the rising/falling role.
+        // Element → the (≤2) bases it supports, with the rising/falling role. A grounded
+        // end's basis has only ONE real supporting element (RisingElement/FallingElement
+        // return −1 for the half that lives on the image current).
         var supports = new List<(int Basis, bool Rising)>[elementCount];
         for (int e = 0; e < elementCount; e++) supports[e] = new List<(int, bool)>(2);
         for (int b = 0; b < n; b++)
         {
-            supports[wire.RisingElement(b)].Add((b, true));
-            supports[wire.FallingElement(b)].Add((b, false));
+            int rising = wire.RisingElement(b);
+            if (rising >= 0) supports[rising].Add((b, true));
+            int falling = wire.FallingElement(b);
+            if (falling >= 0) supports[falling].Add((b, false));
         }
 
         for (int p = 0; p < elementCount; p++)
@@ -111,8 +115,95 @@ public sealed class ThinWireMomSolver
                     }
             }
         }
+
+        if (wire.Ground is { } ground)
+            AddImagePass(z, wire, supports, ground.SurfaceZ, k, vectorFactor, chargeFactor);
         return z;
     }
+
+    /// <summary>
+    /// The image-theory pass for a PEC ground plane: Z += Z_image, testing every real
+    /// basis against the IMAGE of every source basis. The image of element q is mirrored
+    /// across the plane AND endpoint-swapped (the PlaneReturnComposer convention) — the
+    /// swap reverses horizontal current and preserves vertical current, so ALL sign
+    /// physics rides on the geometry: a basis that RISES on q plays the FALLING role on
+    /// q's image, and the tangent dot / charge slope come out of the swapped-mirrored
+    /// endpoints with no hand-tuned signs. The unknown count is unchanged.
+    ///
+    /// Symmetry: mirroring both integration variables shows ∬f_m·(image f_n)·g equals
+    /// ∬f_n·(image f_m)·g exactly, so each real/image element pair is evaluated ONCE and
+    /// scattered to both entries — Z stays bitwise complex-symmetric. (For p == q the
+    /// same identity gives M00 = M01 + M10 for the exact image moments; the ordered
+    /// basis-pair loop below reuses one Combine value for both entries because the
+    /// NUMERICAL moments only satisfy that identity approximately.)
+    ///
+    /// Image pairs are never singular: a real element and any image element are separated
+    /// by at least twice its clearance above the plane — except at a grounded node, which
+    /// IS shared (bitwise, thanks to the builder's exact snap), where the geometric
+    /// shared-corner detection routes the pair into the panelled NEAR quadrature exactly
+    /// like adjacent real elements.
+    /// </summary>
+    private static void AddImagePass(ComplexDenseMatrix z, WireStructure wire,
+        List<(int Basis, bool Rising)>[] supports, double surfaceZ, double k,
+        Complex vectorFactor, Complex chargeFactor)
+    {
+        int elementCount = wire.ElementCount;
+        for (int p = 0; p < elementCount; p++)
+        {
+            if (supports[p].Count == 0) continue;
+            double lengthP = wire.ElementLength(p);
+            var directionP = wire.ElementDirection(p);
+            for (int q = p; q < elementCount; q++)
+            {
+                if (supports[q].Count == 0) continue;
+                var imageStart = Mirror(wire.ElementEnd(q), surfaceZ);
+                var imageEnd = Mirror(wire.ElementStart(q), surfaceZ);
+                double c = Math.Sqrt(wire.ElementRadii[p] * wire.ElementRadii[q]);
+                var moments = GeometricPairMoments(
+                    wire.ElementStart(p), wire.ElementEnd(p), imageStart, imageEnd, c, k);
+                double lengthQ = wire.ElementLength(q);
+                var imageDirection = (imageEnd - imageStart) / lengthQ;
+                double dot = Vector3D.Dot(directionP, imageDirection);
+
+                Complex Contribution(bool risingP, bool risingQ)
+                {
+                    bool imageRising = !risingQ;   // the endpoint swap flips the role
+                    Complex vector = vectorFactor * dot * Combine(moments, risingP, imageRising);
+                    double slopeP = (risingP ? 1.0 : -1.0) / lengthP;
+                    double slopeQ = (imageRising ? 1.0 : -1.0) / lengthQ;
+                    return vector + chargeFactor * slopeP * slopeQ * moments.M00;
+                }
+
+                if (p != q)
+                {
+                    foreach (var (basisP, risingP) in supports[p])
+                        foreach (var (basisQ, risingQ) in supports[q])
+                        {
+                            Complex contribution = Contribution(risingP, risingQ);
+                            z[basisP, basisQ] += contribution;
+                            z[basisQ, basisP] += contribution;
+                        }
+                }
+                else
+                {
+                    // Same element: iterate ordered basis pairs and reuse one value for
+                    // both entries (the exact values coincide; see the symmetry note).
+                    var list = supports[p];
+                    for (int i = 0; i < list.Count; i++)
+                        for (int j = i; j < list.Count; j++)
+                        {
+                            Complex contribution = Contribution(list[i].Rising, list[j].Rising);
+                            z[list[i].Basis, list[j].Basis] += contribution;
+                            if (list[i].Basis != list[j].Basis)
+                                z[list[j].Basis, list[i].Basis] += contribution;
+                        }
+                }
+            }
+        }
+    }
+
+    internal static Vector3D Mirror(Vector3D p, double surfaceZ) =>
+        new(p.X, p.Y, 2 * surfaceZ - p.Z);
 
     /// <summary>The bilinear kernel moments over one element pair:
     /// M_ab = ∬ (s/L_p)^a (s′/L_q)^b · e^{−jkR}/R ds ds′, a,b ∈ {0,1}. Any rooftop
@@ -150,6 +241,28 @@ public sealed class ThinWireMomSolver
             Math.Min((p1 - q0).Length, (p1 - q1).Length));
         bool near = shareNode || minEndpointDistance < 2 * Math.Max(lengthP, lengthQ);
 
+        return near
+            ? NearMoments(p0, p1, q0, q1, c, k, shareNode)
+            : FarMoments(p0, p1, q0, q1, c, k);
+    }
+
+    /// <summary>Regime dispatch for element pairs given by raw endpoints (the image pass,
+    /// where node indices don't apply): a shared corner is detected GEOMETRICALLY —
+    /// a grounded node's image coincides with it bitwise, so a real element and its
+    /// neighbour's image share that corner exactly like adjacent real elements do.
+    /// A real/image pair is never coincident (the builder rejects in-plane segments),
+    /// so the SELF regime can't occur here.</summary>
+    internal static Moments GeometricPairMoments(Vector3D p0, Vector3D p1, Vector3D q0, Vector3D q1,
+        double c, double k)
+    {
+        double lengthP = (p1 - p0).Length;
+        double lengthQ = (q1 - q0).Length;
+        double minEndpointDistance = Math.Min(
+            Math.Min((p0 - q0).Length, (p0 - q1).Length),
+            Math.Min((p1 - q0).Length, (p1 - q1).Length));
+        double maxLength = Math.Max(lengthP, lengthQ);
+        bool shareNode = minEndpointDistance <= 1e-9 * maxLength;
+        bool near = shareNode || minEndpointDistance < 2 * maxLength;
         return near
             ? NearMoments(p0, p1, q0, q1, c, k, shareNode)
             : FarMoments(p0, p1, q0, q1, c, k);
