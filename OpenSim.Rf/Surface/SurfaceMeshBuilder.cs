@@ -26,7 +26,8 @@ public static class SurfaceMeshBuilder
 
     public static SurfaceGridResult BuildRectangularPlate(double width, double length,
         double maxEdgeLength, double z = 0, double portFraction = 0.5,
-        GroundPlane? ground = null, int maxUnknowns = 2000)
+        GroundPlane? ground = null, int maxUnknowns = 2000,
+        (double X, double Y)? snapVertex = null)
     {
         if (width <= 0 || length <= 0 || maxEdgeLength <= 0)
             return SurfaceGridResult.Failure("the plate needs positive width, length, and element size");
@@ -44,6 +45,21 @@ public static class SurfaceMeshBuilder
                 vertices.Add(new Vector3D(
                     -width / 2 + width * i / m, -length / 2 + length * j / n, z));
         int Index(int i, int j) => j * (m + 1) + i;
+
+        // A probe feed needs its (x, y) to BE a mesh vertex (the attachment fan is
+        // vertex-anchored) — move the nearest grid vertex onto it exactly.
+        if (snapVertex is { } snap)
+        {
+            int nearest = 0;
+            double best = double.MaxValue;
+            for (int v = 0; v < vertices.Count; v++)
+            {
+                double dx = vertices[v].X - snap.X, dy = vertices[v].Y - snap.Y;
+                double dist = dx * dx + dy * dy;
+                if (dist < best) { best = dist; nearest = v; }
+            }
+            vertices[nearest] = new Vector3D(snap.X, snap.Y, z);
+        }
 
         var triangles = new List<(int, int, int)>(2 * m * n);
         for (int j = 0; j < n; j++)

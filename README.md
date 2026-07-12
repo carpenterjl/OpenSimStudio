@@ -23,7 +23,7 @@ fully testable.
 | **Electrical** | DC conduction (voltage, current density, resistance), AC electro-quasistatic frequency sweeps (complex-symmetric COCG solver) |
 | **Coupled** | One-way Joule heating (I²R → steady or transient thermal) |
 | **PCB** | Gerber RS-274X + Excellon + IPC-2581 import, per-net copper meshing, pad-to-pad trace resistance, full 3D PEEC inductance (self, mutual, coupling k, plane-return loops), lumped R + jωL trace estimates |
-| **RF** | Thin-wire method-of-moments antenna solver (EFIE, delta-gap feed): input impedance, far-field patterns, directivity, radiated power, near-field E probes — from canonical dipoles/loops or directly from a board's trace geometry |
+| **RF** | First-party method-of-moments antenna solvers: thin-wire EFIE (dipoles, loops, monopoles, board trace chains) and RWG surface MoM for PEC sheets (plates, patches, PCB copper islands), both with optional infinite PEC ground by image theory; **microstrip substrates** via a rigorous layered-media Green's function (direct Sommerfeld integration, surface-wave poles extracted into the power ledger); **coaxial probe feeds** through the slab with a classical 1/ρ attachment mode; input impedance, far-field patterns, directivity, surface-wave power, and near-field E maps in free space, over ground, and inside/above the substrate |
 
 ## What it can import
 
@@ -67,9 +67,10 @@ A slower correct answer always beats a faster wrong one. Concretely:
 
 - **Correctness is gated by analytical regression benchmarks**, not just unit tests:
   cantilever deflection vs. Timoshenko theory, Fourier slab transients, half-wave dipole
-  impedance bands, and an antenna **energy-conservation gate** (radiated power from
-  far-field quadrature must equal ½·Re(V·I*) to 2%). Failing solvers fail loudly —
-  the platform never returns a plausible-looking garbage number.
+  impedance bands, the Balanis microstrip-patch resonance and cavity edge resistance,
+  and antenna **energy-conservation gates** (radiated + surface-wave power must equal
+  ½·Re(V·I*)). Failing solvers fail loudly — the platform never returns a
+  plausible-looking garbage number.
 - **First-party numerics stay transparent.** The CSR sparse matrix + Jacobi-preconditioned
   conjugate gradient, the COCG complex solver, the Bowyer–Watson tet mesher (symbolic
   infinite vertex, CGAL-style), and the subspace eigensolver are core IP, documented,
@@ -87,13 +88,14 @@ targets plain `net8.0` (no WPF), which mechanically enforces the UI/simulation s
 
 ```
 OpenSim.App       WPF shell, per-concern MVVM viewmodels, Helix 3D rendering, DI root
-OpenSim.Rf        thin-wire MoM antenna solver, far/near fields, trace-chain adapter
+OpenSim.Rf        thin-wire + RWG surface MoM, layered-media (microstrip) kernels,
+                  probe feeds, far/near fields, trace-chain adapter
 OpenSim.Pcb       Gerber/Excellon/IPC-2581 import, 2.5D PCB meshing, PEEC inductance
 OpenSim.Solvers   TET4/TET10 assembly; static, modal, thermal, DC/AC electrical, Joule
 OpenSim.Meshing   Bowyer–Watson Delaunay tet mesher, quality metrics, refinement
 OpenSim.Geometry  STL + first-party STEP import, primitives, face detection
 OpenSim.Core      math/numerics, domain model, result fields, interfaces, persistence
-OpenSim.Tests     xUnit: unit tests + analytical regression benchmarks (300+ green)
+OpenSim.Tests     xUnit: unit tests + analytical regression benchmarks (650+ green)
 ```
 
 Every replaceable piece is an interface in `OpenSim.Core/Interfaces`
@@ -109,7 +111,7 @@ the rest of the platform.
 | Phase 1 | Mesh quality refinement, TET10 elements, docking UI, contours/sections | ✅ Complete |
 | Phase 2 | PCB import, DC electrical, thermal, Joule coupling, materials, STEP import | ✅ Largely complete (SVG import deferred) |
 | Phase 3 | Multi-frame results, transient thermal, modal, AC sweeps, 3D PEEC | ✅ Solver track complete |
-| Phase 4 | RF antenna simulator v1 | 🚧 Started — thin-wire MoM shipped; patch/substrate RF, optimization, plugin SDK, reporting open |
+| Phase 4 | RF antenna simulator | 🚧 In progress — thin-wire MoM, PEC ground planes, RWG surface MoM, layered-media microstrip (rigorous Sommerfeld Green's function), substrate near-field maps, deterministic parallel solves (11.8× on 16 cores, bitwise-identical at any thread count), and coax probe feeds all shipped; probe UI wiring, multi-layer stackups, optimization, plugin SDK, and reporting open |
 
 ## Contributing
 

@@ -210,7 +210,7 @@ public sealed class ThinWireMomSolver
     /// weight combination is a linear combination of the four.</summary>
     internal readonly record struct Moments(Complex M00, Complex M01, Complex M10, Complex M11);
 
-    private static Complex Combine(Moments m, bool risingP, bool risingQ) =>
+    internal static Complex Combine(Moments m, bool risingP, bool risingQ) =>
         (risingP, risingQ) switch
         {
             (true, true) => m.M11,

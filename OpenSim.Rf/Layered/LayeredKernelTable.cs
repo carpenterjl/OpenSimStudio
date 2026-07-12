@@ -233,7 +233,7 @@ public sealed class LayeredKernelTable
 
     /// <summary>Parallel per-knot evaluation, each iteration writing only its own
     /// slots; a worker exception surfaces as the first inner exception.</summary>
-    private static void ForKnots(int count, int? maxDegreeOfParallelism, Action<int> body)
+    internal static void ForKnots(int count, int? maxDegreeOfParallelism, Action<int> body)
     {
         try
         {
@@ -247,7 +247,7 @@ public sealed class LayeredKernelTable
         }
     }
 
-    private static double[] LogGrid(double from, double to)
+    internal static double[] LogGrid(double from, double to)
     {
         double decades = Math.Log10(to / from);
         int count = Math.Max(MinPointsPerRegion, (int)Math.Ceiling(decades * PointsPerDecade) + 1);
@@ -258,7 +258,7 @@ public sealed class LayeredKernelTable
         return grid;
     }
 
-    private static double[] HybridGrid(double from, double to, double maxSpacing)
+    internal static double[] HybridGrid(double from, double to, double maxSpacing)
     {
         double logFactor = Math.Log(10) / PointsPerDecade;
         var knots = new List<double> { from };
@@ -277,7 +277,7 @@ public sealed class LayeredKernelTable
     /// <summary>Complex-valued spline: two real natural cubics, over log-ρ (near
     /// region: decades of smooth 1/scale variation) or plain ρ (far region:
     /// k₀-periodic residual, where uniform phase coverage is what matters).</summary>
-    private sealed class ComplexSpline
+    internal sealed class ComplexSpline
     {
         private readonly NaturalCubicSpline _re, _im;
         private readonly bool _log;
