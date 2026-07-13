@@ -106,6 +106,87 @@ internal static class MultiLayerImages
         return ctx.Emit(kg, scale: 2);
     }
 
+    /// <summary>G̃_A's images for a source at INTERIOR interface m (covered patch): still the
+    /// ε-independent primary + PEC ground image, but the image now sits at depth 2·z_m (twice
+    /// the height of interface m above the ground) instead of 2·d_total. m = n−1 recovers
+    /// <see cref="GaImages"/>.</summary>
+    public static IReadOnlyList<Image> GaImagesInterior(LayeredStackup stackup, int m) => new[]
+    {
+        new Image(0, Complex.One),
+        new Image(2 * stackup.InterfaceHeights()[m], -Complex.One),
+    };
+
+    /// <summary>K̃_Φ's quasi-static image series for a source at INTERIOR interface m. The
+    /// charge at node m now sees TWO loaded lines: the grounded substrate below (input
+    /// impedance Z_down, ground = short) and the cover + air half-space above (Z_up); the
+    /// node voltage per unit charge is their PARALLEL combination κG̃ = Z_down·Z_up/(Z_down +
+    /// Z_up), whose expansion in the layer phases yields images from BOTH the down-going
+    /// (ground) and up-going (cover/air) reflections. m = n−1 gives Z_up = Z_air = 1 and
+    /// collapses to the top-source <see cref="PhiImages"/> κG̃ = B/(1+B); an all-air cover
+    /// collapses to the sub-slab beneath m (both gated).</summary>
+    public static IReadOnlyList<Image> PhiImagesInterior(LayeredStackup stackup, int m)
+    {
+        int n = stackup.Layers.Count;
+        if (m < 0 || m >= n)
+            throw new ArgumentOutOfRangeException(nameof(m),
+                $"Source interface {m} is out of range for a {n}-layer stackup.");
+        var t = new double[n];
+        var eps = new Complex[n];
+        for (int i = 0; i < n; i++)
+        {
+            t[i] = stackup.Layers[i].ThicknessMeters;
+            eps[i] = stackup.Layers[i].ComplexPermittivity;
+        }
+        double depthCap = DepthCapFactor * stackup.TotalThicknessMeters;
+        var ctx = new Context(n, t, depthCap);
+
+        // Z_down: ground short (Γ = −1), reflections up through layers 0..m; impedance
+        // referenced to the layer just BELOW node m (char admittance ε_m).
+        var gDown = ctx.Shift(ctx.Constant(-Complex.One), 0);
+        for (int i = 1; i <= m; i++)
+        {
+            Complex fresnel = (eps[i] - eps[i - 1]) / (eps[i] + eps[i - 1]);
+            gDown = ctx.Multiply(ctx.Add(ctx.Constant(fresnel), gDown),
+                ctx.Reciprocal(ctx.Add(ctx.Constant(Complex.One), ctx.Scale(gDown, fresnel))));
+            gDown = ctx.Shift(gDown, i);
+        }
+        var zDown = Impedance(ctx, gDown, 1 / eps[m]);
+
+        // Z_up: air half-space above (matched load, no reflection at infinity), reflections
+        // down through the cover layers n−1..m+1; referenced to the layer just ABOVE node m
+        // (ε_{m+1}). With no cover (m = n−1) the load is air directly: Z_up = 1.
+        Dictionary<Key, Complex> zUp;
+        if (m == n - 1)
+        {
+            zUp = ctx.Constant(Complex.One);
+        }
+        else
+        {
+            Complex rTop = (eps[n - 1] - Complex.One) / (eps[n - 1] + Complex.One);   // cover/air
+            var gUp = ctx.Shift(ctx.Constant(rTop), n - 1);
+            for (int i = n - 2; i >= m + 1; i--)
+            {
+                Complex fresnel = (eps[i] - eps[i + 1]) / (eps[i] + eps[i + 1]);
+                gUp = ctx.Multiply(ctx.Add(ctx.Constant(fresnel), gUp),
+                    ctx.Reciprocal(ctx.Add(ctx.Constant(Complex.One), ctx.Scale(gUp, fresnel))));
+                gUp = ctx.Shift(gUp, i);
+            }
+            zUp = Impedance(ctx, gUp, 1 / eps[m + 1]);
+        }
+
+        // κG̃ = Z_down·Z_up/(Z_down + Z_up); c_m = 2·(κG̃)_m.
+        var kg = ctx.Multiply(ctx.Multiply(zDown, zUp), ctx.Reciprocal(ctx.Add(zDown, zUp)));
+        return ctx.Emit(kg, scale: 2);
+    }
+
+    /// <summary>Normalized input impedance (1/ε)(1 + Γ)/(1 − Γ) as a series.</summary>
+    private static Dictionary<Key, Complex> Impedance(Context ctx, Dictionary<Key, Complex> gamma, Complex invEps)
+    {
+        var onePlus = ctx.Add(ctx.Constant(Complex.One), gamma);
+        var oneMinus = ctx.Add(ctx.Constant(Complex.One), ctx.Scale(gamma, -Complex.One));
+        return ctx.Scale(ctx.Multiply(onePlus, ctx.Reciprocal(oneMinus)), invEps);
+    }
+
     /// <summary>Truncated power-series arithmetic in the per-layer round-trip phases
     /// x_i = e^{−2k_ρ t_i}. A series is a map from a multi-index (round-trip counts) to a
     /// complex coefficient; the term's depth is 2·Σ n_i t_i. Every product/reciprocal is

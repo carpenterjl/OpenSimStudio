@@ -22,13 +22,36 @@ namespace OpenSim.Rf.Layered;
 internal static partial class SommerfeldIntegrator
 {
     /// <summary>The remainder integrals for both potential kernels of a multi-layer stackup
-    /// at one lateral distance. <paramref name="gaImages"/> / <paramref name="phiImages"/>
-    /// are the pre-generated static image series (frequency-independent, built once per
-    /// stackup); <paramref name="poles"/> are the TLGF surface-wave poles.</summary>
+    /// at one lateral distance, source & observation at the TOP metal plane. <paramref
+    /// name="gaImages"/> / <paramref name="phiImages"/> are the pre-generated static image
+    /// series (frequency-independent, built once per stackup); <paramref name="poles"/> are the
+    /// TLGF surface-wave poles.</summary>
     public static (Complex A, Complex Phi) RemainderMultiLayer(
         LayeredStackup stackup, double k0, IReadOnlyList<SurfaceWavePole> poles,
         IReadOnlyList<MultiLayerImages.Image> gaImages,
-        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int refinement = 1)
+        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int refinement = 1) =>
+        // Top source: the kernel is the pinned TransmissionLineGreens.Evaluate — the delegate
+        // wraps that EXACT call, so this path stays bitwise the pre-F2b remainder.
+        RemainderMultiLayerCore(stackup, k0, poles, gaImages, phiImages, rho, refinement,
+            (kRho, kz0) => TransmissionLineGreens.Evaluate(stackup, k0, kRho, kz0));
+
+    /// <summary>The INTERIOR-source remainder (covered patch): source & observation at
+    /// interface <paramref name="m"/>. Same contour / pole-broken panels / partition tail —
+    /// only the spectral kernel switches to <see cref="TransmissionLineGreens.EvaluateInterior"/>,
+    /// and the caller supplies the interior image series (<see cref="MultiLayerImages.PhiImagesInterior"/>
+    /// / <see cref="MultiLayerImages.GaImagesInterior"/>) and interior-plane pole residues.</summary>
+    public static (Complex A, Complex Phi) RemainderMultiLayerInterior(
+        LayeredStackup stackup, double k0, IReadOnlyList<SurfaceWavePole> poles,
+        IReadOnlyList<MultiLayerImages.Image> gaImages,
+        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int m, int refinement = 1) =>
+        RemainderMultiLayerCore(stackup, k0, poles, gaImages, phiImages, rho, refinement,
+            (kRho, kz0) => TransmissionLineGreens.EvaluateInterior(stackup, k0, kRho, kz0, m));
+
+    private static (Complex A, Complex Phi) RemainderMultiLayerCore(
+        LayeredStackup stackup, double k0, IReadOnlyList<SurfaceWavePole> poles,
+        IReadOnlyList<MultiLayerImages.Image> gaImages,
+        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int refinement,
+        Func<double, Complex, (Complex GA, Complex KPhi)> kernel)
     {
         if (rho <= 0) throw new ArgumentOutOfRangeException(nameof(rho),
             "The remainder is tabulated for ρ > 0 (the ρ → 0 limit is flat on the scale of d).");
@@ -50,8 +73,8 @@ internal static partial class SommerfeldIntegrator
             {
                 double t = mid + half * Gauss.Nodes[i];
                 var (sin, cos) = Math.SinCos(t);
-                var (fA, fPhi) = IntegrandML(stackup, k0, k0 * sin, k0 * cos,
-                    poles, gaImages, phiImages, rho);
+                var (fA, fPhi) = IntegrandML(k0, k0 * sin, k0 * cos,
+                    poles, gaImages, phiImages, rho, kernel);
                 double w = Gauss.Weights[i] * half * k0 * cos;
                 sumA += w * fA;
                 sumPhi += w * fPhi;
@@ -85,8 +108,8 @@ internal static partial class SommerfeldIntegrator
                 {
                     double s = mid + half * Gauss.Nodes[i];
                     double kRho = Math.Sqrt(k0 * k0 + s * s);
-                    var (fA, fPhi) = IntegrandML(stackup, k0, kRho, new Complex(0, -s),
-                        poles, gaImages, phiImages, rho);
+                    var (fA, fPhi) = IntegrandML(k0, kRho, new Complex(0, -s),
+                        poles, gaImages, phiImages, rho, kernel);
                     double w = Gauss.Weights[i] * half * s / kRho;
                     sumA += w * fA;
                     sumPhi += w * fPhi;
@@ -99,7 +122,7 @@ internal static partial class SommerfeldIntegrator
         double l1A = sumA.Magnitude, l1Phi = sumPhi.Magnitude;
         for (int doubling = 0; doubling < 60 && b * rho < 3; doubling++)
         {
-            var (vA, vPhi) = TailPanelML(stackup, k0, b, 2 * b, poles, gaImages, phiImages, rho, refinement);
+            var (vA, vPhi) = TailPanelML(k0, b, 2 * b, poles, gaImages, phiImages, rho, refinement, kernel);
             sumA += vA;
             sumPhi += vPhi;
             b *= 2;
@@ -119,8 +142,8 @@ internal static partial class SommerfeldIntegrator
             Complex accA = Complex.Zero, accPhi = Complex.Zero;
             for (int n = 0; n < partitions; n++)
             {
-                var (vA, vPhi) = TailPanelML(stackup, k0, b + n * delta, b + (n + 1) * delta,
-                    poles, gaImages, phiImages, rho, refinement);
+                var (vA, vPhi) = TailPanelML(k0, b + n * delta, b + (n + 1) * delta,
+                    poles, gaImages, phiImages, rho, refinement, kernel);
                 accA += vA;
                 accPhi += vPhi;
                 partialA[n] = accA;
@@ -140,10 +163,11 @@ internal static partial class SommerfeldIntegrator
         return (norm * sumA, norm * sumPhi);
     }
 
-    private static (Complex A, Complex Phi) TailPanelML(LayeredStackup stackup, double k0,
+    private static (Complex A, Complex Phi) TailPanelML(double k0,
         double lo, double hi, IReadOnlyList<SurfaceWavePole> poles,
         IReadOnlyList<MultiLayerImages.Image> gaImages,
-        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int refinement)
+        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int refinement,
+        Func<double, Complex, (Complex GA, Complex KPhi)> kernel)
     {
         Complex vA = Complex.Zero, vPhi = Complex.Zero;
         int sub = refinement;
@@ -155,7 +179,7 @@ internal static partial class SommerfeldIntegrator
             {
                 double kRho = mid + half * Gauss.Nodes[i];
                 var kz0 = new Complex(0, -Math.Sqrt(kRho * kRho - k0 * k0));
-                var (fA, fPhi) = IntegrandML(stackup, k0, kRho, kz0, poles, gaImages, phiImages, rho);
+                var (fA, fPhi) = IntegrandML(k0, kRho, kz0, poles, gaImages, phiImages, rho, kernel);
                 double w = Gauss.Weights[i] * half;
                 vA += w * fA;
                 vPhi += w * fPhi;
@@ -167,12 +191,13 @@ internal static partial class SommerfeldIntegrator
     /// <summary>The multi-layer remainder integrand at one real k_ρ, including the J₀·k_ρ
     /// measure: (F̃ − Σ image asymptotes − Σ pole terms)·J₀(k_ρρ)·k_ρ. The image asymptote
     /// is Σ Coeff·e^{−jk_z0 D}/(jk_z0), scaled by µ₀ for G̃_A and 1/ε₀ for K̃_Φ.</summary>
-    private static (Complex A, Complex Phi) IntegrandML(LayeredStackup stackup, double k0,
+    private static (Complex A, Complex Phi) IntegrandML(double k0,
         double kRho, Complex kz0, IReadOnlyList<SurfaceWavePole> poles,
         IReadOnlyList<MultiLayerImages.Image> gaImages,
-        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho)
+        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho,
+        Func<double, Complex, (Complex GA, Complex KPhi)> kernel)
     {
-        var (gA, kPhi) = TransmissionLineGreens.Evaluate(stackup, k0, kRho, kz0);
+        var (gA, kPhi) = kernel(kRho, kz0);
         var jKz0 = Complex.ImaginaryOne * kz0;
 
         Complex asymA = Complex.Zero;

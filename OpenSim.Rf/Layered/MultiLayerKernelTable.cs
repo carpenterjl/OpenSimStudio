@@ -49,21 +49,35 @@ public sealed class MultiLayerKernelTable
     public double BuildMilliseconds { get; }
     public int PoleCount => _poles.Length;
 
+    /// <summary>The source/observation interface (covered patch): null ⇒ the top metal plane
+    /// (coplanar stackup); m ⇒ a patch buried at interface m with dielectric above.</summary>
+    public int? SourceInterface { get; }
+
     /// <param name="maxDegreeOfParallelism">Thread count for the independent knot integrals
     /// (null = unbounded); the table is bitwise identical for any value (slot-array compute,
     /// sequential spline construction), like the single-slab build.</param>
+    /// <param name="sourceInterface">null ⇒ metal at the slab top (F2a); m ⇒ the interior
+    /// (covered-patch) source & observation at interface m (F2b), using the interior image
+    /// series, interior-plane pole residues, and interior Sommerfeld remainder.</param>
     public MultiLayerKernelTable(LayeredStackup stackup, double frequencyHz, double rhoMax,
-        int? maxDegreeOfParallelism = null)
+        int? maxDegreeOfParallelism = null, int? sourceInterface = null)
     {
         if (frequencyHz <= 0) throw new ArgumentOutOfRangeException(nameof(frequencyHz));
         if (rhoMax <= 0) throw new ArgumentOutOfRangeException(nameof(rhoMax));
+        if (sourceInterface is int si && (si < 0 || si >= stackup.Layers.Count))
+            throw new ArgumentOutOfRangeException(nameof(sourceInterface));
         var stopwatch = Stopwatch.StartNew();
         Stackup = stackup;
         FrequencyHz = frequencyHz;
         K0 = 2 * Math.PI * frequencyHz / RfConstants.SpeedOfLight;
-        PhiImages = MultiLayerImages.PhiImages(stackup);
-        GaImages = MultiLayerImages.GaImages(stackup);
-        _poles = SurfaceWavePoles.Find(stackup, K0).ToArray();
+        SourceInterface = sourceInterface;
+        PhiImages = sourceInterface is int mp
+            ? MultiLayerImages.PhiImagesInterior(stackup, mp)
+            : MultiLayerImages.PhiImages(stackup);
+        GaImages = sourceInterface is int mg
+            ? MultiLayerImages.GaImagesInterior(stackup, mg)
+            : MultiLayerImages.GaImages(stackup);
+        _poles = SurfaceWavePoles.Find(stackup, K0, sourceInterface).ToArray();
 
         double epsMax = stackup.Layers.Max(l => l.RelativePermittivity);
         double k1 = K0 * Math.Sqrt(epsMax);
@@ -78,8 +92,7 @@ public sealed class MultiLayerKernelTable
         var nearPhi = new Complex[nearGrid.Length];
         LayeredKernelTable.ForKnots(nearGrid.Length, maxDegreeOfParallelism, i =>
         {
-            var (a, phi) = SommerfeldIntegrator.RemainderMultiLayer(
-                stackup, K0, _poles, GaImages, PhiImages, nearGrid[i]);
+            var (a, phi) = Remainder(nearGrid[i]);
             var (poleA, polePhi) = PoleTerms(nearGrid[i]);
             nearA[i] = a + poleA;
             nearPhi[i] = phi + polePhi;
@@ -94,8 +107,7 @@ public sealed class MultiLayerKernelTable
             var farA = new Complex[farGrid.Length];
             var farPhi = new Complex[farGrid.Length];
             LayeredKernelTable.ForKnots(farGrid.Length, maxDegreeOfParallelism, i =>
-                (farA[i], farPhi[i]) = SommerfeldIntegrator.RemainderMultiLayer(
-                    stackup, K0, _poles, GaImages, PhiImages, farGrid[i]));
+                (farA[i], farPhi[i]) = Remainder(farGrid[i]));
             _farA = new LayeredKernelTable.ComplexSpline(farGrid, farA, logAbscissa: false);
             _farPhi = new LayeredKernelTable.ComplexSpline(farGrid, farPhi, logAbscissa: false);
         }
@@ -128,12 +140,20 @@ public sealed class MultiLayerKernelTable
     /// — the reference the table-accuracy gate compares against.</summary>
     public (Complex GA, Complex KPhi) EvaluateKernelsDirect(double rho, int refinement = 1)
     {
-        var (a, phi) = SommerfeldIntegrator.RemainderMultiLayer(
-            Stackup, K0, _poles, GaImages, PhiImages, rho, refinement);
+        var (a, phi) = Remainder(rho, refinement);
         var (poleA, polePhi) = PoleTerms(rho);
         var (imageA, imagePhi) = ImageTerms(rho);
         return (imageA + a + poleA, imagePhi + phi + polePhi);
     }
+
+    /// <summary>The Sommerfeld remainder at ρ — the interior-source variant when this table is
+    /// built for a covered patch, else the top-source one.</summary>
+    private (Complex A, Complex Phi) Remainder(double rho, int refinement = 1) =>
+        SourceInterface is int m
+            ? SommerfeldIntegrator.RemainderMultiLayerInterior(
+                Stackup, K0, _poles, GaImages, PhiImages, rho, m, refinement)
+            : SommerfeldIntegrator.RemainderMultiLayer(
+                Stackup, K0, _poles, GaImages, PhiImages, rho, refinement);
 
     /// <summary>The closed-form image parts: µ₀·Σ a_m g(R_m) and (1/ε₀)·Σ c_m g(R_m).</summary>
     public (Complex ImageA, Complex ImagePhi) ImageTerms(double rho)

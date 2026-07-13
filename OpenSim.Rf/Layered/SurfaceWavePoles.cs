@@ -36,7 +36,12 @@ internal static class SurfaceWavePoles
     /// for any N. The single-slab list is byte-identical to <see cref="Find(SubstrateStackup,double)"/>
     /// only up to the finder route; the F-pole gates pin locations + residues to it.
     /// </summary>
-    public static IReadOnlyList<SurfaceWavePole> Find(LayeredStackup stackup, double k0)
+    /// <param name="sourceInterface">null ⇒ top-source residues (metal coplanar at the slab
+    /// top). A value m ⇒ INTERIOR-source residues (covered patch) read out at interface m —
+    /// pole LOCATIONS are identical (source-independent), only the residue read-out plane
+    /// moves (<see cref="TransmissionLineGreens.PoleResiduesInterior"/>).</param>
+    public static IReadOnlyList<SurfaceWavePole> Find(LayeredStackup stackup, double k0,
+        int? sourceInterface = null)
     {
         if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));
         double epsMax = stackup.Layers.Max(l => l.RelativePermittivity);
@@ -67,7 +72,9 @@ internal static class SurfaceWavePoles
                         throw new InvalidOperationException(
                             $"A {(isTm ? "TM" : "TE")} pole converged to the non-physical half-plane (k_ρ = {kp}).");
                 }
-                var (resA, resPhi) = TransmissionLineGreens.PoleResidues(stackup, k0, kp, isTm);
+                var (resA, resPhi) = sourceInterface is int m
+                    ? TransmissionLineGreens.PoleResiduesInterior(stackup, k0, kp, isTm, m)
+                    : TransmissionLineGreens.PoleResidues(stackup, k0, kp, isTm);
                 poles.Add(new SurfaceWavePole(kp, isTm, resA, resPhi));
             }
         }

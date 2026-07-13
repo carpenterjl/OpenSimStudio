@@ -144,6 +144,106 @@ internal static class TransmissionLineGreens
     public static (Complex GA, Complex KPhi) Evaluate(LayeredStackup stackup, double k0, Complex kRho) =>
         Evaluate(stackup, k0, kRho, SpectralKernels.Kz(k0 * k0, kRho));
 
+    /// <summary>The TE (A_x) system for a HED source at an arbitrary INTERIOR interface
+    /// <paramref name="m"/> (top of layer m; 0 ≤ m ≤ n−1) — the covered-patch case where
+    /// dielectric sits ABOVE the metal. The −2µ₀ derivative jump moves from the top plane to
+    /// interface m, and the top interface becomes plain radiation continuity. Value continuity
+    /// holds at every interface (A_x is continuous through the current sheet). m = n−1 recovers
+    /// <see cref="TeSystem"/> exactly (gated). Unknowns [P_0^+, P_0^-, …, C]; C at 2n.</summary>
+    internal static (ComplexDenseMatrix M, Complex[] Rhs, int CIdx) TeSystemInterior(
+        LayerSpectral sp, Complex kz0, int m)
+    {
+        var (_, kz, phi) = sp;
+        int n = kz.Length, size = 2 * n + 1, cIdx = 2 * n, t = 2 * (n - 1);
+        var j = Complex.ImaginaryOne;
+        var m0 = new ComplexDenseMatrix(size, size);
+        var rhs = new Complex[size];
+        int row = 0;
+        m0[row, 0] = 1; m0[row, 1] = phi[0]; row++;                       // ground A_x = 0
+        for (int i = 0; i < n - 1; i++)
+        {
+            int a = 2 * i, b = 2 * (i + 1);
+            m0[row, a] = phi[i]; m0[row, a + 1] = 1; m0[row, b] = -1; m0[row, b + 1] = -phi[i + 1]; row++;
+            if (i == m)
+            {
+                // Source jump at the interior interface: deriv_above − deriv_below = −2µ₀.
+                m0[row, a] = j * kz[i] * phi[i]; m0[row, a + 1] = -j * kz[i];
+                m0[row, b] = -j * kz[i + 1]; m0[row, b + 1] = j * kz[i + 1] * phi[i + 1];
+                rhs[row] = -2 * RfConstants.Mu0;
+            }
+            else
+            {
+                m0[row, a] = -kz[i] * phi[i]; m0[row, a + 1] = kz[i];
+                m0[row, b] = kz[i + 1]; m0[row, b + 1] = -kz[i + 1] * phi[i + 1];
+            }
+            row++;
+        }
+        m0[row, t] = phi[n - 1]; m0[row, t + 1] = 1; m0[row, cIdx] = -1; row++;   // top value → C
+        // Top derivative: the SAME LHS (deriv_above − deriv_below); RHS is the source only
+        // when the source IS the top plane (m == n−1), otherwise plain radiation continuity.
+        m0[row, cIdx] = -j * kz0; m0[row, t] = j * kz[n - 1] * phi[n - 1];
+        m0[row, t + 1] = -j * kz[n - 1];
+        rhs[row] = m == n - 1 ? -2 * RfConstants.Mu0 : Complex.Zero;
+        return (m0, rhs, cIdx);
+    }
+
+    /// <summary>Both potential kernels for a source at interior interface <paramref name="m"/>,
+    /// READ OUT at that same plane z_m (source ≡ observation, what the covered-patch MoM needs):
+    /// G̃_A^xx = A_x(z_m) and K̃_Φ = (A_x(z_m) + ∂_z ã_z(z_m))/(µ₀ε₀), the divergence read-out
+    /// evaluated from the region just ABOVE the source (matching the m = n−1 top read-out
+    /// C − jk_z0 S, where ∂_z ã_z = −jk_z0 S in region 0). The TM system is UNCHANGED — the
+    /// x-directed HED never sources ã_z directly; ã_z is launched only by the ε-contrasts (× A_x)
+    /// the existing <see cref="TmSystem"/> already carries. When ε is continuous across the metal
+    /// (patch buried in a homogeneous slab, or air cover) ∂_z ã_z is continuous at z_m and this
+    /// read-out is unambiguous.</summary>
+    public static (Complex GA, Complex KPhi) EvaluateInterior(
+        LayeredStackup stackup, double k0, Complex kRho, Complex kz0, int m)
+    {
+        int n = stackup.Layers.Count;
+        if (m < 0 || m >= n)
+            throw new ArgumentOutOfRangeException(nameof(m),
+                $"Source interface {m} is out of range for a {n}-layer stackup.");
+        var sp = Spectral(stackup, k0, kRho);
+        var (teM, teRhs, cIdx) = TeSystemInterior(sp, kz0, m);
+        var teSol = ComplexLu.Factor(teM).Solve(teRhs);
+        Complex c = teSol[cIdx];
+        var axAt = AxAtInterfaces(teSol, sp.Phi, c);
+
+        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+        var tmSol = ComplexLu.Factor(tmM).Solve(tmRhs);
+        Complex s = tmSol[sIdx];
+
+        var j = Complex.ImaginaryOne;
+        Complex axm = axAt[m];
+        // ∂_z ã_z(z_m) from ABOVE: region 0 (air) when the source is the top plane, else the
+        // reduced-basis derivative of layer m+1 at its bottom node (= z_m).
+        Complex dAzAbove;
+        Complex epsAbove;
+        if (m == n - 1)
+        {
+            dAzAbove = -j * kz0 * s;
+            epsAbove = Complex.One;                          // region 0 is air
+        }
+        else
+        {
+            int qb = 2 * (m + 1);
+            Complex qp = tmSol[qb], qm = tmSol[qb + 1];
+            dAzAbove = -j * sp.Kz[m + 1] * qp + j * sp.Kz[m + 1] * sp.Phi[m + 1] * qm;
+            epsAbove = sp.Eps[m + 1];
+        }
+        // Φ = −∇·A/(jωµ₀ε₀·εr_local): the divergence read-out divides by the permittivity of
+        // the region it is read in (here, ABOVE the source). Invisible for the top source
+        // (air, εr = 1) — this is why the single-slab path never needed it — but a buried
+        // charge in εr must carry the 1/εr of its host medium (c₀ = 1/εr, the free-medium
+        // Coulomb kernel). Unambiguous where ε is continuous across the metal.
+        return (axm, (axm + dAzAbove) / (RfConstants.Mu0 * RfConstants.Eps0 * epsAbove));
+    }
+
+    /// <summary>The interior-source overload computing k_z0 from k_ρ itself.</summary>
+    public static (Complex GA, Complex KPhi) EvaluateInterior(
+        LayeredStackup stackup, double k0, Complex kRho, int m) =>
+        EvaluateInterior(stackup, k0, kRho, SpectralKernels.Kz(k0 * k0, kRho), m);
+
     /// <summary>The TE surface-wave dispersion function: its zeros are the TE poles (of
     /// both G̃_A and K̃_Φ). D̃_TE = jk_z0 + jk_z,top·(1 − R)/(1 + R), R the bottom-up TE
     /// reflection at the top of the stack (ground = short, Γ = −1). Proportional (never
@@ -235,6 +335,77 @@ internal static class TransmissionLineGreens
             Complex resS = MatrixResidue(tmM, MatrixDerivative(stackup, k0, kp, tm: true), tmRhs)[sIdx];
             return (Complex.Zero, -j * kz0 * resS / normFactor);
         }
+    }
+
+    /// <summary>The residues of the INTERIOR-source kernels at a surface-wave pole (covered
+    /// patch: source & observation at interface <paramref name="m"/>). The pole LOCATION and the
+    /// mode (null vector) are source-independent — only the RHS (the interior source, via
+    /// <see cref="TeSystemInterior"/>) and the read-out plane move to z_m, with the same
+    /// ÷ε_above divergence normalization as <see cref="EvaluateInterior"/>. m = n−1 reproduces
+    /// <see cref="PoleResidues"/> (gated).</summary>
+    public static (Complex ResidueA, Complex ResiduePhi) PoleResiduesInterior(
+        LayeredStackup stackup, double k0, Complex kp, bool isTm, int m)
+    {
+        int n = stackup.Layers.Count;
+        var sp = Spectral(stackup, k0, kp);
+        var kz0 = SpectralKernels.Kz(k0 * k0, kp);
+        var j = Complex.ImaginaryOne;
+        Complex epsAbove = m == n - 1 ? Complex.One : sp.Eps[m + 1];
+        double eps0mu0 = RfConstants.Mu0 * RfConstants.Eps0;
+        Complex norm = eps0mu0 * epsAbove;
+
+        // ∂_z ã_z(z_m) from ABOVE, read off a solved (or residue) TM vector — region 0 when
+        // the source is the top plane, else layer m+1's reduced-basis derivative at its bottom.
+        Complex DAzAbove(Complex[] tmVec, Complex sVal) =>
+            m == n - 1
+                ? -j * kz0 * sVal
+                : -j * sp.Kz[m + 1] * tmVec[2 * (m + 1)]
+                    + j * sp.Kz[m + 1] * sp.Phi[m + 1] * tmVec[2 * (m + 1) + 1];
+
+        var (teM, teRhs, cIdx) = TeSystemInterior(sp, kz0, m);
+        if (!isTm)
+        {
+            // TE pole: A_x (and every interface value) is singular; ã_z inherits it through
+            // the A_z source (regular TM matrix, residue RHS).
+            var resX = MatrixResidue(teM, MatrixDerivativeTeInterior(stackup, k0, kp, m), teRhs);
+            Complex resC = resX[cIdx];
+            var resAx = AxAtInterfaces(resX, sp.Phi, resC);
+            var (tmM, resB, sIdx) = TmSystem(sp, kz0, resAx, resC);
+            var resTm = ComplexLu.Factor(tmM).Solve(resB);
+            Complex resAxm = resAx[m];
+            return (resAxm, (resAxm + DAzAbove(resTm, resTm[sIdx])) / norm);
+        }
+        else
+        {
+            // TM pole: A_x regular ⇒ zero residue; only ã_z is singular.
+            var teSol = ComplexLu.Factor(teM).Solve(teRhs);
+            Complex c = teSol[cIdx];
+            var axAt = AxAtInterfaces(teSol, sp.Phi, c);
+            var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+            var resTm = MatrixResidue(tmM, MatrixDerivative(stackup, k0, kp, tm: true), tmRhs);
+            return (Complex.Zero, DAzAbove(resTm, resTm[sIdx]) / norm);
+        }
+    }
+
+    /// <summary>Central-difference k_ρ derivative of the INTERIOR TE pole matrix (the top-source
+    /// <see cref="MatrixDerivative"/> stays untouched, so the F-pole residue pins never move).</summary>
+    private static ComplexDenseMatrix MatrixDerivativeTeInterior(
+        LayeredStackup stackup, double k0, Complex kp, int m)
+    {
+        Complex delta = 1e-6 * (kp.Magnitude == 0 ? 1 : kp.Magnitude);
+        ComplexDenseMatrix Build(Complex kRho)
+        {
+            var sp = Spectral(stackup, k0, kRho);
+            var kz0 = SpectralKernels.Kz(k0 * k0, kRho);
+            return TeSystemInterior(sp, kz0, m).M;
+        }
+        var plus = Build(kp + delta);
+        var minus = Build(kp - delta);
+        int size = plus.Rows;
+        var d = new ComplexDenseMatrix(size, size);
+        for (int i = 0; i < size; i++)
+            for (int k = 0; k < size; k++) d[i, k] = (plus[i, k] - minus[i, k]) / (2 * delta);
+        return d;
     }
 
     /// <summary>Res x = u (vᵀb)/(vᵀM′u) for the singular system M x = b at a simple pole.</summary>
