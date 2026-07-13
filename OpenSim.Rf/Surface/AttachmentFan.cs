@@ -100,6 +100,64 @@ internal sealed class AttachmentFan
         TotalAngle = total;
     }
 
+    /// <summary>The junction surface current's in-plane spectral transform per unit
+    /// junction coefficient, J̃(k⃗) = ∫ (D + Σᵢγᵢ Hᵢ) e^{+jk⃗·r′} dS — the disc in the
+    /// ray form (its t-free measure) plus each half-RWG's triangle moment. This is the
+    /// EXACT far field of the junction current, replacing the mesh-scale fold onto the
+    /// fan edges (which over-radiates and omits the disc entirely).</summary>
+    public (Complex Jx, Complex Jy) CurrentTransform(SurfaceStructure surface, double kx, double ky)
+    {
+        Complex jx = Complex.Zero, jy = Complex.Zero;
+        var (nodes, weights) = GaussLegendre.Rule(6, 0, 1);
+        // Disc D: ray r′ = v + t·e(s); D dS′ = e(s)·cross/(2π|e|²) ds dt (t cancels).
+        foreach (var wedge in Wedges)
+        {
+            var (a, b, c) = surface.Triangles[wedge.Triangle];
+            var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
+            var eu = surface.Vertices[u] - VertexPosition;
+            var ew = surface.Vertices[w] - VertexPosition;
+            double cross = Vector3D.Cross(eu, ew - eu).Length;
+            for (int si = 0; si < nodes.Length; si++)
+            {
+                var e = eu * (1 - nodes[si]) + ew * nodes[si];
+                double scale = cross / (2 * Math.PI * e.LengthSquared);
+                for (int ti = 0; ti < nodes.Length; ti++)
+                {
+                    var rPrime = VertexPosition + e * nodes[ti];
+                    var (sinP, cosP) = Math.SinCos(kx * rPrime.X + ky * rPrime.Y);
+                    var phase = new Complex(cosP, sinP);
+                    double weight = weights[si] * weights[ti] * scale;
+                    jx += weight * e.X * phase;
+                    jy += weight * e.Y * phase;
+                }
+            }
+        }
+        // Half-RWGs on the outward neighbors: current γᵢ·(lᵢ/2A)(p_opp − r).
+        var (t1, t2, t3, wq) = TriangleQuadrature.Rule(5);
+        foreach (var wedge in Wedges)
+        {
+            int t = wedge.NeighborTriangle;
+            var (ia, ib, ic) = surface.Triangles[t];
+            var va = surface.Vertices[ia];
+            var vb = surface.Vertices[ib];
+            var vc = surface.Vertices[ic];
+            double area = surface.TriangleAreas[t];
+            var pOpp = surface.Vertices[wedge.NeighborOpposite];
+            double coeff = wedge.Gamma * surface.Edges[wedge.EdgeBasis].Length / (2 * area);
+            for (int i = 0; i < wq.Length; i++)
+            {
+                var r = va * t1[i] + vb * t2[i] + vc * t3[i];
+                var fDir = pOpp - r;
+                var (sinP, cosP) = Math.SinCos(kx * r.X + ky * r.Y);
+                var phase = new Complex(cosP, sinP);
+                double weight = wq[i] * area * coeff;
+                jx += weight * fDir.X * phase;
+                jy += weight * fDir.Y * phase;
+            }
+        }
+        return (jx, jy);
+    }
+
     /// <summary>The disc current's vector potential at one test point, per unit
     /// junction current: A(r) = ∫ D(r′) G_A(ρ_eff) dS′ over the fan (in-plane
     /// components; G_A is the boundary table's FULL layered kernel).</summary>

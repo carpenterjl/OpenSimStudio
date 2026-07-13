@@ -158,6 +158,19 @@
                     <TextBox Text="{Binding Antenna.SubstrateTanD}" Margin="2,0,0,0"
                              ToolTip="Substrate loss tangent (0 = lossless)"/>
                 </UniformGrid>
+                <Label Content="Probe x/y [mm] (probe-fed patch)"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding Antenna.ProbeXMm}" Margin="0,0,2,0"
+                             ToolTip="Coaxial probe feed position from the patch centre (Stage E). The probe snaps to the nearest mesh vertex; a good inset off the radiating edge sets the input resistance ∝ cos²(πx/L)."/>
+                    <TextBox Text="{Binding Antenna.ProbeYMm}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Probe bore [mm] / segments"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding Antenna.ProbeRadiusMm}" Margin="0,0,2,0"
+                             ToolTip="Coax inner-conductor radius. The slab must be thick enough that each tube segment ≥ 2·radius (the reduced thin-wire kernel's validity floor)."/>
+                    <TextBox Text="{Binding Antenna.ProbeSegments}" Margin="2,0,0,0"
+                             ToolTip="Number of vertical tube segments across the slab (≥ 2)."/>
+                </UniformGrid>
                 <Label Content="Island (RWG)"/>
                 <ComboBox x:Name="AntennaIslandCombo"
                           ItemsSource="{Binding Antenna.AntennaIslands}"

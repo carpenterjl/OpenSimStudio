@@ -77,6 +77,35 @@ public class LayeredFieldTests
         }
     }
 
+    [Fact]
+    public void EvaluatorEz_IntegratesToTheVoltageKernel_WithTheRightSign()
+    {
+        // Pins the LayeredFieldEvaluator Φ-leg SIGN (the old −1.027 observation): the
+        // straight-path voltage −∫₀^d E_z(r,z) dz assembled by the near-field evaluator
+        // (E_z = −ω²A_z(via W) − ∂_zΦ, both gauge legs) must reproduce EdgeVoltage(r) =
+        // K_V ∗ q (the SAME two legs, a different code path). Measured ratio ≈ +0.97
+        // (POSITIVE, ~3% low from the evaluator's surface-scale quadrature near the metal
+        // — not −1.027; that earlier figure was a sign convention in a brute-force probe,
+        // NOT an evaluator bug). Independent-path consistency + the sign, not a sharp gate.
+        double W = 1.186e-2, L = 0.906e-2, mesh = 1.4e-3, d = 1.588e-3;
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(W, L, mesh, z: d, portFraction: 0.08);
+        var table = new LayeredKernelTable(Balanis, BalanisF, 0.025);
+        var sol = new SurfaceMomSolver().Solve(grid.Structure!, table, grid.Port!);
+        foreach (double fx in new[] { -0.4, -0.2, 0.2, 0.4 })
+        {
+            var edge = new Vector3D(fx * W, -L / 2 + 0.5 * mesh, d);
+            var vK = LayeredPotentialProbe.EdgeVoltage(grid.Structure!, table, sol, edge);
+            var (gn, gw) = GaussLegendre.Rule(8, 0, 1);
+            var pts = gn.Select(t => new Vector3D(edge.X, edge.Y, t * d)).ToList();
+            var map = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, sol, pts);
+            Complex integral = Complex.Zero;
+            for (int i = 0; i < gn.Length; i++) integral += gw[i] * d * map.E[i].Z;
+            var ratio = -integral / vK;
+            Assert.InRange(ratio.Real, 0.90, 1.05);       // positive, near 1 (NOT −1.027)
+            Assert.True(Math.Abs(ratio.Imaginary) < 0.05, $"Im(ratio) = {ratio.Imaginary}");
+        }
+    }
+
     private static void AssertRel(Complex expected, Complex actual, double tol, string what)
     {
         double scale = Math.Max(expected.Magnitude, actual.Magnitude);

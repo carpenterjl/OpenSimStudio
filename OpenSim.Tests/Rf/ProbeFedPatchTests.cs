@@ -113,16 +113,136 @@ public class ProbeFedPatchTests
     }
 
     [Fact]
-    public void PowerLedger_HoldsNearResonance_SheetCurrentsOnly()
+    public void PowerLedger_OnSubstrate_HoldsToTheOpenVerticalSurfaceWaveLeg()
     {
-        // P_rad + P_sw vs ½Re(V·I*) with the probe's own radiation still excluded —
-        // measured 1.03 at the near-edge inset, 1.08 at L/4; the 3% plan gate awaits
-        // the vertical far-field leg (named work, not a hidden approximation).
+        // The COMPLETE mixed-current far field: raw RWG + junction disc/half-RWGs +
+        // the vertical E_θ leg (space wave), and the horizontal-current surface-wave
+        // power. Measured (mesh 1.4 mm, a = 0.2 mm) ~1.05 at resonance. The residual is
+        // ISOLATED and NAMED: at εr = 1 the same far field conserves power EXACTLY
+        // (CompleteProbeFarField_ConservesPowerExactly_WithNoSubstrate = 1.0000), so the
+        // space wave is not the gap — the open item is the vertical tube current's own
+        // TM0 surface-wave launch (a mixed A/Φ residue leg), which interferes with the
+        // horizontal radial current and pulls this the last few %. Gated as a band with
+        // the trend, NOT weakened silently: the physics of the solve (Zin, resonance,
+        // R/cos²) are correct and separately gated.
         var (solution, surface, table) = Solve(9.4e9, -0.375 * PatchL);
         double pIn = 0.5 * Complex.Conjugate(1.0 / solution.Surface.InputImpedance).Real;
-        var far = LayeredFarField.Compute(surface, table, solution.Surface);
-        double pSw = LayeredFarField.SurfaceWavePowerWatts(surface, table, solution.Surface);
-        Assert.InRange((far.TotalRadiatedPowerWatts + pSw) / pIn, 0.90, 1.12);
+        var far = LayeredFarField.Compute(surface, table, solution, probe: new ProbeFeed(
+            0.0, -0.375 * PatchL, ProbeRadius, Segments));
+        double pSw = LayeredFarField.SurfaceWavePowerWatts(surface, table, solution,
+            new ProbeFeed(0.0, -0.375 * PatchL, ProbeRadius, Segments));
+        Assert.InRange((far.TotalRadiatedPowerWatts + pSw) / pIn, 0.97, 1.10);
+    }
+
+    [Fact]
+    public void ProbeVerticalFarField_ConservesPower_AsAMonopoleOverGround()
+    {
+        // The absolute-scale gate for the vertical far-field leg: at εr = 1 a probe of
+        // length L (open top) IS a monopole over PEC ground, and a lossless monopole
+        // radiates ALL its input power into the hemisphere. So the E_θ pattern
+        // LayeredFarField assembles from the tube current must satisfy
+        // P_rad(hemisphere) = ½Re(V·I₀*) to the quadrature — an INDEPENDENT check of the
+        // far-field integrand against the port power (measured 1.0002 across L, f). This
+        // is the sharp gate on the vertical leg; on the microstrip PATCH the ledger does
+        // NOT close to a few % (the junction-disc's own radiation and the tube's surface
+        // wave are not yet in the far field — see PowerLedger_… below), but the leg
+        // itself is exact, which THIS proves.
+        double mu0 = 4e-7 * Math.PI, eps0 = 8.8541878128e-12;
+        double eta = Math.Sqrt(mu0 / eps0);
+        foreach (var (f, L, radius, seg) in new[]
+        {
+            (2.4e9, 0.0312, 0.5e-3, 8),
+            (1.0e9, 0.070, 1.0e-3, 10),
+            (5.0e9, 0.014, 0.3e-3, 6),
+        })
+        {
+            var air = new SubstrateStackup(1.0, 0.0, L);
+            var set = new VerticalKernelSet(air, f);
+            var probe = new ProbeFeed(0, 0, radius, seg);
+            var (_, cur) = ProbeAssembly.SolveProbeOnly(set, probe);
+            double k0 = set.K0, omega = 2 * Math.PI * f;
+            var nodes = ProbeAssembly.TubeNodes(air, probe);
+            var currents = new Complex[seg + 1];
+            for (int i = 0; i < seg; i++) currents[i] = cur[i]; // open top: node seg carries 0
+            var (u, uw) = OpenSim.Rf.GaussLegendre.Rule(64, 0, 1);
+            double pRad = 0;
+            for (int ti = 0; ti < u.Length; ti++)
+            {
+                double cosT = u[ti], sinT = Math.Sqrt(1 - cosT * cosT), th = Math.Acos(cosT);
+                var gHat = LayeredFarField.VerticalAmplitude(air, k0, th, nodes, currents);
+                var eTheta = (omega * k0 * cosT / (4 * Math.PI)) * (-sinT) * gHat;
+                pRad += 2 * Math.PI * uw[ti] * eTheta.Magnitude * eTheta.Magnitude / (2 * eta);
+            }
+            double pIn = 0.5 * cur[0].Real; // V = 1 (real), P_in = ½Re(V·I₀*)
+            Assert.InRange(pRad / pIn, 0.98, 1.02);
+        }
+    }
+
+    [Fact]
+    public void CompleteProbeFarField_ConservesPowerExactly_WithNoSubstrate()
+    {
+        // THE gate that the mixed-current SPACE-wave far field is exact and complete:
+        // at εr = 1 there are NO surface waves (P_sw = 0), so a lossless probe-fed patch
+        // must radiate ALL its input power — P_rad(hemisphere) = ½Re(V·I*) at ANY
+        // frequency, resonant or not. Measured 1.0000 across the band: the raw RWG +
+        // junction disc/half-RWG + vertical E_θ legs, summed coherently, ARE the exact
+        // radiation operator of the extended probe system. (On a real substrate the
+        // vertical current's TM0 surface-wave leg is still open — see the substrate
+        // ledger below — but this proves the space-wave side is not the gap.)
+        var air = new SubstrateStackup(1.0, 0.0, 2.0e-3);
+        foreach (double f in new[] { 8.0e9, 10.0e9, 12.0e9, 14.0e9 })
+        {
+            double y = -PatchL / 4;
+            var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+                PatchW, PatchL, MeshEdge, z: 2.0e-3, portFraction: 0, snapVertex: (0.0, y));
+            var table = new LayeredKernelTable(air, f, 0.025);
+            Assert.Equal(0, table.PoleCount); // no surface waves in air
+            var probe = new ProbeFeed(0.0, y, ProbeRadius, Segments);
+            var sol = new SurfaceMomSolver().SolveProbeFed(grid.Structure!, table, probe);
+            double pIn = 0.5 * Complex.Conjugate(1.0 / sol.Surface.InputImpedance).Real;
+            var far = LayeredFarField.Compute(grid.Structure!, table, sol, probe);
+            Assert.InRange(far.TotalRadiatedPowerWatts / pIn, 0.99, 1.01);
+        }
+    }
+
+    [Fact]
+    public void VerticalSurfaceWavePower_MatchesTheProbeOnlyOracle()
+    {
+        // The vertical tube current's TM0 surface-wave launch, validated INDEPENDENTLY:
+        // for a probe-only-into-grounded-substrate (a pure vertical radiator) the space
+        // wave P_rad is exact, so P_sw = P_in − P_rad is an oracle. The modal formula
+        // P_sw = (ωk_p/16π)·2π·Re[∫∫J_z*·Res G_zz·J_z − ∫∫q_v*·Res K_Φ·q_v] reproduces it
+        // to ~5e-4 across εr / thickness / frequency — no fitted constant (the horizontal
+        // formula's ωk_p/16π prefactor carries over; the 2π is the axial-symmetry
+        // azimuth). This is the validated foundation; mixing it into the PATCH ledger
+        // additionally needs the junction charge-continuity partition (a named open item).
+        foreach (var (eps, h, f, seg) in new[]
+        {
+            (2.2, 1.588e-3, 9.0e9, 3), (2.2, 1.588e-3, 12.0e9, 3), (10.2, 1.27e-3, 8.0e9, 4),
+        })
+        {
+            var sub = new SubstrateStackup(eps, 0.0, h);
+            var set = new VerticalKernelSet(sub, f);
+            var probe = new ProbeFeed(0, 0, 0.15e-3, seg);
+            var (_, cur) = ProbeAssembly.SolveProbeOnly(set, probe);
+            double k0 = set.K0, omega = 2 * Math.PI * f;
+            double mu0 = 4e-7 * Math.PI, eps0 = 8.8541878128e-12, eta = Math.Sqrt(mu0 / eps0);
+            var nodes = ProbeAssembly.TubeNodes(sub, probe);
+            var jc = new Complex[seg + 1];
+            for (int i = 0; i < seg; i++) jc[i] = cur[i];
+            var (uu, uw) = OpenSim.Rf.GaussLegendre.Rule(64, 0, 1);
+            double pRad = 0;
+            for (int ti = 0; ti < uu.Length; ti++)
+            {
+                double cosT = uu[ti], sinT = Math.Sqrt(1 - cosT * cosT), th = Math.Acos(cosT);
+                var g = LayeredFarField.VerticalAmplitude(sub, k0, th, nodes, jc);
+                var e = (omega * k0 * cosT / (4 * Math.PI)) * (-sinT) * g;
+                pRad += 2 * Math.PI * uw[ti] * e.Magnitude * e.Magnitude / (2 * eta);
+            }
+            double target = 0.5 * cur[0].Real - pRad;
+            double model = LayeredFarField.VerticalSurfaceWavePowerWatts(sub, f, nodes, jc);
+            Assert.InRange(model / target, 0.98, 1.02);
+        }
     }
 
     [Fact]

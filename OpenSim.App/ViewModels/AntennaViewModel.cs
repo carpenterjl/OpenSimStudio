@@ -33,6 +33,7 @@ public partial class AntennaViewModel : ObservableObject
     public const string MonopoleMode = "Monopole (wizard)";
     public const string PlateMode = "Plate (wizard, RWG)";
     public const string PatchMode = "Patch over ground (wizard, RWG)";
+    public const string ProbeFedPatchMode = "Probe-fed patch (wizard, RWG + coax)";
     public const string IslandMode = "Copper island (PCB, RWG)";
 
     private readonly ILogService _log;
@@ -50,13 +51,26 @@ public partial class AntennaViewModel : ObservableObject
     }
 
     public ObservableCollection<string> SourceModes { get; } =
-        new() { NetMode, DipoleMode, LoopMode, MonopoleMode, PlateMode, PatchMode, IslandMode };
+        new() { NetMode, DipoleMode, LoopMode, MonopoleMode, PlateMode, PatchMode,
+            ProbeFedPatchMode, IslandMode };
 
     /// <summary>Surface (RWG) modes solve sheets; the others solve thin wires. Mixing
     /// the two in one structure is not supported in v1 — the modes are disjoint by
     /// construction, so no combined request can even be expressed.</summary>
     private bool IsSurfaceMode =>
-        SourceMode is PlateMode or PatchMode or IslandMode;
+        SourceMode is PlateMode or PatchMode or ProbeFedPatchMode or IslandMode;
+
+    /// <summary>The probe-fed patch drives the substrate patch with a real coaxial
+    /// port through the slab (Stage E); the other surface modes use an edge/gap port.</summary>
+    private bool IsProbeMode => SourceMode == ProbeFedPatchMode;
+
+    // Coaxial probe feed [mm]: lateral position from the patch centre, bore radius,
+    // and the number of tube segments across the slab (≥ 2; the slab must be thick
+    // enough that each segment ≥ 2·radius — a typed failure otherwise).
+    [ObservableProperty] private double _probeXMm;
+    [ObservableProperty] private double _probeYMm = -20;
+    [ObservableProperty] private double _probeRadiusMm = 0.2;
+    [ObservableProperty] private int _probeSegments = 3;
 
     /// <summary>Nullable so the ComboBox's transient null push lands harmlessly.</summary>
     [ObservableProperty] private string? _sourceMode = DipoleMode;
@@ -539,18 +553,21 @@ public partial class AntennaViewModel : ObservableObject
     /// <summary>Whether the current surface configuration engages the layered-media
     /// (substrate) path: metal over the ground with a dielectric filling the gap.
     /// εr = 1 means air — the Stage B PEC-image path, byte-for-byte.</summary>
-    private bool UseSubstrate => SubstrateEpsR > 1.0
-        && (SourceMode == PatchMode || UseGroundPlane);
+    private bool UseSubstrate => (SubstrateEpsR > 1.0
+        && (SourceMode == PatchMode || UseGroundPlane))
+        || IsProbeMode; // the coaxial probe lives inside the slab — always layered
 
     private bool TryDiscretizeSurface(out OpenSim.Rf.Surface.SurfaceStructure surface,
         out OpenSim.Rf.Surface.SurfacePort port, out IReadOnlyList<string> warnings,
-        out string? failure, out OpenSim.Rf.Layered.SubstrateStackup? substrate)
+        out string? failure, out OpenSim.Rf.Layered.SubstrateStackup? substrate,
+        out OpenSim.Rf.Surface.ProbeFeed? probe)
     {
         surface = null!;
         port = null!;
         warnings = Array.Empty<string>();
         failure = null;
         substrate = null;
+        probe = null;
 
         if (SubstrateEpsR < 1)
         {
@@ -612,6 +629,38 @@ public partial class AntennaViewModel : ObservableObject
                 }
                 break;
 
+            case ProbeFedPatchMode:
+            {
+                if (PlateWidthMm <= 0 || PlateLengthMm <= 0 || PatchHeightMm <= 0)
+                {
+                    failure = "the probe-fed patch needs positive width, length, and slab thickness";
+                    return false;
+                }
+                if (ProbeSegments < 2)
+                {
+                    failure = "the coaxial probe needs at least 2 tube segments";
+                    return false;
+                }
+                if (ProbeRadiusMm <= 0)
+                {
+                    failure = "the probe bore radius must be positive";
+                    return false;
+                }
+                double px = ProbeXMm * 1e-3, py = ProbeYMm * 1e-3;
+                if (Math.Abs(px) >= PlateWidthMm * 1e-3 / 2 || Math.Abs(py) >= PlateLengthMm * 1e-3 / 2)
+                {
+                    failure = "the probe (x, y) must lie inside the patch footprint";
+                    return false;
+                }
+                grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
+                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10,
+                    z: groundZ + PatchHeightMm * 1e-3, portFraction: 0, snapVertex: (px, py));
+                substrate = new OpenSim.Rf.Layered.SubstrateStackup(
+                    Math.Max(SubstrateEpsR, 1.0), Math.Max(SubstrateTanD, 0), PatchHeightMm * 1e-3);
+                probe = new OpenSim.Rf.Surface.ProbeFeed(px, py, ProbeRadiusMm * 1e-3, ProbeSegments);
+                break;
+            }
+
             case IslandMode:
             {
                 if (AntennaIsland is not { } choice)
@@ -662,7 +711,7 @@ public partial class AntennaViewModel : ObservableObject
     private async Task SolveSurfaceAntennaAsync()
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out var warnings,
-                out string? failure, out var substrate))
+                out string? failure, out var substrate, out var probe))
         {
             AntennaResult = $"Not solvable: {failure}";
             return;
@@ -694,7 +743,7 @@ public partial class AntennaViewModel : ObservableObject
                     {
                         pointTiming[k] = new List<string>();
                         results[k] = SolveSurfacePoint(solver, surface, port, FrequencyAt(k),
-                            substrate, pointTiming[k]);
+                            substrate, probe, pointTiming[k]);
                     });
                 }
                 catch (AggregateException e) { throw e.InnerExceptions[0]; }
@@ -706,7 +755,7 @@ public partial class AntennaViewModel : ObservableObject
                         results[k].InputImpedance.Real, results[k].InputImpedance.Imaginary));
                     timing.AddRange(pointTiming[k]);
                 }
-                return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, timing));
+                return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, probe, timing));
             });
 
             foreach (var point in sweep) ZinSweep.Add(point);
@@ -718,7 +767,9 @@ public partial class AntennaViewModel : ObservableObject
                             $"({surface.BasisCount} RWG unknowns, {surface.Triangles.Count} triangles" +
                             (substrate is null ? ")" : $", εr = {substrate.RelativePermittivity:g3} substrate)");
             AntennaAssumptions = "Assumptions: "
-                + string.Join(" ", BuildSurfaceAssumptions(surface, substrate))
+                + string.Join(" ", probe is null
+                    ? BuildSurfaceAssumptions(surface, substrate)
+                    : OpenSim.Rf.Surface.SurfaceMomSolver.ProbeFedAssumptions)
                 + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
             // A slow sweep names its own bottleneck: the layered path rebuilds the
             // kernel table per frequency point (a table IS one (f, stackup) pair).
@@ -733,14 +784,20 @@ public partial class AntennaViewModel : ObservableObject
     private OpenSim.Rf.Surface.SurfaceMomSolution SolveSurfacePoint(
         OpenSim.Rf.Surface.SurfaceMomSolver solver, OpenSim.Rf.Surface.SurfaceStructure surface,
         OpenSim.Rf.Surface.SurfacePort port, double frequencyHz,
-        OpenSim.Rf.Layered.SubstrateStackup? substrate, List<string> timing)
+        OpenSim.Rf.Layered.SubstrateStackup? substrate, OpenSim.Rf.Surface.ProbeFeed? probe,
+        List<string> timing)
     {
         if (substrate is null) return solver.Solve(surface, frequencyHz, port);
         var table = BuildKernelTable(surface, substrate, frequencyHz);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var solution = solver.Solve(surface, table, port);
+        // The probe-fed path returns the coax port impedance; its surface solution
+        // carries the junction's transported current for the current/far-field consumers.
+        var solution = probe is { } p
+            ? solver.SolveProbeFed(surface, table, p).Surface
+            : solver.Solve(surface, table, port);
         timing.Add($"Antenna: layered point {frequencyHz / 1e6:g4} MHz — table "
                    + $"{table.BuildMilliseconds:F0} ms ({table.PoleCount} surface-wave pole(s)), "
+                   + (probe is null ? "" : "probe-fed ")
                    + $"solve {stopwatch.Elapsed.TotalMilliseconds:F0} ms.");
         return solution;
     }
@@ -757,7 +814,7 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ComputeSurfaceNearFieldAsync()
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
-                out var substrate))
+                out var substrate, out var probe))
         {
             FieldResult = $"Not computable: {failure}";
             return;
@@ -788,9 +845,13 @@ public partial class AntennaViewModel : ObservableObject
                         solvedFree);
                 }
                 // The Stage D layered field kernels: per-z tables (in-slab AND
-                // above-slab points; at/below the ground E = 0 exactly).
+                // above-slab points; at/below the ground E = 0 exactly). The probe-fed
+                // near field uses the patch sheet currents (the probe's own vertical
+                // field is a named follow-up, like its far-field surface-wave leg).
                 var table = BuildKernelTable(surface, substrate, frequency);
-                var solved = solver.Solve(surface, table, port);
+                var solved = probe is { } p
+                    ? solver.SolveProbeFed(surface, table, p).Surface
+                    : solver.Solve(surface, table, port);
                 return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
                     surface, table, solved, points), solved);
             });
@@ -813,7 +874,7 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ShowSurfaceFarFieldAsync()
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
-                out var substrate))
+                out var substrate, out var probe))
         {
             FieldResult = $"Not computable: {failure}";
             return;
@@ -833,6 +894,19 @@ public partial class AntennaViewModel : ObservableObject
                         solvedFree, 0.0, 0.0);
                 }
                 var table = BuildKernelTable(surface, substrate, frequency);
+                if (probe is { } p)
+                {
+                    // The probe-fed far field carries the vertical E_θ leg + the exact
+                    // junction current; the ledger's remaining ~5% is the vertical
+                    // surface-wave leg (a named follow-up, so P_rad+P_sw can read a few
+                    // % over near resonance).
+                    var pf = solver.SolveProbeFed(surface, table, p);
+                    double pinP = 0.5 * (System.Numerics.Complex.One / pf.Surface.InputImpedance).Real;
+                    return (OpenSim.Rf.Layered.LayeredFarField.Compute(surface, table, pf, p),
+                        pf.Surface,
+                        OpenSim.Rf.Layered.LayeredFarField.SurfaceWavePowerWatts(surface, table, pf, p),
+                        pinP);
+                }
                 var solved = solver.Solve(surface, table, port);
                 double pin = 0.5 * (System.Numerics.Complex.One / solved.InputImpedance).Real;
                 return (OpenSim.Rf.Layered.LayeredFarField.Compute(surface, table, solved),

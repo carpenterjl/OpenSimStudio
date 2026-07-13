@@ -6,10 +6,13 @@ namespace OpenSim.Rf.Surface;
 
 /// <summary>One frequency point of a probe-fed layered solve: the surface solution
 /// (input impedance seen by the REAL probe port, edge currents with the junction's
-/// transported current folded onto the fan outer edges for the far-field consumers)
-/// plus the tube current per probe node (index 0 = ground contact = the port current;
-/// last = the junction current entering the patch).</summary>
-public sealed record ProbeFedSolution(SurfaceMomSolution Surface, Complex[] TubeCurrents);
+/// transported current folded onto the fan outer edges for generic consumers) plus the
+/// tube current per probe node (index 0 = ground contact = the port current; last = the
+/// junction current entering the patch), and the RAW (un-folded) edge currents so the
+/// accurate far field can add the junction's disc + half-RWG current exactly instead of
+/// through the mesh-scale fold.</summary>
+public sealed record ProbeFedSolution(
+    SurfaceMomSolution Surface, Complex[] TubeCurrents, Complex[] RawEdgeCurrents);
 
 /// <summary>
 /// The probe-fed (coaxial feed) assembly path: the layered RWG system extended by the
@@ -374,8 +377,9 @@ public sealed partial class SurfaceMomSolver
         // full RWG there (exact crossing, mesh-scale approximation of the local
         // distribution, consistent with k₀·mesh ≪ 1).
         var junction = x[jIndex];
+        var rawEdgeCurrents = new Complex[nEdges];
         var edgeCurrents = new Complex[nEdges];
-        for (int e = 0; e < nEdges; e++) edgeCurrents[e] = x[e];
+        for (int e = 0; e < nEdges; e++) rawEdgeCurrents[e] = edgeCurrents[e] = x[e];
         foreach (var wedge in fan.Wedges)
             edgeCurrents[wedge.EdgeBasis] += wedge.OrientationSign * wedge.Gamma * junction;
         var tubeCurrents = new Complex[segments + 1];
@@ -384,6 +388,6 @@ public sealed partial class SurfaceMomSolver
 
         return new ProbeFedSolution(
             new SurfaceMomSolution(kernel.FrequencyHz, gapVolts / baseCurrent, edgeCurrents),
-            tubeCurrents);
+            tubeCurrents, rawEdgeCurrents);
     }
 }
