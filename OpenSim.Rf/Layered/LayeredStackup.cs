@@ -80,6 +80,25 @@ public sealed record LayeredStackup
         new(new[] { new Layer(substrate.RelativePermittivity, substrate.LossTangent,
             substrate.ThicknessMeters) });
 
+    /// <summary>The interface index of the metal plane in a <see cref="CoveredPatch"/> stackup:
+    /// the top of the (single) substrate layer, index 0. Pass this as the
+    /// <c>sourceInterface</c> of a <see cref="MultiLayerKernelTable"/> to place source AND
+    /// observation at the buried metal.</summary>
+    public const int CoveredPatchMetalInterface = 0;
+
+    /// <summary>A covered patch: metal buried between a substrate slab and a dielectric COVER
+    /// of the SAME εr/tanδ (a homogeneous slab split at the metal). This restriction keeps
+    /// ∂_z ã_z single-valued at the metal — the interior-source read-out (F2b) needs it — while
+    /// still loading the patch (a cover pulls the resonance DOWN, growing with cover thickness).
+    /// The genuinely different-εr superstrate is a named follow-up. The metal sits at interface
+    /// <see cref="CoveredPatchMetalInterface"/> = 0.</summary>
+    public static LayeredStackup CoveredPatch(double epsR, double tanD, double hSub, double hCover) =>
+        new(new[]
+        {
+            new Layer(epsR, tanD, hSub),
+            new Layer(epsR, tanD, hCover)
+        });
+
     /// <summary>True when this stackup is a single slab — the fast path that dispatches to
     /// the pinned single-slab closed form instead of the general TLGF recursion.</summary>
     public bool IsSingleSlab => Layers.Count == 1;

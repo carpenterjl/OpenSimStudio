@@ -34,6 +34,7 @@ public partial class AntennaViewModel : ObservableObject
     public const string PlateMode = "Plate (wizard, RWG)";
     public const string PatchMode = "Patch over ground (wizard, RWG)";
     public const string ProbeFedPatchMode = "Probe-fed patch (wizard, RWG + coax)";
+    public const string CoveredPatchMode = "Covered patch (wizard, RWG + cover)";
     public const string IslandMode = "Copper island (PCB, RWG)";
 
     private readonly ILogService _log;
@@ -52,13 +53,19 @@ public partial class AntennaViewModel : ObservableObject
 
     public ObservableCollection<string> SourceModes { get; } =
         new() { NetMode, DipoleMode, LoopMode, MonopoleMode, PlateMode, PatchMode,
-            ProbeFedPatchMode, IslandMode };
+            ProbeFedPatchMode, CoveredPatchMode, IslandMode };
 
     /// <summary>Surface (RWG) modes solve sheets; the others solve thin wires. Mixing
     /// the two in one structure is not supported in v1 — the modes are disjoint by
     /// construction, so no combined request can even be expressed.</summary>
     private bool IsSurfaceMode =>
-        SourceMode is PlateMode or PatchMode or ProbeFedPatchMode or IslandMode;
+        SourceMode is PlateMode or PatchMode or ProbeFedPatchMode or CoveredPatchMode or IslandMode;
+
+    /// <summary>The covered patch (Stage F): a patch buried under a dielectric cover of the
+    /// SAME εr as its substrate (a homogeneous slab split at the metal), solved through the
+    /// multi-layer transmission-line Green's function with the source at the buried interface.
+    /// The cover loads the patch — its resonance drops below the bare patch's.</summary>
+    private bool IsCoveredPatchMode => SourceMode == CoveredPatchMode;
 
     /// <summary>The probe-fed patch drives the substrate patch with a real coaxial
     /// port through the slab (Stage E); the other surface modes use an edge/gap port.</summary>
@@ -71,6 +78,11 @@ public partial class AntennaViewModel : ObservableObject
     [ObservableProperty] private double _probeYMm = -20;
     [ObservableProperty] private double _probeRadiusMm = 0.2;
     [ObservableProperty] private int _probeSegments = 3;
+
+    // Dielectric cover over a covered patch [mm]: its thickness. The cover shares the
+    // substrate's εr/tanδ (SubstrateEpsR / SubstrateTanD) — the homogeneous-slab-split
+    // model that keeps the buried-source read-out unambiguous (Stage F2b).
+    [ObservableProperty] private double _coverThicknessMm = 0.8;
 
     /// <summary>Nullable so the ComboBox's transient null push lands harmlessly.</summary>
     [ObservableProperty] private string? _sourceMode = DipoleMode;
@@ -555,12 +567,20 @@ public partial class AntennaViewModel : ObservableObject
     /// εr = 1 means air — the Stage B PEC-image path, byte-for-byte.</summary>
     private bool UseSubstrate => (SubstrateEpsR > 1.0
         && (SourceMode == PatchMode || UseGroundPlane))
-        || IsProbeMode; // the coaxial probe lives inside the slab — always layered
+        || IsProbeMode          // the coaxial probe lives inside the slab — always layered
+        || IsCoveredPatchMode;  // the covered patch is buried in the slab — always layered
+
+    /// <summary>A multi-layer (Stage F) solve spec: the stackup plus the metal source
+    /// interface (null ⇒ coplanar at the slab top; m ⇒ buried at interface m, a covered
+    /// patch). When present it supersedes <see cref="OpenSim.Rf.Layered.SubstrateStackup"/> —
+    /// the solve, far field, and near field route through the multi-layer kernel table.</summary>
+    private readonly record struct LayeredSpec(
+        OpenSim.Rf.Layered.LayeredStackup Stackup, int? SourceInterface);
 
     private bool TryDiscretizeSurface(out OpenSim.Rf.Surface.SurfaceStructure surface,
         out OpenSim.Rf.Surface.SurfacePort port, out IReadOnlyList<string> warnings,
         out string? failure, out OpenSim.Rf.Layered.SubstrateStackup? substrate,
-        out OpenSim.Rf.Surface.ProbeFeed? probe)
+        out OpenSim.Rf.Surface.ProbeFeed? probe, out LayeredSpec? layered)
     {
         surface = null!;
         port = null!;
@@ -568,6 +588,7 @@ public partial class AntennaViewModel : ObservableObject
         failure = null;
         substrate = null;
         probe = null;
+        layered = null;
 
         if (SubstrateEpsR < 1)
         {
@@ -661,6 +682,39 @@ public partial class AntennaViewModel : ObservableObject
                 break;
             }
 
+            case CoveredPatchMode:
+            {
+                if (PlateWidthMm <= 0 || PlateLengthMm <= 0 || PatchHeightMm <= 0)
+                {
+                    failure = "the covered patch needs positive width, length, and substrate thickness";
+                    return false;
+                }
+                if (CoverThicknessMm <= 0)
+                {
+                    failure = "the dielectric cover thickness must be positive";
+                    return false;
+                }
+                if (SubstrateEpsR < 1)
+                {
+                    failure = "the covered patch needs a substrate εr ≥ 1";
+                    return false;
+                }
+                // Metal buried at the top of the substrate (interface 0), cover above. The plate
+                // is built at the substrate-top z (cosmetic for overlays — the radial kernel
+                // ignores it; the buried source height lives in the interior kernel table).
+                double hSub = PatchHeightMm * 1e-3;
+                grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
+                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10,
+                    z: groundZ + hSub, portFraction: 0);
+                substrate = new OpenSim.Rf.Layered.SubstrateStackup(
+                    SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSub);
+                layered = new LayeredSpec(
+                    OpenSim.Rf.Layered.LayeredStackup.CoveredPatch(
+                        SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSub, CoverThicknessMm * 1e-3),
+                    OpenSim.Rf.Layered.LayeredStackup.CoveredPatchMetalInterface);
+                break;
+            }
+
             case IslandMode:
             {
                 if (AntennaIsland is not { } choice)
@@ -711,13 +765,13 @@ public partial class AntennaViewModel : ObservableObject
     private async Task SolveSurfaceAntennaAsync()
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out var warnings,
-                out string? failure, out var substrate, out var probe))
+                out string? failure, out var substrate, out var probe, out var layered))
         {
             AntennaResult = $"Not solvable: {failure}";
             return;
         }
         AntennaResult = $"Solving ({surface.BasisCount} RWG unknowns"
-                        + (substrate is null ? "" : ", layered substrate") + ")…";
+                        + (substrate is null ? "" : layered is null ? ", layered substrate" : ", multi-layer stackup") + ")…";
         try
         {
             double frequency = FrequencyMHz * 1e6;
@@ -743,7 +797,7 @@ public partial class AntennaViewModel : ObservableObject
                     {
                         pointTiming[k] = new List<string>();
                         results[k] = SolveSurfacePoint(solver, surface, port, FrequencyAt(k),
-                            substrate, probe, pointTiming[k]);
+                            substrate, probe, layered, pointTiming[k]);
                     });
                 }
                 catch (AggregateException e) { throw e.InnerExceptions[0]; }
@@ -755,7 +809,7 @@ public partial class AntennaViewModel : ObservableObject
                         results[k].InputImpedance.Real, results[k].InputImpedance.Imaginary));
                     timing.AddRange(pointTiming[k]);
                 }
-                return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, probe, timing));
+                return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, probe, layered, timing));
             });
 
             foreach (var point in sweep) ZinSweep.Add(point);
@@ -765,10 +819,15 @@ public partial class AntennaViewModel : ObservableObject
                             $"{(display.InputImpedance.Imaginary >= 0 ? "+" : "−")} " +
                             $"j{Math.Abs(display.InputImpedance.Imaginary):g4} Ω at {FrequencyMHz:g4} MHz " +
                             $"({surface.BasisCount} RWG unknowns, {surface.Triangles.Count} triangles" +
-                            (substrate is null ? ")" : $", εr = {substrate.RelativePermittivity:g3} substrate)");
+                            (substrate is null ? ")"
+                                : layered is { SourceInterface: not null }
+                                    ? $", εr = {substrate.RelativePermittivity:g3} covered patch, Stage F multi-layer)"
+                                    : layered is not null
+                                        ? $", εr = {substrate.RelativePermittivity:g3} multi-layer stackup)"
+                                        : $", εr = {substrate.RelativePermittivity:g3} substrate)");
             AntennaAssumptions = "Assumptions: "
                 + string.Join(" ", probe is null
-                    ? BuildSurfaceAssumptions(surface, substrate)
+                    ? BuildSurfaceAssumptions(surface, substrate, layered)
                     : OpenSim.Rf.Surface.SurfaceMomSolver.ProbeFedAssumptions)
                 + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
             // A slow sweep names its own bottleneck: the layered path rebuilds the
@@ -785,8 +844,20 @@ public partial class AntennaViewModel : ObservableObject
         OpenSim.Rf.Surface.SurfaceMomSolver solver, OpenSim.Rf.Surface.SurfaceStructure surface,
         OpenSim.Rf.Surface.SurfacePort port, double frequencyHz,
         OpenSim.Rf.Layered.SubstrateStackup? substrate, OpenSim.Rf.Surface.ProbeFeed? probe,
-        List<string> timing)
+        LayeredSpec? layered, List<string> timing)
     {
+        if (layered is { } spec)
+        {
+            // The multi-layer (Stage F) path: a covered patch (buried source) or a genuine
+            // multi-gap stackup, through the transmission-line Green's function kernel table.
+            var mlTable = BuildMultiLayerTable(surface, spec, frequencyHz);
+            var mlStopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var mlSolution = solver.Solve(surface, mlTable, port);
+            timing.Add($"Antenna: multi-layer point {frequencyHz / 1e6:g4} MHz — table "
+                       + $"{mlTable.BuildMilliseconds:F0} ms ({mlTable.PoleCount} surface-wave pole(s)), "
+                       + $"solve {mlStopwatch.Elapsed.TotalMilliseconds:F0} ms.");
+            return mlSolution;
+        }
         if (substrate is null) return solver.Solve(surface, frequencyHz, port);
         var table = BuildKernelTable(surface, substrate, frequencyHz);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -811,12 +882,30 @@ public partial class AntennaViewModel : ObservableObject
             rhoMax: 1.2 * diagonal);
     }
 
+    private static OpenSim.Rf.Layered.MultiLayerKernelTable BuildMultiLayerTable(
+        OpenSim.Rf.Surface.SurfaceStructure surface, LayeredSpec spec, double frequencyHz)
+    {
+        var (_, diagonal) = SurfaceBounds(surface);
+        return new OpenSim.Rf.Layered.MultiLayerKernelTable(spec.Stackup, frequencyHz,
+            rhoMax: 1.2 * diagonal, sourceInterface: spec.SourceInterface);
+    }
+
     private async Task ComputeSurfaceNearFieldAsync()
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
-                out var substrate, out var probe))
+                out var substrate, out var probe, out var layered))
         {
             FieldResult = $"Not computable: {failure}";
+            return;
+        }
+        if (layered is not null)
+        {
+            // The Stage D layered field kernels are single-slab; their multi-layer / interior-
+            // source generalization is a named follow-up. The impedance and far field of a
+            // multi-layer / covered patch are computed — only the near-field MAP is deferred.
+            FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
+                + "named follow-up (the in-slab field kernels are single-slab). The Zin sweep "
+                + "and far field of a covered patch are available.";
             return;
         }
         FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
@@ -874,19 +963,32 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ShowSurfaceFarFieldAsync()
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
-                out var substrate, out var probe))
+                out var substrate, out var probe, out var layered))
         {
             FieldResult = $"Not computable: {failure}";
             return;
         }
         FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
-                      + (substrate is null ? "" : ", layered substrate") + ")…";
+                      + (substrate is null ? "" : layered is null ? ", layered substrate" : ", multi-layer stackup") + ")…";
         try
         {
             double frequency = FrequencyMHz * 1e6;
             var (pattern, solution, surfaceWavePower, inputPower) = await Task.Run(() =>
             {
                 var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                if (layered is { } spec)
+                {
+                    // The multi-layer (Stage F) far field: horizontal RWG currents radiating
+                    // through the stack, region-0 amplitude from the TLGF; P_sw from the
+                    // multi-layer poles. Covered-patch ledger P_rad + P_sw ≡ ½Re(V·I*).
+                    var mlTable = BuildMultiLayerTable(surface, spec, frequency);
+                    var mlSolved = solver.Solve(surface, mlTable, port);
+                    double mlPin = 0.5 * (System.Numerics.Complex.One / mlSolved.InputImpedance).Real;
+                    return (OpenSim.Rf.Layered.LayeredFarField.Compute(surface, mlTable, mlSolved),
+                        mlSolved,
+                        OpenSim.Rf.Layered.LayeredFarField.SurfaceWavePowerWatts(surface, mlTable, mlSolved),
+                        mlPin);
+                }
                 if (substrate is null)
                 {
                     var solvedFree = solver.Solve(surface, frequency, port);
@@ -941,16 +1043,26 @@ public partial class AntennaViewModel : ObservableObject
 
     private IReadOnlyList<string> BuildSurfaceAssumptions(
         OpenSim.Rf.Surface.SurfaceStructure surface,
-        OpenSim.Rf.Layered.SubstrateStackup? substrate)
+        OpenSim.Rf.Layered.SubstrateStackup? substrate, LayeredSpec? layered = null)
     {
         if (substrate is not null)
         {
-            var layered = OpenSim.Rf.Surface.SurfaceMomSolver.LayeredAssumptions.ToList();
-            layered.Insert(1,
+            var lines = OpenSim.Rf.Surface.SurfaceMomSolver.LayeredAssumptions.ToList();
+            lines.Insert(1,
                 $"Substrate: εr = {substrate.RelativePermittivity:g3}, tanδ = {substrate.LossTangent:g3}, " +
                 $"thickness {substrate.ThicknessMeters * 1e3:g4} mm; the reported power ledger counts " +
                 "only the extracted surface-wave modes (TM0 always; higher modes above cutoff).");
-            return layered;
+            // Covered patch: name the cover so the downward resonance shift is not a surprise.
+            if (layered is { SourceInterface: not null } spec && spec.Stackup.Layers.Count > 1)
+            {
+                var cover = spec.Stackup.Layers[^1];
+                lines.Insert(2,
+                    $"Dielectric cover: εr = {cover.RelativePermittivity:g3}, thickness "
+                    + $"{cover.ThicknessMeters * 1e3:g4} mm above the buried metal (a covered patch, "
+                    + "Stage F multi-layer TLGF) — the cover loads the patch, so its resonance sits "
+                    + "below the bare patch's.");
+            }
+            return lines;
         }
         if (surface.Ground is not { } ground)
             return OpenSim.Rf.Surface.SurfaceMomSolver.Assumptions;

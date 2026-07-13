@@ -244,6 +244,32 @@ internal static class TransmissionLineGreens
         LayeredStackup stackup, double k0, Complex kRho, int m) =>
         EvaluateInterior(stackup, k0, kRho, SpectralKernels.Kz(k0 * k0, kRho), m);
 
+    /// <summary>The region-0 (top air) radiation amplitudes the far field needs from a source
+    /// at interface <paramref name="m"/> (m = n−1 ⇒ the coplanar-top plane, else a covered patch):
+    /// G̃_A = C (the A_x amplitude per unit horizontal current) and W̃ = S/C (the A_z/A_x
+    /// amplitude ratio per −j·k⃗_ρ·J̃; zero at εr = 1 — no TM coupling without a contrast). These
+    /// are the SAME C, S the potential read-out uses, WITHOUT the K̃_Φ divergence normalization:
+    /// the far field radiates the raw region-0 vector potential. At N = 1, m = 0 this equals
+    /// (<see cref="SpectralKernels.Evaluate"/>.GA, <see cref="SpectralKernels.AzRatio"/>) — an
+    /// identity gate, not a re-derivation. Source depth changes C and S (the cover loads the
+    /// radiation) but the region-0 propagation is unchanged, so the far-field formula is the same.</summary>
+    public static (Complex GA, Complex AzRatio) RadiationAmplitude(
+        LayeredStackup stackup, double k0, Complex kRho, Complex kz0, int m)
+    {
+        int n = stackup.Layers.Count;
+        if (m < 0 || m >= n)
+            throw new ArgumentOutOfRangeException(nameof(m),
+                $"Source interface {m} is out of range for a {n}-layer stackup.");
+        var sp = Spectral(stackup, k0, kRho);
+        var (teM, teRhs, cIdx) = m == n - 1 ? TeSystem(sp, kz0) : TeSystemInterior(sp, kz0, m);
+        var teSol = ComplexLu.Factor(teM).Solve(teRhs);
+        Complex c = teSol[cIdx];
+        var axAt = AxAtInterfaces(teSol, sp.Phi, c);
+        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+        Complex s = ComplexLu.Factor(tmM).Solve(tmRhs)[sIdx];
+        return (c, s / c);
+    }
+
     /// <summary>The TE surface-wave dispersion function: its zeros are the TE poles (of
     /// both G̃_A and K̃_Φ). D̃_TE = jk_z0 + jk_z,top·(1 − R)/(1 + R), R the bottom-up TE
     /// reflection at the top of the stack (ground = short, Γ = −1). Proportional (never

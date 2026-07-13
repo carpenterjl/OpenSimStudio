@@ -145,11 +145,11 @@
                 <TextBox Text="{Binding Antenna.WireRadiusMm}"/>
                 <Label Content="Plate/patch W×L [mm]"/>
                 <UniformGrid Columns="2">
-                    <TextBox Text="{Binding Antenna.PlateWidthMm}" Margin="0,0,2,0"/>
-                    <TextBox Text="{Binding Antenna.PlateLengthMm}" Margin="2,0,0,0"/>
+                    <TextBox x:Name="PlateWidthBox" Text="{Binding Antenna.PlateWidthMm}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="PlateLengthBox" Text="{Binding Antenna.PlateLengthMm}" Margin="2,0,0,0"/>
                 </UniformGrid>
                 <Label Content="Patch height [mm]"/>
-                <TextBox Text="{Binding Antenna.PatchHeightMm}"
+                <TextBox x:Name="PatchHeightBox" Text="{Binding Antenna.PatchHeightMm}"
                          ToolTip="Gap between the patch metal and the ground plane (RWG patch mode). With a substrate εr &gt; 1 this is the dielectric slab thickness."/>
                 <Label Content="Substrate εr / tanδ"/>
                 <UniformGrid Columns="2">
@@ -171,6 +171,9 @@
                     <TextBox Text="{Binding Antenna.ProbeSegments}" Margin="2,0,0,0"
                              ToolTip="Number of vertical tube segments across the slab (≥ 2)."/>
                 </UniformGrid>
+                <Label Content="Cover thickness [mm] (covered patch)"/>
+                <TextBox Text="{Binding Antenna.CoverThicknessMm}"
+                         ToolTip="Dielectric cover thickness above the buried patch (covered-patch mode, Stage F multi-layer). The cover shares the substrate's εr/tanδ (a homogeneous slab split at the metal); it loads the patch, so the resonance drops below the bare patch's."/>
                 <Label Content="Island (RWG)"/>
                 <ComboBox x:Name="AntennaIslandCombo"
                           ItemsSource="{Binding Antenna.AntennaIslands}"
@@ -186,7 +189,7 @@
                 <TextBox Text="{Binding Antenna.HeightAboveGroundMm}"
                          ToolTip="Wizard dipole/loop shapes are lifted this far above the plane; net geometry keeps its board coordinates."/>
                 <Label Content="f [MHz]"/>
-                <TextBox Text="{Binding Antenna.FrequencyMHz}"/>
+                <TextBox x:Name="FrequencyBox" Text="{Binding Antenna.FrequencyMHz}"/>
                 <Label Content="Sweep f min [MHz]"/>
                 <TextBox Text="{Binding Antenna.SweepFMinMHz}"/>
                 <Label Content="Sweep f max [MHz]"/>

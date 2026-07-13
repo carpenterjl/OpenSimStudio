@@ -55,6 +55,64 @@ public static class LayeredFarField
             thetaCount, phiCount);
     }
 
+    /// <summary>Far field of a MULTI-LAYER stackup solve (Stage F): the horizontal RWG patch
+    /// currents radiating through the stack, with the region-0 amplitude G̃_A = C and the
+    /// W̃ = S/C coupling taken from the transmission-line Green's function
+    /// (<see cref="TransmissionLineGreens.RadiationAmplitude"/>) instead of the single-slab
+    /// closed form. A covered patch (buried source) just changes C and S — the source depth
+    /// is encoded in the table's <see cref="MultiLayerKernelTable.SourceInterface"/>. No probe /
+    /// vertical leg here (covered patches are pure horizontal metal); at N = 1 the pattern
+    /// equals the single-slab <see cref="Compute(SurfaceStructure, LayeredKernelTable, SurfaceMomSolution, int, int)"/>
+    /// to the table-accuracy floor — a cross-check gate.</summary>
+    public static FarFieldPattern Compute(SurfaceStructure surface, MultiLayerKernelTable kernel,
+        SurfaceMomSolution solution, int thetaCount = 32, int phiCount = 64)
+    {
+        double omega = 2 * Math.PI * kernel.FrequencyHz;
+        double k0 = kernel.K0;
+        double eta = Math.Sqrt(RfConstants.Mu0 / RfConstants.Eps0);
+        int m = kernel.SourceInterface ?? kernel.Stackup.Layers.Count - 1;
+        var edgeCurrents = solution.EdgeCurrents;
+
+        var (uNodes, uWeights) = GaussLegendre.Rule(thetaCount, 0, 1); // hemisphere
+        var theta = uNodes.Select(Math.Acos).ToArray();
+        var phi = Enumerable.Range(0, phiCount).Select(i => 2 * Math.PI * i / phiCount).ToArray();
+        double phiWeight = 2 * Math.PI / phiCount;
+
+        var intensity = new double[thetaCount, phiCount];
+        double totalPower = 0;
+        for (int ti = 0; ti < thetaCount; ti++)
+        {
+            double cosTheta = uNodes[ti];
+            double sinTheta = Math.Sin(theta[ti]);
+            double kRho = k0 * sinTheta;
+            var kz0 = new Complex(k0 * cosTheta, 0);
+            var (gA, w) = TransmissionLineGreens.RadiationAmplitude(kernel.Stackup, k0, kRho, kz0, m);
+            var thetaFactor = cosTheta + Complex.ImaginaryOne * k0 * sinTheta * sinTheta * w;
+
+            for (int pi = 0; pi < phiCount; pi++)
+            {
+                var (cosPhi, sinPhi) = (Math.Cos(phi[pi]), Math.Sin(phi[pi]));
+                double kx = kRho * cosPhi, ky = kRho * sinPhi;
+                var (jx, jy) = SpectralCurrent(surface, edgeCurrents, kx, ky);
+                var jPar = cosPhi * jx + sinPhi * jy;
+                var jPerp = -sinPhi * jx + cosPhi * jy;
+
+                double amplitude = omega * k0 * cosTheta / (4 * Math.PI);
+                Complex eTheta = amplitude * gA * thetaFactor * jPar;
+                Complex ePhi = amplitude * gA * jPerp;
+                double u = (eTheta.Magnitude * eTheta.Magnitude
+                            + ePhi.Magnitude * ePhi.Magnitude) / (2 * eta);
+                intensity[ti, pi] = u;
+                totalPower += uWeights[ti] * phiWeight * u;
+            }
+        }
+
+        double maxDirectivity = 0;
+        foreach (double u in intensity)
+            maxDirectivity = Math.Max(maxDirectivity, 4 * Math.PI * u / totalPower);
+        return new FarFieldPattern(theta, phi, intensity, totalPower, maxDirectivity);
+    }
+
     /// <summary>The attachment fan at the probe vertex — rebuilt from the mesh + probe
     /// so the far field carries the junction's exact current geometry.</summary>
     internal static AttachmentFan ProbeVertexFan(SurfaceStructure surface, ProbeFeed probe)
@@ -252,10 +310,26 @@ public static class LayeredFarField
     private static double SurfaceWavePowerWatts(SurfaceStructure surface,
         LayeredKernelTable kernel, IReadOnlyList<Complex> edgeCurrents,
         JunctionLeg? junction, int alphaCount)
+        => SurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles, edgeCurrents,
+            junction, alphaCount);
+
+    /// <summary>The lateral surface-wave power carried by the extracted modes of a MULTI-LAYER
+    /// stackup (Stage F). Identical spectral-power residue formula as the single slab — the
+    /// only thing that changes is the pole set / residues, which the table already carries
+    /// (interior-plane residues when it is a covered patch). <see cref="SpectralCurrent"/> is
+    /// geometry-only, so it is reused verbatim.</summary>
+    public static double SurfaceWavePowerWatts(SurfaceStructure surface,
+        MultiLayerKernelTable kernel, SurfaceMomSolution solution, int alphaCount = 64)
+        => SurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
+            solution.EdgeCurrents, null, alphaCount);
+
+    private static double SurfaceWavePowerWatts(SurfaceStructure surface,
+        double frequencyHz, IReadOnlyList<SurfaceWavePole> poles,
+        IReadOnlyList<Complex> edgeCurrents, JunctionLeg? junction, int alphaCount)
     {
-        double omega = 2 * Math.PI * kernel.FrequencyHz;
+        double omega = 2 * Math.PI * frequencyHz;
         double power = 0;
-        foreach (var pole in kernel.Poles)
+        foreach (var pole in poles)
         {
             double kp = pole.KRho.Real;
             double integralAll = 0, integralRadial = 0;

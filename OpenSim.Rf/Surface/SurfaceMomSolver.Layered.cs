@@ -36,7 +36,7 @@ public sealed partial class SurfaceMomSolver
     public static IReadOnlyList<string> LayeredAssumptions { get; } = new[]
     {
         "Perfect electric conductor, zero-thickness sheet (no ohmic loss).",
-        "One dielectric slab (εr, tanδ) on an infinite PEC ground plane; all metal in the single plane at the top of the slab.",
+        "A grounded dielectric stackup (one or more layers, per-layer εr/tanδ) on an infinite PEC ground plane; all metal coplanar at a single interface — the slab top, or buried under a dielectric cover of the same εr (a covered patch).",
         "Rigorous layered-media Green's function (MPIE, direct Sommerfeld integration) — surface waves included; only TM0/TE modes above cutoff are extracted into the power ledger.",
         "No vias or probe feeds (vertical currents are out of scope in v1); delta-gap voltage feed across an interior mesh edge.",
         "Current normal to the sheet rim is zero by construction (no wire attachments)."
