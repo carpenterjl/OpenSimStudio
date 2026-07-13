@@ -415,7 +415,13 @@ public partial class PcbViewModel : ObservableObject
             double microns = gaps is not null && orders[i] - 1 < gaps.Count
                 ? gaps[orders[i] - 1] * 1e6
                 : defaultGapMicrons;
-            var gap = new DielectricGap(orders[i], microns);
+            // RF materials: from the file's stackup when it names them, else FR4 (the gap
+            // ctor's default). Index matches the thickness list — one entry per gap.
+            var perms = board.Stackup?.DielectricGapPermittivities;
+            var losses = board.Stackup?.DielectricGapLossTangents;
+            double eps = perms is not null && orders[i] - 1 < perms.Count ? perms[orders[i] - 1] : 4.4;
+            double tand = losses is not null && orders[i] - 1 < losses.Count ? losses[orders[i] - 1] : 0.02;
+            var gap = new DielectricGap(orders[i], microns, eps, tand);
             gap.PropertyChanged += OnDielectricGapChanged;
             DielectricGaps.Add(gap);
         }
@@ -552,11 +558,7 @@ public partial class PcbViewModel : ObservableObject
             var result = await Task.Run(() => new NetMesher().MeshNet(net, boardPads, options));
             foreach (var w in result.Warnings) _log.Append($"Net: {w}");
 
-            LoadImportedBody(result.Body, new PcbStackupSettings
-            {
-                CopperThickness = PcbCopperThickness,
-                BoardThickness = PcbBoardThickness
-            });
+            LoadImportedBody(result.Body, BuildStackupSettings());
             // The meshed net now stands in for the preview: hide the rest of the copper
             // (toggle it back on with "Show full-board copper").
             SelectedNetOutlines = new Point3DCollection();
@@ -576,6 +578,44 @@ public partial class PcbViewModel : ObservableObject
         }
         catch (Exception ex) { _session.ReportError(ex); }
         finally { _session.IsBusy = false; _session.StatusText = "Ready"; }
+    }
+
+    /// <summary>The stackup persisted with the project: copper/board thickness plus the
+    /// per-gap thicknesses AND RF materials (εr/tanδ), indexed by (UpperLayerOrder − 1) so
+    /// the import seeder reads them back at the same index. Empty when there are no gaps.</summary>
+    private PcbStackupSettings BuildStackupSettings()
+    {
+        int maxOrder = DielectricGaps.Count == 0 ? 0 : DielectricGaps.Max(g => g.UpperLayerOrder);
+        if (maxOrder == 0)
+            return new PcbStackupSettings
+            {
+                CopperThickness = PcbCopperThickness,
+                BoardThickness = PcbBoardThickness
+            };
+        var thick = new double[maxOrder];
+        var perm = new double[maxOrder];
+        var loss = new double[maxOrder];
+        for (int i = 0; i < maxOrder; i++)
+        {
+            thick[i] = PcbBoardThickness / maxOrder;   // benign default for any unlisted gap
+            perm[i] = 4.4;
+            loss[i] = 0.02;
+        }
+        foreach (var g in DielectricGaps)
+        {
+            int idx = g.UpperLayerOrder - 1;
+            thick[idx] = g.ThicknessMeters;
+            perm[idx] = g.RelativePermittivity;
+            loss[idx] = g.LossTangent;
+        }
+        return new PcbStackupSettings
+        {
+            CopperThickness = PcbCopperThickness,
+            BoardThickness = PcbBoardThickness,
+            DielectricGapThicknesses = thick,
+            DielectricGapPermittivities = perm,
+            DielectricGapLossTangents = loss
+        };
     }
 
     /// <summary>The mesh options the net mesher, the copper preview, and the inductance

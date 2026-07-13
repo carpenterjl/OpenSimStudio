@@ -25,7 +25,7 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Text="Dielectric between layers [µm]:" Margin="0,4,0,2"
+            <TextBlock Text="Dielectric between layers (thickness µm · εr · tanδ):" Margin="0,4,0,2"
                        Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}"/>
             <ItemsControl ItemsSource="{Binding Pcb.DielectricGaps}"
                           Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}">
@@ -33,7 +33,11 @@
                     <DataTemplate>
                         <DockPanel Margin="0,1">
                             <Label Content="{Binding Label}" DockPanel.Dock="Left" Width="60"/>
-                            <TextBox Text="{Binding ThicknessMicrons}"
+                            <TextBox DockPanel.Dock="Right" Width="46" Text="{Binding LossTangent}"
+                                     ToolTip="Loss tangent tanδ (RF layered-media Green's function; FR4 ≈ 0.02)"/>
+                            <TextBox DockPanel.Dock="Right" Width="40" Margin="0,0,3,0" Text="{Binding RelativePermittivity}"
+                                     ToolTip="Relative permittivity εr (RF layered-media Green's function; FR4 ≈ 4.4)"/>
+                            <TextBox Margin="0,0,3,0" Text="{Binding ThicknessMicrons}"
                                      ToolTip="Dielectric thickness = the via-barrel height between these layers"/>
                         </DockPanel>
                     </DataTemplate>

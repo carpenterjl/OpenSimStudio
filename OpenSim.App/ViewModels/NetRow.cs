@@ -54,14 +54,18 @@ public partial class LayerFilter : ObservableObject
     public double ThicknessMeters => ThicknessMicrons * 1e-6;
 }
 
-/// <summary>The dielectric between two adjacent copper layers, with an editable thickness.
-/// Sets the true z-separation (and via-barrel height) between the layers.</summary>
+/// <summary>The dielectric between two adjacent copper layers, with an editable thickness
+/// and RF material (εr, tanδ). The thickness sets the true z-separation (and via-barrel
+/// height); the material feeds the RF layered-media Green's function. Defaults to FR4.</summary>
 public partial class DielectricGap : ObservableObject
 {
-    public DielectricGap(int upperLayerOrder, double thicknessMicrons)
+    public DielectricGap(int upperLayerOrder, double thicknessMicrons,
+        double relativePermittivity = 4.4, double lossTangent = 0.02)
     {
         UpperLayerOrder = upperLayerOrder;
         _thicknessMicrons = thicknessMicrons;
+        _relativePermittivity = relativePermittivity;
+        _lossTangent = lossTangent;
     }
 
     /// <summary>The upper (smaller-order) copper layer; the gap sits between it and <c>UpperLayerOrder + 1</c>.</summary>
@@ -69,6 +73,12 @@ public partial class DielectricGap : ObservableObject
     public string Label => $"L{UpperLayerOrder}–L{UpperLayerOrder + 1}";
 
     [ObservableProperty] private double _thicknessMicrons;
+
+    /// <summary>Relative permittivity εr of this gap's dielectric (FR4 default 4.4). RF only.</summary>
+    [ObservableProperty] private double _relativePermittivity;
+
+    /// <summary>Loss tangent tanδ of this gap's dielectric (FR4 default 0.02). RF only.</summary>
+    [ObservableProperty] private double _lossTangent;
 
     public double ThicknessMeters => ThicknessMicrons * 1e-6;
 }

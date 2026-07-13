@@ -71,6 +71,49 @@ public class ProjectSerializerTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void PcbStackup_PerGapMaterials_RoundTrip_AndOldProjectsDefaultToEmpty()
+    {
+        // Stage F-data: per-gap εr/tanδ persist alongside the thicknesses (parallel init
+        // lists, the same pattern the thickness list already uses). An older .ossproj with
+        // no material lists must load them as empty (⇒ the VM re-seeds FR4), never crash.
+        var project = new SimProject
+        {
+            Name = "Board",
+            Stackup = new PcbStackupSettings
+            {
+                CopperThickness = 18e-6,
+                BoardThickness = 1.6e-3,
+                DielectricGapThicknesses = new[] { 0.8e-3, 0.4e-3 },
+                DielectricGapPermittivities = new[] { 4.4, 3.66 },
+                DielectricGapLossTangents = new[] { 0.02, 0.004 }
+            }
+        };
+
+        string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".ossproj");
+        try
+        {
+            var serializer = new ProjectSerializer();
+            serializer.Save(project, path);
+            var loaded = serializer.Load(path);
+
+            Assert.NotNull(loaded.Stackup);
+            Assert.Equal(18e-6, loaded.Stackup!.CopperThickness);
+            Assert.Equal(new[] { 4.4, 3.66 }, loaded.Stackup.DielectricGapPermittivities);
+            Assert.Equal(new[] { 0.02, 0.004 }, loaded.Stackup.DielectricGapLossTangents);
+            Assert.Equal(new[] { 0.8e-3, 0.4e-3 }, loaded.Stackup.DielectricGapThicknesses);
+
+            // A default-constructed stackup (an older project) carries empty material lists.
+            var bare = new PcbStackupSettings();
+            Assert.Empty(bare.DielectricGapPermittivities);
+            Assert.Empty(bare.DielectricGapLossTangents);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }
 
 public class Phase2PersistenceTests

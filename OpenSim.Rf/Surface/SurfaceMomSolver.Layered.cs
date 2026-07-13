@@ -42,10 +42,34 @@ public sealed partial class SurfaceMomSolver
         "Current normal to the sheet rim is zero by construction (no wire attachments)."
     };
 
-    /// <summary>Solve over the layered medium described by <paramref name="kernel"/>
+    /// <summary>Solve over the single-slab layered medium described by <paramref name="kernel"/>
     /// (which fixes the frequency — a table is one (frequency, stackup) pair).</summary>
     public SurfaceMomSolution Solve(SurfaceStructure surface, LayeredKernelTable kernel,
         SurfacePort port, double gapVolts = 1.0)
+    {
+        ValidateLayeredSurface(surface, port);
+        double omega = 2 * Math.PI * kernel.FrequencyHz;
+        var z = AssembleLayeredImpedanceMatrix(surface, kernel, omega, MaxDegreeOfParallelism);
+        return SolveAssembled(surface, port, gapVolts, kernel.FrequencyHz, z);
+    }
+
+    /// <summary>Solve over a multi-layer stackup (Stage F): identical assembly to the
+    /// single-slab path, but the kernel split carries G_A's ε-independent ground image plus
+    /// K_Φ's quasi-static image SERIES. Same coplanar-at-top scope — metal at an interior
+    /// interface (a covered patch) is a separate future item.</summary>
+    public SurfaceMomSolution Solve(SurfaceStructure surface, MultiLayerKernelTable kernel,
+        SurfacePort port, double gapVolts = 1.0)
+    {
+        ValidateLayeredSurface(surface, port);
+        double omega = 2 * Math.PI * kernel.FrequencyHz;
+        var z = AssembleLayeredImpedanceMatrix(surface, kernel, omega, MaxDegreeOfParallelism);
+        return SolveAssembled(surface, port, gapVolts, kernel.FrequencyHz, z);
+    }
+
+    /// <summary>The layered-scope guards shared by both table types: no explicit ground
+    /// (the Green's function owns it), a valid non-rim port, and all metal coplanar (the
+    /// kernel is radial — R ≡ lateral ρ only holds in-plane).</summary>
+    private static void ValidateLayeredSurface(SurfaceStructure surface, SurfacePort port)
     {
         if (surface.Ground is not null)
             throw new ArgumentException(
@@ -65,8 +89,6 @@ public sealed partial class SurfaceMomSolver
                     + "through the slab is a via structure, out of the v1 layered scope.", nameof(port));
         }
 
-        // The kernel is radial in the LATERAL distance, so R = |r − r′| is only the
-        // kernel argument when every point shares one plane. Enforce, don't assume.
         double minZ = double.MaxValue, maxZ = double.MinValue, diameter = 0;
         foreach (var v in surface.Vertices)
         {
@@ -81,10 +103,6 @@ public sealed partial class SurfaceMomSolver
                 $"The v1 layered scope needs ALL metal in one plane (z spread {maxZ - minZ:g3} m found) — "
                 + "multi-level metal and vertical currents are named future work, not approximated.",
                 nameof(surface));
-
-        double omega = 2 * Math.PI * kernel.FrequencyHz;
-        var z = AssembleLayeredImpedanceMatrix(surface, kernel, omega, MaxDegreeOfParallelism);
-        return SolveAssembled(surface, port, gapVolts, kernel.FrequencyHz, z);
     }
 
     /// <summary>RHS build + LU + port current — shared verbatim by both kernel paths.</summary>
@@ -117,13 +135,22 @@ public sealed partial class SurfaceMomSolver
 
     internal static ComplexDenseMatrix AssembleLayeredImpedanceMatrix(
         SurfaceStructure surface, LayeredKernelTable kernel, double omega,
-        int? maxDegreeOfParallelism = null)
+        int? maxDegreeOfParallelism = null) =>
+        AssembleLayeredCore(surface, new LayeredKernelSplit(kernel), omega, maxDegreeOfParallelism);
+
+    internal static ComplexDenseMatrix AssembleLayeredImpedanceMatrix(
+        SurfaceStructure surface, MultiLayerKernelTable kernel, double omega,
+        int? maxDegreeOfParallelism = null) =>
+        AssembleLayeredCore(surface, new LayeredKernelSplit(kernel), omega, maxDegreeOfParallelism);
+
+    private static ComplexDenseMatrix AssembleLayeredCore(
+        SurfaceStructure surface, LayeredKernelSplit split, double omega,
+        int? maxDegreeOfParallelism)
     {
         int n = surface.BasisCount;
         var z = new ComplexDenseMatrix(n, n);
         Complex vectorFactor = Complex.ImaginaryOne * omega * RfConstants.Mu0 / (4 * Math.PI);
         Complex chargeFactor = -Complex.ImaginaryOne / (4 * Math.PI * RfConstants.Eps0 * omega);
-        var split = new LayeredKernelSplit(kernel);
         var pairs = PairMomentSchedule.Build(surface);
 
         // Parallel dual-kernel moments into slots (all three tracks of one pair —
@@ -149,31 +176,85 @@ public sealed partial class SurfaceMomSolver
         return z;
     }
 
-    /// <summary>The g-normalized kernel split (see the class doc): the singular
-    /// primary with coefficients (1, c₀) plus the tabulated Sommerfeld part. The 2d
-    /// IMAGE term is deliberately NOT here: on thin substrates 2d is comparable to a
-    /// triangle edge, making e^{−jk₀R₂}/R₂ nearly singular on triangle scale — it is
-    /// integrated by the free-space pair machinery against the shifted-down source
-    /// triangle (its exact geometric meaning) and combined scalar-weighted.</summary>
+    /// <summary>One deeper (depth &gt; 0) quasi-static image, carrying its G_A weight and
+    /// its K_Φ weight at a shared depth — the source triangle is shifted down by
+    /// <see cref="Depth"/> and the resulting free-space pair moment scaled into each kernel.</summary>
+    private readonly record struct ImageTerm(double Depth, Complex CoeffA, Complex CoeffPhi);
+
+    /// <summary>The g-normalized kernel split (see the class doc): the singular primary
+    /// (depth-0 image, coefficients (1, c₀)) handled by Wilton–Rao, plus the deeper images
+    /// and the tabulated Sommerfeld part. The deeper image terms are deliberately NOT in the
+    /// Wilton–Rao track: on thin substrates their depth is comparable to a triangle edge,
+    /// making e^{−jk₀R}/R nearly singular on triangle scale — they are integrated by the
+    /// free-space pair machinery against the shifted-down source triangle (their exact
+    /// geometric meaning) and combined scalar-weighted.
+    ///
+    /// Single-slab (<see cref="LayeredKernelTable"/>): ONE image at 2d with weights (−1, c₁)
+    /// — byte-identical to the Stage C/D/E path. Multi-layer (<see cref="MultiLayerKernelTable"/>):
+    /// G_A's single ε-independent ground image at 2·d_total plus the K_Φ quasi-static image
+    /// SERIES, merged by depth. At N = 1 the merged list collapses to the single-slab pair.</summary>
     private readonly struct LayeredKernelSplit
     {
-        private readonly LayeredKernelTable _table;
         private readonly double _k0;
         public double WaveNumber => _k0;
-        public readonly double ImageShift; // 2d — source triangle shift for the image term
-        public readonly Complex ChargeStaticCoefficient; // c₀ — scales the Wilton–Rao part
-        public readonly Complex ChargeImageCoefficient;  // c₁ — scales the image moments
+        public readonly Complex ChargeStaticCoefficient; // c₀ — scales the Wilton–Rao primary
+        public readonly ImageTerm[] Images;              // deeper images (depth > 0)
+        private readonly Func<double, (Complex A, Complex Phi)> _smooth;
         private readonly double _scaleA;   // 4π/µ₀
         private readonly double _scalePhi; // 4πε₀
 
         public LayeredKernelSplit(LayeredKernelTable table)
         {
-            _table = table;
             _k0 = table.K0;
-            ImageShift = 2 * table.Substrate.ThicknessMeters;
-            (ChargeStaticCoefficient, ChargeImageCoefficient) = table.PhiImages;
+            ChargeStaticCoefficient = table.PhiImages.C0;
+            Images = new[]
+            {
+                new ImageTerm(2 * table.Substrate.ThicknessMeters,
+                    new Complex(-1, 0), table.PhiImages.C1)
+            };
+            _smooth = table.EvaluateSmooth;
             _scaleA = 4 * Math.PI / RfConstants.Mu0;
             _scalePhi = 4 * Math.PI * RfConstants.Eps0;
+        }
+
+        public LayeredKernelSplit(MultiLayerKernelTable table)
+        {
+            _k0 = table.K0;
+            var phi = table.PhiImages;
+            var ga = table.GaImages;
+            if (phi.Count == 0 || phi[0].Depth != 0 || ga.Count == 0 || ga[0].Depth != 0)
+                throw new ArgumentException(
+                    "A multi-layer kernel table must lead each image list with the depth-0 "
+                    + "primary (the 1/ρ singularity the Wilton–Rao track integrates).", nameof(table));
+            ChargeStaticCoefficient = phi[0].Coeff;
+            Images = MergeDeeperImages(ga, phi);
+            _smooth = table.EvaluateSmooth;
+            _scaleA = 4 * Math.PI / RfConstants.Mu0;
+            _scalePhi = 4 * Math.PI * RfConstants.Eps0;
+        }
+
+        /// <summary>Merge G_A's deeper images (weight into CoeffA) and K_Φ's deeper images
+        /// (weight into CoeffPhi) by shared depth, so each distinct depth costs exactly one
+        /// free-space pair moment. First-seen order (G_A first) is deterministic.</summary>
+        private static ImageTerm[] MergeDeeperImages(
+            IReadOnlyList<MultiLayerImages.Image> ga, IReadOnlyList<MultiLayerImages.Image> phi)
+        {
+            var order = new List<double>();
+            var aCoeff = new Dictionary<double, Complex>();
+            var phiCoeff = new Dictionary<double, Complex>();
+            void Ensure(double depth)
+            {
+                if (aCoeff.ContainsKey(depth)) return;
+                aCoeff[depth] = Complex.Zero;
+                phiCoeff[depth] = Complex.Zero;
+                order.Add(depth);
+            }
+            for (int i = 1; i < ga.Count; i++) { Ensure(ga[i].Depth); aCoeff[ga[i].Depth] += ga[i].Coeff; }
+            for (int i = 1; i < phi.Count; i++) { Ensure(phi[i].Depth); phiCoeff[phi[i].Depth] += phi[i].Coeff; }
+            var result = new ImageTerm[order.Count];
+            for (int i = 0; i < order.Count; i++)
+                result[i] = new ImageTerm(order[i], aCoeff[order[i]], phiCoeff[order[i]]);
+            return result;
         }
 
         /// <summary>Primary-track smooth parts: the primary's phase remainder
@@ -188,7 +269,7 @@ public sealed partial class SurfaceMomSolver
                 var (sin, cos) = Math.SinCos(_k0 * rho);
                 primaryRemainder = new Complex((cos - 1) / rho, -sin / rho);
             }
-            var (smoothA, smoothPhi) = _table.EvaluateSmooth(rho);
+            var (smoothA, smoothPhi) = _smooth(rho);
             return (primaryRemainder + _scaleA * smoothA,
                     ChargeStaticCoefficient * primaryRemainder + _scalePhi * smoothPhi);
         }
@@ -198,7 +279,7 @@ public sealed partial class SurfaceMomSolver
         {
             var (sin, cos) = Math.SinCos(_k0 * rho);
             var primary = new Complex(cos / rho, -sin / rho);
-            var (smoothA, smoothPhi) = _table.EvaluateSmooth(rho);
+            var (smoothA, smoothPhi) = _smooth(rho);
             return (primary + _scaleA * smoothA,
                     ChargeStaticCoefficient * primary + _scalePhi * smoothPhi);
         }
@@ -283,25 +364,36 @@ public sealed partial class SurfaceMomSolver
                 : LayeredSmoothMoments(pVerts, qVerts, split, degree: 6);
         }
 
-        // Image track: ∬λλ′·e^{−jk₀R}/R against the source triangle shifted DOWN by
-        // 2d — the exact geometric identity R₂ = |r − (r′ − 2d ẑ)|. The free-space
-        // pair machinery dispatches its own regimes, so a thin substrate's nearly
-        // singular image integral gets the panelled analytic treatment for free.
-        // Barycentric values are shift-invariant, so these moments combine with the
-        // REAL RWG vectors — the currents are not mirrored here, only the kernel
-        // argument is (unlike Stage B's PEC image pass).
-        var shift = new Vector3D(0, 0, -split.ImageShift);
-        var imageQ = (qVerts.Item1 + shift, qVerts.Item2 + shift, qVerts.Item3 + shift);
-        var image = GeometricPairMoments(pVerts, imageQ, split.WaveNumber);
-
         var momentsA = new SurfaceMoments();
         var momentsPhi = new SurfaceMoments();
         for (int a = 0; a < 3; a++)
             for (int b = 0; b < 3; b++)
             {
-                momentsA[a, b] = primaryA[a, b] - image[a, b];
-                momentsPhi[a, b] = primaryPhi[a, b] + split.ChargeImageCoefficient * image[a, b];
+                momentsA[a, b] = primaryA[a, b];
+                momentsPhi[a, b] = primaryPhi[a, b];
             }
+
+        // Deeper images: ∬λλ′·e^{−jk₀R}/R against the source triangle shifted DOWN by
+        // each depth D — the exact geometric identity R = |r − (r′ − D ẑ)|. The free-space
+        // pair machinery dispatches its own regimes, so a thin substrate's nearly singular
+        // image integral gets the panelled analytic treatment for free. Barycentric values
+        // are shift-invariant, so these moments combine with the REAL RWG vectors — the
+        // currents are not mirrored here, only the kernel argument is (unlike Stage B's PEC
+        // image pass). At N = 1 this is the single (−1, c₁) image at 2d.
+        var images = split.Images;
+        for (int k = 0; k < images.Length; k++)
+        {
+            var shift = new Vector3D(0, 0, -images[k].Depth);
+            var imageQ = (qVerts.Item1 + shift, qVerts.Item2 + shift, qVerts.Item3 + shift);
+            var image = GeometricPairMoments(pVerts, imageQ, split.WaveNumber);
+            Complex ca = images[k].CoeffA, cf = images[k].CoeffPhi;
+            for (int a = 0; a < 3; a++)
+                for (int b = 0; b < 3; b++)
+                {
+                    momentsA[a, b] += ca * image[a, b];
+                    momentsPhi[a, b] += cf * image[a, b];
+                }
+        }
         return (momentsA, momentsPhi);
     }
 

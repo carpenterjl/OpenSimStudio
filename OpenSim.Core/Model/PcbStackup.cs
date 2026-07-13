@@ -28,4 +28,18 @@ public sealed record PcbStackupSettings
     /// across the gaps. Sets the true z-separation the mesher extrudes via barrels through.
     /// </summary>
     public IReadOnlyList<double> DielectricGapThicknesses { get; init; } = Array.Empty<double>();
+
+    /// <summary>
+    /// Per-gap relative permittivity εr; index <c>i</c> is the dielectric between copper layer
+    /// order <c>i+1</c> and <c>i+2</c> (parallel to <see cref="DielectricGapThicknesses"/>).
+    /// Empty ⇒ every gap is FR4 (εr 4.4). Feeds the RF layered-media Green's function; ignored
+    /// by the mechanical/thermal mesh (materials don't move nodes). Kept as an init-list so it
+    /// round-trips through the .ossproj serializer exactly like the thickness lists.
+    /// </summary>
+    public IReadOnlyList<double> DielectricGapPermittivities { get; init; } = Array.Empty<double>();
+
+    /// <summary>
+    /// Per-gap loss tangent tanδ; index <c>i</c> as above. Empty ⇒ every gap is FR4 (tanδ 0.02).
+    /// </summary>
+    public IReadOnlyList<double> DielectricGapLossTangents { get; init; } = Array.Empty<double>();
 }
