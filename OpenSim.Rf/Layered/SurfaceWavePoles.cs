@@ -25,6 +25,87 @@ internal readonly record struct SurfaceWavePole(
 /// </summary>
 internal static class SurfaceWavePoles
 {
+    /// <summary>
+    /// The multi-layer (Stage F) pole finder: zeros of the TLGF TE/TM dispersion
+    /// (<see cref="TransmissionLineGreens.TeDispersion"/> / <see cref="TransmissionLineGreens.TmDispersion"/>)
+    /// on the bound-mode segment (k₀, k₀√εr_max), where a lossless stack makes each
+    /// dispersion REAL — so the same bracket-and-bisect logic as the single-slab finder
+    /// applies, now sampling k_ρ directly instead of the u = k_z1·d branches. Lossy stacks
+    /// take the lossless root as a complex-Newton seed. Residues come from the analytic
+    /// null-vector matrix method (<see cref="TransmissionLineGreens.PoleResidues"/>), general
+    /// for any N. The single-slab list is byte-identical to <see cref="Find(SubstrateStackup,double)"/>
+    /// only up to the finder route; the F-pole gates pin locations + residues to it.
+    /// </summary>
+    public static IReadOnlyList<SurfaceWavePole> Find(LayeredStackup stackup, double k0)
+    {
+        if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));
+        double epsMax = stackup.Layers.Max(l => l.RelativePermittivity);
+        double kMax = k0 * Math.Sqrt(epsMax);
+        var poles = new List<SurfaceWavePole>();
+        if (kMax <= k0) return poles;   // all air: no surface waves, image theory is exact.
+        bool lossy = stackup.Layers.Any(l => l.LossTangent > 0);
+
+        foreach (bool isTm in new[] { true, false })
+        {
+            Func<Complex, Complex> disp = isTm
+                ? kr => TransmissionLineGreens.TmDispersion(stackup, k0, kr)
+                : kr => TransmissionLineGreens.TeDispersion(stackup, k0, kr);
+            foreach (double kRhoReal in RealDispersionRoots(kr => disp(kr).Real, k0, kMax))
+            {
+                Complex kp = kRhoReal;
+                if (lossy)
+                {
+                    for (int iteration = 0; iteration < 50; iteration++)
+                    {
+                        Complex delta = 1e-7 * Math.Max(kp.Magnitude, k0);
+                        Complex slope = (disp(kp + delta) - disp(kp - delta)) / (2 * delta);
+                        Complex step = disp(kp) / slope;
+                        kp -= step;
+                        if (step.Magnitude <= 1e-15 * kp.Magnitude) break;
+                    }
+                    if (kp.Imaginary > 0)
+                        throw new InvalidOperationException(
+                            $"A {(isTm ? "TM" : "TE")} pole converged to the non-physical half-plane (k_ρ = {kp}).");
+                }
+                var (resA, resPhi) = TransmissionLineGreens.PoleResidues(stackup, k0, kp, isTm);
+                poles.Add(new SurfaceWavePole(kp, isTm, resA, resPhi));
+            }
+        }
+        return poles;
+    }
+
+    /// <summary>Real roots of a real dispersion on (k₀, k_max), bracketed on a fixed dense
+    /// sampling and bisected. Endpoints are nudged inward: k_ρ → k₀ makes k_z0 → 0 and
+    /// k_ρ → k_max makes the top-layer k_z → 0, both of which the dispersion form divides
+    /// through. The grid is fine enough to separate the surface-wave branches of a thick
+    /// high-εr stack (they crowd toward k_max).</summary>
+    private static IEnumerable<double> RealDispersionRoots(Func<double, double> f, double k0, double kMax)
+    {
+        const int Samples = 4000;
+        double lo = k0 * (1 + 1e-9), hi = kMax * (1 - 1e-9);
+        double previous = lo, previousF = f(lo);
+        for (int i = 1; i <= Samples; i++)
+        {
+            double kr = lo + (hi - lo) * i / Samples;
+            double value = f(kr);
+            if (previousF * value < 0)
+            {
+                double a = previous, b = kr, fa = previousF;
+                for (int iteration = 0; iteration < 200; iteration++)
+                {
+                    double mid = 0.5 * (a + b);
+                    if (mid == a || mid == b) break;
+                    double fm = f(mid);
+                    if (Math.Sign(fm) == Math.Sign(fa)) { a = mid; fa = fm; }
+                    else b = mid;
+                }
+                yield return 0.5 * (a + b);
+            }
+            previous = kr;
+            previousF = value;
+        }
+    }
+
     public static IReadOnlyList<SurfaceWavePole> Find(SubstrateStackup substrate, double k0)
     {
         if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));
