@@ -30,7 +30,8 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(ProjectSession session, ILogService log, GeometryViewModel geometry,
         MaterialsViewModel materials, MeshingViewModel meshing, BoundaryConditionsViewModel conditions,
         PcbViewModel pcb, ElectrodesViewModel electrodes, InductanceViewModel inductance,
-        AntennaViewModel antenna, SolveViewModel solve, ResultsViewModel results, SceneViewModel scene,
+        AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, SolveViewModel solve,
+        ResultsViewModel results, SceneViewModel scene,
         ProjectSerializer serializer, RecentProjectsService recentProjects)
     {
         Session = session;
@@ -43,6 +44,7 @@ public partial class MainViewModel : ObservableObject
         Electrodes = electrodes;
         Inductance = inductance;
         Antenna = antenna;
+        SignalIntegrity = signalIntegrity;
         Solve = solve;
         Results = results;
         Scene = scene;
@@ -62,6 +64,7 @@ public partial class MainViewModel : ObservableObject
     public ElectrodesViewModel Electrodes { get; }
     public InductanceViewModel Inductance { get; }
     public AntennaViewModel Antenna { get; }
+    public SignalIntegrityViewModel SignalIntegrity { get; }
     public SolveViewModel Solve { get; }
     public ResultsViewModel Results { get; }
     public SceneViewModel Scene { get; }

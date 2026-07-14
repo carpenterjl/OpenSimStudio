@@ -51,8 +51,17 @@ public partial class Viewport3DView : UserControl
 
     private void OnAntennaPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(AntennaViewModel.WirePoints))
-            AntennaWireLines.Points = _viewModel!.Antenna.WirePoints;
+        switch (e.PropertyName)
+        {
+            case nameof(AntennaViewModel.WirePoints):
+                AntennaWireLines.Points = _viewModel!.Antenna.WirePoints;
+                break;
+            case nameof(AntennaViewModel.FieldOverlayModel):
+                FieldOverlayLegendPanel.Visibility = _viewModel!.Antenna.FieldOverlayModel is null
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+                break;
+        }
     }
 
     private void OnResultsPropertyChanged(object? sender, PropertyChangedEventArgs e)

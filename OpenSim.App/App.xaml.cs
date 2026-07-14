@@ -52,6 +52,7 @@ public partial class App : Application
         services.AddSingleton<ElectrodesViewModel>();
         services.AddSingleton<InductanceViewModel>();
         services.AddSingleton<AntennaViewModel>();
+        services.AddSingleton<SignalIntegrityViewModel>();
         services.AddSingleton<SceneViewModel>();
         services.AddSingleton<SolveViewModel>();
         services.AddSingleton<PcbViewModel>();

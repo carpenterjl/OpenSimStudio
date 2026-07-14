@@ -48,6 +48,7 @@
             <!-- RF / antenna overlays: free-space field visuals from the Antenna panel. -->
             <ModelVisual3D Content="{Binding Antenna.VectorFieldModel}"/>
             <ModelVisual3D Content="{Binding Antenna.FieldSliceModel}"/>
+            <ModelVisual3D Content="{Binding Antenna.FieldOverlayModel}"/>
             <ModelVisual3D Content="{Binding Antenna.FarFieldLobeModel}"/>
             <ModelVisual3D Content="{Binding Antenna.GroundPlaneModel}"/>
             <ModelVisual3D Content="{Binding Antenna.SurfaceCurrentModel}"/>
@@ -64,6 +65,22 @@
                 <DockPanel Margin="0,2,0,0">
                     <TextBlock Text="{Binding Scene.LegendMin}" DockPanel.Dock="Left" FontSize="11"/>
                     <TextBlock Text="{Binding Scene.LegendMax}" DockPanel.Dock="Right" FontSize="11" HorizontalAlignment="Right"/>
+                </DockPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Field-overlay legend (antenna/SI): same style, its own pipeline — the FE
+             legend's title and visibility belong to the Results VM's selected field. -->
+        <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
+                Background="#CC1E1E24" CornerRadius="4" Padding="8"
+                x:Name="FieldOverlayLegendPanel" Visibility="Collapsed"
+                AutomationProperties.AutomationId="FieldOverlayLegend">
+            <StackPanel Width="160">
+                <TextBlock Text="{Binding Antenna.OverlayLegendTitle}" FontWeight="Bold" Margin="0,0,0,4"/>
+                <Rectangle Height="14" Fill="{Binding Antenna.OverlayLegendBrush}" RadiusX="2" RadiusY="2"/>
+                <DockPanel Margin="0,2,0,0">
+                    <TextBlock Text="{Binding Antenna.OverlayLegendMin}" DockPanel.Dock="Left" FontSize="11"/>
+                    <TextBlock Text="{Binding Antenna.OverlayLegendMax}" DockPanel.Dock="Right" FontSize="11" HorizontalAlignment="Right"/>
                 </DockPanel>
             </StackPanel>
         </Border>

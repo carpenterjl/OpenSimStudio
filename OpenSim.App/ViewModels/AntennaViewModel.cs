@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Rendering;
 using OpenSim.App.Services;
+using OpenSim.Core.PostProcessing;
 using OpenSim.Pcb.Import;
 using OpenSim.Pcb.Inductance;
 using OpenSim.Rf;
@@ -134,10 +136,50 @@ public partial class AntennaViewModel : ObservableObject
     [ObservableProperty] private string _antennaAssumptions = "";
     public ObservableCollection<AntennaZinPoint> ZinSweep { get; } = new();
 
+    // ------------------------------------------------------------------
+    // Board field overlay (SIwave-style): a translucent |field| heatmap plane over
+    // the PCB/structure. E only in v1 — the H toggle is present but typed-fails until
+    // the H-field kernels ship (SI Stage S7); the UI is field-type-agnostic by design.
+    // ------------------------------------------------------------------
+    public const string EFieldOverlay = "E (electric)";
+    public const string HFieldOverlay = "H (magnetic)";
+    public const string LogScale = "Logarithmic";
+    public const string LinearScale = "Linear";
+
+    public ObservableCollection<string> OverlayFieldTypes { get; } =
+        new() { EFieldOverlay, HFieldOverlay };
+    public ObservableCollection<string> OverlayScaleModes { get; } =
+        new() { LogScale, LinearScale };
+
+    /// <summary>Nullable so a ComboBox transient null push lands harmlessly.</summary>
+    [ObservableProperty] private string? _overlayFieldType = EFieldOverlay;
+    [ObservableProperty] private string? _overlayScaleMode = LogScale;
+
+    /// <summary>Overlay plane height above the structure's top metal [mm].</summary>
+    [ObservableProperty] private double _overlayHeightMm = 1.0;
+    /// <summary>Overlay sample grid resolution per axis (n² points).</summary>
+    [ObservableProperty] private int _overlayGridN = 61;
+    [ObservableProperty] private bool _overlayAutoRange = true;
+    // Explicit color range [V/m], used when auto-range is off. In log mode a
+    // non-positive min falls back to max/10^decades (FieldScale.EffectiveMin).
+    [ObservableProperty] private double _overlayMinVPerM;
+    [ObservableProperty] private double _overlayMaxVPerM = 100;
+    /// <summary>Decades below the peak spanned by an auto-ranged log overlay.</summary>
+    [ObservableProperty] private int _overlayDecades = 3;
+    [ObservableProperty] private double _overlayOpacityPercent = 60;
+
+    // The overlay's own legend (same visual style as the FE legend, separate pipeline —
+    // the FE legend's title/visibility are driven by the Results VM's selected field).
+    [ObservableProperty] private string _overlayLegendTitle = "";
+    [ObservableProperty] private Brush _overlayLegendBrush = Brushes.Transparent;
+    [ObservableProperty] private string _overlayLegendMin = "";
+    [ObservableProperty] private string _overlayLegendMax = "";
+
     // Viewport overlays (bound by Viewport3DView, the same hosting pattern as the
     // PCB preview lines).
     [ObservableProperty] private Model3D? _vectorFieldModel;
     [ObservableProperty] private Model3D? _fieldSliceModel;
+    [ObservableProperty] private Model3D? _fieldOverlayModel;
     [ObservableProperty] private Model3D? _farFieldLobeModel;
     [ObservableProperty] private Model3D? _groundPlaneModel;
     [ObservableProperty] private Model3D? _surfaceCurrentModel;
@@ -191,10 +233,14 @@ public partial class AntennaViewModel : ObservableObject
     {
         VectorFieldModel = null;
         FieldSliceModel = null;
+        FieldOverlayModel = null;
         FarFieldLobeModel = null;
         GroundPlaneModel = null;
         SurfaceCurrentModel = null;
         WirePoints = new Point3DCollection();
+        OverlayLegendTitle = "";
+        OverlayLegendBrush = Brushes.Transparent;
+        OverlayLegendMin = OverlayLegendMax = "";
     }
 
     partial void OnAntennaNetChanged(CopperNet? value)
@@ -351,6 +397,149 @@ public partial class AntennaViewModel : ObservableObject
             _log.Append($"Antenna: {FieldResult}");
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
+    }
+
+    /// <summary>
+    /// The board field overlay: samples |E| on a horizontal grid hovering
+    /// <see cref="OverlayHeightMm"/> above the structure's top metal and renders it as
+    /// a translucent heatmap plane over the copper preview — the SIwave-style radiated-
+    /// field view. Uses the SAME field evaluators as the near-field commands, so the
+    /// values carry the same gates and the same near-metal surface-scale caveat.
+    /// </summary>
+    [RelayCommand]
+    private async Task ShowFieldOverlay()
+    {
+        FieldResult = "";
+        if (OverlayFieldType == HFieldOverlay)
+        {
+            FieldResult = "Not computable: H-field kernels are a named follow-up (SI track) — "
+                + "the field evaluators compute E only today. Switch the overlay to the E field.";
+            return;
+        }
+        int n = Math.Clamp(OverlayGridN, 9, 201);
+        double opacity = Math.Clamp(OverlayOpacityPercent / 100.0, 0.05, 1.0);
+        var mode = OverlayScaleMode == LinearScale ? FieldScaleMode.Linear : FieldScaleMode.Logarithmic;
+
+        if (IsSurfaceMode)
+        {
+            await ShowSurfaceFieldOverlayAsync(n, mode, opacity);
+            return;
+        }
+        if (!TryDiscretize(out var wire, out var feedBasis, out _, out string? failure))
+        {
+            FieldResult = $"Not computable: {failure}";
+            return;
+        }
+        try
+        {
+            double frequency = FrequencyMHz * 1e6;
+            var (center, diagonal) = BoundingSphere(wire);
+            double z = wire.Nodes.Max(p => p.Z) + OverlayHeightMm * 1e-3;
+            var map = await Task.Run(() =>
+            {
+                var solution = new ThinWireMomSolver().Solve(wire, frequency, feedBasis);
+                return FieldProbe.Evaluate(wire, solution, OverlayGridPoints(center, diagonal, z, n));
+            });
+            ApplyFieldOverlay(map, n, mode, opacity, z, kernelNote: "free-space kernels");
+            WirePoints = BuildWireOverlay(wire);
+            GroundPlaneModel = BuildGroundOverlay(wire);
+        }
+        catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
+    }
+
+    private async Task ShowSurfaceFieldOverlayAsync(int n, FieldScaleMode mode, double opacity)
+    {
+        if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
+                out var substrate, out var probe, out var layered))
+        {
+            FieldResult = $"Not computable: {failure}";
+            return;
+        }
+        if (layered is not null)
+        {
+            FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
+                + "named follow-up (the in-slab field kernels are single-slab). The Zin sweep "
+                + "and far field of a covered patch are available.";
+            return;
+        }
+        FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
+                      + (substrate is null ? "" : ", layered field kernels") + ")…";
+        try
+        {
+            double frequency = FrequencyMHz * 1e6;
+            var (center, diagonal) = SurfaceBounds(surface);
+            double z = surface.Vertices.Max(v => v.Z) + OverlayHeightMm * 1e-3;
+            var points = OverlayGridPoints(center, diagonal, z, n);
+            var (map, solution) = await Task.Run(() =>
+            {
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                if (substrate is null)
+                {
+                    var solvedFree = solver.Solve(surface, frequency, port);
+                    return (OpenSim.Rf.Surface.SurfaceFieldProbe.Evaluate(
+                        surface, solvedFree, points), solvedFree);
+                }
+                // The Stage D layered field kernels (above-slab points); a probe-fed
+                // patch maps its sheet currents, like the near-field command.
+                var table = BuildKernelTable(surface, substrate, frequency);
+                var solved = probe is { } p
+                    ? solver.SolveProbeFed(surface, table, p).Surface
+                    : solver.Solve(surface, table, port);
+                return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
+                    surface, table, solved, points), solved);
+            });
+            ApplyFieldOverlay(map, n, mode, opacity, z,
+                kernelNote: substrate is null
+                    ? "free-space kernels"
+                    : $"εr = {substrate.RelativePermittivity:g3} layered kernels");
+            SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, solution, ColormapKind.Viridis);
+            GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
+        }
+        catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
+    }
+
+    /// <summary>Builds the overlay model + its legend from a sampled map. The legend
+    /// brush stays opaque (readability); only the viewport plane takes the opacity.</summary>
+    private void ApplyFieldOverlay(FieldMap map, int n, FieldScaleMode mode, double opacity,
+        double zMeters, string kernelNote)
+    {
+        int decades = Math.Max(1, OverlayDecades);
+        var scale = OverlayAutoRange
+            ? FieldScale.Auto(mode, map.Magnitude, decades)
+            : new FieldScale(mode, OverlayMinVPerM, OverlayMaxVPerM, decades);
+        FieldOverlayModel = SceneBuilder.BuildFieldOverlayModel(
+            map, n, n, ColormapKind.Viridis, scale, opacity);
+
+        double peak = map.Magnitude.Count > 0 ? map.Magnitude.Max() : 0;
+        OverlayLegendTitle = mode == FieldScaleMode.Logarithmic ? "|E| (log)" : "|E|";
+        OverlayLegendBrush = Colormap.CreateBrush(ColormapKind.Viridis);
+        OverlayLegendMin = $"{scale.EffectiveMin:g3} V/m";
+        // ▲ = samples above the range top are saturated (the FE legend's convention).
+        OverlayLegendMax = $"{scale.Max:g3} V/m" + (peak > scale.Max ? " ▲" : "");
+
+        string rangeNote = OverlayAutoRange
+            ? mode == FieldScaleMode.Logarithmic
+                ? $"auto range, top {decades} decades"
+                : "auto range"
+            : $"range {scale.EffectiveMin:g3}–{scale.Max:g3} V/m";
+        FieldResult = $"Field overlay at {FrequencyMHz:g4} MHz: peak |E| = {peak:g4} V/m "
+                      + $"on the z = {zMeters * 1e3:g4} mm plane (1 V feed, {n}×{n} grid, "
+                      + $"{kernelNote}; {rangeNote}, {OverlayOpacityPercent:g0}% opacity)";
+        _log.Append($"Antenna: {FieldResult}");
+    }
+
+    private static List<Vector3D> OverlayGridPoints(Vector3D center, double diagonal,
+        double z, int n)
+    {
+        double span = 1.4 * diagonal;
+        double spacing = span / (n - 1);
+        var points = new List<Vector3D>(n * n);
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                points.Add(new Vector3D(
+                    center.X + x * spacing - span / 2,
+                    center.Y + y * spacing - span / 2, z));
+        return points;
     }
 
     // ------------------------------------------------------------------

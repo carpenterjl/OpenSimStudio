@@ -223,9 +223,122 @@
                         Command="{Binding Antenna.ShowFarFieldCommand}"/>
                 <Button Content="Clear overlays" Command="{Binding Antenna.ClearOverlaysCommand}"/>
             </UniformGrid>
+
+            <!-- Board field overlay (SIwave-style): a translucent |field| heatmap plane
+                 over the PCB/structure with user scale/range/opacity controls. E only in
+                 v1; picking H surfaces a typed follow-up message until the H kernels ship. -->
+            <TextBlock Text="Field overlay over the board" FontWeight="Bold" Margin="0,8,0,2"/>
+            <UniformGrid Columns="4">
+                <Label Content="Field"/>
+                <ComboBox x:Name="OverlayFieldCombo"
+                          ItemsSource="{Binding Antenna.OverlayFieldTypes}"
+                          SelectedItem="{Binding Antenna.OverlayFieldType}"/>
+                <Label Content="Scale"/>
+                <ComboBox x:Name="OverlayScaleCombo"
+                          ItemsSource="{Binding Antenna.OverlayScaleModes}"
+                          SelectedItem="{Binding Antenna.OverlayScaleMode}"/>
+                <Label Content="Height above metal [mm]"/>
+                <TextBox x:Name="OverlayHeightBox" Text="{Binding Antenna.OverlayHeightMm}"
+                         ToolTip="The overlay plane hovers this far above the structure's top metal. Values within ~an element of metal are surface-scale approximations."/>
+                <Label Content="Grid (n²)"/>
+                <TextBox x:Name="OverlayGridBox" Text="{Binding Antenna.OverlayGridN}"/>
+                <CheckBox x:Name="OverlayAutoRangeCheck" Content="Auto range"
+                          IsChecked="{Binding Antenna.OverlayAutoRange}"
+                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Color range from the sampled data; log mode spans the top N decades below the peak."/>
+                <TextBox x:Name="OverlayDecadesBox" Text="{Binding Antenna.OverlayDecades}"
+                         ToolTip="Log mode: decades below the peak an auto range spans"/>
+                <Label Content="Range min/max [V/m]"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="OverlayMinBox" Text="{Binding Antenna.OverlayMinVPerM}" Margin="0,0,2,0"
+                             ToolTip="Range minimum (V/m), used when auto range is off. In log mode a non-positive min falls back to max/10^decades."/>
+                    <TextBox x:Name="OverlayMaxBox" Text="{Binding Antenna.OverlayMaxVPerM}" Margin="2,0,0,0"
+                             ToolTip="Range maximum (V/m), used when auto range is off. Samples above it saturate (legend shows ▲)."/>
+                </UniformGrid>
+                <Label Content="Opacity [%]"/>
+                <Slider x:Name="OverlayOpacitySlider" Minimum="5" Maximum="100"
+                        Value="{Binding Antenna.OverlayOpacityPercent}"
+                        TickFrequency="5" IsSnapToTickEnabled="True"
+                        ToolTip="Overlay plane transparency over the copper preview"/>
+            </UniformGrid>
+            <Button x:Name="FieldOverlayButton" Content="Field overlay on board"
+                    Command="{Binding Antenna.ShowFieldOverlayCommand}"/>
             <TextBlock Text="{Binding Antenna.FieldResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
             <TextBlock Text="{Binding Antenna.AntennaAssumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+
+            <!-- Step 7: signal integrity (SI track) — coupled microstrip wizard →
+                 RLGC → MTL network → S-params/Touchstone → PRBS transient + eye. -->
+            <TextBlock Text="7. Signal integrity (coupled lines)" FontWeight="Bold" Margin="0,8,0,2"/>
+            <TextBlock Text="N coupled microstrips on the substrate: per-unit-length RLGC (2D quasi-static BEM over the layered dielectric), the exact frequency-domain coupled-line network, S-parameter export, and PRBS eye diagrams with crosstalk. Thevenin driver + R∥C receiver."
+                       TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,0,0,2"/>
+            <UniformGrid Columns="4">
+                <Label Content="Lines / driven"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="SiLineCountBox" Text="{Binding SignalIntegrity.LineCount}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="SiDrivenLineBox" Text="{Binding SignalIntegrity.DrivenLine}" Margin="2,0,0,0"
+                             ToolTip="1-based index of the driven (victim) line"/>
+                </UniformGrid>
+                <Label Content="Width / gap [mm]"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="SiWidthBox" Text="{Binding SignalIntegrity.TraceWidthMm}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="SiGapBox" Text="{Binding SignalIntegrity.TraceGapMm}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Substrate h [mm] / εr"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="SiHeightBox" Text="{Binding SignalIntegrity.SubstrateHeightMm}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="SiEpsRBox" Text="{Binding SignalIntegrity.SiEpsR}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="tanδ / copper [µm]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SignalIntegrity.SiTanD}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding SignalIntegrity.CopperThicknessUm}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Length [mm]"/>
+                <TextBox x:Name="SiLengthBox" Text="{Binding SignalIntegrity.LineLengthMm}"/>
+                <Label Content="Signal"/>
+                <ComboBox x:Name="SiSignalCombo"
+                          ItemsSource="{Binding SignalIntegrity.SignalTypes}"
+                          SelectedItem="{Binding SignalIntegrity.SignalType}"/>
+                <Label Content="Bit rate [Gb/s]"/>
+                <TextBox x:Name="SiBitRateBox" Text="{Binding SignalIntegrity.BitRateGbps}"/>
+                <Label Content="Rise [% UI] / amp [V]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SignalIntegrity.RiseFractionPercent}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding SignalIntegrity.AmplitudeVolts}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Driver Rs [Ω]"/>
+                <TextBox Text="{Binding SignalIntegrity.SourceOhms}"/>
+                <Label Content="Receiver R [Ω] / C [pF]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SignalIntegrity.LoadOhms}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding SignalIntegrity.LoadPicofarads}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <CheckBox x:Name="SiAggressorsCheck" Content="Aggressors on"
+                          IsChecked="{Binding SignalIntegrity.AggressorsEnabled}"
+                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
+                <Label Content=""/>
+            </UniformGrid>
+            <UniformGrid Columns="3">
+                <Button x:Name="SiExtractButton" Content="Extract RLGC"
+                        Command="{Binding SignalIntegrity.ExtractRlgcCommand}"/>
+                <Button x:Name="SiSparamButton" Content="S-params (Touchstone)"
+                        Command="{Binding SignalIntegrity.ComputeSParametersCommand}"/>
+                <Button x:Name="SiEyeButton" Content="Transient + eye"
+                        Command="{Binding SignalIntegrity.RunEyeDiagramCommand}"/>
+            </UniformGrid>
+            <TextBlock Text="{Binding SignalIntegrity.RlgcResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding SignalIntegrity.SParamResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding SignalIntegrity.EyeResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
+            <Image Source="{Binding SignalIntegrity.EyeImage}" MaxHeight="180" Margin="0,4,0,0"
+                   Stretch="Uniform" RenderOptions.BitmapScalingMode="Linear"
+                   AutomationProperties.AutomationId="SiEyeImage"/>
+            <TextBlock Text="{Binding SignalIntegrity.SiAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
         </StackPanel>
     </GroupBox>

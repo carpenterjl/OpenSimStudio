@@ -422,6 +422,54 @@ public static class SceneBuilder
         return new GeometryModel3D(geometry3D, material) { BackMaterial = material };
     }
 
+    /// <summary>
+    /// The board field overlay (SIwave-style): a semi-transparent |field| heatmap plane
+    /// hovering over the PCB / structure, colored through the shared colormap brush with
+    /// a user-controlled <see cref="OpenSim.Core.PostProcessing.FieldScale"/> (linear or
+    /// log, auto or explicit range) and opacity. Same shared-vertex quad mesh as the
+    /// slice heatmap; the copper ribbons underneath stay opaque, so the overlay reads as
+    /// a translucent film over the board. Frozen; both faces drawn.
+    /// </summary>
+    public static GeometryModel3D BuildFieldOverlayModel(OpenSim.Rf.FieldMap map,
+        int nx, int ny, ColormapKind colormap,
+        OpenSim.Core.PostProcessing.FieldScale scale, double opacity)
+    {
+        if (map.Points.Count != nx * ny)
+            throw new ArgumentException($"Field map has {map.Points.Count} points, expected {nx}×{ny}.");
+
+        var geometry3D = new MeshGeometry3D();
+        for (int i = 0; i < map.Points.Count; i++)
+        {
+            var p = map.Points[i];
+            geometry3D.Positions.Add(new Point3D(p.X, p.Y, p.Z));
+            geometry3D.TextureCoordinates.Add(new System.Windows.Point(
+                scale.Normalize(map.Magnitude[i]), 0.5));
+        }
+        for (int y = 0; y < ny - 1; y++)
+            for (int x = 0; x < nx - 1; x++)
+            {
+                int v00 = y * nx + x, v10 = v00 + 1, v01 = v00 + nx, v11 = v01 + 1;
+                geometry3D.TriangleIndices.Add(v00);
+                geometry3D.TriangleIndices.Add(v10);
+                geometry3D.TriangleIndices.Add(v11);
+                geometry3D.TriangleIndices.Add(v00);
+                geometry3D.TriangleIndices.Add(v11);
+                geometry3D.TriangleIndices.Add(v01);
+            }
+        geometry3D.Freeze();
+
+        // The shared gradient brush, made translucent: Brush.Opacity multiplies every
+        // stop's alpha uniformly, so the colormap keeps its hue ramp under transparency.
+        var brush = Colormap.CreateBrush(colormap).Clone();
+        brush.Opacity = Math.Clamp(opacity, 0, 1);
+        brush.Freeze();
+        var material = new DiffuseMaterial(brush);
+        material.Freeze();
+        var model = new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+        model.Freeze();
+        return model;
+    }
+
     /// <summary>The RWG surface colored by log₁₀|J| at each triangle centroid over
     /// three decades (the near-field arrows' normalization, one mental legend for
     /// both). Flat-shaded — vertices are duplicated per triangle so each carries one

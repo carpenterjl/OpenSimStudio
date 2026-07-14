@@ -81,7 +81,7 @@ internal static class MultiLayerImages
             eps[i] = stackup.Layers[i].ComplexPermittivity;
         }
         double depthCap = DepthCapFactor * stackup.TotalThicknessMeters;
-        var ctx = new Context(n, t, depthCap);
+        var ctx = new Context(n, t, depthCap, CoefficientFloor, RelativePrune);
 
         // Γ: bottom-up electrostatic reflection, ground = short (−1), Y_i ∝ ε_i.
         var gamma = ctx.Constant(-Complex.One);
@@ -125,6 +125,20 @@ internal static class MultiLayerImages
     /// collapses to the top-source <see cref="PhiImages"/> κG̃ = B/(1+B); an all-air cover
     /// collapses to the sub-slab beneath m (both gated).</summary>
     public static IReadOnlyList<Image> PhiImagesInterior(LayeredStackup stackup, int m)
+        => PhiImagesInterior(stackup, m, DepthCapFactor, CoefficientFloor, RelativePrune);
+
+    /// <summary>
+    /// The interior-source K̃_Φ image series with CALLER-CHOSEN truncation — for the SI
+    /// track's 2D electrostatic BEM (RLGC extraction), which has NO Sommerfeld remainder
+    /// to absorb the truncated tail: the image series IS the whole kernel there, so it
+    /// must run deep enough that the residual monopole Σcᵢ (exactly zero for the full
+    /// grounded-stack series) is negligible. The RF default (8·d_total) leaves a
+    /// percent-level tail on high-contrast stacks — fine under a remainder integral,
+    /// wrong as a standalone kernel. The default-parameter overload above is the pinned
+    /// RF path and its arithmetic is untouched.
+    /// </summary>
+    public static IReadOnlyList<Image> PhiImagesInterior(LayeredStackup stackup, int m,
+        double depthCapFactor, double coefficientFloor, double relativePrune)
     {
         int n = stackup.Layers.Count;
         if (m < 0 || m >= n)
@@ -137,8 +151,8 @@ internal static class MultiLayerImages
             t[i] = stackup.Layers[i].ThicknessMeters;
             eps[i] = stackup.Layers[i].ComplexPermittivity;
         }
-        double depthCap = DepthCapFactor * stackup.TotalThicknessMeters;
-        var ctx = new Context(n, t, depthCap);
+        double depthCap = depthCapFactor * stackup.TotalThicknessMeters;
+        var ctx = new Context(n, t, depthCap, coefficientFloor, relativePrune);
 
         // Z_down: ground short (Γ = −1), reflections up through layers 0..m; impedance
         // referenced to the layer just BELOW node m (char admittance ε_m).
@@ -197,12 +211,17 @@ internal static class MultiLayerImages
         private readonly int _n;
         private readonly double[] _t;
         private readonly double _depthCap;
+        private readonly double _coefficientFloor;
+        private readonly double _relativePrune;
 
-        public Context(int n, double[] t, double depthCap)
+        public Context(int n, double[] t, double depthCap,
+            double coefficientFloor, double relativePrune)
         {
             _n = n;
             _t = t;
             _depthCap = depthCap;
+            _coefficientFloor = coefficientFloor;
+            _relativePrune = relativePrune;
         }
 
         public double Depth(int[] idx)
@@ -284,7 +303,7 @@ internal static class MultiLayerImages
                 acc = Add(acc, term);
                 double maxTerm = 0;
                 foreach (var v in term.Values) maxTerm = Math.Max(maxTerm, v.Magnitude);
-                if (maxTerm < CoefficientFloor) break;
+                if (maxTerm < _coefficientFloor) break;
                 if (k == 99_999)
                     throw new InvalidOperationException(
                         "MultiLayerImages.Reciprocal did not converge — a near-unit reflection "
@@ -306,7 +325,7 @@ internal static class MultiLayerImages
             double primary = byDepth.TryGetValue(0, out var c0) ? c0.Magnitude : 1;
             var images = new List<Image>();
             foreach (var (d, c) in byDepth)
-                if (d == 0 || c.Magnitude >= CoefficientFloor * primary)
+                if (d == 0 || c.Magnitude >= _coefficientFloor * primary)
                     images.Add(new Image(d, c));
             return images;
         }
@@ -326,7 +345,7 @@ internal static class MultiLayerImages
             double max = 0;
             foreach (var v in r.Values) max = Math.Max(max, v.Magnitude);
             if (max == 0) { r.Clear(); return; }
-            double floor = max * RelativePrune;
+            double floor = max * _relativePrune;
             List<Key>? dead = null;
             foreach (var (k, v) in r)
                 if (v.Magnitude < floor) (dead ??= new()).Add(k);
