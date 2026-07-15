@@ -4,17 +4,28 @@ using OpenSim.Core.Numerics;
 namespace OpenSim.Rf;
 
 /// <summary>
-/// The electric field sampled at a set of free-space points: complex Cartesian phasor
-/// components (peak convention, like the solver), the peak magnitude
+/// The electromagnetic field sampled at a set of free-space points: complex Cartesian
+/// phasor components (peak convention, like the solver), the peak magnitude
 /// |E| = √(|Ex|²+|Ey|²+|Ez|²), and the t = 0 snapshot Re(E) used to draw arrows (an
 /// elliptically polarized field has no single direction; the snapshot is the honest
-/// drawable and is documented as such).
+/// drawable and is documented as such). The magnetic field triple <see cref="H"/> (A/m)
+/// and its magnitude/snapshot are populated by the free-space evaluators (SI Stage S7,
+/// H = ∇×A/µ₀); they stay null on layered maps where the H spectral kernels are a named
+/// follow-up.
 /// </summary>
 public sealed record FieldMap(
     IReadOnlyList<Vector3D> Points,
     IReadOnlyList<(Complex X, Complex Y, Complex Z)> E,
     IReadOnlyList<double> Magnitude,
-    IReadOnlyList<Vector3D> Snapshot);
+    IReadOnlyList<Vector3D> Snapshot)
+{
+    /// <summary>Complex magnetic-field phasor per point (A/m); null when H was not computed.</summary>
+    public IReadOnlyList<(Complex X, Complex Y, Complex Z)>? H { get; init; }
+    /// <summary>|H| = √(|Hx|²+|Hy|²+|Hz|²) per point (A/m); null when H was not computed.</summary>
+    public IReadOnlyList<double>? HMagnitude { get; init; }
+    /// <summary>t = 0 snapshot Re(H) per point; null when H was not computed.</summary>
+    public IReadOnlyList<Vector3D>? HSnapshot { get; init; }
+}
 
 /// <summary>
 /// Near-field evaluation from the solved currents: E = −jωA − ∇Φ with
@@ -36,11 +47,15 @@ public static class FieldProbe
         var fields = new (Complex X, Complex Y, Complex Z)[points.Count];
         var magnitudes = new double[points.Count];
         var snapshots = new Vector3D[points.Count];
+        var hFields = new (Complex X, Complex Y, Complex Z)[points.Count];
+        var hMagnitudes = new double[points.Count];
+        var hSnapshots = new Vector3D[points.Count];
 
         for (int p = 0; p < points.Count; p++)
         {
             Complex ax = Complex.Zero, ay = Complex.Zero, az = Complex.Zero;   // vector potential integrals
             Complex gx = Complex.Zero, gy = Complex.Zero, gz = Complex.Zero;   // ∇Φ integrals
+            Complex hx = Complex.Zero, hy = Complex.Zero, hz = Complex.Zero;   // ∇×A integrals (H·4π)
             var point = points[p];
 
             // Inside a PEC (at or below a ground plane) the field is identically zero —
@@ -51,6 +66,9 @@ public static class FieldProbe
                 fields[p] = (Complex.Zero, Complex.Zero, Complex.Zero);
                 magnitudes[p] = 0;
                 snapshots[p] = new Vector3D(0, 0, 0);
+                hFields[p] = (Complex.Zero, Complex.Zero, Complex.Zero);
+                hMagnitudes[p] = 0;
+                hSnapshots[p] = new Vector3D(0, 0, 0);
                 continue;
             }
 
@@ -89,6 +107,16 @@ public static class FieldProbe
                         gx += wPhi * separation.X;
                         gy += wPhi * separation.Y;
                         gz += wPhi * separation.Z;
+
+                        // H = ∇×A/µ₀ = (1/4π)∫ I (∇g × t̂), and ∇g = separation·dg, so the
+                        // per-point contribution is I·dg·(separation × t̂) — the curl carries
+                        // no charge/∇Φ term (that part is curl-free). separation × t̂ is a
+                        // real vector (both operands real); the current/dg weight is complex.
+                        var cross = Vector3D.Cross(separation, tangent);
+                        Complex wH = weights[i] * current * dg;
+                        hx += wH * cross.X;
+                        hy += wH * cross.Y;
+                        hz += wH * cross.Z;
                     }
                 }
             }
@@ -125,8 +153,18 @@ public static class FieldProbe
             magnitudes[p] = Math.Sqrt(
                 ex.Magnitude * ex.Magnitude + ey.Magnitude * ey.Magnitude + ez.Magnitude * ez.Magnitude);
             snapshots[p] = new Vector3D(ex.Real, ey.Real, ez.Real);
+
+            Complex hFactor = 1.0 / (4 * Math.PI);
+            Complex bx = hFactor * hx, by = hFactor * hy, bz = hFactor * hz;
+            hFields[p] = (bx, by, bz);
+            hMagnitudes[p] = Math.Sqrt(
+                bx.Magnitude * bx.Magnitude + by.Magnitude * by.Magnitude + bz.Magnitude * bz.Magnitude);
+            hSnapshots[p] = new Vector3D(bx.Real, by.Real, bz.Real);
         }
-        return new FieldMap(points, fields, magnitudes, snapshots);
+        return new FieldMap(points, fields, magnitudes, snapshots)
+        {
+            H = hFields, HMagnitude = hMagnitudes, HSnapshot = hSnapshots
+        };
     }
 
     private static double DistanceToSegment(Vector3D point, Vector3D start, Vector3D direction,

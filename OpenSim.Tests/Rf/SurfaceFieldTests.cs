@@ -108,6 +108,46 @@ public class SurfaceFieldTests
     }
 
     [Fact]
+    public void SurfaceFieldProbe_FarZoneH_SatisfiesWaveImpedance_AndOutwardPoynting()
+    {
+        // The same evaluator-agnostic Maxwell identity as the wire H gate, on RWG currents:
+        // H = (r̂ × E)/η₀ in the radiation zone. A strip dipole (no ground) sampled at
+        // r = 20λ; the residual decays like 1/(kr) ≈ 1%.
+        const double eta = 4e-7 * Math.PI * 299_792_458.0;
+        double h = 0.25 * Lambda, width = Lambda / 100;
+        var dipole = VerticalStrip(width, -h, h, 20, null);
+        int port = EdgeBasis(dipole, 20, 21);                     // the z = 0 row (2·rows/2)
+        var solution = new SurfaceMomSolver().Solve(dipole, Frequency,
+            new SurfacePort(new[] { port }, new Vector3D(0, 0, 1)));
+
+        foreach (var dir in new[] { new Vector3D(0, 1, 0), Unit(new Vector3D(1, 1, 0)) })
+        {
+            double r = 20 * Lambda;
+            var map = SurfaceFieldProbe.Evaluate(dipole, solution, new[] { dir * r });
+            var (ex, ey, ez) = map.E[0];
+            var (hx, hy, hz) = map.H![0];
+
+            Complex cx = dir.Y * ez - dir.Z * ey;
+            Complex cy = dir.Z * ex - dir.X * ez;
+            Complex cz = dir.X * ey - dir.Y * ex;
+            double cScale = Math.Sqrt(cx.Magnitude * cx.Magnitude + cy.Magnitude * cy.Magnitude
+                                      + cz.Magnitude * cz.Magnitude);
+            Assert.True((eta * hx - cx).Magnitude < 0.03 * cScale
+                        && (eta * hy - cy).Magnitude < 0.03 * cScale
+                        && (eta * hz - cz).Magnitude < 0.03 * cScale,
+                $"dir {dir.X:g2},{dir.Y:g2},{dir.Z:g2}: η₀H vs r̂×E mismatch");
+
+            Complex sx = ey * Complex.Conjugate(hz) - ez * Complex.Conjugate(hy);
+            Complex sy = ez * Complex.Conjugate(hx) - ex * Complex.Conjugate(hz);
+            Complex sz = ex * Complex.Conjugate(hy) - ey * Complex.Conjugate(hx);
+            double radial = 0.5 * (sx.Real * dir.X + sy.Real * dir.Y + sz.Real * dir.Z);
+            Assert.True(radial > 0, $"Poynting must point outward (S·r̂ = {radial:g3})");
+        }
+    }
+
+    private static Vector3D Unit(Vector3D v) => v / v.Length;
+
+    [Fact]
     public void SurfaceFieldProbe_ReturnsExactlyZeroBelowThePlane()
     {
         double h = 0.25 * Lambda, width = Lambda / 100;

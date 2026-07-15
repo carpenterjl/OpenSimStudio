@@ -7,10 +7,20 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
 using OpenSim.Core.Signals;
+using OpenSim.Pcb.Import;
 using OpenSim.Rf.Layered;
 using OpenSim.Rf.Si;
 
 namespace OpenSim.App.ViewModels;
+
+/// <summary>A board net offered for coupled extraction, with its selection toggle.</summary>
+public partial class SiNetSelection : ObservableObject
+{
+    public SiNetSelection(CopperNet net) => Net = net;
+    public CopperNet Net { get; }
+    public string Label => Net.Label;
+    [ObservableProperty] private bool _isSelected;
+}
 
 /// <summary>
 /// The Signal Integrity panel (SI track, Stage S5): wizard-defined coupled microstrip
@@ -63,6 +73,42 @@ public partial class SignalIntegrityViewModel : ObservableObject
     /// victim eye (each aggressor gets its own LFSR seed).</summary>
     [ObservableProperty] private bool _aggressorsEnabled;
 
+    // ------------------------------------------------------------------
+    // Board net extraction (Stage S6): take the coupled cross-section from real nets
+    // instead of the wizard geometry. When _boardExtraction is set, the RLGC/network the
+    // Extract/S-param/eye commands consume comes from the board, not the wizard fields.
+    // ------------------------------------------------------------------
+
+    /// <summary>Use the coupled cross-section extracted from the selected board nets rather
+    /// than the wizard geometry. Set true by a successful extraction; the wizard fields stay
+    /// editable but are ignored while it holds.</summary>
+    [ObservableProperty] private bool _useBoardNets;
+
+    /// <summary>The importable board nets, each with a selection toggle (pick 2+ parallel
+    /// signal nets, then Extract).</summary>
+    public ObservableCollection<SiNetSelection> BoardNets { get; } = new();
+
+    [ObservableProperty] private string _boardExtractionResult = "";
+    [ObservableProperty] private bool _hasBoard;
+
+    private PcbBoard? _board;
+    private Func<NetMeshOptions>? _meshOptions;
+    private BoardCoupledResult? _boardExtraction;
+
+    /// <summary>Populates the board net list — mirrors the antenna/inductance panels so the
+    /// same import feeds every downstream analysis one board.</summary>
+    public void LoadBoard(PcbBoard board, Func<NetMeshOptions> meshOptions)
+    {
+        _board = board;
+        _meshOptions = meshOptions;
+        _boardExtraction = null;
+        UseBoardNets = false;
+        BoardNets.Clear();
+        foreach (var net in board.Nets) BoardNets.Add(new SiNetSelection(net));
+        HasBoard = board.Nets.Count > 0;
+        BoardExtractionResult = "";
+    }
+
     [ObservableProperty] private string _rlgcResult = "";
     [ObservableProperty] private string _sParamResult = "";
     [ObservableProperty] private string _eyeResult = "";
@@ -75,6 +121,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     private CoupledLineCrossSection BuildCrossSection()
     {
+        if (UseBoardNets && _boardExtraction?.CrossSection is { } extracted)
+            return extracted;
         if (LineCount < 1 || LineCount > 8)
             throw new ArgumentException("Line count must be 1–8 (the wizard's coupled group).");
         double w = TraceWidthMm * 1e-3, s = TraceGapMm * 1e-3;
@@ -91,6 +139,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     private (RlgcResult Rlgc, MtlNetwork Network) BuildNetwork()
     {
+        if (UseBoardNets && _boardExtraction is { Rlgc: { } rlgcBoard, Network: { } networkBoard })
+            return (rlgcBoard, networkBoard);
         var rlgc = RlgcExtractor.Extract(BuildCrossSection());
         return (rlgc, new MtlNetwork(new[] { new MtlSection(rlgc, LineLengthMm * 1e-3) }));
     }
@@ -111,6 +161,65 @@ public partial class SignalIntegrityViewModel : ObservableObject
     // ------------------------------------------------------------------
     // Commands.
     // ------------------------------------------------------------------
+
+    /// <summary>Extract the coupled cross-section from the selected board nets. On success
+    /// the RLGC/network is cached and <see cref="UseBoardNets"/> flips on, so the existing
+    /// Extract RLGC / S-parameter / eye commands run on the real board geometry. A typed
+    /// failure (non-parallel tangle, pour net, lateral overlap, no overlap, layer change)
+    /// surfaces verbatim and leaves the wizard geometry active.</summary>
+    [RelayCommand]
+    private async Task ExtractFromBoardNets()
+    {
+        if (_board is null || _meshOptions is null)
+        {
+            BoardExtractionResult = "Import a board first (PCB panel).";
+            return;
+        }
+        var selected = BoardNets.Where(n => n.IsSelected).Select(n => n.Net).ToList();
+        if (selected.Count < 2)
+        {
+            BoardExtractionResult = "Select at least two parallel signal nets.";
+            return;
+        }
+
+        BoardExtractionResult = "Extracting…";
+        try
+        {
+            var options = _meshOptions();
+            var extraction = await Task.Run(() => BoardCoupledExtractor.Extract(_board, selected,
+                new BoardCoupledOptions
+                {
+                    CopperThicknessMeters = options.CopperThickness,
+                }));
+            if (extraction.FailureReason is not null)
+            {
+                _boardExtraction = null;
+                UseBoardNets = false;
+                BoardExtractionResult = $"Not a coupled line: {extraction.FailureReason}";
+                _log.Append($"SI board extraction failed — {extraction.FailureReason}");
+                return;
+            }
+
+            _boardExtraction = extraction;
+            UseBoardNets = true;
+            LineCount = extraction.CrossSection!.Traces.Count;      // terminations follow the real count
+            DrivenLine = Math.Clamp(DrivenLine, 1, LineCount);
+            var widths = string.Join(", ",
+                extraction.CrossSection.Traces.Select(t => $"{t.WidthMeters * 1e3:g3}"));
+            BoardExtractionResult =
+                $"{LineCount} coupled conductors, section = {extraction.CoupledLengthMeters * 1e3:g4} mm, "
+                + $"widths [{widths}] mm — RLGC/S-params/eye now use the board geometry.";
+            ShowAssumptions(extraction.Rlgc!);
+            SiAssumptions = "Assumptions: " + string.Join(" ", extraction.Assumptions);
+            _log.Append($"SI board extraction — {BoardExtractionResult}");
+        }
+        catch (Exception ex)
+        {
+            _boardExtraction = null;
+            UseBoardNets = false;
+            BoardExtractionResult = $"Not solvable: {ex.Message}";
+        }
+    }
 
     [RelayCommand]
     private async Task ExtractRlgc()

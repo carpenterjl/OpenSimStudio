@@ -27,10 +27,11 @@ public partial class PcbViewModel : ObservableObject
     private readonly MaterialsViewModel _materials;
     private readonly InductanceViewModel _inductance;
     private readonly AntennaViewModel _antenna;
+    private readonly SignalIntegrityViewModel _signalIntegrity;
 
     public PcbViewModel(ProjectSession session, ILogService log, MeshingViewModel meshing,
         ElectrodesViewModel electrodes, MaterialsViewModel materials, InductanceViewModel inductance,
-        AntennaViewModel antenna)
+        AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity)
     {
         _session = session;
         _log = log;
@@ -39,6 +40,7 @@ public partial class PcbViewModel : ObservableObject
         _materials = materials;
         _inductance = inductance;
         _antenna = antenna;
+        _signalIntegrity = signalIntegrity;
         session.GeometryReplaced += (_, e) =>
         {
             if (e.LeavingPcbMode) TearDownBoardState();
@@ -297,6 +299,7 @@ public partial class PcbViewModel : ObservableObject
             _layerZMapCache = null;
             _inductance.LoadBoard(board, BuildNetMeshOptions);
             _antenna.LoadBoard(board, BuildNetMeshOptions);
+            _signalIntegrity.LoadBoard(board, BuildNetMeshOptions);
 
             _log.Append($"PCB archive: {board.Layers.Count} layers classified " +
                         $"(import {importTimer.ElapsedMilliseconds} ms).");

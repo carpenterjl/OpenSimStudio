@@ -138,8 +138,9 @@ public partial class AntennaViewModel : ObservableObject
 
     // ------------------------------------------------------------------
     // Board field overlay (SIwave-style): a translucent |field| heatmap plane over
-    // the PCB/structure. E only in v1 — the H toggle is present but typed-fails until
-    // the H-field kernels ship (SI Stage S7); the UI is field-type-agnostic by design.
+    // the PCB/structure. E everywhere; H (Stage S7) for free-space/PEC structures
+    // (H = ∇×A/µ₀) — layered H stays a typed follow-up (its spectral kernels are their
+    // own stage), so H over a substrate returns a typed message.
     // ------------------------------------------------------------------
     public const string EFieldOverlay = "E (electric)";
     public const string HFieldOverlay = "H (magnetic)";
@@ -410,19 +411,14 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ShowFieldOverlay()
     {
         FieldResult = "";
-        if (OverlayFieldType == HFieldOverlay)
-        {
-            FieldResult = "Not computable: H-field kernels are a named follow-up (SI track) — "
-                + "the field evaluators compute E only today. Switch the overlay to the E field.";
-            return;
-        }
         int n = Math.Clamp(OverlayGridN, 9, 201);
         double opacity = Math.Clamp(OverlayOpacityPercent / 100.0, 0.05, 1.0);
         var mode = OverlayScaleMode == LinearScale ? FieldScaleMode.Linear : FieldScaleMode.Logarithmic;
+        bool magnetic = OverlayFieldType == HFieldOverlay;
 
         if (IsSurfaceMode)
         {
-            await ShowSurfaceFieldOverlayAsync(n, mode, opacity);
+            await ShowSurfaceFieldOverlayAsync(n, mode, opacity, magnetic);
             return;
         }
         if (!TryDiscretize(out var wire, out var feedBasis, out _, out string? failure))
@@ -440,14 +436,15 @@ public partial class AntennaViewModel : ObservableObject
                 var solution = new ThinWireMomSolver().Solve(wire, frequency, feedBasis);
                 return FieldProbe.Evaluate(wire, solution, OverlayGridPoints(center, diagonal, z, n));
             });
-            ApplyFieldOverlay(map, n, mode, opacity, z, kernelNote: "free-space kernels");
+            ApplyFieldOverlay(map, magnetic, n, mode, opacity, z, kernelNote: "free-space kernels");
             WirePoints = BuildWireOverlay(wire);
             GroundPlaneModel = BuildGroundOverlay(wire);
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
     }
 
-    private async Task ShowSurfaceFieldOverlayAsync(int n, FieldScaleMode mode, double opacity)
+    private async Task ShowSurfaceFieldOverlayAsync(int n, FieldScaleMode mode, double opacity,
+        bool magnetic)
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
                 out var substrate, out var probe, out var layered))
@@ -460,6 +457,13 @@ public partial class AntennaViewModel : ObservableObject
             FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
                 + "named follow-up (the in-slab field kernels are single-slab). The Zin sweep "
                 + "and far field of a covered patch are available.";
+            return;
+        }
+        if (magnetic && substrate is not null)
+        {
+            FieldResult = "Not computable: layered H-field kernels are a named follow-up — the "
+                + "H field ships for free-space/PEC structures (Stage S7); the layered spectral "
+                + "H kernels are their own stage. Switch to E, or set εr = 1 for the free-space H.";
             return;
         }
         FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
@@ -488,7 +492,7 @@ public partial class AntennaViewModel : ObservableObject
                 return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
                     surface, table, solved, points), solved);
             });
-            ApplyFieldOverlay(map, n, mode, opacity, z,
+            ApplyFieldOverlay(map, magnetic, n, mode, opacity, z,
                 kernelNote: substrate is null
                     ? "free-space kernels"
                     : $"εr = {substrate.RelativePermittivity:g3} layered kernels");
@@ -500,29 +504,35 @@ public partial class AntennaViewModel : ObservableObject
 
     /// <summary>Builds the overlay model + its legend from a sampled map. The legend
     /// brush stays opaque (readability); only the viewport plane takes the opacity.</summary>
-    private void ApplyFieldOverlay(FieldMap map, int n, FieldScaleMode mode, double opacity,
-        double zMeters, string kernelNote)
+    private void ApplyFieldOverlay(FieldMap map, bool magnetic, int n, FieldScaleMode mode,
+        double opacity, double zMeters, string kernelNote)
     {
+        // Stage S7: the map carries |E| and |H|; the toggle picks which to color, with the
+        // matching unit. H is present only on free-space/PEC maps (HMagnitude non-null).
+        IReadOnlyList<double> values = magnetic ? map.HMagnitude ?? map.Magnitude : map.Magnitude;
+        string symbol = magnetic ? "|H|" : "|E|";
+        string unit = magnetic ? "A/m" : "V/m";
+
         int decades = Math.Max(1, OverlayDecades);
         var scale = OverlayAutoRange
-            ? FieldScale.Auto(mode, map.Magnitude, decades)
+            ? FieldScale.Auto(mode, values, decades)
             : new FieldScale(mode, OverlayMinVPerM, OverlayMaxVPerM, decades);
         FieldOverlayModel = SceneBuilder.BuildFieldOverlayModel(
-            map, n, n, ColormapKind.Viridis, scale, opacity);
+            map, values, n, n, ColormapKind.Viridis, scale, opacity);
 
-        double peak = map.Magnitude.Count > 0 ? map.Magnitude.Max() : 0;
-        OverlayLegendTitle = mode == FieldScaleMode.Logarithmic ? "|E| (log)" : "|E|";
+        double peak = values.Count > 0 ? values.Max() : 0;
+        OverlayLegendTitle = mode == FieldScaleMode.Logarithmic ? $"{symbol} (log)" : symbol;
         OverlayLegendBrush = Colormap.CreateBrush(ColormapKind.Viridis);
-        OverlayLegendMin = $"{scale.EffectiveMin:g3} V/m";
+        OverlayLegendMin = $"{scale.EffectiveMin:g3} {unit}";
         // ▲ = samples above the range top are saturated (the FE legend's convention).
-        OverlayLegendMax = $"{scale.Max:g3} V/m" + (peak > scale.Max ? " ▲" : "");
+        OverlayLegendMax = $"{scale.Max:g3} {unit}" + (peak > scale.Max ? " ▲" : "");
 
         string rangeNote = OverlayAutoRange
             ? mode == FieldScaleMode.Logarithmic
                 ? $"auto range, top {decades} decades"
                 : "auto range"
-            : $"range {scale.EffectiveMin:g3}–{scale.Max:g3} V/m";
-        FieldResult = $"Field overlay at {FrequencyMHz:g4} MHz: peak |E| = {peak:g4} V/m "
+            : $"range {scale.EffectiveMin:g3}–{scale.Max:g3} {unit}";
+        FieldResult = $"Field overlay at {FrequencyMHz:g4} MHz: peak {symbol} = {peak:g4} {unit} "
                       + $"on the z = {zMeters * 1e3:g4} mm plane (1 V feed, {n}×{n} grid, "
                       + $"{kernelNote}; {rangeNote}, {OverlayOpacityPercent:g0}% opacity)";
         _log.Append($"Antenna: {FieldResult}");

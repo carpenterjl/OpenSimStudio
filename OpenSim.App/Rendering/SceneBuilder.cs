@@ -430,8 +430,11 @@ public static class SceneBuilder
     /// slice heatmap; the copper ribbons underneath stay opaque, so the overlay reads as
     /// a translucent film over the board. Frozen; both faces drawn.
     /// </summary>
+    /// <param name="values">The per-point scalar to color by — |E| or |H| picked by the
+    /// caller (the map carries both since Stage S7); must be parallel to
+    /// <see cref="OpenSim.Rf.FieldMap.Points"/>.</param>
     public static GeometryModel3D BuildFieldOverlayModel(OpenSim.Rf.FieldMap map,
-        int nx, int ny, ColormapKind colormap,
+        IReadOnlyList<double> values, int nx, int ny, ColormapKind colormap,
         OpenSim.Core.PostProcessing.FieldScale scale, double opacity)
     {
         if (map.Points.Count != nx * ny)
@@ -443,7 +446,7 @@ public static class SceneBuilder
             var p = map.Points[i];
             geometry3D.Positions.Add(new Point3D(p.X, p.Y, p.Z));
             geometry3D.TextureCoordinates.Add(new System.Windows.Point(
-                scale.Normalize(map.Magnitude[i]), 0.5));
+                scale.Normalize(values[i]), 0.5));
         }
         for (int y = 0; y < ny - 1; y++)
             for (int x = 0; x < nx - 1; x++)

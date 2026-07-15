@@ -175,4 +175,87 @@ public class FieldEvaluationTests
         for (int i = 0; i < points.Length; i++)
             Assert.Equal(map.E[i], repeat.E[i]);                  // bitwise deterministic
     }
+
+    // ------------------------------------------------------------------
+    // Magnetic field (SI Stage S7): H = ∇×A/µ₀, computed alongside E.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void NearFieldH_MatchesTheHertzianDipole_WithTheSolvedMoment()
+    {
+        // The exact analog of the E Hertzian gate: the infinitesimal-dipole magnetic field
+        // is H_φ = j·k·M·sinθ/(4π r)·(1 + 1/(jkr))·e^{−jkr} (no η — H is ∇×A/µ₀). At φ = 0,
+        // φ̂ = ŷ, so the whole field lands on Hy; Hx/Hz must vanish. 2% is a real gate on
+        // the curl evaluation (the O((l/r)²) finite-size correction is ~0.2%).
+        var (wire, solution) = Dipole(0.02, 16, Lambda / 20000);
+        var nodeCurrents = FarFieldEvaluator.NodeCurrents(wire, solution);
+        Complex moment = Complex.Zero;
+        for (int e = 0; e < wire.ElementCount; e++)
+            moment += wire.ElementLength(e) * wire.ElementDirection(e).Z
+                      * 0.5 * (nodeCurrents[e] + nodeCurrents[(e + 1) % wire.Nodes.Count]);
+
+        double k = 2 * Math.PI / Lambda;
+        foreach (double theta in new[] { Math.PI / 2, Math.PI / 4 })
+        {
+            double r = 0.5 * Lambda;
+            var point = new Vector3D(r * Math.Sin(theta), 0, r * Math.Cos(theta));
+            var map = FieldProbe.Evaluate(wire, solution, new[] { point });
+            Assert.NotNull(map.H);
+            var (hx, hy, hz) = map.H![0];
+
+            Complex phase = Complex.Exp(new Complex(0, -k * r));
+            Complex jkr = new Complex(0, k * r);
+            Complex hPhi = Complex.ImaginaryOne * k * moment * Math.Sin(theta) / (4 * Math.PI * r)
+                           * (1 + 1 / jkr) * phase;
+
+            double scale = hPhi.Magnitude;
+            Assert.True((hy - hPhi).Magnitude < 0.02 * scale,
+                $"θ={theta:g3}: Hy {hy} vs Hertzian {hPhi}");
+            Assert.True(hx.Magnitude < 1e-9 * scale, "Hx must vanish in the φ = 0 plane");
+            Assert.True(hz.Magnitude < 1e-9 * scale, "Hz must vanish in the φ = 0 plane");
+
+            // |H| bookkeeping mirrors |E|.
+            Assert.Equal(scale, map.HMagnitude![0], scale * 0.02);
+        }
+    }
+
+    [Fact]
+    public void FarZoneH_SatisfiesTheWaveImpedanceRelation_AndOutwardPoynting()
+    {
+        // The evaluator-agnostic Maxwell identity: in the radiation zone the fields are a
+        // transverse plane wave, H = (r̂ × E)/η₀. Sampling both from the SAME probe pass,
+        // ‖η₀ H − r̂ × E‖ decays like 1/(kr); at r = 20λ (kr ≈ 126) the residual is ~1%.
+        var (wire, solution) = Dipole(0.5, 40, Lambda / 2000);
+        foreach (var dir in new[]
+                 {
+                     new Vector3D(1, 0, 0), new Vector3D(0, 1, 0),
+                     Unit(new Vector3D(1, 1, 1)), Unit(new Vector3D(1, 0, 2)),
+                 })
+        {
+            double r = 20 * Lambda;
+            var map = FieldProbe.Evaluate(wire, solution, new[] { dir * r });
+            var (ex, ey, ez) = map.E[0];
+            var (hx, hy, hz) = map.H![0];
+
+            // r̂ × E (real r̂, complex E).
+            Complex cx = dir.Y * ez - dir.Z * ey;
+            Complex cy = dir.Z * ex - dir.X * ez;
+            Complex cz = dir.X * ey - dir.Y * ex;
+            double cScale = Math.Sqrt(cx.Magnitude * cx.Magnitude + cy.Magnitude * cy.Magnitude
+                                      + cz.Magnitude * cz.Magnitude);
+            Assert.True((Eta * hx - cx).Magnitude < 0.02 * cScale
+                        && (Eta * hy - cy).Magnitude < 0.02 * cScale
+                        && (Eta * hz - cz).Magnitude < 0.02 * cScale,
+                $"dir {dir.X:g2},{dir.Y:g2},{dir.Z:g2}: η₀H {Eta * hx:g3} vs r̂×E {cx:g3}");
+
+            // Time-averaged Poynting ½Re(E×H*) points outward (radiated power leaves).
+            Complex sx = ey * Complex.Conjugate(hz) - ez * Complex.Conjugate(hy);
+            Complex sy = ez * Complex.Conjugate(hx) - ex * Complex.Conjugate(hz);
+            Complex sz = ex * Complex.Conjugate(hy) - ey * Complex.Conjugate(hx);
+            double radial = 0.5 * (sx.Real * dir.X + sy.Real * dir.Y + sz.Real * dir.Z);
+            Assert.True(radial > 0, $"Poynting must point outward (got S·r̂ = {radial:g3})");
+        }
+    }
+
+    private static Vector3D Unit(Vector3D v) => v / v.Length;
 }

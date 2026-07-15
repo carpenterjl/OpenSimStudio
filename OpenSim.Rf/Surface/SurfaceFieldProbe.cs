@@ -27,6 +27,9 @@ public static class SurfaceFieldProbe
         var fields = new (Complex X, Complex Y, Complex Z)[points.Count];
         var magnitudes = new double[points.Count];
         var snapshots = new Vector3D[points.Count];
+        var hFields = new (Complex X, Complex Y, Complex Z)[points.Count];
+        var hMagnitudes = new double[points.Count];
+        var hSnapshots = new Vector3D[points.Count];
 
         for (int p = 0; p < points.Count; p++)
         {
@@ -36,11 +39,15 @@ public static class SurfaceFieldProbe
                 fields[p] = (Complex.Zero, Complex.Zero, Complex.Zero);
                 magnitudes[p] = 0;
                 snapshots[p] = new Vector3D(0, 0, 0);
+                hFields[p] = (Complex.Zero, Complex.Zero, Complex.Zero);
+                hMagnitudes[p] = 0;
+                hSnapshots[p] = new Vector3D(0, 0, 0);
                 continue;
             }
 
             Complex ax = Complex.Zero, ay = Complex.Zero, az = Complex.Zero;
             Complex gx = Complex.Zero, gy = Complex.Zero, gz = Complex.Zero;
+            Complex hx = Complex.Zero, hy = Complex.Zero, hz = Complex.Zero;   // ∇×A integrals (H·4π)
 
             void AddTriangle(Vector3D va, Vector3D vb, Vector3D vc, double area,
                 IReadOnlyList<(int Basis, double Sign, int Opposite)> supports,
@@ -102,6 +109,13 @@ public static class SurfaceFieldProbe
                         gx += wPhi * separation.X;
                         gy += wPhi * separation.Y;
                         gz += wPhi * separation.Z;
+
+                        // H = ∇×A/µ₀ = (1/4π)Σ∫ (∇g × J), ∇g = separation·dg → dg·(separation × J).
+                        // J is complex, so this is a complex cross product; no charge term.
+                        Complex wH = weight * dg;
+                        hx += wH * (separation.Y * jz - separation.Z * jy);
+                        hy += wH * (separation.Z * jx - separation.X * jz);
+                        hz += wH * (separation.X * jy - separation.Y * jx);
                     }
                 }
             }
@@ -133,8 +147,18 @@ public static class SurfaceFieldProbe
             magnitudes[p] = Math.Sqrt(
                 ex.Magnitude * ex.Magnitude + ey.Magnitude * ey.Magnitude + ez.Magnitude * ez.Magnitude);
             snapshots[p] = new Vector3D(ex.Real, ey.Real, ez.Real);
+
+            Complex hFactor = 1.0 / (4 * Math.PI);
+            Complex bx = hFactor * hx, by = hFactor * hy, bz = hFactor * hz;
+            hFields[p] = (bx, by, bz);
+            hMagnitudes[p] = Math.Sqrt(
+                bx.Magnitude * bx.Magnitude + by.Magnitude * by.Magnitude + bz.Magnitude * bz.Magnitude);
+            hSnapshots[p] = new Vector3D(bx.Real, by.Real, bz.Real);
         }
-        return new FieldMap(points, fields, magnitudes, snapshots);
+        return new FieldMap(points, fields, magnitudes, snapshots)
+        {
+            H = hFields, HMagnitude = hMagnitudes, HSnapshot = hSnapshots
+        };
     }
 
     private static IEnumerable<(Vector3D A, Vector3D B, Vector3D C)> Split(

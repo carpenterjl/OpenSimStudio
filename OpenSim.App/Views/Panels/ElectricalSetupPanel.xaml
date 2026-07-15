@@ -321,7 +321,37 @@
                           ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
                 <Label Content=""/>
             </UniformGrid>
-            <UniformGrid Columns="3">
+
+            <!-- Board extraction (Stage S6): pick 2+ parallel signal nets from the imported
+                 board; the coupled cross-section replaces the wizard geometry above. -->
+            <Border BorderBrush="#3A3A46" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0"
+                    Visibility="{Binding SignalIntegrity.HasBoard, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="From board nets (select 2+ parallel signal nets):"
+                               FontSize="11" Foreground="#C9C9D2" Margin="0,0,0,2"/>
+                    <ListBox x:Name="SiBoardNetsList" MaxHeight="110"
+                             ItemsSource="{Binding SignalIntegrity.BoardNets}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             Background="#22222A" BorderBrush="#3A3A46">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}"
+                                          Foreground="#C9C9D2"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button x:Name="SiBoardExtractButton" Content="Extract coupled section from nets"
+                            Command="{Binding SignalIntegrity.ExtractFromBoardNetsCommand}"
+                            Margin="0,3,0,0"/>
+                    <CheckBox Content="Use board geometry (uncheck for wizard)"
+                              IsChecked="{Binding SignalIntegrity.UseBoardNets}"
+                              Foreground="#C9C9D2" Margin="2,3,0,0"/>
+                    <TextBlock Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
+                               FontSize="11" Foreground="#7FD0A0" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <UniformGrid Columns="3" Margin="0,4,0,0">
                 <Button x:Name="SiExtractButton" Content="Extract RLGC"
                         Command="{Binding SignalIntegrity.ExtractRlgcCommand}"/>
                 <Button x:Name="SiSparamButton" Content="S-params (Touchstone)"
