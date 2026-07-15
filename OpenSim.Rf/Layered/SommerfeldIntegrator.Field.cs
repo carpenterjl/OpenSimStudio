@@ -15,8 +15,8 @@ namespace OpenSim.Rf.Layered;
 /// </summary>
 internal static partial class SommerfeldIntegrator
 {
-    public static (Complex A, Complex W, Complex Phi, Complex DzPhi) FieldRemainder(
-        SubstrateStackup substrate, double k0, IReadOnlyList<SurfaceWavePole> poles,
+    public static (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)
+        FieldRemainder(SubstrateStackup substrate, double k0, IReadOnlyList<SurfaceWavePole> poles,
         double rho, double z, int refinement = 1)
     {
         if (rho <= 0) throw new ArgumentOutOfRangeException(nameof(rho));
@@ -26,22 +26,25 @@ internal static partial class SommerfeldIntegrator
 
         double d = substrate.ThicknessMeters;
         var images = LayeredFieldKernels.Images(substrate, z);
-        var residues = new (Complex A, Complex W, Complex Phi, Complex DzPhi)[poles.Count];
+        var residues = new (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[poles.Count];
         for (int p = 0; p < poles.Count; p++)
             residues[p] = LayeredFieldKernels.PoleResidues(substrate, k0, poles[p].KRho, z);
         double k1Real = k0 * Math.Sqrt(substrate.RelativePermittivity);
 
         Complex sumA = Complex.Zero, sumW = Complex.Zero;
         Complex sumPhi = Complex.Zero, sumDz = Complex.Zero;
+        Complex sumDzA = Complex.Zero, sumDzW = Complex.Zero;
 
         void Accumulate(double kRho, Complex kz0, double weight)
         {
-            var (fA, fW, fPhi, fDz) = FieldIntegrand(substrate, k0, kRho, kz0, z,
+            var (fA, fW, fPhi, fDz, fDzA, fDzW) = FieldIntegrand(substrate, k0, kRho, kz0, z,
                 images, poles, residues, rho);
             sumA += weight * fA;
             sumW += weight * fW;
             sumPhi += weight * fPhi;
             sumDz += weight * fDz;
+            sumDzA += weight * fDzA;
+            sumDzW += weight * fDzW;
         }
 
         // ---- Segment 1: k_ρ = k₀ sin t (k_z0 = k₀ cos t in closed form). ----
@@ -99,12 +102,14 @@ internal static partial class SommerfeldIntegrator
         double headScale = sumA.Magnitude + sumW.Magnitude + sumPhi.Magnitude + sumDz.Magnitude;
         for (int doubling = 0; doubling < 60 && b * rho < 3; doubling++)
         {
-            var (vA, vW, vPhi, vDz) = FieldTailPanel(substrate, k0, b, 2 * b, z,
+            var (vA, vW, vPhi, vDz, vDzA, vDzW) = FieldTailPanel(substrate, k0, b, 2 * b, z,
                 images, poles, residues, rho, refinement);
             sumA += vA;
             sumW += vW;
             sumPhi += vPhi;
             sumDz += vDz;
+            sumDzA += vDzA;
+            sumDzW += vDzW;
             b *= 2;
             if (vA.Magnitude + vW.Magnitude + vPhi.Magnitude + vDz.Magnitude
                 < 1e-16 * (headScale + 1e-300))
@@ -118,41 +123,49 @@ internal static partial class SommerfeldIntegrator
             double delta = Math.PI / rho;
             int partitions = Math.Min(400 * refinement,
                 12 * refinement + (int)Math.Ceiling(6.0 / d / delta));
-            var partial = new (Complex A, Complex W, Complex Phi, Complex Dz)[partitions];
+            var partial = new (Complex A, Complex W, Complex Phi, Complex Dz, Complex DzA, Complex DzW)[partitions];
             Complex accA = Complex.Zero, accW = Complex.Zero, accPhi = Complex.Zero, accDz = Complex.Zero;
+            Complex accDzA = Complex.Zero, accDzW = Complex.Zero;
             for (int n = 0; n < partitions; n++)
             {
-                var (vA, vW, vPhi, vDz) = FieldTailPanel(substrate, k0,
+                var (vA, vW, vPhi, vDz, vDzA, vDzW) = FieldTailPanel(substrate, k0,
                     b + n * delta, b + (n + 1) * delta, z, images, poles, residues, rho, refinement);
                 accA += vA;
                 accW += vW;
                 accPhi += vPhi;
                 accDz += vDz;
-                partial[n] = (accA, accW, accPhi, accDz);
+                accDzA += vDzA;
+                accDzW += vDzW;
+                partial[n] = (accA, accW, accPhi, accDz, accDzA, accDzW);
             }
             for (int m = 1; m < partitions; m++)
                 for (int i = 0; i < partitions - m; i++)
                     partial[i] = (0.5 * (partial[i].A + partial[i + 1].A),
                                   0.5 * (partial[i].W + partial[i + 1].W),
                                   0.5 * (partial[i].Phi + partial[i + 1].Phi),
-                                  0.5 * (partial[i].Dz + partial[i + 1].Dz));
+                                  0.5 * (partial[i].Dz + partial[i + 1].Dz),
+                                  0.5 * (partial[i].DzA + partial[i + 1].DzA),
+                                  0.5 * (partial[i].DzW + partial[i + 1].DzW));
             sumA += partial[0].A;
             sumW += partial[0].W;
             sumPhi += partial[0].Phi;
             sumDz += partial[0].Dz;
+            sumDzA += partial[0].DzA;
+            sumDzW += partial[0].DzW;
         }
 
         double norm = 1 / (4 * Math.PI);
-        return (norm * sumA, norm * sumW, norm * sumPhi, norm * sumDz);
+        return (norm * sumA, norm * sumW, norm * sumPhi, norm * sumDz, norm * sumDzA, norm * sumDzW);
     }
 
-    private static (Complex A, Complex W, Complex Phi, Complex Dz) FieldTailPanel(
+    private static (Complex A, Complex W, Complex Phi, Complex Dz, Complex DzA, Complex DzW) FieldTailPanel(
         SubstrateStackup substrate, double k0, double lo, double hi, double z,
         LayeredFieldKernels.KernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
-        (Complex A, Complex W, Complex Phi, Complex DzPhi)[] residues,
+        (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[] residues,
         double rho, int refinement)
     {
         Complex vA = Complex.Zero, vW = Complex.Zero, vPhi = Complex.Zero, vDz = Complex.Zero;
+        Complex vDzA = Complex.Zero, vDzW = Complex.Zero;
         for (int p = 0; p < refinement; p++)
         {
             double x0 = lo + (hi - lo) * p / refinement, x1 = lo + (hi - lo) * (p + 1) / refinement;
@@ -161,33 +174,36 @@ internal static partial class SommerfeldIntegrator
             {
                 double kRho = mid + half * Gauss.Nodes[i];
                 var kz0 = new Complex(0, -Math.Sqrt(kRho * kRho - k0 * k0));
-                var (fA, fW, fPhi, fDz) = FieldIntegrand(substrate, k0, kRho, kz0, z,
+                var (fA, fW, fPhi, fDz, fDzA, fDzW) = FieldIntegrand(substrate, k0, kRho, kz0, z,
                     images, poles, residues, rho);
                 double w = Gauss.Weights[i] * half;
                 vA += w * fA;
                 vW += w * fW;
                 vPhi += w * fPhi;
                 vDz += w * fDz;
+                vDzA += w * fDzA;
+                vDzW += w * fDzW;
             }
         }
-        return (vA, vW, vPhi, vDz);
+        return (vA, vW, vPhi, vDz, vDzA, vDzW);
     }
 
-    private static (Complex A, Complex W, Complex Phi, Complex DzPhi) FieldIntegrand(
+    private static (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW) FieldIntegrand(
         SubstrateStackup substrate, double k0, double kRho, Complex kz0, double z,
         LayeredFieldKernels.KernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
-        (Complex A, Complex W, Complex Phi, Complex DzPhi)[] residues, double rho)
+        (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[] residues, double rho)
     {
-        var (fA, fW, fPhi, fDz) = LayeredFieldKernels.EvaluateAll(substrate, k0, kRho, kz0, z);
+        var (fA, fW, fPhi, fDz, fDzA, fDzW) = LayeredFieldKernels.EvaluateAll(substrate, k0, kRho, kz0, z);
         var jKz0 = Complex.ImaginaryOne * kz0;
 
         // Quasi-static image subtraction (spectral form Σc·e^{−jk_z0h}/(jk_z0); the
-        // path Jacobians cancel the 1/k_z0 exactly — the z = d precedent). ∂zΦ's
+        // path Jacobians cancel the 1/k_z0 exactly — the z = d precedent). ∂zΦ's and ∂zA's
         // subtraction carries the ∂z of each exponential: −c·(dh/dz)·e^{−jk_z0h}
         // — no 1/k_z0 at all. Heights are ordered so dh/dz alternates −1, +1 in-slab
-        // and is +1 throughout above the slab.
+        // and is +1 throughout above the slab. W̃/∂zW̃ get NO image (their spectral decay
+        // is already 1/k_ρ² × exp — the tail carries them, like the E path).
         double d = substrate.ThicknessMeters;
-        Complex imgA = Complex.Zero, imgPhi = Complex.Zero, imgDz = Complex.Zero;
+        Complex imgA = Complex.Zero, imgPhi = Complex.Zero, imgDz = Complex.Zero, imgDzA = Complex.Zero;
         for (int m = 0; m < images.Length; m++)
         {
             var image = images[m];
@@ -196,10 +212,12 @@ internal static partial class SommerfeldIntegrator
             imgPhi += image.CoefficientPhi * e;
             double dhdz = z >= d ? 1 : (m % 2 == 0 ? -1 : 1);
             imgDz += -image.CoefficientPhi * dhdz * e;
+            imgDzA += -image.CoefficientA * dhdz * e;
         }
         fA -= RfConstants.Mu0 * imgA / jKz0;
         fPhi -= imgPhi / (jKz0 * RfConstants.Eps0);
         fDz -= imgDz / RfConstants.Eps0;
+        fDzA -= RfConstants.Mu0 * imgDzA;
 
         for (int p = 0; p < poles.Count; p++)
         {
@@ -208,9 +226,11 @@ internal static partial class SommerfeldIntegrator
             fW -= residues[p].W * factor;
             fPhi -= residues[p].Phi * factor;
             fDz -= residues[p].DzPhi * factor;
+            fDzA -= residues[p].DzA * factor;
+            fDzW -= residues[p].DzW * factor;
         }
 
         double measure = Bessel.J0(kRho * rho) * kRho;
-        return (measure * fA, measure * fW, measure * fPhi, measure * fDz);
+        return (measure * fA, measure * fW, measure * fPhi, measure * fDz, measure * fDzA, measure * fDzW);
     }
 }

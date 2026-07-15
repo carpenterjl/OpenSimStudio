@@ -78,14 +78,21 @@ public sealed class MtlNetwork
         var rlgc = section.Rlgc;
         var g = rlgc.ConductancePerMeter(frequencyHz);
 
+        // The proximity-effect providers (Stage S8) carry the full N×N R(f) and the internal
+        // ΔL(f); when absent the generator is bitwise the v1 scalar-diagonal-R + external-L path.
+        double[,]? rMatrix = rlgc.ResistanceMatrixOhmsPerMeter?.Invoke(frequencyHz);
+        double[,]? internalL = rlgc.InternalInductanceHenriesPerMeter?.Invoke(frequencyHz);
+
         // Generator ℓ·[[0, Z′], [Y′, 0]]: dV/dx = −Z′I, dI/dx = −Y′V integrated
         // BACKWARD from the far end (the chain convention).
         var generator = new ComplexDenseMatrix(2 * n, 2 * n);
         for (int i = 0; i < n; i++)
             for (int j = 0; j < n; j++)
             {
-                Complex z = new Complex(0, omega * rlgc.InductanceHenriesPerMeter[i, j]);
-                if (i == j) z += rlgc.ResistancePerMeter(i, frequencyHz);
+                double lFull = rlgc.InductanceHenriesPerMeter[i, j] + (internalL?[i, j] ?? 0);
+                Complex z = new Complex(0, omega * lFull);
+                if (rMatrix is not null) z += rMatrix[i, j];
+                else if (i == j) z += rlgc.ResistancePerMeter(i, frequencyHz);
                 Complex y = new Complex(g[i, j], omega * rlgc.CapacitanceFaradsPerMeter[i, j]);
                 generator[i, n + j] = z * section.LengthMeters;
                 generator[n + i, j] = y * section.LengthMeters;

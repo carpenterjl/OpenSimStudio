@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Rendering;
 using OpenSim.App.Services;
+using OpenSim.Core.Geometry2D;
 using OpenSim.Core.PostProcessing;
 using OpenSim.Pcb.Import;
 using OpenSim.Pcb.Inductance;
@@ -87,7 +88,9 @@ public partial class AntennaViewModel : ObservableObject
     [ObservableProperty] private double _coverThicknessMm = 0.8;
 
     /// <summary>Nullable so the ComboBox's transient null push lands harmlessly.</summary>
-    [ObservableProperty] private string? _sourceMode = DipoleMode;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBoardOverlay))]
+    private string? _sourceMode = DipoleMode;
 
     public ObservableCollection<CopperNet> Nets { get; } = new();
     [ObservableProperty] private CopperNet? _antennaNet;
@@ -138,9 +141,9 @@ public partial class AntennaViewModel : ObservableObject
 
     // ------------------------------------------------------------------
     // Board field overlay (SIwave-style): a translucent |field| heatmap plane over
-    // the PCB/structure. E everywhere; H (Stage S7) for free-space/PEC structures
-    // (H = ∇×A/µ₀) — layered H stays a typed follow-up (its spectral kernels are their
-    // own stage), so H over a substrate returns a typed message.
+    // the PCB/structure. E everywhere; H = ∇×A/µ₀ for free-space/PEC (Stage S7) AND over a
+    // single-slab substrate (Stage S9a, the layered ∂zG̃_A / boundary-trick curl). Only
+    // MULTI-LAYER / covered near-field maps (E and H) stay the S9b typed follow-up.
     // ------------------------------------------------------------------
     public const string EFieldOverlay = "E (electric)";
     public const string HFieldOverlay = "H (magnetic)";
@@ -168,6 +171,15 @@ public partial class AntennaViewModel : ObservableObject
     /// <summary>Decades below the peak spanned by an auto-ranged log overlay.</summary>
     [ObservableProperty] private int _overlayDecades = 3;
     [ObservableProperty] private double _overlayOpacityPercent = 60;
+
+    /// <summary>Paint the overlay over the actual board OUTLINE at each copper-layer z
+    /// (Stage S10, the SIwave board view), instead of one rectangular plane hovering above
+    /// the solved net. Only active when a board net is loaded (<see cref="HasBoardOverlay"/>).</summary>
+    [ObservableProperty] private bool _overlayOverBoard;
+
+    /// <summary>True when a board is loaded and the selected source is a board net — the
+    /// board-outline overlay is available (the wizard shapes have no board to paint over).</summary>
+    public bool HasBoardOverlay => _board is not null && SourceMode == NetMode;
 
     // The overlay's own legend (same visual style as the FE legend, separate pipeline —
     // the FE legend's title/visibility are driven by the Results VM's selected field).
@@ -416,6 +428,11 @@ public partial class AntennaViewModel : ObservableObject
         var mode = OverlayScaleMode == LinearScale ? FieldScaleMode.Linear : FieldScaleMode.Logarithmic;
         bool magnetic = OverlayFieldType == HFieldOverlay;
 
+        if (OverlayOverBoard && _board is not null && SourceMode == NetMode)
+        {
+            await ShowBoardOverlayAsync(n, mode, opacity, magnetic);
+            return;
+        }
         if (IsSurfaceMode)
         {
             await ShowSurfaceFieldOverlayAsync(n, mode, opacity, magnetic);
@@ -454,16 +471,11 @@ public partial class AntennaViewModel : ObservableObject
         }
         if (layered is not null)
         {
+            // Multi-layer / covered near-field maps (E and H) remain the S9b follow-up —
+            // the per-z field kernels are single-slab. Single-slab substrate H ships (S9a).
             FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
                 + "named follow-up (the in-slab field kernels are single-slab). The Zin sweep "
                 + "and far field of a covered patch are available.";
-            return;
-        }
-        if (magnetic && substrate is not null)
-        {
-            FieldResult = "Not computable: layered H-field kernels are a named follow-up — the "
-                + "H field ships for free-space/PEC structures (Stage S7); the layered spectral "
-                + "H kernels are their own stage. Switch to E, or set εr = 1 for the free-space H.";
             return;
         }
         FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
@@ -498,6 +510,138 @@ public partial class AntennaViewModel : ObservableObject
                     : $"εr = {substrate.RelativePermittivity:g3} layered kernels");
             SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, solution, ColormapKind.Viridis);
             GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
+        }
+        catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
+    }
+
+    /// <summary>
+    /// The SIwave board view (Stage S10): paints the radiated |E|/|H| over the board's
+    /// actual OUTLINE at each copper-layer z, one masked heatmap per layer composed into a
+    /// Model3DGroup. The net is solved ONCE; the field is sampled per layer plane (the
+    /// layered evaluator builds one kernel table per distinct z — its cheap case). Colors
+    /// share one FieldScale pooled over every layer's in-outline samples, so they compare
+    /// layer-to-layer; grid cells outside the outline are not painted.
+    /// </summary>
+    private async Task ShowBoardOverlayAsync(int n, FieldScaleMode mode, double opacity, bool magnetic)
+    {
+        if (_board is null || _options is null) { FieldResult = "Not computable: no board loaded."; return; }
+        var outlinePoints = _board.Outline.SelectMany(p => p.Outer).ToList();
+        if (outlinePoints.Count == 0)
+        {
+            FieldResult = "Not computable: the board has no outline to paint over.";
+            return;
+        }
+        double minX = outlinePoints.Min(p => p.X), maxX = outlinePoints.Max(p => p.X);
+        double minY = outlinePoints.Min(p => p.Y), maxY = outlinePoints.Max(p => p.Y);
+        var outlineIndex = new PolygonSetIndex(_board.Outline);
+
+        // Copper-layer mid-heights the selected net spans — the planes to paint.
+        var options = _options();
+        var islandLayers = _board.Islands.Select(i => i.LayerOrder).ToList();
+        if (islandLayers.Count == 0) { FieldResult = "Not computable: the board has no copper."; return; }
+        var (layerZ, _) = NetMesher.BuildStackupZ(islandLayers.Min(), islandLayers.Max(), options);
+        var netLayers = (AntennaNet?.Layers ?? layerZ.Keys.ToList())
+            .Where(layerZ.ContainsKey).Distinct().OrderBy(l => l).ToList();
+        var zPlanes = netLayers.Select(l => (layerZ[l].zLo + layerZ[l].zHi) / 2).ToList();
+        if (zPlanes.Count == 0) { FieldResult = "Not computable: the net spans no known copper layer."; return; }
+
+        // Solve once; capture an evaluator points → field map (evaluator picked by geometry).
+        double frequency = FrequencyMHz * 1e6;
+        string kernelNote;
+        Func<IReadOnlyList<Vector3D>, FieldMap> evaluate;
+        if (IsSurfaceMode)
+        {
+            if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
+                    out var substrate, out var probe, out var layered))
+            {
+                FieldResult = $"Not computable: {failure}";
+                return;
+            }
+            if (layered is not null)
+            {
+                FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
+                    + "named follow-up (single-slab field kernels only). The free-space and "
+                    + "single-slab board overlays are available.";
+                return;
+            }
+            var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+            if (substrate is null)
+            {
+                var sol = solver.Solve(surface, frequency, port);
+                evaluate = pts => OpenSim.Rf.Surface.SurfaceFieldProbe.Evaluate(surface, sol, pts);
+                kernelNote = "free-space kernels";
+            }
+            else
+            {
+                var table = BuildKernelTable(surface, substrate, frequency);
+                var sol = probe is { } p
+                    ? solver.SolveProbeFed(surface, table, p).Surface
+                    : solver.Solve(surface, table, port);
+                evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(surface, table, sol, pts);
+                kernelNote = $"εr = {substrate.RelativePermittivity:g3} layered kernels";
+            }
+        }
+        else
+        {
+            if (!TryDiscretize(out var wire, out var feedBasis, out _, out string? failure))
+            {
+                FieldResult = $"Not computable: {failure}";
+                return;
+            }
+            var sol = new ThinWireMomSolver().Solve(wire, frequency, feedBasis);
+            evaluate = pts => FieldProbe.Evaluate(wire, sol, pts);
+            kernelNote = "free-space kernels";
+        }
+
+        FieldResult = $"Computing board overlay ({zPlanes.Count} layer"
+                      + (zPlanes.Count > 1 ? "s" : "") + $", {n}×{n})…";
+        try
+        {
+            var (perLayer, pooled) = await Task.Run(() =>
+            {
+                var result = new List<(FieldMap Map, double[] Values, bool[] Inside)>();
+                var pool = new List<double>();
+                foreach (double z in zPlanes)
+                {
+                    var points = OverlayGrid.RectPoints(minX, minY, maxX, maxY, z, n, n);
+                    var map = evaluate(points);
+                    var vals = (magnetic ? map.HMagnitude ?? map.Magnitude : map.Magnitude).ToArray();
+                    var inside = OverlayGrid.InteriorMask(points, outlineIndex);
+                    for (int i = 0; i < vals.Length; i++) if (inside[i]) pool.Add(vals[i]);
+                    result.Add((map, vals, inside));
+                }
+                return (result, pool);
+            });
+            if (pooled.Count == 0)
+            {
+                FieldResult = "Not computable: the sample grid fell entirely outside the board outline.";
+                return;
+            }
+
+            string symbol = magnetic ? "|H|" : "|E|";
+            string unit = magnetic ? "A/m" : "V/m";
+            int decades = Math.Max(1, OverlayDecades);
+            var scale = OverlayAutoRange
+                ? FieldScale.Auto(mode, pooled, decades)
+                : new FieldScale(mode, OverlayMinVPerM, OverlayMaxVPerM, decades);
+
+            var group = new Model3DGroup();
+            foreach (var (map, vals, inside) in perLayer)
+                group.Children.Add(SceneBuilder.BuildMaskedFieldOverlayModel(
+                    map, vals, n, n, inside, ColormapKind.Viridis, scale, opacity));
+            group.Freeze();
+            FieldOverlayModel = group;
+
+            double peak = pooled.Max();
+            OverlayLegendTitle = mode == FieldScaleMode.Logarithmic ? $"{symbol} (log)" : symbol;
+            OverlayLegendBrush = Colormap.CreateBrush(ColormapKind.Viridis);
+            OverlayLegendMin = $"{scale.EffectiveMin:g3} {unit}";
+            OverlayLegendMax = $"{scale.Max:g3} {unit}" + (peak > scale.Max ? " ▲" : "");
+            FieldResult = $"Board overlay at {FrequencyMHz:g4} MHz: peak {symbol} = {peak:g4} {unit} "
+                + $"over {perLayer.Count} copper layer" + (perLayer.Count > 1 ? "s" : "")
+                + $" (masked to the outline, {n}×{n} grid, {kernelNote}, "
+                + $"{OverlayOpacityPercent:g0}% opacity)";
+            _log.Append($"Antenna: {FieldResult}");
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
     }

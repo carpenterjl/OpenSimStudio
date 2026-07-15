@@ -20,7 +20,16 @@ public sealed record RlgcResult(
     double[,] InductanceHenriesPerMeter,
     double[] ResistanceDcOhmsPerMeter,
     double[] SkinResistanceOhmsPerMeterPerSqrtHz,
-    IReadOnlyList<string> Assumptions)
+    IReadOnlyList<string> Assumptions,
+    /// <summary>Optional full N×N series-resistance matrix R(f) [Ω/m] from the proximity-
+    /// effect filament solve (Stage S8). When present it REPLACES the per-conductor
+    /// <see cref="ResistancePerMeter"/> diagonal in the MTL generator — carrying the
+    /// current-crowding coupling the scalar model cannot. Null ⇒ the v1 scalar model.</summary>
+    Func<double, double[,]>? ResistanceMatrixOhmsPerMeter = null,
+    /// <summary>Optional frequency-dependent INTERNAL inductance ΔL(f) [H/m], N×N, added to
+    /// the external <see cref="InductanceHenriesPerMeter"/> (Stage S8). → 0 at high frequency
+    /// (current on the surface, external only) by construction. Null ⇒ no internal-L term.</summary>
+    Func<double, double[,]>? InternalInductanceHenriesPerMeter = null)
 {
     /// <summary>Per-conductor series resistance at f [Ω/m]: the DC/skin crossover.</summary>
     public double ResistancePerMeter(int conductor, double frequencyHz) =>
@@ -247,16 +256,20 @@ public static class RlgcExtractor
         return result;
     }
 
-    /// <summary>∬_{x∈a, y∈b} ½ln((x−y)² + D²) dx dy via the closed-form second
-    /// antiderivative G₂ (G₂″(u) = ½ln(u²+D²)): the four-corner combination.</summary>
     private static double LogMoment(in Panel a, in Panel b, double depth)
-        => G2(a.End - b.Start, depth) + G2(a.Start - b.End, depth)
-         - G2(a.Start - b.Start, depth) - G2(a.End - b.End, depth);
+        => LogMoment(a.Start, a.End, b.Start, b.End, depth);
+
+    /// <summary>∬_{x∈[a0,a1], y∈[b0,b1]} ½ln((x−y)² + D²) dx dy via the closed-form second
+    /// antiderivative G₂ (G₂″(u) = ½ln(u²+D²)): the four-corner combination. Shared with the
+    /// Stage S8 proximity filament solve (the SAME 2D log kernel, magnetic vector potential).</summary>
+    internal static double LogMoment(double a0, double a1, double b0, double b1, double depth)
+        => G2(a1 - b0, depth) + G2(a0 - b1, depth)
+         - G2(a0 - b0, depth) - G2(a1 - b1, depth);
 
     /// <summary>G₂(u) = ¼(u²−D²)ln(u²+D²) − ¾u² + D·u·arctan(u/D); the D → 0 limit is
     /// the classic ½u²ln|u| − ¾u² collinear self-term (u = 0 ⇒ 0 — the log's zero is
     /// integrable and the combination needs no special-casing).</summary>
-    private static double G2(double u, double depth)
+    internal static double G2(double u, double depth)
     {
         double r2 = u * u + depth * depth;
         if (r2 == 0) return 0;

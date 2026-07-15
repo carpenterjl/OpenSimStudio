@@ -135,7 +135,7 @@ public class LayeredFieldTests
         AssertRel(oW(z), w, 1e-12, $"W̃(kρ={kRho:g4}, z={z:g4})");
         AssertRel(oPhi(z), kPhi, 1e-12, $"K̃_Φ(kρ={kRho:g4}, z={z:g4})");
 
-        var (_, dw, dPhi) = SpectralProfiles.EvaluateDz(Balanis, k0, kRho, kz0, z);
+        var (dGa, dw, dPhi) = SpectralProfiles.EvaluateDz(Balanis, k0, kRho, kz0, z);
         AssertRel(oDPhi(z), dPhi, 1e-12, $"∂zK̃_Φ(kρ={kRho:g4}, z={z:g4})");
         // ∂z of the cos profile via the oracle's trig derivative.
         double d = Balanis.ThicknessMeters;
@@ -143,6 +143,24 @@ public class LayeredFieldTests
             ? -Complex.ImaginaryOne * kz0 * oW(z)
             : AnalyticDw(kRho, z);
         AssertRel(oDw, dw, 1e-12, $"∂zW̃(kρ={kRho:g4}, z={z:g4})");
+        // ∂z of the sin profile G̃_A (Stage S9a, the H = ∇×A leg): P·sin → P·k_z1·cos.
+        var oDga = z >= d
+            ? -Complex.ImaginaryOne * kz0 * oGA(z)
+            : AnalyticDga(kRho, z);
+        AssertRel(oDga, dGa, 1e-12, $"∂zG̃_A(kρ={kRho:g4}, z={z:g4})");
+    }
+
+    /// <summary>Oracle ∂z of the region-1 A_x profile: P·sin(k_z1 z) → P·k_z1·cos(k_z1 z).
+    /// Recover P from the profile at z = d (avoids the cot singularity at z = 0).</summary>
+    private static Complex AnalyticDga(double kRho, double z)
+    {
+        double k0 = 2 * Math.PI * BalanisF / 299_792_458.0;
+        double d = Balanis.ThicknessMeters;
+        var kz1 = Complex.Sqrt(new Complex(2.2, 0) * k0 * k0 - kRho * kRho);
+        if (kz1.Imaginary > 0) kz1 = -kz1;
+        var (oGA, _, _, _, _, _) = Oracle(Balanis, k0, kRho);
+        var p = oGA(d) / Complex.Sin(kz1 * d);        // GA(d) = P·sin(kz1·d)
+        return kz1 * p * Complex.Cos(kz1 * z);
     }
 
     /// <summary>Oracle ∂z of the region-1 A_z profile: Q·cos → −Q·k_z1·sin, with
@@ -307,7 +325,7 @@ public class LayeredFieldTests
     {
         double k0 = 2 * Math.PI * frequencyHz / 299_792_458.0;
         var poles = SurfaceWavePoles.Find(substrate, k0);
-        var (rA, rW, rPhi, rDz) = SommerfeldIntegrator.FieldRemainder(
+        var (rA, rW, rPhi, rDz, _, _) = SommerfeldIntegrator.FieldRemainder(
             substrate, k0, poles, rho, z, refinement);
 
         double d = substrate.ThicknessMeters;
@@ -581,7 +599,106 @@ public class LayeredFieldTests
             maxDegreeOfParallelism: 1);
         var parallel = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, solution, points);
         for (int i = 0; i < points.Length; i++)
+        {
             Assert.Equal(serial.E[i], parallel.E[i]);
+            Assert.Equal(serial.H![i], parallel.H![i]);   // H is deterministic too
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // S9a: the layered H field, H = ∇×A/µ₀ over a substrate.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void LayeredH_AtEpsilonROne_MatchesTheFreeSpaceProbe()
+    {
+        // The headline identity: at εr = 1 the layered H assembly (boundary-trick curl,
+        // ∂zG̃_A kernel) must equal SurfaceFieldProbe's independent free-space + PEC-image
+        // H (pointwise ∇×g). W̃ = 0 at εr = 1, so this exercises the G̃_A / ∂zG̃_A legs. The
+        // band is 1.5e-2 (measured 8.7e-3), wider than the E analog's 5e-3: H is a
+        // DERIVATIVE (curl) of A, so the two assembly strategies' map-grade quadrature
+        // differences amplify — the kernel-level ∂z gates carry the 1e-12 physics claim.
+        double f = 300e6, lambda = 299_792_458.0 / f, h = 0.05 * lambda;
+        var grounded = SurfaceMeshBuilder.BuildPatchOverGround(
+            0.3 * lambda, 0.5 * lambda, h, 0, lambda / 12);
+        var bare = SurfaceMeshBuilder.BuildRectangularPlate(
+            0.3 * lambda, 0.5 * lambda, lambda / 12, z: h, portFraction: 0);
+        var table = new LayeredKernelTable(new SubstrateStackup(1, 0, h), f, 1.5 * lambda);
+        var solG = new SurfaceMomSolver().Solve(grounded.Structure!, f, grounded.Port!);
+        var solL = new SurfaceMomSolver().Solve(bare.Structure!, table, bare.Port!);
+
+        var points = new List<Vector3D>();
+        foreach (double zf in new[] { 1.5, 2.5, 5.0 })
+            foreach (double xf in new[] { 0.0, 0.2, 0.45 })
+                points.Add(new Vector3D(xf * lambda, 0.1 * lambda, zf * h));
+        var mapFree = SurfaceFieldProbe.Evaluate(grounded.Structure!, solG, points);
+        var mapLayered = LayeredFieldEvaluator.Evaluate(bare.Structure!, table, solL, points);
+        for (int i = 0; i < points.Count; i++)
+        {
+            double rel = Math.Abs(mapFree.HMagnitude![i] - mapLayered.HMagnitude![i])
+                         / Math.Max(mapFree.HMagnitude[i], 1e-30);
+            Assert.True(rel <= 1.5e-2, $"|H| at {points[i]}: free {mapFree.HMagnitude[i]:e3} " +
+                $"vs layered {mapLayered.HMagnitude[i]:e3} (rel {rel:e2})");
+        }
+    }
+
+    [Fact]
+    public void LayeredH_NormalComponent_VanishesApproachingTheGround()
+    {
+        // B_normal = µ₀H_z = 0 on a PEC. On a real substrate (εr = 2.2), H_z just above
+        // the ground plane must vanish relative to the mid-slab field — a gate on the
+        // H_z boundary-integral assembly (∮ G̃_A(J·t̂)) over a substrate.
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+            1.186e-2, 0.906e-2, 1.4e-3, z: Balanis.ThicknessMeters, portFraction: 0);
+        var table = new LayeredKernelTable(Balanis, BalanisF, 0.05);
+        var solution = new SurfaceMomSolver().Solve(grid.Structure!, table, grid.Port!);
+        double d = Balanis.ThicknessMeters;
+
+        var pecPoints = new List<Vector3D>();
+        var midPoints = new List<Vector3D>();
+        foreach (double xf in new[] { 0.1, 0.3, 0.8 })
+        {
+            pecPoints.Add(new Vector3D(xf * 1.186e-2, 0.2e-2, 1e-4 * d));
+            midPoints.Add(new Vector3D(xf * 1.186e-2, 0.2e-2, 0.5 * d));
+        }
+        var pec = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, solution, pecPoints);
+        var mid = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, solution, midPoints);
+        for (int i = 0; i < pecPoints.Count; i++)
+            Assert.True(pec.H![i].Z.Magnitude <= 1e-2 * mid.HMagnitude![i],
+                $"H_z on PEC at {pecPoints[i]}: {pec.H[i].Z.Magnitude:e3} vs mid {mid.HMagnitude![i]:e3}");
+    }
+
+    [Fact]
+    public void LayeredH_IsDivergenceFree_OverTheSubstrate()
+    {
+        // ∇·B = 0: the assembled H (all three components, INCLUDING the A_z/W̃ leg that
+        // only fires at εr > 1) must be a genuine curl. A wrong sign or missing leg breaks
+        // ∇·H ≠ 0 at O(|H|/δ); a correct assembly leaves only the map-grade quadrature
+        // floor. Measured ~1e-3 relative; gated 3% (well below the O(1) a bug produces).
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+            1.186e-2, 0.906e-2, 1.4e-3, z: Balanis.ThicknessMeters, portFraction: 0);
+        var table = new LayeredKernelTable(Balanis, BalanisF, 0.05);
+        var solution = new SurfaceMomSolver().Solve(grid.Structure!, table, grid.Port!);
+        double d = Balanis.ThicknessMeters;
+        double delta = 0.2 * d;
+        var c = new Vector3D(0.35 * 1.186e-2, 0.15e-2, 1.5 * d);
+
+        Complex Comp(Vector3D p, int axis)
+        {
+            var m = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, solution, new[] { p });
+            var h = m.H![0];
+            return axis == 0 ? h.X : axis == 1 ? h.Y : h.Z;
+        }
+        var dx = new Vector3D(delta, 0, 0);
+        var dy = new Vector3D(0, delta, 0);
+        var dz = new Vector3D(0, 0, delta);
+        Complex divH = (Comp(c + dx, 0) - Comp(c - dx, 0)
+                      + Comp(c + dy, 1) - Comp(c - dy, 1)
+                      + Comp(c + dz, 2) - Comp(c - dz, 2)) / (2 * delta);
+        double hScale = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, solution, new[] { c })
+            .HMagnitude![0];
+        double relative = divH.Magnitude * delta / Math.Max(hScale, 1e-30);
+        Assert.True(relative < 0.03, $"∇·H·δ/|H| = {relative:e3} (should be the quadrature floor)");
     }
 
     [Fact]

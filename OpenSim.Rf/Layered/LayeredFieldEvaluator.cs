@@ -58,16 +58,17 @@ public static class LayeredFieldEvaluator
         }
 
         var fields = new (Complex X, Complex Y, Complex Z)[points.Count];
+        var hFields = new (Complex X, Complex Y, Complex Z)[points.Count];
         foreach (var (z, indices) in groups.OrderBy(g => g.Key))
         {
             if (z <= 0)
-                continue; // PEC interior/ground: E = 0 (slots stay zero)
+                continue; // PEC interior/ground: E = H = 0 (slots stay zero)
             var table = new FieldKernelTable(substrate, kernel, z, rhoMax, maxDegreeOfParallelism);
             try
             {
                 Parallel.ForEach(indices,
                     new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 },
-                    i => fields[i] = FieldAt(surface, solution, table, omega, points[i]));
+                    i => (fields[i], hFields[i]) = FieldAt(surface, solution, table, omega, points[i]));
             }
             catch (AggregateException e)
             {
@@ -77,17 +78,33 @@ public static class LayeredFieldEvaluator
 
         var magnitudes = new double[points.Count];
         var snapshots = new Vector3D[points.Count];
+        var hMagnitudes = new double[points.Count];
+        var hSnapshots = new Vector3D[points.Count];
         for (int i = 0; i < points.Count; i++)
         {
             var (ex, ey, ez) = fields[i];
             magnitudes[i] = Math.Sqrt(ex.Magnitude * ex.Magnitude
                 + ey.Magnitude * ey.Magnitude + ez.Magnitude * ez.Magnitude);
             snapshots[i] = new Vector3D(ex.Real, ey.Real, ez.Real);
+            var (hx, hy, hz) = hFields[i];
+            hMagnitudes[i] = Math.Sqrt(hx.Magnitude * hx.Magnitude
+                + hy.Magnitude * hy.Magnitude + hz.Magnitude * hz.Magnitude);
+            hSnapshots[i] = new Vector3D(hx.Real, hy.Real, hz.Real);
         }
-        return new FieldMap(points, fields, magnitudes, snapshots);
+        return new FieldMap(points, fields, magnitudes, snapshots)
+        {
+            H = hFields, HMagnitude = hMagnitudes, HSnapshot = hSnapshots
+        };
     }
 
-    private static (Complex X, Complex Y, Complex Z) FieldAt(SurfaceStructure surface,
+    /// <summary>E = −jωA − ∇Φ AND H = ∇×A/µ₀ at one probe point. The curl uses the SAME
+    /// divergence-theorem boundary trick that gives ∇Φ (kernel VALUES only, no ∂ρ family):
+    /// H_z = −Σ_T ∮_{∂T} G̃_A(J·t̂) dl′ (each RWG basis is curl-free — J = c(r−v_opp) — so
+    /// the area term vanishes and only the tangential line integral survives), the in-plane
+    /// ∂A_z legs are ∮ W̃ n̂′ with the charge (like ∇Φ), and ∂zA_x/∂zA_y take the analytic
+    /// ∂zG̃_A kernel over the same area quadrature.</summary>
+    private static ((Complex X, Complex Y, Complex Z) E, (Complex X, Complex Y, Complex Z) H)
+        FieldAt(SurfaceStructure surface,
         SurfaceMomSolution solution, FieldKernelTable table, double omega, Vector3D point)
     {
         var (l1, l2, l3, w) = TriangleQuadrature.Rule(5);
@@ -95,6 +112,9 @@ public static class LayeredFieldEvaluator
         Complex ax = Complex.Zero, ay = Complex.Zero;
         Complex azW = Complex.Zero, phiDz = Complex.Zero;
         Complex gx = Complex.Zero, gy = Complex.Zero;
+        // H legs: ∂zA_x/∂zA_y (area), ∮ W̃ n̂′ for ∂A_z (boundary), ∮ G̃_A(J·t̂) for H_z.
+        Complex dzAx = Complex.Zero, dzAy = Complex.Zero;
+        Complex awx = Complex.Zero, awy = Complex.Zero, hzLine = Complex.Zero;
 
         for (int t = 0; t < surface.Triangles.Count; t++)
         {
@@ -142,12 +162,16 @@ public static class LayeredFieldEvaluator
                     ay += weight * k.A * jy;
                     azW += weight * charge * k.W;
                     phiDz += weight * charge * k.DzPhi;
+                    dzAx += weight * k.DzA * jx;    // ∂z A_x
+                    dzAy += weight * k.DzA * jy;    // ∂z A_y
                 }
             }
 
-            // In-plane ∇Φ by the divergence theorem (q constant per triangle):
-            // ∇Φ = −q ∮ K_Φ n̂′ dl′ over the ORIGINAL triangle boundary (interior
-            // panel edges cancel pairwise, so panelling is unnecessary here).
+            // In-plane boundary integrals (q / J constant-or-linear per triangle):
+            //  ∇Φ  = −q ∮ K_Φ n̂′       (E's gradient leg)
+            //  ∂A_z ∝ q ∮ W̃  n̂′        (A_z = −jω(W̃∗q); its in-plane gradient)
+            //  H_z  = −∮ G̃_A (J·t̂)     (t̂ = CCW tangent = (−n_y, n_x))
+            // over the ORIGINAL triangle boundary (interior panel edges cancel pairwise).
             for (int e = 0; e < 3; e++)
             {
                 var (p1, p2, third) = e switch
@@ -163,16 +187,34 @@ public static class LayeredFieldEvaluator
                 var normal = new Vector3D(direction.Y, -direction.X, 0);
                 normal = normal / normal.Length;
                 if (Vector3D.Dot(normal, third - p1) > 0) normal = -1.0 * normal;
+                // CCW tangent from the outward normal (interior on the left).
+                var tangent = new Vector3D(-normal.Y, normal.X, 0);
 
                 for (int i = 0; i < gl.Length; i++)
                 {
                     var source = p1 + direction * (0.5 * (gl[i] + 1));
                     double dx = point.X - source.X, dy = point.Y - source.Y;
                     double rho = Math.Sqrt(dx * dx + dy * dy);
-                    var kPhi = table.Evaluate(rho).Phi;
-                    Complex lineWeight = -charge * glw[i] * (length / 2) * kPhi;
-                    gx += lineWeight * normal.X;
-                    gy += lineWeight * normal.Y;
+                    var k = table.Evaluate(rho);
+                    double dl = glw[i] * (length / 2);
+                    Complex phiWeight = -charge * dl * k.Phi;
+                    gx += phiWeight * normal.X;
+                    gy += phiWeight * normal.Y;
+                    Complex wWeight = charge * dl * k.W;   // Σ_T q ∮ W̃ n̂′
+                    awx += wWeight * normal.X;
+                    awy += wWeight * normal.Y;
+
+                    // H_z tangential leg: J on the edge (linear), dotted with the tangent.
+                    Complex jx = Complex.Zero, jy = Complex.Zero;
+                    foreach (var (basis, sign, opposite) in supports)
+                    {
+                        Complex c = solution.EdgeCurrents[basis]
+                            * (sign * surface.Edges[basis].Length / (2 * area));
+                        var rhoVec = source - surface.Vertices[opposite];
+                        jx += c * rhoVec.X;
+                        jy += c * rhoVec.Y;
+                    }
+                    hzLine += dl * k.A * (jx * tangent.X + jy * tangent.Y);
                 }
             }
         }
@@ -181,7 +223,14 @@ public static class LayeredFieldEvaluator
         var ex = -jOmega * ax - gx;
         var ey = -jOmega * ay - gy;
         var ez = -omega * omega * azW - phiDz;
-        return (ex, ey, ez);
+
+        // H = ∇×A/µ₀. A_z = −jω(W̃∗q) ⇒ ∂x A_z = jω·awx, ∂y A_z = jω·awy.
+        Complex dxAz = jOmega * awx, dyAz = jOmega * awy;
+        double inv = 1 / RfConstants.Mu0;   // every kernel carries µ₀; strip it once
+        var hx = inv * (dyAz - dzAy);
+        var hy = inv * (dzAx - dxAz);
+        var hz = inv * (-hzLine);
+        return ((ex, ey, ez), (hx, hy, hz));
     }
 
     /// <summary>One observation height's radial kernels: closed-form images at eval
@@ -194,7 +243,7 @@ public static class LayeredFieldEvaluator
         private readonly SubstrateStackup _substrate;
         private readonly double _k0, _z, _d, _rhoMin, _rhoMax, _epsilon;
         private readonly LayeredFieldKernels.KernelImage[] _images;
-        private readonly NaturalCubicSpline[] _smooth; // A/W/Phi/DzPhi × re/im
+        private readonly NaturalCubicSpline[] _smooth; // A/W/Phi/DzPhi/DzA/DzW × re/im
 
         public FieldKernelTable(SubstrateStackup substrate, LayeredKernelTable boundary,
             double z, double rhoMax, int? maxDegreeOfParallelism)
@@ -222,20 +271,21 @@ public static class LayeredFieldEvaluator
             var x = grid.ToArray();
 
             var poles = boundary.Poles;
-            var residues = new (Complex A, Complex W, Complex Phi, Complex DzPhi)[poles.Count];
+            var residues = new (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[poles.Count];
             for (int p = 0; p < poles.Count; p++)
                 residues[p] = LayeredFieldKernels.PoleResidues(substrate, _k0, poles[p].KRho, z);
 
-            var knots = new (Complex A, Complex W, Complex Phi, Complex Dz)[x.Length];
+            var knots = new (Complex A, Complex W, Complex Phi, Complex Dz, Complex DzA, Complex DzW)[x.Length];
             try
             {
                 Parallel.For(0, x.Length,
                     new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 },
                     i =>
                     {
-                        var (a, wv, phi, dz) = SommerfeldIntegrator.FieldRemainder(
+                        var (a, wv, phi, dz, dza, dzw) = SommerfeldIntegrator.FieldRemainder(
                             substrate, _k0, poles, x[i], z);
                         Complex pa = Complex.Zero, pw = Complex.Zero, pp = Complex.Zero, pd = Complex.Zero;
+                        Complex pda = Complex.Zero, pdw = Complex.Zero;
                         for (int p = 0; p < poles.Count; p++)
                         {
                             var factor = new Complex(0, -0.25) * poles[p].KRho
@@ -244,8 +294,10 @@ public static class LayeredFieldEvaluator
                             pw += residues[p].W * factor;
                             pp += residues[p].Phi * factor;
                             pd += residues[p].DzPhi * factor;
+                            pda += residues[p].DzA * factor;
+                            pdw += residues[p].DzW * factor;
                         }
-                        knots[i] = (a + pa, wv + pw, phi + pp, dz + pd);
+                        knots[i] = (a + pa, wv + pw, phi + pp, dz + pd, dza + pda, dzw + pdw);
                     });
             }
             catch (AggregateException e)
@@ -253,16 +305,20 @@ public static class LayeredFieldEvaluator
                 throw e.InnerExceptions[0];
             }
 
-            _smooth = new NaturalCubicSpline[8];
+            _smooth = new NaturalCubicSpline[12];
             var logX = new double[x.Length];
             for (int i = 0; i < x.Length; i++) logX[i] = Math.Log(x[i]);
-            for (int c = 0; c < 4; c++)
+            for (int c = 0; c < 6; c++)
             {
                 var re = new double[x.Length];
                 var im = new double[x.Length];
                 for (int i = 0; i < x.Length; i++)
                 {
-                    var v = c switch { 0 => knots[i].A, 1 => knots[i].W, 2 => knots[i].Phi, _ => knots[i].Dz };
+                    var v = c switch
+                    {
+                        0 => knots[i].A, 1 => knots[i].W, 2 => knots[i].Phi,
+                        3 => knots[i].Dz, 4 => knots[i].DzA, _ => knots[i].DzW
+                    };
                     re[i] = v.Real;
                     im[i] = v.Imaginary;
                 }
@@ -271,7 +327,10 @@ public static class LayeredFieldEvaluator
             }
         }
 
-        public (Complex A, Complex W, Complex Phi, Complex DzPhi) Evaluate(double rho)
+        /// <summary>The six field kernels at a lateral distance. A/Φ/∂zΦ/∂zA carry a
+        /// closed-form image (∂zA's image is the ∂z of A's, exactly as ∂zΦ is of Φ's);
+        /// W̃/∂zW̃ are pure spline (no image extraction).</summary>
+        public (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW) Evaluate(double rho)
         {
             double clamped = Math.Clamp(rho, _rhoMin, _rhoMax);
             double x = Math.Log(clamped);
@@ -279,10 +338,12 @@ public static class LayeredFieldEvaluator
             var wv = new Complex(_smooth[2].Evaluate(x), _smooth[3].Evaluate(x));
             var phi = new Complex(_smooth[4].Evaluate(x), _smooth[5].Evaluate(x));
             var dz = new Complex(_smooth[6].Evaluate(x), _smooth[7].Evaluate(x));
+            var dza = new Complex(_smooth[8].Evaluate(x), _smooth[9].Evaluate(x));
+            var dzw = new Complex(_smooth[10].Evaluate(x), _smooth[11].Evaluate(x));
 
             // Closed-form images on the true (unclamped) lateral distance, with the
             // free-space probe's diameter-scale regularization near the source point.
-            Complex imgA = Complex.Zero, imgPhi = Complex.Zero, imgDz = Complex.Zero;
+            Complex imgA = Complex.Zero, imgPhi = Complex.Zero, imgDz = Complex.Zero, imgDzA = Complex.Zero;
             for (int m = 0; m < _images.Length; m++)
             {
                 double h = _images[m].Height;
@@ -295,10 +356,12 @@ public static class LayeredFieldEvaluator
                 imgPhi += _images[m].CoefficientPhi * g;
                 double dhdz = _z >= _d ? 1 : (m % 2 == 0 ? -1 : 1);
                 imgDz += _images[m].CoefficientPhi * dhdz * (h / r) * gPrime;
+                imgDzA += _images[m].CoefficientA * dhdz * (h / r) * gPrime;
             }
             return (RfConstants.Mu0 * imgA + a, wv,
                     imgPhi / RfConstants.Eps0 + phi,
-                    imgDz / RfConstants.Eps0 + dz);
+                    imgDz / RfConstants.Eps0 + dz,
+                    RfConstants.Mu0 * imgDzA + dza, dzw);
         }
     }
 }

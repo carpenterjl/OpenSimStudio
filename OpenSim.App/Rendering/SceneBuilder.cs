@@ -473,6 +473,53 @@ public static class SceneBuilder
         return model;
     }
 
+    /// <summary>
+    /// A board field overlay masked to the outline (SI Stage S10): the same textured quad
+    /// heatmap as <see cref="BuildFieldOverlayModel"/>, but only the lattice cells whose four
+    /// corners all sit inside the board are painted (<paramref name="inside"/> from
+    /// <see cref="OpenSim.Core.PostProcessing.OverlayGrid.InteriorMask"/>). Composed one per
+    /// copper-layer z into a <see cref="Model3DGroup"/> so the field reads over each layer's
+    /// copper. The colormap <paramref name="scale"/> is shared across layers (pooled range)
+    /// so colors compare layer-to-layer.
+    /// </summary>
+    public static GeometryModel3D BuildMaskedFieldOverlayModel(OpenSim.Rf.FieldMap map,
+        IReadOnlyList<double> values, int nx, int ny, bool[] inside, ColormapKind colormap,
+        OpenSim.Core.PostProcessing.FieldScale scale, double opacity)
+    {
+        if (map.Points.Count != nx * ny)
+            throw new ArgumentException($"Field map has {map.Points.Count} points, expected {nx}×{ny}.");
+        if (inside.Length != nx * ny)
+            throw new ArgumentException($"Mask has {inside.Length} entries, expected {nx}×{ny}.");
+
+        var geometry3D = new MeshGeometry3D();
+        for (int i = 0; i < map.Points.Count; i++)
+        {
+            var p = map.Points[i];
+            geometry3D.Positions.Add(new Point3D(p.X, p.Y, p.Z));
+            geometry3D.TextureCoordinates.Add(new System.Windows.Point(scale.Normalize(values[i]), 0.5));
+        }
+        foreach (var (v00, v10, v11, v01) in
+                 OpenSim.Core.PostProcessing.OverlayGrid.InteriorQuads(inside, nx, ny))
+        {
+            geometry3D.TriangleIndices.Add(v00);
+            geometry3D.TriangleIndices.Add(v10);
+            geometry3D.TriangleIndices.Add(v11);
+            geometry3D.TriangleIndices.Add(v00);
+            geometry3D.TriangleIndices.Add(v11);
+            geometry3D.TriangleIndices.Add(v01);
+        }
+        geometry3D.Freeze();
+
+        var brush = Colormap.CreateBrush(colormap).Clone();
+        brush.Opacity = Math.Clamp(opacity, 0, 1);
+        brush.Freeze();
+        var material = new DiffuseMaterial(brush);
+        material.Freeze();
+        var model = new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+        model.Freeze();
+        return model;
+    }
+
     /// <summary>The RWG surface colored by log₁₀|J| at each triangle centroid over
     /// three decades (the near-field arrows' normalization, one mental legend for
     /// both). Flat-shaded — vertices are duplicated per triangle so each carries one

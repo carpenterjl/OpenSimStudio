@@ -73,6 +73,23 @@ public partial class SignalIntegrityViewModel : ObservableObject
     /// victim eye (each aggressor gets its own LFSR seed).</summary>
     [ObservableProperty] private bool _aggressorsEnabled;
 
+    /// <summary>Replace the v1 <c>max(R_dc, R_s√f)</c> per-conductor resistance with the
+    /// full proximity-effect filament solve (Stage S8): frequency-dependent N×N R(f) with
+    /// current crowding + internal L(f). Default OFF so existing results don't shift.</summary>
+    [ObservableProperty] private bool _proximityEffect;
+
+    // ------------------------------------------------------------------
+    // IBIS driver (Stage S11): a nonlinear behavioral buffer replaces the Thevenin driver.
+    // Single driven line only (the nonlinear engine); coupled lines keep the linear path.
+    // ------------------------------------------------------------------
+    [ObservableProperty] private bool _useIbisDriver;
+    public ObservableCollection<string> IbisModelNames { get; } = new();
+    [ObservableProperty] private string? _selectedIbisModel;
+    public ObservableCollection<string> IbisCorners { get; } = new() { "Typ", "Min", "Max" };
+    [ObservableProperty] private string? _ibisCorner = "Typ";
+    [ObservableProperty] private string _ibisStatus = "";
+    private OpenSim.Rf.Si.Ibis.IbisFile? _ibisFile;
+
     // ------------------------------------------------------------------
     // Board net extraction (Stage S6): take the coupled cross-section from real nets
     // instead of the wizard geometry. When _boardExtraction is set, the RLGC/network the
@@ -139,10 +156,31 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     private (RlgcResult Rlgc, MtlNetwork Network) BuildNetwork()
     {
-        if (UseBoardNets && _boardExtraction is { Rlgc: { } rlgcBoard, Network: { } networkBoard })
-            return (rlgcBoard, networkBoard);
-        var rlgc = RlgcExtractor.Extract(BuildCrossSection());
-        return (rlgc, new MtlNetwork(new[] { new MtlSection(rlgc, LineLengthMm * 1e-3) }));
+        if (UseBoardNets && _boardExtraction is
+            { Rlgc: { } rlgcBoard, Network: { } networkBoard, CrossSection: { } sectionBoard })
+            return ProximityEffect
+                ? Build(sectionBoard, _boardExtraction.CoupledLengthMeters)
+                : (rlgcBoard, networkBoard);
+        return Build(BuildCrossSection(), LineLengthMm * 1e-3);
+    }
+
+    /// <summary>Extract the RLGC and build the one-section network, optionally attaching the
+    /// Stage S8 proximity-effect R(f)/L(f) providers (a filament solve over the band the eye
+    /// uses). Off ⇒ the v1 scalar-R model, bit-for-bit.</summary>
+    private (RlgcResult, MtlNetwork) Build(CoupledLineCrossSection section, double lengthMeters)
+    {
+        var rlgc = RlgcExtractor.Extract(section);
+        if (ProximityEffect)
+        {
+            double fMax = Math.Max(1e10, BitRateGbps * 1e9 * 20);
+            var prox = ProximityExtractor.Extract(section, 1e3, fMax);
+            rlgc = rlgc with
+            {
+                ResistanceMatrixOhmsPerMeter = prox.ResistanceMatrix,
+                InternalInductanceHenriesPerMeter = prox.InternalInductance,
+            };
+        }
+        return (rlgc, new MtlNetwork(new[] { new MtlSection(rlgc, lengthMeters) }));
     }
 
     private LineTermination[] Terminations()
@@ -155,8 +193,12 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     private void ShowAssumptions(RlgcResult rlgc) =>
         SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
-            + " Linear Thevenin driver + R∥C receiver (IBIS models are a named follow-up); "
-            + "uniform coupled section (board net extraction is the next SI stage).";
+            + (ProximityEffect
+                ? " Proximity effect ON: R(f) and internal L(f) from the 2D filament solve "
+                  + "(current crowding + skin effect, full N×N)."
+                : " R = max(R_dc, R_s√f) per conductor (enable Proximity effect for the "
+                  + "filament R(f)/L(f)).")
+            + " Linear Thevenin driver + R∥C receiver (IBIS models are a named follow-up).";
 
     // ------------------------------------------------------------------
     // Commands.
@@ -305,6 +347,32 @@ public partial class SignalIntegrityViewModel : ObservableObject
         catch (Exception ex) { SParamResult = $"Not solvable: {ex.Message}"; }
     }
 
+    /// <summary>Load an IBIS (.ibs) file and populate the model picker; selecting a model +
+    /// ticking "Use IBIS driver" routes the eye through the nonlinear engine (single line).</summary>
+    [RelayCommand]
+    private void LoadIbis()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "IBIS model (*.ibs)|*.ibs|All files|*.*",
+            Title = "Select an IBIS (.ibs) model file",
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            _ibisFile = new OpenSim.Rf.Si.Ibis.IbisParser().ParseFile(dialog.FileName);
+            IbisModelNames.Clear();
+            foreach (var m in _ibisFile.Models) IbisModelNames.Add(m.Name);
+            SelectedIbisModel = _ibisFile.Models.FirstOrDefault(m => m.IsOutput)?.Name
+                ?? IbisModelNames.FirstOrDefault();
+            UseIbisDriver = SelectedIbisModel is not null;
+            IbisStatus = $"Loaded {Path.GetFileName(dialog.FileName)}: {_ibisFile.Models.Count} model(s)"
+                + (_ibisFile.Warnings.Count > 0 ? $", {_ibisFile.Warnings.Count} skipped keyword(s)" : "");
+            _log.Append($"SI: IBIS — {IbisStatus}");
+        }
+        catch (Exception ex) { IbisStatus = $"Not readable: {ex.Message}"; _ibisFile = null; }
+    }
+
     [RelayCommand]
     private async Task RunEyeDiagram()
     {
@@ -312,6 +380,11 @@ public partial class SignalIntegrityViewModel : ObservableObject
         try
         {
             var (rlgc, network) = BuildNetwork();
+            if (UseIbisDriver && _ibisFile is not null && SelectedIbisModel is not null)
+            {
+                await RunIbisEye(rlgc, network);
+                return;
+            }
             var terminations = Terminations();
             int driven = Math.Clamp(DrivenLine - 1, 0, LineCount - 1);
             double dt = 1.0 / (BitRateGbps * 1e9 * SamplesPerUi);
@@ -354,6 +427,57 @@ public partial class SignalIntegrityViewModel : ObservableObject
             _log.Append($"SI: {EyeResult}");
         }
         catch (Exception ex) { EyeResult = $"Not solvable: {ex.Message}"; EyeImage = null; }
+    }
+
+    /// <summary>The IBIS eye: the nonlinear behavioral driver (Stage S11) into the single-line
+    /// channel + R∥C receiver, folded like the linear path. Requires a single conductor (the
+    /// nonlinear engine is single-line; coupled lines keep the linear Thevenin driver).</summary>
+    private async Task RunIbisEye(RlgcResult rlgc, MtlNetwork network)
+    {
+        if (network.ConductorCount != 1)
+        {
+            EyeResult = "IBIS driver is single-line only (nonlinear crosstalk is a named "
+                + "follow-up). Set the line count to 1, or untick 'Use IBIS driver' for the "
+                + "linear Thevenin driver on coupled lines.";
+            return;
+        }
+        var model = _ibisFile!.Model(SelectedIbisModel!);
+        if (!model.IsOutput)
+        {
+            EyeResult = $"IBIS model '{model.Name}' is an input/terminator, not an output driver.";
+            return;
+        }
+        var corner = IbisCorner == "Min" ? OpenSim.Rf.Si.Ibis.IbisCornerSelection.Min
+            : IbisCorner == "Max" ? OpenSim.Rf.Si.Ibis.IbisCornerSelection.Max
+            : OpenSim.Rf.Si.Ibis.IbisCornerSelection.Typ;
+        double dt = 1.0 / (BitRateGbps * 1e9 * SamplesPerUi);
+        var receiver = new NonlinearReceiver(LoadOhms, LoadPicofarads * 1e-12);
+        var bits = IbisBits(SignalType);
+        var (eye, note) = await Task.Run(() =>
+        {
+            var driver = IbisDriver.FromBits(model, corner, bits, SamplesPerUi, dt);
+            var result = NonlinearLink.Solve(network, driver, receiver, bits, SamplesPerUi, dt);
+            var folded = EyeDiagram.Fold(result.ReceiverVolts, SamplesPerUi, dt);
+            return (folded, $"channel FIR {result.ChannelMemorySamples} taps, "
+                + $"tail {result.TailEnergyFraction:e1}");
+        });
+        EyeImage = RenderEye(eye);
+        EyeResult = $"IBIS eye ({model.Name}, {IbisCorner}) at {BitRateGbps:g3} Gb/s: "
+            + $"height = {eye.EyeHeight:g3} V, width = {eye.EyeWidthSeconds * 1e12:g3} ps "
+            + $"({eye.EyeWidthSeconds / eye.UnitIntervalSeconds:P0} of UI), "
+            + $"jitter p-p = {eye.JitterPeakToPeakSeconds * 1e12:g3} ps ({note})";
+        SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
+            + " Nonlinear IBIS driver (V-I tables + ramp switching, C_comp backward-Euler) into "
+            + "the single-line channel FIR + R∥C receiver; nonlinear receiver clamps and coupled "
+            + "IBIS crosstalk are named follow-ups.";
+        _log.Append($"SI: {EyeResult}");
+    }
+
+    private static bool[] IbisBits(string? type)
+    {
+        if (type == ClockPattern) return Enumerable.Range(0, 64).Select(i => i % 2 == 0).ToArray();
+        int order = type == Prbs9 ? 9 : type == Prbs11 ? 11 : 7;
+        return PrbsGenerator.Generate(order, (1 << order) - 1, seed: 1);
     }
 
     private double[] BuildPattern(string? type, double rise, uint seed)

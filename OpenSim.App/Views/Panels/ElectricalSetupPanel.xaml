@@ -261,6 +261,11 @@
                         TickFrequency="5" IsSnapToTickEnabled="True"
                         ToolTip="Overlay plane transparency over the copper preview"/>
             </UniformGrid>
+            <CheckBox x:Name="OverlayOverBoardCheck" Content="Over the board outline (per copper layer)"
+                      IsChecked="{Binding Antenna.OverlayOverBoard}"
+                      Visibility="{Binding Antenna.HasBoardOverlay, Converter={StaticResource BoolToVis}}"
+                      Foreground="#C9C9D2" Margin="2,3,0,0"
+                      ToolTip="Paint the field masked to the board outline at each copper-layer height (the SIwave board view), instead of one plane above the net"/>
             <Button x:Name="FieldOverlayButton" Content="Field overlay on board"
                     Command="{Binding Antenna.ShowFieldOverlayCommand}"/>
             <TextBlock Text="{Binding Antenna.FieldResult}" TextWrapping="Wrap"
@@ -319,7 +324,10 @@
                           IsChecked="{Binding SignalIntegrity.AggressorsEnabled}"
                           Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
                           ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
-                <Label Content=""/>
+                <CheckBox x:Name="SiProximityCheck" Content="Proximity R(f)"
+                          IsChecked="{Binding SignalIntegrity.ProximityEffect}"
+                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Frequency-dependent R(f) and internal L(f) from the 2D filament solve (current crowding + skin effect) — replaces max(R_dc, R_s√f)"/>
             </UniformGrid>
 
             <!-- Board extraction (Stage S6): pick 2+ parallel signal nets from the imported
@@ -348,6 +356,29 @@
                               Foreground="#C9C9D2" Margin="2,3,0,0"/>
                     <TextBlock Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
                                FontSize="11" Foreground="#7FD0A0" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- IBIS driver (Stage S11): a nonlinear behavioral buffer replaces the Thevenin
+                 driver for a single line; the eye then runs the nonlinear engine. -->
+            <Border BorderBrush="#3A3A46" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0">
+                <StackPanel>
+                    <UniformGrid Columns="3">
+                        <Button x:Name="SiIbisLoadButton" Content="IBIS model…"
+                                Command="{Binding SignalIntegrity.LoadIbisCommand}"
+                                ToolTip="Load an .ibs behavioral buffer and drive the eye with its nonlinear V-I curves (single line)"/>
+                        <ComboBox x:Name="SiIbisModelCombo" Margin="2,0"
+                                  ItemsSource="{Binding SignalIntegrity.IbisModelNames}"
+                                  SelectedItem="{Binding SignalIntegrity.SelectedIbisModel}"/>
+                        <ComboBox x:Name="SiIbisCornerCombo"
+                                  ItemsSource="{Binding SignalIntegrity.IbisCorners}"
+                                  SelectedItem="{Binding SignalIntegrity.IbisCorner}"/>
+                    </UniformGrid>
+                    <CheckBox x:Name="SiUseIbisCheck" Content="Use IBIS driver (nonlinear)"
+                              IsChecked="{Binding SignalIntegrity.UseIbisDriver}"
+                              Foreground="#C9C9D2" Margin="2,3,0,0"/>
+                    <TextBlock Text="{Binding SignalIntegrity.IbisStatus}" TextWrapping="Wrap"
+                               FontSize="11" Foreground="#8A8A96" Margin="0,1,0,0"/>
                 </StackPanel>
             </Border>
 

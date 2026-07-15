@@ -62,21 +62,24 @@ internal static class LayeredFieldKernels
         };
     }
 
-    /// <summary>All four field-kernel profiles at one (k_ρ, z): the three potentials
-    /// plus ∂z of K̃_Φ (E_z's ∇Φ leg). kz0 in closed form as everywhere.</summary>
-    public static (Complex A, Complex W, Complex Phi, Complex DzPhi) EvaluateAll(
-        SubstrateStackup substrate, double k0, Complex kRho, Complex kz0, double z)
+    /// <summary>All SIX field-kernel profiles at one (k_ρ, z): the three potentials, ∂z of
+    /// K̃_Φ (E_z's ∇Φ leg), and ∂z of G̃_A and W̃ (the H = ∇×A legs, Stage S9a). kz0 in
+    /// closed form as everywhere; the ∂z profiles come from the SAME analytic
+    /// <see cref="SpectralProfiles.EvaluateDz"/> (sin↔cos swap, no finite differences).</summary>
+    public static (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)
+        EvaluateAll(SubstrateStackup substrate, double k0, Complex kRho, Complex kz0, double z)
     {
         var (a, w, phi) = SpectralProfiles.Evaluate(substrate, k0, kRho, kz0, z);
-        var (_, _, dzPhi) = SpectralProfiles.EvaluateDz(substrate, k0, kRho, kz0, z);
-        return (a, w, phi, dzPhi);
+        var (dzA, dzW, dzPhi) = SpectralProfiles.EvaluateDz(substrate, k0, kRho, kz0, z);
+        return (a, w, phi, dzPhi, dzA, dzW);
     }
 
-    /// <summary>The per-z residues of all four kernels at one surface-wave pole.
-    /// Gated against the z = d residues of <see cref="SurfaceWavePoles"/> (identity)
-    /// and against Richardson extrapolation of the profiles near k_p.</summary>
-    public static (Complex A, Complex W, Complex Phi, Complex DzPhi) PoleResidues(
-        SubstrateStackup substrate, double k0, Complex poleKRho, double z)
+    /// <summary>The per-z residues of all SIX kernels at one surface-wave pole (the two
+    /// ∂z legs DzA/DzW added for Stage S9a's H). Gated against the z = d residues of
+    /// <see cref="SurfaceWavePoles"/> (identity) and against Richardson extrapolation of
+    /// the profiles near k_p.</summary>
+    public static (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)
+        PoleResidues(SubstrateStackup substrate, double k0, Complex poleKRho, double z)
     {
         var epsC = SpectralKernels.ComplexPermittivity(substrate);
         double k0Sq = k0 * k0;
@@ -100,6 +103,10 @@ internal static class LayeredFieldKernels
         var numW = (epsC - 1) * 2 * RfConstants.Mu0 * sd * (cz * phaseIn) / j;
         var numPhi = (2 / RfConstants.Eps0) * n * sz * phaseIn;
         var numDzPhi = kz1 * (2 / RfConstants.Eps0) * n * cz * phaseIn;
+        // ∂z legs (sin↔cos swap × ±kz1, exactly as SpectralProfiles.EvaluateDz): A/Φ are
+        // ∝ sin ⇒ ∂z ∝ +kz1·cos; W is ∝ cos ⇒ ∂z ∝ −kz1·sin.
+        var numDzA = kz1 * 2 * RfConstants.Mu0 * cz * phaseIn * dTm;
+        var numDzW = -kz1 * (epsC - 1) * 2 * RfConstants.Mu0 * sd * (sz * phaseIn) / j;
 
         if (z > d)
         {
@@ -109,7 +116,10 @@ internal static class LayeredFieldKernels
             numW *= e0;
             numPhi *= e0;
             numDzPhi = -j * kz0 * numPhi; // region-0 ∂z is the shared −jk_z0 factor
+            numDzA = -j * kz0 * numA;
+            numDzW = -j * kz0 * numW;
         }
-        return (numA / denom, numW / denom, numPhi / denom, numDzPhi / denom);
+        return (numA / denom, numW / denom, numPhi / denom, numDzPhi / denom,
+                numDzA / denom, numDzW / denom);
     }
 }
