@@ -30,7 +30,7 @@ namespace OpenSim.Rf.Layered;
 /// per-k_ρ system is a small dense complex solve (2 unknowns per layer per polarization);
 /// N ≤ a handful of layers and the table has a few hundred knots, so it is negligible.
 /// </summary>
-internal static class TransmissionLineGreens
+internal static partial class TransmissionLineGreens
 {
     /// <summary>The per-k_ρ layer quantities the recursion is built from: complex
     /// permittivity, vertical wavenumber, and the reduced (decaying) per-layer phase.</summary>

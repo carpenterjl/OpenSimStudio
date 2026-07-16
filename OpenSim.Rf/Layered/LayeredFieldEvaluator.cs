@@ -76,6 +76,70 @@ public static class LayeredFieldEvaluator
             }
         }
 
+        return Package(points, fields, hFields);
+    }
+
+    /// <summary>Stage S9b — the MULTI-LAYER / covered near-field map: E = −jωA − ∇Φ and
+    /// H = ∇×A/µ₀ over a general grounded stackup (the covered patch, or a coplanar multi-gap
+    /// stack), through the TLGF per-z field kernels (<see cref="MultiLayerFieldKernelTable"/>).
+    /// The MoM assembly (<see cref="FieldAt"/>) is IDENTICAL to the single-slab path — only the
+    /// radial kernel table changes — so the E and H legs, the boundary-trick curl, and every
+    /// quadrature rule are shared. Observation must stand at or above the source metal
+    /// (z ≥ z_source); points at or below it stay zero (the map region is above the metal, like
+    /// the ground-plane skip in the single-slab path).</summary>
+    public static FieldMap Evaluate(SurfaceStructure surface, MultiLayerKernelTable kernel,
+        SurfaceMomSolution solution, IReadOnlyList<Vector3D> points,
+        int? maxDegreeOfParallelism = null)
+    {
+        double omega = 2 * Math.PI * solution.FrequencyHz;
+        var stackup = kernel.Stackup;
+        int sourceInterface = kernel.SourceInterface ?? stackup.Layers.Count - 1;
+        double sourceHeight = stackup.InterfaceHeights()[sourceInterface];
+
+        double rhoMax = 1e-9;
+        foreach (var p in points)
+            foreach (var v in surface.Vertices)
+            {
+                double dx = p.X - v.X, dy = p.Y - v.Y;
+                rhoMax = Math.Max(rhoMax, Math.Sqrt(dx * dx + dy * dy));
+            }
+        rhoMax *= 1.05;
+
+        var groups = new Dictionary<double, List<int>>();
+        for (int i = 0; i < points.Count; i++)
+        {
+            if (!groups.TryGetValue(points[i].Z, out var list))
+                groups[points[i].Z] = list = new List<int>();
+            list.Add(i);
+        }
+
+        var fields = new (Complex X, Complex Y, Complex Z)[points.Count];
+        var hFields = new (Complex X, Complex Y, Complex Z)[points.Count];
+        foreach (var (z, indices) in groups.OrderBy(g => g.Key))
+        {
+            // The map lives above the source metal; at/below it the field is not tabulated
+            // (the below-source image ladder is a named follow-up), so leave those slots zero.
+            if (z <= sourceHeight)
+                continue;
+            var table = new MultiLayerFieldKernelTable(stackup, kernel.K0, kernel.Poles,
+                sourceInterface, z, rhoMax, maxDegreeOfParallelism);
+            try
+            {
+                Parallel.ForEach(indices,
+                    new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 },
+                    i => (fields[i], hFields[i]) = FieldAt(surface, solution, table, omega, points[i]));
+            }
+            catch (AggregateException e)
+            {
+                throw e.InnerExceptions[0];
+            }
+        }
+        return Package(points, fields, hFields);
+    }
+
+    private static FieldMap Package(IReadOnlyList<Vector3D> points,
+        (Complex X, Complex Y, Complex Z)[] fields, (Complex X, Complex Y, Complex Z)[] hFields)
+    {
         var magnitudes = new double[points.Count];
         var snapshots = new Vector3D[points.Count];
         var hMagnitudes = new double[points.Count];
@@ -103,9 +167,18 @@ public static class LayeredFieldEvaluator
     /// the area term vanishes and only the tangential line integral survives), the in-plane
     /// ∂A_z legs are ∮ W̃ n̂′ with the charge (like ∇Φ), and ∂zA_x/∂zA_y take the analytic
     /// ∂zG̃_A kernel over the same area quadrature.</summary>
+    /// <summary>One observation height's radial field kernels A/W/Φ/∂zΦ/∂zA/∂zW — the seam
+    /// that lets the SAME <see cref="FieldAt"/> assembly serve the single-slab
+    /// (<see cref="FieldKernelTable"/>) and multi-layer (<see cref="MultiLayerFieldKernelTable"/>)
+    /// paths.</summary>
+    internal interface IRadialFieldKernel
+    {
+        (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW) Evaluate(double rho);
+    }
+
     private static ((Complex X, Complex Y, Complex Z) E, (Complex X, Complex Y, Complex Z) H)
         FieldAt(SurfaceStructure surface,
-        SurfaceMomSolution solution, FieldKernelTable table, double omega, Vector3D point)
+        SurfaceMomSolution solution, IRadialFieldKernel table, double omega, Vector3D point)
     {
         var (l1, l2, l3, w) = TriangleQuadrature.Rule(5);
         var (gl, glw) = GaussLegendre.Rule(4);
@@ -238,7 +311,7 @@ public static class LayeredFieldEvaluator
     /// [remainder + pole terms], knots evaluated in parallel (bitwise-deterministic
     /// slot recipe). Grid: log steps capped at λ₀/64 so the splined H₀⁽²⁾ pole
     /// oscillation stays resolved (the production far-grid reasoning).</summary>
-    private sealed class FieldKernelTable
+    private sealed class FieldKernelTable : IRadialFieldKernel
     {
         private readonly SubstrateStackup _substrate;
         private readonly double _k0, _z, _d, _rhoMin, _rhoMax, _epsilon;
@@ -357,6 +430,139 @@ public static class LayeredFieldEvaluator
                 double dhdz = _z >= _d ? 1 : (m % 2 == 0 ? -1 : 1);
                 imgDz += _images[m].CoefficientPhi * dhdz * (h / r) * gPrime;
                 imgDzA += _images[m].CoefficientA * dhdz * (h / r) * gPrime;
+            }
+            return (RfConstants.Mu0 * imgA + a, wv,
+                    imgPhi / RfConstants.Eps0 + phi,
+                    imgDz / RfConstants.Eps0 + dz,
+                    RfConstants.Mu0 * imgDzA + dza, dzw);
+        }
+    }
+
+    /// <summary>Stage S9b — one observation height's MULTI-LAYER / covered radial field kernels:
+    /// closed-form images (G̃_A pair + K̃_Φ primary + ground image) at eval + one spline over
+    /// [multi-layer Sommerfeld remainder + per-z pole terms], knots evaluated in parallel
+    /// (bitwise-deterministic slot recipe). The multi-layer twin of <see cref="FieldKernelTable"/>;
+    /// observation stands above the source metal so both image heights rise with z (dh/dz = +1).</summary>
+    private sealed class MultiLayerFieldKernelTable : IRadialFieldKernel
+    {
+        private readonly double _k0, _rhoMin, _rhoMax, _epsilon;
+        private readonly MultiLayerImages.Image[] _gaImages, _phiImages;
+        private readonly NaturalCubicSpline[] _smooth; // A/W/Phi/DzPhi/DzA/DzW × re/im
+
+        public MultiLayerFieldKernelTable(LayeredStackup stackup, double k0,
+            IReadOnlyList<SurfaceWavePole> poles, int sourceInterface, double z,
+            double rhoMax, int? maxDegreeOfParallelism)
+        {
+            _k0 = k0;
+            double d = stackup.TotalThicknessMeters;
+            _rhoMax = rhoMax;
+            double epsMax = stackup.Layers.Max(l => l.RelativePermittivity);
+            double lambdaD = 2 * Math.PI / (_k0 * Math.Sqrt(epsMax));
+            _rhoMin = Math.Min(Math.Min(1e-4 * lambdaD, 0.01 * d), 0.1 * rhoMax);
+            _epsilon = d / 50;
+            (_gaImages, _phiImages) = MultiLayerFieldKernels.FieldImages(stackup, sourceInterface, z);
+
+            var grid = new List<double> { _rhoMin };
+            double logFactor = Math.Log(10) / 96;
+            double maxSpacing = 2 * Math.PI / _k0 / 64;
+            double rho = _rhoMin;
+            while (rho < rhoMax)
+            {
+                rho += Math.Min(rho * logFactor, maxSpacing);
+                grid.Add(Math.Min(rho, rhoMax));
+            }
+            while (grid.Count < 4) grid.Add(grid[^1] + maxSpacing);
+            var x = grid.ToArray();
+
+            var residues = new (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[poles.Count];
+            for (int p = 0; p < poles.Count; p++)
+                residues[p] = MultiLayerFieldKernels.PoleResidues(stackup, _k0, poles[p].KRho, poles[p].IsTm, sourceInterface, z);
+
+            var knots = new (Complex A, Complex W, Complex Phi, Complex Dz, Complex DzA, Complex DzW)[x.Length];
+            try
+            {
+                Parallel.For(0, x.Length,
+                    new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 },
+                    i =>
+                    {
+                        var (a, wv, phi, dz, dza, dzw) = SommerfeldIntegrator.FieldRemainderMultiLayer(
+                            stackup, _k0, poles, sourceInterface, x[i], z);
+                        Complex pa = Complex.Zero, pw = Complex.Zero, pp = Complex.Zero, pd = Complex.Zero;
+                        Complex pda = Complex.Zero, pdw = Complex.Zero;
+                        for (int p = 0; p < poles.Count; p++)
+                        {
+                            var factor = new Complex(0, -0.25) * poles[p].KRho
+                                         * Bessel.H02(poles[p].KRho * x[i]);
+                            pa += residues[p].A * factor;
+                            pw += residues[p].W * factor;
+                            pp += residues[p].Phi * factor;
+                            pd += residues[p].DzPhi * factor;
+                            pda += residues[p].DzA * factor;
+                            pdw += residues[p].DzW * factor;
+                        }
+                        knots[i] = (a + pa, wv + pw, phi + pp, dz + pd, dza + pda, dzw + pdw);
+                    });
+            }
+            catch (AggregateException e)
+            {
+                throw e.InnerExceptions[0];
+            }
+
+            _smooth = new NaturalCubicSpline[12];
+            var logX = new double[x.Length];
+            for (int i = 0; i < x.Length; i++) logX[i] = Math.Log(x[i]);
+            for (int c = 0; c < 6; c++)
+            {
+                var re = new double[x.Length];
+                var im = new double[x.Length];
+                for (int i = 0; i < x.Length; i++)
+                {
+                    var v = c switch
+                    {
+                        0 => knots[i].A, 1 => knots[i].W, 2 => knots[i].Phi,
+                        3 => knots[i].Dz, 4 => knots[i].DzA, _ => knots[i].DzW
+                    };
+                    re[i] = v.Real;
+                    im[i] = v.Imaginary;
+                }
+                _smooth[2 * c] = new NaturalCubicSpline(logX, re);
+                _smooth[2 * c + 1] = new NaturalCubicSpline(logX, im);
+            }
+        }
+
+        public (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW) Evaluate(double rho)
+        {
+            double clamped = Math.Clamp(rho, _rhoMin, _rhoMax);
+            double x = Math.Log(clamped);
+            var a = new Complex(_smooth[0].Evaluate(x), _smooth[1].Evaluate(x));
+            var wv = new Complex(_smooth[2].Evaluate(x), _smooth[3].Evaluate(x));
+            var phi = new Complex(_smooth[4].Evaluate(x), _smooth[5].Evaluate(x));
+            var dz = new Complex(_smooth[6].Evaluate(x), _smooth[7].Evaluate(x));
+            var dza = new Complex(_smooth[8].Evaluate(x), _smooth[9].Evaluate(x));
+            var dzw = new Complex(_smooth[10].Evaluate(x), _smooth[11].Evaluate(x));
+
+            // Closed-form images: dh/dz = +1 (observation above the source metal).
+            Complex imgA = Complex.Zero, imgDzA = Complex.Zero;
+            foreach (var img in _gaImages)
+            {
+                double r = Math.Sqrt(rho * rho + img.Depth * img.Depth + _epsilon * _epsilon);
+                var (sin, cos) = Math.SinCos(_k0 * r);
+                var g = new Complex(cos, -sin) / (4 * Math.PI * r);
+                var gPrime = -new Complex(cos, -sin)
+                             * (1 + Complex.ImaginaryOne * _k0 * r) / (4 * Math.PI * r * r);
+                imgA += img.Coeff * g;
+                imgDzA += img.Coeff * (img.Depth / r) * gPrime;
+            }
+            Complex imgPhi = Complex.Zero, imgDz = Complex.Zero;
+            foreach (var img in _phiImages)
+            {
+                double r = Math.Sqrt(rho * rho + img.Depth * img.Depth + _epsilon * _epsilon);
+                var (sin, cos) = Math.SinCos(_k0 * r);
+                var g = new Complex(cos, -sin) / (4 * Math.PI * r);
+                var gPrime = -new Complex(cos, -sin)
+                             * (1 + Complex.ImaginaryOne * _k0 * r) / (4 * Math.PI * r * r);
+                imgPhi += img.Coeff * g;
+                imgDz += img.Coeff * (img.Depth / r) * gPrime;
             }
             return (RfConstants.Mu0 * imgA + a, wv,
                     imgPhi / RfConstants.Eps0 + phi,

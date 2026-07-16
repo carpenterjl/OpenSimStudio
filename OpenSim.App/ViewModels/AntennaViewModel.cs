@@ -469,17 +469,9 @@ public partial class AntennaViewModel : ObservableObject
             FieldResult = $"Not computable: {failure}";
             return;
         }
-        if (layered is not null)
-        {
-            // Multi-layer / covered near-field maps (E and H) remain the S9b follow-up —
-            // the per-z field kernels are single-slab. Single-slab substrate H ships (S9a).
-            FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
-                + "named follow-up (the in-slab field kernels are single-slab). The Zin sweep "
-                + "and far field of a covered patch are available.";
-            return;
-        }
         FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
-                      + (substrate is null ? "" : ", layered field kernels") + ")…";
+                      + (layered is not null ? ", multi-layer field kernels"
+                         : substrate is null ? "" : ", layered field kernels") + ")…";
         try
         {
             double frequency = FrequencyMHz * 1e6;
@@ -489,6 +481,15 @@ public partial class AntennaViewModel : ObservableObject
             var (map, solution) = await Task.Run(() =>
             {
                 var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                if (layered is { } spec)
+                {
+                    // Stage S9b — the multi-layer / covered-patch field kernels (TLGF per-z),
+                    // sampled on the overlay plane above the (buried) metal.
+                    var mlTable = BuildMultiLayerTable(surface, spec, frequency);
+                    var mlSolved = solver.Solve(surface, mlTable, port);
+                    return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
+                        surface, mlTable, mlSolved, points), mlSolved);
+                }
                 if (substrate is null)
                 {
                     var solvedFree = solver.Solve(surface, frequency, port);
@@ -505,9 +506,11 @@ public partial class AntennaViewModel : ObservableObject
                     surface, table, solved, points), solved);
             });
             ApplyFieldOverlay(map, magnetic, n, mode, opacity, z,
-                kernelNote: substrate is null
-                    ? "free-space kernels"
-                    : $"εr = {substrate.RelativePermittivity:g3} layered kernels");
+                kernelNote: layered is not null
+                    ? $"εr = {SubstrateEpsR:g3} multi-layer / covered-patch kernels"
+                    : substrate is null
+                        ? "free-space kernels"
+                        : $"εr = {substrate.RelativePermittivity:g3} layered kernels");
             SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, solution, ColormapKind.Viridis);
             GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
         }
@@ -559,9 +562,12 @@ public partial class AntennaViewModel : ObservableObject
             }
             if (layered is not null)
             {
-                FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
-                    + "named follow-up (single-slab field kernels only). The free-space and "
-                    + "single-slab board overlays are available.";
+                // Multi-layer / covered near-field MAPS ship (Stage S9b), but the per-copper-layer
+                // BOARD overlay paints AT each copper plane (the source plane), which the field
+                // maps do not resolve; board per-gap multi-layer overlays stay a named follow-up.
+                FieldResult = "Not computable: the per-layer board overlay over a multi-layer / "
+                    + "covered stackup is a named follow-up (it paints at the metal plane itself). "
+                    + "The wizard covered-patch near-field map and free-space board overlays work.";
                 return;
             }
             var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
@@ -1241,18 +1247,9 @@ public partial class AntennaViewModel : ObservableObject
             FieldResult = $"Not computable: {failure}";
             return;
         }
-        if (layered is not null)
-        {
-            // The Stage D layered field kernels are single-slab; their multi-layer / interior-
-            // source generalization is a named follow-up. The impedance and far field of a
-            // multi-layer / covered patch are computed — only the near-field MAP is deferred.
-            FieldResult = "Not computable: multi-layer / covered-patch near-field maps are a "
-                + "named follow-up (the in-slab field kernels are single-slab). The Zin sweep "
-                + "and far field of a covered patch are available.";
-            return;
-        }
         FieldResult = $"Computing ({surface.BasisCount} RWG unknowns"
-                      + (substrate is null ? "" : ", layered field kernels") + ")…";
+                      + (layered is not null ? ", multi-layer field kernels"
+                         : substrate is null ? "" : ", layered field kernels") + ")…";
         try
         {
             var (center, diagonal) = SurfaceBounds(surface);
@@ -1270,6 +1267,16 @@ public partial class AntennaViewModel : ObservableObject
                         for (int x = 0; x < n; x++)
                             points.Add(center + new Vector3D(
                                 x * spacing - span / 2, y * spacing - span / 2, z * spacing - span / 2));
+                if (layered is { } spec)
+                {
+                    // Stage S9b — the multi-layer / covered-patch per-z field kernels (TLGF).
+                    // Points above the (buried) metal are mapped; the below-source half stays
+                    // zero (the below-metal image ladder is a named follow-up).
+                    var mlTable = BuildMultiLayerTable(surface, spec, frequency);
+                    var mlSolved = solver.Solve(surface, mlTable, port);
+                    return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
+                        surface, mlTable, mlSolved, points), mlSolved);
+                }
                 if (substrate is null)
                 {
                     var solvedFree = solver.Solve(surface, frequency, port);
