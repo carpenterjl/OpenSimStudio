@@ -44,6 +44,11 @@ public sealed class Ipc2581BoardBuilder
         var orderByName = conductors.ToDictionary(l => l.Name, l => l.CopperOrder!.Value);
         var nameByOrder = conductors.ToDictionary(l => l.CopperOrder!.Value, l => l.Name);
 
+        // refdes → part name (footprint package as the fallback), for pad identity.
+        var partByRefDes = new Dictionary<string, string?>(StringComparer.Ordinal);
+        foreach (var component in source.Components)
+            partByRefDes[component.RefDes] = component.Part ?? component.PackageRef;
+
         // Nets are mutually independent boolean workloads: stroke + union in parallel,
         // then assemble strictly in file order (ids, warnings, list order bitwise-stable).
         var netList = source.Nets.Values.ToList();
@@ -68,7 +73,8 @@ public sealed class Ipc2581BoardBuilder
                             if (polygons.Count > 0) layerCopper.Add((c, polygons));
                         }
                         sw.Stop();
-                        results[i] = new NetResult(layerCopper, BuildPads(net, orderByName),
+                        results[i] = new NetResult(layerCopper,
+                            BuildPads(net, orderByName, partByRefDes),
                             netCenterlines, sw.ElapsedMilliseconds);
                     }
                     catch (Exception ex)
@@ -242,8 +248,11 @@ public sealed class Ipc2581BoardBuilder
         return rings.Count == 0 ? Array.Empty<Polygon2>() : _ops.Union(rings);
     }
 
-    /// <summary>Pad-sized flashes on conductor layers → selectable electrode pads.</summary>
-    private static List<CopperPad> BuildPads(Ipc2581Net net, Dictionary<string, int> orderByName)
+    /// <summary>Pad-sized flashes on conductor layers → selectable electrode pads,
+    /// carrying the PinRef identity (refdes.pin + resolved part name) when the file
+    /// declared one.</summary>
+    private static List<CopperPad> BuildPads(Ipc2581Net net, Dictionary<string, int> orderByName,
+        Dictionary<string, string?> partByRefDes)
     {
         var result = new List<CopperPad>();
         foreach (var flash in net.Pads)
@@ -258,7 +267,13 @@ public sealed class Ipc2581BoardBuilder
             }
             double size = Math.Max(maxX - minX, maxY - minY);
             if (size <= MaxPadSize)
-                result.Add(new CopperPad(order, flash.Center, flash.Shape, size));
+                result.Add(new CopperPad(order, flash.Center, flash.Shape, size)
+                {
+                    ComponentRef = flash.ComponentRef,
+                    Pin = flash.Pin,
+                    PartName = flash.ComponentRef is { } refDes
+                        && partByRefDes.TryGetValue(refDes, out var part) ? part : null,
+                });
         }
         return result;
     }

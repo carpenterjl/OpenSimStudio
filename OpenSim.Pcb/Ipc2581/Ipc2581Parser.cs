@@ -33,6 +33,7 @@ public sealed class Ipc2581Parser
     // conductor layers a padstack lands pads on.
     private readonly Dictionary<string, (string From, string To)> _drillSpans = new();
     private readonly Dictionary<string, List<string>> _padstackPadLayers = new();
+    private readonly List<Ipc2581Component> _components = new();
     private readonly List<(string LayerRef, double Thickness, int Sequence, int Group)> _stackupRows = new();
     private int _stackupGroupIndex;
 
@@ -73,7 +74,8 @@ public sealed class Ipc2581Parser
             Profile = _profile,
             Layers = BuildLayerArray(),
             Nets = _nets,
-            Warnings = _warnings
+            Warnings = _warnings,
+            Components = _components
         };
     }
 
@@ -129,9 +131,14 @@ public sealed class Ipc2581Parser
                 case "LayerFeature":
                     ReadLayerFeature(reader);
                     break;
+                case "Component":
+                    // Only the identity attributes matter (refdes → part/package for pad
+                    // naming in reports); the placement subtree is consumed unread.
+                    ReadComponent(reader);
+                    break;
                 // Whole subtrees with nothing the geometry engine needs. (Content is NOT
                 // skipped — it wraps DictionaryStandard.)
-                case "Bom" or "Component" or "Package" or "LogisticHeader" or "HistoryRecord"
+                case "Bom" or "Package" or "LogisticHeader" or "HistoryRecord"
                     or "DictionaryColor" or "DictionaryLineDesc" or "DictionaryFillDesc"
                     or "DictionaryUser":
                     Consume(reader);
@@ -375,14 +382,15 @@ public sealed class Ipc2581Parser
     private Ipc2581PadFlash? ReadLayerPad(XmlReader reader, double scale)
     {
         string layerRef = reader.GetAttribute("layerRef") ?? "";
-        var (location, rotation, primitiveRef, inline) = ReadFlashBody(reader, scale);
+        var (location, rotation, primitiveRef, inline, componentRef, pin) = ReadFlashBody(reader, scale);
         if (location is null)
         {
             _warnings.Add($"IPC-2581: LayerPad on '{layerRef}' has no Location; pad skipped.");
             return null;
         }
         var shape = ResolveFlash(primitiveRef, inline, location.Value, rotation);
-        return shape is null ? null : new Ipc2581PadFlash(layerRef, location.Value, shape);
+        return shape is null ? null
+            : new Ipc2581PadFlash(layerRef, location.Value, shape, componentRef, pin);
     }
 
     /// <summary>
@@ -585,11 +593,12 @@ public sealed class Ipc2581Parser
     /// <summary>
     /// A KiCad-style <c>Pad</c> instance inside a conductor Set: its Location/Xform and
     /// primitive ref are self-contained (unlike bare flashes, which inherit the running
-    /// Set state), so it reuses the LayerPad body reader.
+    /// Set state), so it reuses the LayerPad body reader. A <c>PinRef</c> child carries
+    /// the component pin the flash belongs to — captured for pad naming.
     /// </summary>
     private void ReadPadInstance(XmlReader reader, double scale, string layerRef, Ipc2581Net net)
     {
-        var (location, rotation, primitiveRef, inline) = ReadFlashBody(reader, scale);
+        var (location, rotation, primitiveRef, inline, componentRef, pin) = ReadFlashBody(reader, scale);
         if (location is null)
         {
             _warnings.Add($"IPC-2581: Pad on '{layerRef}' has no Location" +
@@ -598,15 +607,30 @@ public sealed class Ipc2581Parser
         }
         var shape = ResolveFlash(primitiveRef, inline, location.Value, rotation);
         if (shape is not null)
-            net.Pads.Add(new Ipc2581PadFlash(layerRef, location.Value, shape));
+            net.Pads.Add(new Ipc2581PadFlash(layerRef, location.Value, shape, componentRef, pin));
+    }
+
+    /// <summary>Reads a <c>Component</c> element's identity attributes (refdes and the
+    /// part / footprint-package names its pads inherit); the placement subtree holds
+    /// nothing else the geometry engine needs.</summary>
+    private void ReadComponent(XmlReader reader)
+    {
+        string? refDes = reader.GetAttribute("refDes");
+        if (refDes is not null)
+            _components.Add(new Ipc2581Component(refDes,
+                reader.GetAttribute("packageRef"), reader.GetAttribute("part")));
+        Consume(reader);
     }
 
     private (Point2? Location, double Rotation, string? PrimitiveRef,
-        Ipc2581PrimitiveDictionary.Primitive? Inline) ReadFlashBody(XmlReader reader, double scale)
+        Ipc2581PrimitiveDictionary.Primitive? Inline, string? ComponentRef, string? Pin)
+        ReadFlashBody(XmlReader reader, double scale)
     {
         Point2? location = null;
         double rotation = 0;
         string? primitiveRef = null;
+        string? componentRef = null;
+        string? pin = null;
         Ipc2581PrimitiveDictionary.Primitive? inline = null;
 
         using var sub = reader.ReadSubtree();
@@ -627,12 +651,16 @@ public sealed class Ipc2581Parser
                 case "StandardPrimitiveRef":
                     primitiveRef = sub.GetAttribute("id");
                     break;
+                case "PinRef":
+                    componentRef = sub.GetAttribute("componentRef");
+                    pin = sub.GetAttribute("pin");
+                    break;
                 default:
                     inline = Ipc2581PrimitiveDictionary.TryReadPrimitive(sub, scale, _warnings) ?? inline;
                     break;
             }
         }
-        return (location, rotation, primitiveRef, inline);
+        return (location, rotation, primitiveRef, inline, componentRef, pin);
     }
 
     private Polygon2? ResolveFlash(string? primitiveRef,

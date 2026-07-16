@@ -45,7 +45,19 @@ public sealed record ViaBridge(Via Via, IReadOnlyList<int> Layers);
 /// (annular ring) covers it — distinguishing a real via connection from a signal via that
 /// merely passes through a plane. Also the selectable electrode footprint for the sim.
 /// </summary>
-public sealed record CopperPad(int LayerOrder, Point2 Center, Polygon2 Shape, double Size);
+public sealed record CopperPad(int LayerOrder, Point2 Center, Polygon2 Shape, double Size)
+{
+    /// <summary>The component refdes this pad belongs to (IPC-2581 PinRef); null when the
+    /// source format doesn't say (Gerber discards %TO object attributes).</summary>
+    public string? ComponentRef { get; init; }
+
+    /// <summary>The component pin number/name (IPC-2581 PinRef); null when unknown.</summary>
+    public string? Pin { get; init; }
+
+    /// <summary>The owning component's part name (falling back to its footprint package
+    /// name), resolved from the IPC-2581 Component element; null when unknown.</summary>
+    public string? PartName { get; init; }
+}
 
 /// <summary>
 /// A connected copper net: the set of islands joined into one conductor (islands on one

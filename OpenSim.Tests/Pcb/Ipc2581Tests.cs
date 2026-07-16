@@ -525,6 +525,46 @@ public class Ipc2581Tests
     }
 
     [Fact]
+    public void KiCadDialect_PinRefAndComponent_NamePads()
+    {
+        // The component pad's PinRef + the Component element give it a refdes.pin and a
+        // part name (part preferred; packageRef is the fallback when part is absent).
+        string step = KiCadStep + """
+            <Component refDes="J1" packageRef="PKG_HDR" part="PART_HDR_2X5" layerRef="F.Cu" mountType="SMT">
+              <Location x="2.0" y="5.0" />
+            </Component>
+            """;
+        var board = Read(Document(KiCadDecls, KiCadStackup, step, dictionary: KiCadDictionary));
+
+        var component = board.Pads.Single(p => (p.Center - new Point2(2e-3, 5e-3)).Length < 1e-9);
+        Assert.Equal("J1", component.ComponentRef);
+        Assert.Equal("1", component.Pin);
+        Assert.Equal("PART_HDR_2X5", component.PartName);
+
+        // Via landing pads carry no PinRef — identity stays null, never fabricated.
+        Assert.All(board.Pads.Where(p => (p.Center - new Point2(10e-3, 5e-3)).Length < 1e-9),
+            pad =>
+            {
+                Assert.Null(pad.ComponentRef);
+                Assert.Null(pad.PartName);
+            });
+    }
+
+    [Fact]
+    public void KiCadDialect_ComponentWithoutPart_FallsBackToPackage()
+    {
+        string step = KiCadStep + """
+            <Component refDes="J1" packageRef="PKG_HDR" layerRef="F.Cu" mountType="SMT">
+              <Location x="2.0" y="5.0" />
+            </Component>
+            """;
+        var board = Read(Document(KiCadDecls, KiCadStackup, step, dictionary: KiCadDictionary));
+
+        var component = board.Pads.Single(p => (p.Center - new Point2(2e-3, 5e-3)).Length < 1e-9);
+        Assert.Equal("PKG_HDR", component.PartName);
+    }
+
+    [Fact]
     public void KiCadDialect_UnknownPadstackRef_FallsBackToDrillSpan()
     {
         // Drop the PadStackDef: the hole's pad layers fall back to the drill layer's
@@ -691,6 +731,19 @@ public class Ipc2581IntegrationTests
         Assert.NotNull(board.Stackup);
         Assert.All(board.Stackup!.CopperLayerThicknesses, t => Assert.Equal(35e-6, t, 1e-9));
         Assert.Equal(1.51e-3, board.Stackup.DielectricGapThicknesses.Single(), 1e-9);
+
+        // Pad identity from the file's PinRef + Component data. Measured against the
+        // raw XML: exactly the 190 SMD component pads on F.Cu carry a PinRef — the
+        // remaining copper flashes are via landing pads, which have no component pin
+        // (the file's other PinRefs sit on mask/paste flashes of layers we skip).
+        var named = board.Pads.Where(p => p.ComponentRef is not null).ToList();
+        Assert.True(named.Count > 150, $"only {named.Count} pads carry a PinRef identity");
+        Assert.True(named.Count < board.Pads.Count, "via landing pads must stay anonymous");
+        Assert.All(named, p =>
+        {
+            Assert.False(string.IsNullOrEmpty(p.Pin));
+            Assert.False(string.IsNullOrEmpty(p.PartName));
+        });
     }
 
     [Fact]

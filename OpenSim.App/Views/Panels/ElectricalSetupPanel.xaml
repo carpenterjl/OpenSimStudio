@@ -362,6 +362,12 @@
                             ToolTip="Capacitance of each selected net to its reference plane: Σ C′(width, gap) × routed centerline length + parallel-plate pad terms, over the stackup dielectric (2D BEM). Bends and branches count; one net is enough."/>
                     <TextBlock Text="{Binding SignalIntegrity.TraceCapResult}" TextWrapping="Wrap"
                                FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
+                    <Button x:Name="SiDcNetsButton" Content="Evaluate DC nets (R, C, τ → CSV)"
+                            Command="{Binding SignalIntegrity.EvaluateDcNetsCommand}"
+                            Margin="0,3,0,0"
+                            ToolTip="Board-wide DC screen over EVERY net with 2+ pads: resistance between each pad pair (nodal network on the trace graph — branches and parallel paths solve exactly), the net's total C to the reference plane, and the lumped time constant τ = R·C, saved as a CSV report. Nets that can't be priced appear as typed note rows."/>
+                    <TextBlock Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
+                               FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
                 </StackPanel>
             </Border>
 

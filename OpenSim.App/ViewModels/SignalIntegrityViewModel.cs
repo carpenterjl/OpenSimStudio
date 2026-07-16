@@ -107,17 +107,22 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     [ObservableProperty] private string _boardExtractionResult = "";
     [ObservableProperty] private string _traceCapResult = "";
+    [ObservableProperty] private string _dcNetsResult = "";
     [ObservableProperty] private bool _hasBoard;
 
     private PcbBoard? _board;
+    private string? _boardFileName;
     private Func<NetMeshOptions>? _meshOptions;
     private BoardCoupledResult? _boardExtraction;
 
     /// <summary>Populates the board net list — mirrors the antenna/inductance panels so the
-    /// same import feeds every downstream analysis one board.</summary>
-    public void LoadBoard(PcbBoard board, Func<NetMeshOptions> meshOptions)
+    /// same import feeds every downstream analysis one board. The source file name is only
+    /// for the DC-nets CSV report's Board column (the board model itself has no path).</summary>
+    public void LoadBoard(PcbBoard board, Func<NetMeshOptions> meshOptions,
+        string? sourceFileName = null)
     {
         _board = board;
+        _boardFileName = sourceFileName;
         _meshOptions = meshOptions;
         _boardExtraction = null;
         UseBoardNets = false;
@@ -125,6 +130,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
         foreach (var net in board.Nets) BoardNets.Add(new SiNetSelection(net));
         HasBoard = board.Nets.Count > 0;
         BoardExtractionResult = "";
+        DcNetsResult = "";
     }
 
     [ObservableProperty] private string _rlgcResult = "";
@@ -321,6 +327,63 @@ public partial class SignalIntegrityViewModel : ObservableObject
                 SiAssumptions = "Assumptions: " + string.Join(" ", assumptions);
         }
         catch (Exception ex) { TraceCapResult = $"Not computable: {ex.Message}"; }
+    }
+
+    /// <summary>The board-wide DC screen: EVERY net with ≥2 pads (fewer is an import
+    /// artifact — skipped and counted) gets its pad-pair resistances from the nodal
+    /// network on the trace graph (branches AND parallel paths — the case the inductance
+    /// chain refuses), the net's total C to the reference plane, and the lumped
+    /// τ = R·C screen, written to a CSV report via a save dialog. Non-conforming nets
+    /// appear as typed note ROWS in the file; the panel and log carry one summary line —
+    /// hundreds of per-net log lines would help nobody.</summary>
+    [RelayCommand]
+    private async Task EvaluateDcNets()
+    {
+        if (_board is null || _meshOptions is null)
+        {
+            DcNetsResult = "Import a board first (PCB panel).";
+            return;
+        }
+
+        DcNetsResult = "Evaluating…";
+        try
+        {
+            var board = _board;
+            string boardName = _boardFileName ?? "board";
+            var meshOptions = _meshOptions();
+            var options = new BoardCoupledOptions
+            {
+                CopperThicknessMeters = meshOptions.CopperThickness,
+            };
+            var report = await Task.Run(() =>
+                DcNetEvaluator.Evaluate(board, meshOptions, options, boardName));
+
+            string text = $"{report.NetsEvaluated} net(s) evaluated — "
+                + $"{report.Rows.Count} pad pair(s) reported (R and C), "
+                + $"{report.PairsOmitted} omitted; "
+                + $"{report.NetsSkipped} skipped (<2 pads), {report.NetsFailed} not computable";
+
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                FileName = $"{Path.GetFileNameWithoutExtension(boardName)}_dc-nets.csv",
+                Filter = "CSV report|*.csv|All files|*.*",
+                Title = "Save DC net evaluation (CSV)"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                // UTF-8 with BOM so spreadsheet apps read the preamble's symbols right.
+                File.WriteAllText(dialog.FileName, DcNetReportCsv.Write(report),
+                    System.Text.Encoding.UTF8);
+                text += $"; saved {Path.GetFileName(dialog.FileName)}";
+            }
+            else
+            {
+                text += "; not saved";
+            }
+            DcNetsResult = text;
+            _log.Append($"SI DC nets ({boardName}): {text}");
+        }
+        catch (Exception ex) { DcNetsResult = $"Not computable: {ex.Message}"; }
     }
 
     [RelayCommand]

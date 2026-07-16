@@ -299,7 +299,9 @@ public partial class PcbViewModel : ObservableObject
             _layerZMapCache = null;
             _inductance.LoadBoard(board, BuildNetMeshOptions);
             _antenna.LoadBoard(board, BuildNetMeshOptions);
-            _signalIntegrity.LoadBoard(board, BuildNetMeshOptions);
+            // GetFileName also yields the folder name for a Gerber directory import —
+            // the DC-nets CSV report names its source board with it.
+            _signalIntegrity.LoadBoard(board, BuildNetMeshOptions, Path.GetFileName(archive));
 
             _log.Append($"PCB archive: {board.Layers.Count} layers classified " +
                         $"(import {importTimer.ElapsedMilliseconds} ms).");

@@ -35,8 +35,16 @@ public sealed record Ipc2581Trace(string LayerRef, IReadOnlyList<Point2> Path, d
 /// <summary>A filled Contour/Polygon (pour, plane region) on one layer; Cutouts are holes.</summary>
 public sealed record Ipc2581Fill(string LayerRef, Polygon2 Shape);
 
-/// <summary>A flashed pad primitive on one layer (standalone SMD pad or a padstack's landing pad).</summary>
-public sealed record Ipc2581PadFlash(string LayerRef, Point2 Center, Polygon2 Shape);
+/// <summary>A flashed pad primitive on one layer (standalone SMD pad or a padstack's
+/// landing pad). KiCad-dialect <c>Pad</c> instances carry a <c>PinRef</c> child naming
+/// the component pin the flash belongs to — captured so reports can name pads by
+/// refdes.pin instead of synthesized coordinates; null when the file doesn't say.</summary>
+public sealed record Ipc2581PadFlash(string LayerRef, Point2 Center, Polygon2 Shape,
+    string? ComponentRef = null, string? Pin = null);
+
+/// <summary>A placed component from the <c>Component</c> element: the refdes and the
+/// part / footprint-package identity its pads inherit.</summary>
+public sealed record Ipc2581Component(string RefDes, string? PackageRef, string? Part);
 
 /// <summary>
 /// A drilled hole from a <c>LayerHole</c>: mechanical drill parameters plus the conductor
@@ -80,6 +88,10 @@ public sealed class Ipc2581Board
     public required IReadOnlyList<Ipc2581Layer> Layers { get; init; }
     public required IReadOnlyDictionary<string, Ipc2581Net> Nets { get; init; }
     public required IReadOnlyList<string> Warnings { get; init; }
+
+    /// <summary>Placed components (refdes → part/package identity); empty when the file
+    /// carries no Component elements (or an exporter omits them).</summary>
+    public IReadOnlyList<Ipc2581Component> Components { get; init; } = Array.Empty<Ipc2581Component>();
 
     /// <summary>Conductor layers in stackup order (CopperOrder 1..N).</summary>
     public IReadOnlyList<Ipc2581Layer> ConductorLayers =>

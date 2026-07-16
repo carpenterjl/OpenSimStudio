@@ -137,15 +137,103 @@ public static class TraceChainBuilder
         IReadOnlyCollection<int>? includeLayers = null,
         (ChainTerminal Source, ChainTerminal Sink)? terminals = null)
     {
+        var (segments, itemTolerances, layerZ, firstBridgeIndex, copperBridges, prepFailure) =
+            PrepareSegments(centerlines, vias, options, islands, includeLayers);
+        if (prepFailure is not null)
+            return TraceChain3DResult.Failure(prepFailure);
+
+        var items = segments
+            .Select((s, i) => (s.Start, s.End, itemTolerances[i]))
+            .ToList();
+
+        if (terminals is { } pads)
+            return ExtractTerminalPath(segments, items, pads, layerZ, firstBridgeIndex);
+
+        var (order, failure) = OrderChain(items);
+        if (failure is not null)
+            return TraceChain3DResult.Failure(failure);
+
+        var chain = new List<TraceSegment3D>(order!.Count);
+        foreach (var (index, flipped) in order)
+        {
+            var segment = segments[index];
+            chain.Add(flipped ? segment with { Start = segment.End, End = segment.Start } : segment);
+        }
+        return TraceChain3DResult.Success(chain) with { CopperBridges = copperBridges, LayerZ = layerZ };
+    }
+
+    /// <summary>
+    /// The net's conductor topology as a GRAPH instead of one ordered path: the SAME
+    /// segment recipe as the 3D <c>Build</c> (dedup, stackup z, via barrels with the
+    /// dead-end gate, stub drops, copper bridges), then junction clustering. Exposed
+    /// for the DC resistance network — branches and parallel paths (the chain's typed
+    /// "a network solve is required" failure) are exactly what a nodal solve handles.
+    /// A bridge bar that clusters degenerate after appending (a bridge endpoint can
+    /// enlarge a junction's tolerance enough to collapse a short bar) is dropped like
+    /// any sub-junction stub — it carries no information for a network — never fatal.
+    /// </summary>
+    public static TraceGraphResult BuildGraph(IReadOnlyList<TraceCenterline> centerlines,
+        IReadOnlyList<ViaBridge> vias, NetMeshOptions options,
+        IReadOnlyList<CopperIsland>? islands = null,
+        IReadOnlyCollection<int>? includeLayers = null)
+    {
+        var (segments, itemTolerances, layerZ, firstBridgeIndex, _, prepFailure) =
+            PrepareSegments(centerlines, vias, options, islands, includeLayers);
+        if (prepFailure is not null)
+            return TraceGraphResult.Failure(prepFailure);
+
+        // The chain path treats a post-bridge degenerate as an unreachable safety net;
+        // a network wants a clean edge list, so run the same drop once more here. The
+        // bridge flag rides the parallel-list mechanism so FirstBridgeIndex stays exact
+        // (bridges are appended, so survivors remain contiguous at the tail).
+        var isBridge = new List<bool>(segments.Count);
+        for (int i = 0; i < segments.Count; i++) isBridge.Add(i >= firstBridgeIndex);
+        var items = segments
+            .Select((s, i) => (s.Start, s.End, itemTolerances[i]))
+            .ToList();
+        DropSubJunctionSegments(items, segments, itemTolerances, isBridge);
+        if (segments.Count == 0)
+            return TraceGraphResult.Failure(
+                "all trace segments are shorter than the junction tolerance (sub-width stubs)");
+        int firstSurvivingBridge = isBridge.IndexOf(true);
+        firstBridgeIndex = firstSurvivingBridge >= 0 ? firstSurvivingBridge : segments.Count;
+
+        var (junctions, ends, _, degenerateIndex) = Cluster(items);
+        if (degenerateIndex >= 0)                        // unreachable after the drop; safety net
+            return TraceGraphResult.Failure(DegenerateMessage(items, degenerateIndex));
+
+        return new TraceGraphResult(segments, ends, junctions, layerZ,
+            segments.Count - firstBridgeIndex, firstBridgeIndex, null);
+    }
+
+    /// <summary>
+    /// The shared 3D segment recipe: dedup coincident draws → stackup z frame → traces
+    /// lifted to their layer mid-plane → plated via barrels (dead-end stitches dropped)
+    /// → sub-junction stub drops → copper bridges through shared islands. Extracted
+    /// verbatim from the 3D <c>Build</c> so the chain/path extraction and
+    /// <see cref="BuildGraph"/> consume ONE set of composition rules — two copies of
+    /// these hard-won real-board rules would drift.
+    /// </summary>
+    private static (List<TraceSegment3D> Segments, List<double> Tolerances,
+        Dictionary<int, (double zLo, double zHi)> LayerZ, int FirstBridgeIndex,
+        int CopperBridges, string? Failure) PrepareSegments(
+        IReadOnlyList<TraceCenterline> centerlines,
+        IReadOnlyList<ViaBridge> vias, NetMeshOptions options,
+        IReadOnlyList<CopperIsland>? islands,
+        IReadOnlyCollection<int>? includeLayers)
+    {
+        static (List<TraceSegment3D>, List<double>, Dictionary<int, (double zLo, double zHi)>,
+            int, int, string?) Fail(string reason) =>
+            (new List<TraceSegment3D>(), new List<double>(),
+                new Dictionary<int, (double zLo, double zHi)>(), 0, 0, reason);
+
         if (centerlines.Count == 0)
-            return TraceChain3DResult.Failure(
-                "no trace centerlines (the net is a pour/region or was imported without draw records)");
+            return Fail("no trace centerlines (the net is a pour/region or was imported without draw records)");
 
         double tolerance = centerlines.Min(c => c.Width) / 2;
         var traces = Deduplicate(centerlines.Where(c => c.Length > tolerance).ToList(), tolerance);
         if (traces.Count == 0)
-            return TraceChain3DResult.Failure(
-                "all trace segments are shorter than the junction tolerance (sub-width stubs)");
+            return Fail("all trace segments are shorter than the junction tolerance (sub-width stubs)");
 
         int minL = traces.Min(c => c.LayerOrder);
         int maxL = traces.Max(c => c.LayerOrder);
@@ -207,32 +295,14 @@ public static class TraceChainBuilder
             .ToList();
         DropSubJunctionSegments(items, segments, itemTolerances);
         if (segments.Count == 0)
-            return TraceChain3DResult.Failure(
-                "all trace segments are shorter than the junction tolerance (sub-width stubs)");
+            return Fail("all trace segments are shorter than the junction tolerance (sub-width stubs)");
 
         int firstBridgeIndex = segments.Count;
         int copperBridges = 0;
         if (islands is not null && islands.Count > 0)
             copperBridges = BridgeThroughCopper(segments, itemTolerances, islands, layerZ);
 
-        items = segments
-            .Select((s, i) => (s.Start, s.End, itemTolerances[i]))
-            .ToList();
-
-        if (terminals is { } pads)
-            return ExtractTerminalPath(segments, items, pads, layerZ, firstBridgeIndex);
-
-        var (order, failure) = OrderChain(items);
-        if (failure is not null)
-            return TraceChain3DResult.Failure(failure);
-
-        var chain = new List<TraceSegment3D>(order!.Count);
-        foreach (var (index, flipped) in order)
-        {
-            var segment = segments[index];
-            chain.Add(flipped ? segment with { Start = segment.End, End = segment.Start } : segment);
-        }
-        return TraceChain3DResult.Success(chain) with { CopperBridges = copperBridges, LayerZ = layerZ };
+        return (segments, itemTolerances, layerZ, firstBridgeIndex, copperBridges, null);
     }
 
     /// <summary>Longest same-island gap a straight bar may close [m] — pad/fill scale.
@@ -368,41 +438,9 @@ public static class TraceChainBuilder
         if (degenerateIndex >= 0)                        // unreachable after the pre-drop; safety net
             return TraceChain3DResult.Failure(DegenerateMessage(items, degenerateIndex));
 
-        int MapTerminal(ChainTerminal terminal, string label, out string? failure)
-        {
-            failure = null;
-            if (!layerZ.TryGetValue(terminal.Layer, out var span))
-            {
-                failure = $"the {label} pad's layer L{terminal.Layer} is outside the chain's stackup span";
-                return -1;
-            }
-            double z = 0.5 * (span.zLo + span.zHi);
-            int best = -1;
-            double bestDistance = double.MaxValue;
-            for (int j = 0; j < junctions.Count; j++)
-            {
-                // Junction z's are exact layer mid-planes (traces, barrels, and bridges
-                // are all placed there), so an exact-scale z gate keeps a pad from
-                // anchoring to copper on another layer directly beneath it.
-                if (Math.Abs(junctions[j].Position.Z - z) > 1e-12) continue;
-                double dx = junctions[j].Position.X - terminal.Center.X;
-                double dy = junctions[j].Position.Y - terminal.Center.Y;
-                double distance = Math.Sqrt(dx * dx + dy * dy);
-                if (distance <= MaxBridgeSpan && distance < bestDistance)
-                {
-                    best = j;
-                    bestDistance = distance;
-                }
-            }
-            if (best < 0)
-                failure = $"no chain junction within {MaxBridgeSpan * 1e3:g3} mm of the {label} pad at " +
-                          $"({terminal.Center.X * 1e3:g4}, {terminal.Center.Y * 1e3:g4}) mm on L{terminal.Layer}";
-            return best;
-        }
-
-        int sourceJunction = MapTerminal(terminals.Source, "source", out var sourceFailure);
+        int sourceJunction = MapTerminal(terminals.Source, "source", junctions, layerZ, out var sourceFailure);
         if (sourceFailure is not null) return TraceChain3DResult.Failure(sourceFailure);
-        int sinkJunction = MapTerminal(terminals.Sink, "sink", out var sinkFailure);
+        int sinkJunction = MapTerminal(terminals.Sink, "sink", junctions, layerZ, out var sinkFailure);
         if (sinkFailure is not null) return TraceChain3DResult.Failure(sinkFailure);
         if (sourceJunction == sinkJunction)
             return TraceChain3DResult.Failure("the source and sink pads land on the same chain junction");
@@ -476,6 +514,47 @@ public static class TraceChainBuilder
             PrunedSegments = pruned,
             PrunedLengthMeters = prunedLength
         };
+    }
+
+    /// <summary>
+    /// Maps a pad terminal to the nearest chain junction on its layer's mid-plane within
+    /// the pad-scale span. Junction z's are exact layer mid-planes (traces, barrels, and
+    /// bridges are all placed there), so an exact-scale z gate keeps a pad from anchoring
+    /// to copper on another layer directly beneath it. Internal because the DC resistance
+    /// network attaches pads by the SAME rule — two implementations of one attachment
+    /// contract would drift (the <see cref="Deduplicate"/> precedent). Returns the
+    /// junction index, or −1 with <paramref name="failure"/> set.
+    /// </summary>
+    internal static int MapTerminal(ChainTerminal terminal, string label,
+        IReadOnlyList<(Vector3D Position, double Tolerance)> junctions,
+        IReadOnlyDictionary<int, (double zLo, double zHi)> layerZ,
+        out string? failure)
+    {
+        failure = null;
+        if (!layerZ.TryGetValue(terminal.Layer, out var span))
+        {
+            failure = $"the {label} pad's layer L{terminal.Layer} is outside the chain's stackup span";
+            return -1;
+        }
+        double z = 0.5 * (span.zLo + span.zHi);
+        int best = -1;
+        double bestDistance = double.MaxValue;
+        for (int j = 0; j < junctions.Count; j++)
+        {
+            if (Math.Abs(junctions[j].Position.Z - z) > 1e-12) continue;
+            double dx = junctions[j].Position.X - terminal.Center.X;
+            double dy = junctions[j].Position.Y - terminal.Center.Y;
+            double distance = Math.Sqrt(dx * dx + dy * dy);
+            if (distance <= MaxBridgeSpan && distance < bestDistance)
+            {
+                best = j;
+                bestDistance = distance;
+            }
+        }
+        if (best < 0)
+            failure = $"no chain junction within {MaxBridgeSpan * 1e3:g3} mm of the {label} pad at " +
+                      $"({terminal.Center.X * 1e3:g4}, {terminal.Center.Y * 1e3:g4}) mm on L{terminal.Layer}";
+        return best;
     }
 
     // ------------------------------------------------------------------
