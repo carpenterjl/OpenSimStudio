@@ -326,9 +326,11 @@ public static class TraceChainBuilder
     /// segments are duplicates when both endpoint pairs match within the junction
     /// tolerance on the same layer (either orientation); the wider survives (the copper
     /// is the union, and width only enters L through the GMD). Keep-first plus a
-    /// width-compare is deterministic.
+    /// width-compare is deterministic. Public because the per-trace capacitance
+    /// extractor needs the SAME rule — copper drawn twice must never count twice there
+    /// either — and two implementations of one contract would drift.
     /// </summary>
-    private static List<TraceCenterline> Deduplicate(List<TraceCenterline> traces, double tolerance)
+    public static List<TraceCenterline> Deduplicate(List<TraceCenterline> traces, double tolerance)
     {
         var kept = new List<TraceCenterline>();
         foreach (var c in traces)

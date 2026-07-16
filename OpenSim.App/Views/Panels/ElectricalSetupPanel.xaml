@@ -335,7 +335,7 @@
             <Border BorderBrush="#3A3A46" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0"
                     Visibility="{Binding SignalIntegrity.HasBoard, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
-                    <TextBlock Text="From board nets (select 2+ parallel signal nets):"
+                    <TextBlock Text="From board nets (2+ parallel for coupling; 1+ for C to ground):"
                                FontSize="11" Foreground="#C9C9D2" Margin="0,0,0,2"/>
                     <ListBox x:Name="SiBoardNetsList" MaxHeight="110"
                              ItemsSource="{Binding SignalIntegrity.BoardNets}"
@@ -356,6 +356,12 @@
                               Foreground="#C9C9D2" Margin="2,3,0,0"/>
                     <TextBlock Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
                                FontSize="11" Foreground="#7FD0A0" Margin="0,2,0,0"/>
+                    <Button x:Name="SiTraceCapButton" Content="Per-trace C to ground"
+                            Command="{Binding SignalIntegrity.ComputeTraceCapacitanceCommand}"
+                            Margin="0,3,0,0"
+                            ToolTip="Capacitance of each selected net to its reference plane: Σ C′(width, gap) × routed centerline length + parallel-plate pad terms, over the stackup dielectric (2D BEM). Bends and branches count; one net is enough."/>
+                    <TextBlock Text="{Binding SignalIntegrity.TraceCapResult}" TextWrapping="Wrap"
+                               FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
                 </StackPanel>
             </Border>
 

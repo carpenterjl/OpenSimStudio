@@ -253,8 +253,10 @@ public static class BoardCoupledExtractor
 
     /// <summary>The single-slab substrate beneath (or above) the trace layer, from the board's
     /// per-gap stackup data when present, else the option defaults. Returns null when the trace
-    /// layer has no adjacent dielectric gap (a one-layer board has no reference plane).</summary>
-    private static LayeredStackup? ResolveSubstrate(PcbBoard board, int layer,
+    /// layer has no adjacent dielectric gap (a one-layer board has no reference plane).
+    /// Internal — <see cref="TraceCapacitanceExtractor"/> shares this exact gap-below-then-above
+    /// rule; a second implementation would drift.</summary>
+    internal static LayeredStackup? ResolveSubstrate(PcbBoard board, int layer,
         BoardCoupledOptions options, out string note)
     {
         var stackup = board.Stackup;

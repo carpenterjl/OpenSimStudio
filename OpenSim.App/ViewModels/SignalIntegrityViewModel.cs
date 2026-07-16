@@ -106,6 +106,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
     public ObservableCollection<SiNetSelection> BoardNets { get; } = new();
 
     [ObservableProperty] private string _boardExtractionResult = "";
+    [ObservableProperty] private string _traceCapResult = "";
     [ObservableProperty] private bool _hasBoard;
 
     private PcbBoard? _board;
@@ -261,6 +262,65 @@ public partial class SignalIntegrityViewModel : ObservableObject
             UseBoardNets = false;
             BoardExtractionResult = $"Not solvable: {ex.Message}";
         }
+    }
+
+    /// <summary>Capacitance to the reference plane for EVERY selected board net — one net
+    /// is enough, unlike the coupled extraction: this is a per-net electrostatic number.
+    /// The net's FULL routed copper counts (bends and branches — all copper holds charge),
+    /// priced as Σ C′(width, gap) × length by the same 2D BEM, plus parallel-plate pad
+    /// terms. Typed failures (pour nets, no adjacent gap) surface verbatim per net.</summary>
+    [RelayCommand]
+    private async Task ComputeTraceCapacitance()
+    {
+        if (_board is null || _meshOptions is null)
+        {
+            TraceCapResult = "Import a board first (PCB panel).";
+            return;
+        }
+        var selected = BoardNets.Where(n => n.IsSelected).Select(n => n.Net).ToList();
+        if (selected.Count == 0)
+        {
+            TraceCapResult = "Select at least one net.";
+            return;
+        }
+
+        TraceCapResult = "Computing…";
+        try
+        {
+            var board = _board;
+            var options = new BoardCoupledOptions
+            {
+                CopperThicknessMeters = _meshOptions().CopperThickness,
+            };
+            var results = await Task.Run(() => selected
+                .Select(net => (Net: net, Result: TraceCapacitanceExtractor.Extract(board, net, options)))
+                .ToList());
+
+            var summaries = new List<string>();
+            IReadOnlyList<string>? assumptions = null;
+            foreach (var (net, r) in results)
+            {
+                if (r.FailureReason is not null)
+                {
+                    summaries.Add($"{net.Label}: not computable — {r.FailureReason}");
+                    _log.Append($"SI trace C: net '{net.Label}' — {r.FailureReason}");
+                    continue;
+                }
+                double lengthMm = r.Groups.Sum(g => g.LengthMeters) * 1e3;
+                string line = $"{net.Label}: C ≈ {r.TotalFarads * 1e12:g4} pF to ground "
+                    + $"(traces {r.TraceFarads * 1e12:g4} pF over {lengthMm:g4} mm"
+                    + (r.PadCount > 0
+                        ? $", pads +{r.PadFarads * 1e12:g4} pF plate ({r.PadCount})" : "")
+                    + $"; {r.Groups.Count} cross-section group(s))";
+                summaries.Add(line);
+                _log.Append($"SI trace C: {line}");
+                assumptions ??= r.Assumptions;
+            }
+            TraceCapResult = string.Join("\n", summaries);
+            if (assumptions is not null)
+                SiAssumptions = "Assumptions: " + string.Join(" ", assumptions);
+        }
+        catch (Exception ex) { TraceCapResult = $"Not computable: {ex.Message}"; }
     }
 
     [RelayCommand]
