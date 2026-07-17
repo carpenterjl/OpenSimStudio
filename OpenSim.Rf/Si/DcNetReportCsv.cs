@@ -21,7 +21,7 @@ public static class DcNetReportCsv
         sb.Append(CultureInfo.InvariantCulture,
             $"# board: {report.BoardName}\r\n");
         sb.Append(CultureInfo.InvariantCulture,
-            $"# nets: {report.NetsEvaluated} evaluated, {report.NetsSkipped} skipped (<2 pads), "
+            $"# nets: {report.NetsEvaluated} evaluated, {report.NetsSkipped} skipped (<2 component pins), "
             + $"{report.NetsFailed} not computable\r\n");
         if (report.PairsOmitted > 0)
             sb.Append(CultureInfo.InvariantCulture,

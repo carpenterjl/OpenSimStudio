@@ -1,6 +1,7 @@
 using OpenSim.Core.Geometry2D;
 using OpenSim.Core.Model;
 using OpenSim.Pcb.Import;
+using OpenSim.Pcb.Ipc2581;
 using OpenSim.Rf.Si;
 using Xunit;
 
@@ -9,11 +10,13 @@ namespace OpenSim.Tests.Si;
 /// <summary>
 /// The board-wide "Evaluate DC nets" sweep. The R network and C extractor carry their
 /// own machine-sharp gates (<see cref="TraceResistanceNetworkTests"/>,
-/// <see cref="TraceCapacitanceTests"/>) — these gate the COMPOSITION: the ≥2-pad
-/// filter, the complete-rows contract (a row requires BOTH R and C; everything else is
-/// counted, never silently dropped), pad naming (refdes.pin + part when the file says,
-/// synthesized otherwise), the exact R·C = τ product, CSV escaping, bitwise determinism
-/// at any DOP, and the real-board sweep that synthetic fixtures cannot give.
+/// <see cref="TraceCapacitanceTests"/>) — these gate the COMPOSITION: the component-pin
+/// filter (only pairs whose BOTH pads trace back to a package/pin are reported; via
+/// landings and Gerber flashes never terminate a row), the complete-rows contract (a row
+/// requires BOTH R and C; everything else is counted, never silently dropped), pad
+/// naming (refdes.pin + part), the exact R·C = τ product, CSV escaping, bitwise
+/// determinism at any DOP, and both the Gerber (no rows) and real IPC-2581 (named rows)
+/// sweeps that synthetic fixtures cannot give.
 /// </summary>
 public class DcNetEvaluatorTests
 {
@@ -23,10 +26,16 @@ public class DcNetEvaluatorTests
     private static Polygon2 Rect(double x0, double y0, double x1, double y1) =>
         new(new[] { new Point2(x0, y0), new Point2(x1, y0), new Point2(x1, y1), new Point2(x0, y1) });
 
-    private static CopperPad Pad(double xMm, double yMm)
+    /// <summary>A pad at (xMm, yMm). With refDes/pin set it is a COMPONENT PIN — the only
+    /// kind the sweep reports; without them it is an anonymous flash (a via landing or a
+    /// Gerber pad) that conducts but never terminates a measurement.</summary>
+    private static CopperPad Pad(double xMm, double yMm,
+        string? refDes = null, string? pin = null, string? part = null)
     {
         double x = xMm * 1e-3, y = yMm * 1e-3;
-        return new CopperPad(1, new Point2(x, y), Rect(x - 0.5e-3, y - 0.5e-3, x + 0.5e-3, y + 0.5e-3), 1e-3);
+        return new CopperPad(1, new Point2(x, y),
+            Rect(x - 0.5e-3, y - 0.5e-3, x + 0.5e-3, y + 0.5e-3), 1e-3)
+        { ComponentRef = refDes, Pin = pin, PartName = part };
     }
 
     private static TraceCenterline Trace(double x1, double y1, double x2, double y2) =>
@@ -39,10 +48,12 @@ public class DcNetEvaluatorTests
         DielectricGapLossTangents = new[] { TanD },
     };
 
-    /// <summary>Four L1 nets in disjoint island bands (containment maps traces/pads to
-    /// nets): a 2-pad straight run, a 3-pad T-branch whose name carries a comma (the CSV
-    /// escaping gate), a 1-pad net (skipped), and a 2-pad pour with no centerlines
-    /// (a failure note, no rows).</summary>
+    /// <summary>Five L1 nets in disjoint island bands (containment maps traces/pads to
+    /// nets): a 2-pin straight run carrying an extra ANONYMOUS mid pad (a via landing —
+    /// excluded from pairs), a 3-pin T-branch whose name carries a comma (the CSV escaping
+    /// gate), a 1-pin net (skipped), a 2-pin pour with no centerlines (a failure note),
+    /// and an ANON net of two anonymous pads (no component identity ⇒ skipped, the Gerber
+    /// case in miniature).</summary>
     private static PcbBoard MultiNetBoard()
     {
         var islands = new[]
@@ -51,6 +62,7 @@ public class DcNetEvaluatorTests
             new CopperIsland(1, 1, "L1", Rect(-5e-3, 7e-3, 25e-3, 23e-3)),
             new CopperIsland(2, 1, "L1", Rect(50e-3, -3e-3, 60e-3, 3e-3)),
             new CopperIsland(3, 1, "L1", Rect(50e-3, 7e-3, 80e-3, 23e-3)),
+            new CopperIsland(4, 1, "L1", Rect(-5e-3, -23e-3, 45e-3, -17e-3)),
         };
         return new PcbBoard
         {
@@ -58,10 +70,11 @@ public class DcNetEvaluatorTests
             Islands = islands,
             Pads = new[]
             {
-                Pad(0, 0), Pad(40, 0),                    // SIG1
-                Pad(0, 10), Pad(20, 10), Pad(10, 18),     // T,NET
-                Pad(55, 0),                               // LONELY — 1 pad ⇒ skipped
-                Pad(55, 10), Pad(75, 10),                 // POUR — no centerlines ⇒ failure note
+                Pad(0, 0, "H5", "1", "HDR-SMD"), Pad(40, 0, "U1", "3", "SOT-223"), Pad(20, 0), // SIG1 (+via landing)
+                Pad(0, 10, "R1", "1", "0402"), Pad(20, 10, "R1", "2", "0402"), Pad(10, 18, "U2", "5", "QFN"), // T,NET
+                Pad(55, 0, "D1", "1", "SOD-123"),           // LONELY — 1 pin ⇒ skipped
+                Pad(55, 10, "J2", "1", "CONN"), Pad(75, 10, "J2", "2", "CONN"), // POUR — no centerlines ⇒ failure
+                Pad(0, -20), Pad(40, -20),                  // ANON — no component identity ⇒ skipped
             },
             Vias = Array.Empty<Via>(),
             Nets = new[]
@@ -70,6 +83,7 @@ public class DcNetEvaluatorTests
                 new CopperNet(2, new[] { islands[1] }) { Name = "T,NET" },
                 new CopperNet(3, new[] { islands[2] }) { Name = "LONELY" },
                 new CopperNet(4, new[] { islands[3] }) { Name = "POUR" },
+                new CopperNet(5, new[] { islands[4] }) { Name = "ANON" },
             },
             Layers = Array.Empty<BoardLayer>(),
             Warnings = Array.Empty<string>(),
@@ -77,6 +91,7 @@ public class DcNetEvaluatorTests
             {
                 Trace(0, 0, 40, 0),
                 Trace(0, 10, 10, 10), Trace(10, 10, 20, 10), Trace(10, 10, 10, 18),
+                Trace(0, -20, 40, -20),
             },
             Stackup = Stackup(),
         };
@@ -89,24 +104,45 @@ public class DcNetEvaluatorTests
     private static double BarR(double lengthMm) => lengthMm * 1e-3 / (Sigma * W * Copper);
 
     [Fact]
-    public void Sweep_CountsRowsAndFailureNotes_FollowThePadFilter()
+    public void Sweep_CountsRowsAndFailureNotes_FollowTheComponentPinFilter()
     {
         var report = Evaluate(MultiNetBoard());
 
         Assert.Equal(2, report.NetsEvaluated);           // SIG1, T,NET
-        Assert.Equal(1, report.NetsSkipped);             // LONELY (<2 pads)
+        Assert.Equal(2, report.NetsSkipped);             // LONELY (1 pin), ANON (0 pins)
         Assert.Equal(1, report.NetsFailed);              // POUR
         Assert.Equal(0, report.PairsOmitted);
-        // 1 pair + C(3,2) = 3 pairs, in board-net order — the pour has NO row.
+        // 1 pair (SIG1) + C(3,2) = 3 pairs (T,NET), in board-net order — the pour has NO row.
         Assert.Equal(4, report.Rows.Count);
         Assert.Equal("SIG1", report.Rows[0].Net);
         Assert.All(report.Rows.Skip(1), r => Assert.Equal("T,NET", r.Net));
-        Assert.DoesNotContain(report.Rows, r => r.Net is "LONELY" or "POUR");
+        Assert.DoesNotContain(report.Rows, r => r.Net is "LONELY" or "POUR" or "ANON");
+
+        // Every reported endpoint is a component pin — no synthesized coordinate labels.
+        Assert.All(report.Rows, r =>
+        {
+            Assert.DoesNotContain("mm)", r.PadA);
+            Assert.DoesNotContain("mm)", r.PadB);
+        });
 
         // The pour's reason lives on the failure notes (the R side fails first).
         var note = Assert.Single(report.FailureNotes);
         Assert.StartsWith("POUR — ", note);
         Assert.Contains("pour/region", note);
+    }
+
+    [Fact]
+    public void AnonymousPad_ConductsButNeverTerminatesARow()
+    {
+        // SIG1 carries an anonymous via-landing pad at its midpoint (20,0). It sits on the
+        // conduction path but has no component identity, so it produces NO pair: SIG1 is
+        // exactly the single H5.1 ↔ U1.3 measurement, unaffected in value by the landing.
+        var report = Evaluate(MultiNetBoard());
+        var sig = report.Rows.Where(r => r.Net == "SIG1").ToList();
+        var row = Assert.Single(sig);
+        Assert.Equal("H5.1", row.PadA);
+        Assert.Equal("U1.3", row.PadB);
+        Assert.True(Math.Abs(row.ResistanceOhms - BarR(40)) / BarR(40) < 1e-12);
     }
 
     [Fact]
@@ -130,33 +166,33 @@ public class DcNetEvaluatorTests
         Assert.True(Math.Abs(t[2].ResistanceOhms - BarR(18)) / BarR(18) < 1e-12);
         Assert.Equal(t[0].CapacitanceFarads, t[1].CapacitanceFarads);
         Assert.Equal(t[0].CapacitanceFarads, t[2].CapacitanceFarads);
-
-        // No component identity on the fixture ⇒ synthesized labels, blank part names.
-        Assert.Equal("P0 L1 (0;0)mm", sig.PadA);
-        Assert.Equal("P1 L1 (40;0)mm", sig.PadB);
-        Assert.Null(sig.PartA);
-        Assert.Null(sig.PartB);
     }
 
     [Fact]
     public void NamedPads_UseRefDesPin_AndPartName()
     {
+        var sig = Evaluate(MultiNetBoard()).Rows[0];
+        Assert.Equal("H5.1", sig.PadA);
+        Assert.Equal("HDR-SMD", sig.PartA);
+        Assert.Equal("U1.3", sig.PadB);
+        Assert.Equal("SOT-223", sig.PartB);
+    }
+
+    [Fact]
+    public void ComponentPadWithoutPin_LabelsByRefDesAlone()
+    {
+        // A component pad that carries a refdes but no pin number still traces to a
+        // package — the label falls back to the refdes rather than a coordinate.
         var board = MultiNetBoard();
         var pads = board.Pads.ToArray();
-        pads[0] = pads[0] with { ComponentRef = "H5", Pin = "1", PartName = "HDR-SMD_HX-PZ2.54" };
-        pads[1] = pads[1] with { ComponentRef = "U1", Pin = "3", PartName = "SOT-223" };
-        var named = new PcbBoard
+        pads[1] = pads[1] with { Pin = null };            // U1 pad, pin cleared
+        var patched = new PcbBoard
         {
             Outline = board.Outline, Islands = board.Islands, Pads = pads, Vias = board.Vias,
             Nets = board.Nets, Layers = board.Layers, Warnings = board.Warnings,
             TraceCenterlines = board.TraceCenterlines, Stackup = board.Stackup,
         };
-
-        var sig = Evaluate(named).Rows[0];
-        Assert.Equal("H5.1", sig.PadA);
-        Assert.Equal("HDR-SMD_HX-PZ2.54", sig.PartA);
-        Assert.Equal("U1.3", sig.PadB);
-        Assert.Equal("SOT-223", sig.PartB);
+        Assert.Equal("U1", Evaluate(patched).Rows[0].PadB);
     }
 
     [Fact]
@@ -170,7 +206,7 @@ public class DcNetEvaluatorTests
         {
             Outline = Array.Empty<Polygon2>(),
             Islands = new[] { island },
-            Pads = new[] { Pad(0, 0), Pad(40, 0) },
+            Pads = new[] { Pad(0, 0, "U1", "1", "IC"), Pad(40, 0, "U2", "1", "IC") },
             Vias = Array.Empty<Via>(),
             Nets = new[] { new CopperNet(1, new[] { island }) { Name = "SIG1" } },
             Layers = Array.Empty<BoardLayer>(),
@@ -189,14 +225,14 @@ public class DcNetEvaluatorTests
     [Fact]
     public void PairsWithoutR_AreCounted_NotRows()
     {
-        // Three pads: two on the trace, one 40 mm off any copper — its two pairs have
-        // no computable R and must be counted, leaving exactly the complete pair.
+        // Three component pins: two on the trace, one 40 mm off any copper — its two
+        // pairs have no computable R and must be counted, leaving exactly the complete pair.
         var island = new CopperIsland(0, 1, "L1", Rect(-5e-3, -3e-3, 85e-3, 45e-3));
         var board = new PcbBoard
         {
             Outline = Array.Empty<Polygon2>(),
             Islands = new[] { island },
-            Pads = new[] { Pad(0, 0), Pad(40, 0), Pad(80, 40) },
+            Pads = new[] { Pad(0, 0, "U1", "1", "IC"), Pad(40, 0, "U1", "2", "IC"), Pad(80, 40, "U3", "1", "IC") },
             Vias = Array.Empty<Via>(),
             Nets = new[] { new CopperNet(1, new[] { island }) { Name = "SIG1" } },
             Layers = Array.Empty<BoardLayer>(),
@@ -208,8 +244,8 @@ public class DcNetEvaluatorTests
 
         Assert.Equal(1, report.NetsEvaluated);
         var row = Assert.Single(report.Rows);
-        Assert.Equal("P0 L1 (0;0)mm", row.PadA);
-        Assert.Equal("P1 L1 (40;0)mm", row.PadB);
+        Assert.Equal("U1.1", row.PadA);
+        Assert.Equal("U1.2", row.PadB);
         Assert.Equal(2, report.PairsOmitted);
     }
 
@@ -222,6 +258,7 @@ public class DcNetEvaluatorTests
         // The board name appears ONCE, in the preamble — not on every row.
         Assert.Contains("# board: fixture_board.zip", csv);
         Assert.DoesNotContain("fixture_board.zip,", csv);
+        Assert.Contains("# nets: 2 evaluated, 2 skipped (<2 component pins), 1 not computable", csv);
         // The pour's reason is a preamble note; deterministic (no timestamp).
         Assert.Contains("# not computable: POUR — ", csv);
         Assert.Contains("Net,Pad A,Part A,Pad B,Part B,R (ohm),C_total (F),Tau (s),Note", csv);
@@ -229,8 +266,8 @@ public class DcNetEvaluatorTests
         Assert.DoesNotContain(",LONELY,", csv);
 
         var lines = csv.Split("\r\n");
-        // The SIG1 data row: every default cell is quote-free, so a naive split works
-        // (the pad labels use ';' inside coordinates on purpose) — and "R" round-trips.
+        // The SIG1 data row: every cell is quote-free (component labels have no comma), so
+        // a naive split works — and "R" round-trips.
         var sig = lines.Single(l => l.StartsWith("SIG1,"));
         var cells = sig.Split(',');
         Assert.Equal(9, cells.Length);
@@ -248,30 +285,48 @@ public class DcNetEvaluatorTests
     }
 
     [Fact]
-    public void RealBoard_Sweep_EveryNetIsRowsOrCountedSkipOrNote()
+    public void GerberBoard_YieldsNoRows_EveryNetSkippedForNoComponentPins()
     {
+        // Gerber carries no PinRef, so no pad is a component pin — the report is empty by
+        // design, every net skipped (this is why the feature is IPC-2581-specific).
         string zip = System.IO.Path.Combine(AppContext.BaseDirectory, "Pcb", "Fixtures", "example_board.zip");
         var board = new PcbBoardReader().Read(zip);
         var report = DcNetEvaluator.Evaluate(board, new NetMeshOptions(),
             new BoardCoupledOptions(), "example_board.zip");
 
+        Assert.True(board.Nets.Count > 0);
+        Assert.Empty(report.Rows);
+        Assert.Equal(0, report.NetsEvaluated);
+        Assert.Equal(0, report.NetsFailed);
+        Assert.Equal(board.Nets.Count, report.NetsSkipped);
+        // The CSV still renders cleanly (header + preamble, no data rows).
+        Assert.Contains("Net,Pad A,Part A,Pad B,Part B", DcNetReportCsv.Write(report));
+    }
+
+    [Fact]
+    public void RealIpc2581Board_ProducesNamedComponentPinRows()
+    {
+        string? path = OpenSim.Tests.Pcb.Ipc2581IntegrationTests.FindKiCadExampleFile();
+        if (path is null) return;                          // example not present in this checkout
+        var board = new Ipc2581Reader().Read(path);
+        var report = DcNetEvaluator.Evaluate(board, new NetMeshOptions(),
+            new BoardCoupledOptions(), "Breakout_Board.xml");
+
+        Assert.True(report.Rows.Count > 0, "The real IPC-2581 board should produce component-pin rows.");
+        Assert.True(report.NetsEvaluated > 0);
         Assert.Equal(board.Nets.Count, report.NetsEvaluated + report.NetsSkipped + report.NetsFailed);
-        Assert.Equal(report.NetsFailed, report.FailureNotes.Count);
-        Assert.True(report.Rows.Count > 0, "The example board should produce report rows.");
-        Assert.True(report.NetsEvaluated > 0, "Some nets should evaluate cleanly.");
 
         foreach (var row in report.Rows)
         {
-            Assert.True(double.IsFinite(row.ResistanceOhms) && row.ResistanceOhms >= 0,
-                $"{row.Net}: R = {row.ResistanceOhms}");
-            Assert.True(double.IsFinite(row.CapacitanceFarads) && row.CapacitanceFarads > 0,
-                $"{row.Net}: C = {row.CapacitanceFarads}");
-            Assert.True(double.IsFinite(row.TimeConstantSeconds) && row.TimeConstantSeconds >= 0,
-                $"{row.Net}: τ = {row.TimeConstantSeconds}");
+            // Every reported endpoint is a component pin — a refdes label, never a
+            // synthesized coordinate — with finite, physical R/C/τ.
+            Assert.DoesNotContain("mm)", row.PadA);
+            Assert.DoesNotContain("mm)", row.PadB);
+            Assert.True(double.IsFinite(row.ResistanceOhms) && row.ResistanceOhms >= 0, $"{row.Net}: R");
+            Assert.True(double.IsFinite(row.CapacitanceFarads) && row.CapacitanceFarads > 0, $"{row.Net}: C");
+            Assert.True(double.IsFinite(row.TimeConstantSeconds) && row.TimeConstantSeconds >= 0, $"{row.Net}: τ");
         }
-
-        // The CSV renders the whole sweep without incident.
-        string csv = DcNetReportCsv.Write(report);
-        Assert.Contains("Net,Pad A,Part A,Pad B,Part B", csv);
+        // The part column is populated for at least some pins (the file's Component data).
+        Assert.Contains(report.Rows, r => r.PartA is not null || r.PartB is not null);
     }
 }

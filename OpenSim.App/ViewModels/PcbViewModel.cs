@@ -308,6 +308,7 @@ public partial class PcbViewModel : ObservableObject
             foreach (var layer in board.Layers)
                 _log.Append($"  • {layer.Type} — {layer.FileName}");
             foreach (var w in board.Warnings) _log.Append($"PCB: {w}");
+            foreach (var n in board.Notes) _log.Append($"PCB note: {n}");
 
             // The board workflow is electrical: land in the Electrical workspace and
             // switch the analysis right away (Joule stays — it includes the electrical

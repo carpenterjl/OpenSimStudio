@@ -94,7 +94,14 @@ public sealed class PcbBoard
     public required IReadOnlyList<Via> Vias { get; init; }
     public required IReadOnlyList<CopperNet> Nets { get; init; }
     public required IReadOnlyList<BoardLayer> Layers { get; init; }
+
+    /// <summary>Declared-but-skipped/approximated content — a conforming file should
+    /// import with zero warnings.</summary>
     public required IReadOnlyList<string> Warnings { get; init; }
+
+    /// <summary>Informational: absent data defaulted, summaries, timings — never a sign
+    /// that declared content was lost. Empty for readers that predate the split (Gerber).</summary>
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// The physical stackup read from the source file (per-layer copper and per-gap

@@ -32,6 +32,26 @@ public class ImportDeterminismTests
         AssertBoardsIdentical(sequential, parallel);
     }
 
+    [Fact]
+    public void AltiumBoard_ParallelBuild_IsBitwiseIdenticalToSequential()
+    {
+        // The Altium dialect exercises the coincident-copper via refinement and the
+        // plated-slot barrel synthesis — both must stay bitwise at any thread count.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        string? file = null;
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir.FullName, "Ohmmeter_PCB_Final.cvg");
+            if (File.Exists(candidate)) { file = candidate; break; }
+            dir = dir.Parent;
+        }
+        if (file is null) return;   // soft-skip
+        var design = new Ipc2581Parser().Parse(file);
+        var sequential = new Ipc2581BoardBuilder { MaxDegreeOfParallelism = 1 }.Build(design);
+        var parallel = new Ipc2581BoardBuilder().Build(design);
+        AssertBoardsIdentical(sequential, parallel);
+    }
+
     private static void AssertBoardsIdentical(PcbBoard a, PcbBoard b)
     {
         Assert.Equal(a.Islands.Count, b.Islands.Count);
@@ -74,11 +94,15 @@ public class ImportDeterminismTests
         for (int i = 0; i < a.TraceCenterlines.Count; i++)
             Assert.Equal(a.TraceCenterlines[i], b.TraceCenterlines[i]);
 
-        // Warning ORDER and content must match — only wall-clock digits may differ.
+        // Warning/note ORDER and content must match — only wall-clock digits may differ.
         Assert.Equal(a.Warnings.Count, b.Warnings.Count);
         for (int i = 0; i < a.Warnings.Count; i++)
             if (!a.Warnings[i].Contains(" ms"))
                 Assert.Equal(a.Warnings[i], b.Warnings[i]);
+        Assert.Equal(a.Notes.Count, b.Notes.Count);
+        for (int i = 0; i < a.Notes.Count; i++)
+            if (!a.Notes[i].Contains(" ms"))
+                Assert.Equal(a.Notes[i], b.Notes[i]);
     }
 
     private static void AssertRingsIdentical(

@@ -359,9 +359,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
                 DcNetEvaluator.Evaluate(board, meshOptions, options, boardName));
 
             string text = $"{report.NetsEvaluated} net(s) evaluated — "
-                + $"{report.Rows.Count} pad pair(s) reported (R and C), "
+                + $"{report.Rows.Count} component-pin pair(s) reported (R and C), "
                 + $"{report.PairsOmitted} omitted; "
-                + $"{report.NetsSkipped} skipped (<2 pads), {report.NetsFailed} not computable";
+                + $"{report.NetsSkipped} skipped (<2 component pins), {report.NetsFailed} not computable";
 
             var dialog = new Microsoft.Win32.SaveFileDialog
             {

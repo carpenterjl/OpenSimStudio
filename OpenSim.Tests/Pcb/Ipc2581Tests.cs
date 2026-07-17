@@ -243,7 +243,7 @@ public class Ipc2581Tests
     }
 
     [Fact]
-    public void ZeroWidthTrace_WarnsAndSkips()
+    public void ZeroWidthTrace_NotesAndSkips()
     {
         var step = RectProfile + """
             <LayerFeature layerRef="Top Layer">
@@ -258,7 +258,548 @@ public class Ipc2581Tests
             """;
         var board = Read(Document(TwoLayerDecls, TwoLayerStackup, step));
         Assert.DoesNotContain(board.Nets, n => n.Name == "X");
-        Assert.Contains(board.Warnings, w => w.Contains("zero-width"));
+        // A zero-width stroke declares no copper AREA — informational, not a warning
+        // (the zero-warning contract counts only skipped/approximated declared content).
+        Assert.Contains(board.Notes, n => n.Contains("zero-width"));
+        Assert.DoesNotContain(board.Warnings, w => w.Contains("zero-width"));
+    }
+
+    // ---------------- diagnostics severity (the zero-warning contract) ----------------
+
+    private const string GoodTraceStep = RectProfile + """
+        <LayerFeature layerRef="Top Layer">
+          <Set net="X">
+            <Features>
+              <Line startX="2" startY="5" endX="10" endY="5">
+                <LineDesc lineEnd="ROUND" lineWidth="0.3" lineProperty="SOLID" />
+              </Line>
+            </Features>
+          </Set>
+        </LayerFeature>
+        """;
+
+    [Fact]
+    public void MissingStackup_AndDefaults_AreNotes_NotWarnings()
+    {
+        // No StackupLayer rows: layer order/thicknesses are genuinely absent from the
+        // file, so defaults apply with NOTES — the import itself is warning-free.
+        var board = Read(Document(TwoLayerDecls, "", GoodTraceStep));
+
+        Assert.Empty(board.Warnings);
+        Assert.Contains(board.Notes, n => n.Contains("no Stackup section"));
+        Assert.Contains(board.Notes, n => n.Contains("no stackup thickness"));
+        Assert.Contains(board.Notes, n => n.Contains("Board-build timing"));
+        Assert.Contains(board.Notes, n => n.Contains("nets ("));
+        Assert.Contains(board.Nets, n => n.Name == "X");
+    }
+
+    [Fact]
+    public void NonstandardAttributeAndTextual_SkipSilently_SiblingsSurvive()
+    {
+        // Metadata elements between two traces: both must be consumed without a warning,
+        // and Textual's CHILD must not leak into the feature dispatch (the subtree-skip
+        // sibling-swallow class of bug).
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <Line startX="2" startY="5" endX="8" endY="5">
+                    <LineDesc lineEnd="ROUND" lineWidth="0.3" lineProperty="SOLID" />
+                  </Line>
+                  <NonstandardAttribute name="PADSTACK_USAGE" value="Through_via" type="STRING" />
+                  <Textual textString="REF**"><BoundingBox lowerLeftX="0" lowerLeftY="0" upperRightX="1" upperRightY="1" /></Textual>
+                  <Line startX="8" startY="5" endX="14" endY="5">
+                    <LineDesc lineEnd="ROUND" lineWidth="0.3" lineProperty="SOLID" />
+                  </Line>
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        // Both lines landed (one island 2→14) — the second sibling was not swallowed.
+        var net = board.Nets.Single(n => n.Name == "X");
+        Assert.Equal(2, board.TraceCenterlines.Count);
+        Assert.True(net.Area > 12e-3 * 0.3e-3 * 0.99);
+    }
+
+    // ---------------- style dictionaries + Polyline + fill semantics ----------------
+
+    private const string StyleDictionaries = """
+        <DictionaryLineDesc units="MILLIMETER">
+          <EntryLineDesc id="ROUND_300"><LineDesc lineEnd="ROUND" lineWidth="0.3"/></EntryLineDesc>
+        </DictionaryLineDesc>
+        <DictionaryFillDesc units="MILLIMETER">
+          <EntryFillDesc id="SOLID_FILL"><FillDesc fillProperty="FILL"/></EntryFillDesc>
+          <EntryFillDesc id="HOLLOW_FILL"><FillDesc fillProperty="HOLLOW"/></EntryFillDesc>
+        </DictionaryFillDesc>
+        """;
+
+    [Fact]
+    public void Polyline_WithLineDescRef_StrokesTheResolvedWidth_AndKeepsCenterlines()
+    {
+        // The Cadence routed-copper construct: an L-shaped open path, width via ref.
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <Location x="0.0" y="0.0"/>
+                  <Polyline>
+                    <PolyBegin x="2" y="2"/>
+                    <PolyStepSegment x="10" y="2"/>
+                    <PolyStepSegment x="10" y="8"/>
+                    <LineDescRef id="ROUND_300"/>
+                  </Polyline>
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls + StyleDictionaries, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        var net = board.Nets.Single(n => n.Name == "X");
+        // Stroked capsule area of a 14 mm path at w = 0.3 mm (round caps + convex bend
+        // add ~one full circle of w/2 in total).
+        double ideal = 14e-3 * 0.3e-3 + Math.PI * 0.15e-3 * 0.15e-3;
+        Assert.Equal(ideal, net.Area, ideal * 2e-2);
+        // Both legs land as PEEC centerlines carrying the resolved width.
+        Assert.Equal(2, board.TraceCenterlines.Count);
+        Assert.All(board.TraceCenterlines, c => Assert.Equal(0.3e-3, c.Width, 1e-12));
+    }
+
+    [Fact]
+    public void Polyline_WithArcStep_AccumulatesChordCenterlines()
+    {
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <Polyline>
+                    <PolyBegin x="2" y="5"/>
+                    <PolyStepCurve x="8" y="5" centerX="5" centerY="5" clockwise="false"/>
+                    <LineDescRef id="ROUND_300"/>
+                  </Polyline>
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls + StyleDictionaries, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        // Half-circle of radius 3 mm: chords accumulate above the width/2 stub tolerance,
+        // and the path's endpoints are preserved exactly.
+        Assert.True(board.TraceCenterlines.Count >= 3);
+        var first = board.TraceCenterlines[0];
+        var last = board.TraceCenterlines[^1];
+        Assert.Equal(2e-3, first.Start.X, 1e-9);
+        Assert.Equal(8e-3, last.End.X, 1e-9);
+    }
+
+    [Fact]
+    public void HollowRing_IsStrokedAsAnOutline_NotFilled()
+    {
+        // A HOLLOW square ring 8×8 mm: filling it would fabricate ~64 mm² of copper
+        // (the short hazard); the correct copper is the stroked outline ring.
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <Polygon>
+                    <PolyBegin x="2" y="1"/>
+                    <PolyStepSegment x="10" y="1"/>
+                    <PolyStepSegment x="10" y="9"/>
+                    <PolyStepSegment x="2" y="9"/>
+                    <PolyBegin x="2" y="1"/>
+                    <FillDescRef id="HOLLOW_FILL"/>
+                    <LineDescRef id="ROUND_300"/>
+                  </Polygon>
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls + StyleDictionaries, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        var net = board.Nets.Single(n => n.Name == "X");
+        // Stroked closed outline: perimeter × width + corner caps ≈ one circle.
+        double outline = 32e-3 * 0.3e-3 + Math.PI * 0.15e-3 * 0.15e-3;
+        Assert.Equal(outline, net.Area, outline * 5e-2);
+        Assert.True(net.Area < 64e-6 * 0.2, "a HOLLOW ring must never pour the enclosed area");
+        // The enclosed region stays open: the island carries a hole.
+        Assert.Contains(net.Islands, i => i.Shape.Holes.Count > 0);
+    }
+
+    [Fact]
+    public void UnknownLineDescRef_WarnsAndSkipsTheDraw()
+    {
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <Polyline>
+                    <PolyBegin x="2" y="5"/>
+                    <PolyStepSegment x="10" y="5"/>
+                    <LineDescRef id="MISSING_STYLE"/>
+                  </Polyline>
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls + StyleDictionaries, TwoLayerStackup, step));
+
+        Assert.Contains(board.Warnings, w => w.Contains("MISSING_STYLE"));
+        Assert.DoesNotContain(board.Nets, n => n.Name == "X");
+        // The unresolved ref is a WARNING, not an extra zero-width note.
+        Assert.DoesNotContain(board.Notes, n => n.Contains("zero-width"));
+    }
+
+    // ---------------- user dictionary, mirror, Marking, LocalFiducial ----------------
+
+    [Fact]
+    public void UserPrimitiveRef_PlacesTheDictionaryFigure()
+    {
+        // A user figure: an L-path stroke + a HOLLOW circle outline (the KiCad figure
+        // style — bare primitives at the entry's local origin). Flashed at (10, 5).
+        var dictionaries = """
+            <DictionaryUser units="MILLIMETER">
+              <EntryUser id="FIG_L">
+                <UserSpecial>
+                  <Polyline>
+                    <PolyBegin x="0" y="0"/>
+                    <PolyStepSegment x="3" y="0"/>
+                    <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+                  </Polyline>
+                  <Circle diameter="2">
+                    <LineDesc lineEnd="ROUND" lineWidth="0.1"/>
+                    <FillDesc fillProperty="HOLLOW"/>
+                  </Circle>
+                </UserSpecial>
+              </EntryUser>
+            </DictionaryUser>
+            """;
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <Location x="10" y="5"/>
+                  <UserPrimitiveRef id="FIG_L"/>
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls + dictionaries, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        var net = board.Nets.Single(n => n.Name == "X");
+        // The stroked L-path (3 mm × 0.2 mm + caps) + the circle OUTLINE (not a disk).
+        double ideal = 3e-3 * 0.2e-3 + Math.PI * 0.1e-3 * 0.1e-3          // path + caps
+                     + Math.PI * 2e-3 * 0.1e-3;                            // ring ≈ 2πr·w
+        Assert.Equal(ideal, net.Area, ideal * 5e-2);
+        // Geometry landed at the flash location, and the hollow circle kept its opening.
+        Assert.Contains(net.Islands, i => i.Shape.Holes.Count > 0);
+        Assert.All(net.Islands, i =>
+        {
+            var (minX, _, maxX, _) = i.Bounds();
+            Assert.InRange(minX, 8.8e-3, 14e-3);
+            Assert.InRange(maxX, 8.8e-3, 14e-3);
+        });
+    }
+
+    [Fact]
+    public void XformMirror_FlipsAnAsymmetricFlash()
+    {
+        // An asymmetric RectCorner pad (extends only to +x locally) flashed with
+        // mirror="true": the copper must land on the −x side of the location. The old
+        // behavior (warn + ignore) would put it at +x — sign-decisive.
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <Location x="10" y="5"/>
+                  <Xform rotation="0" mirror="true"/>
+                  <RectCorner lowerLeftX="1" lowerLeftY="-0.5" upperRightX="3" upperRightY="0.5"/>
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        var island = board.Nets.Single(n => n.Name == "X").Islands.Single();
+        var (minX, _, maxX, _) = island.Bounds();
+        Assert.Equal(7e-3, minX, 1e-9);                          // 10 − 3
+        Assert.Equal(9e-3, maxX, 1e-9);                          // 10 − 1
+    }
+
+    [Fact]
+    public void Marking_OnAConductorLayer_DepositsItsGeometry()
+    {
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Marking markingUsage="NONE">
+                  <Location x="0" y="0"/>
+                  <Polyline>
+                    <PolyBegin x="2" y="5"/>
+                    <PolyStepSegment x="8" y="5"/>
+                    <LineDesc lineEnd="ROUND" lineWidth="0.3"/>
+                  </Polyline>
+                </Marking>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        var net = board.Nets.Single(n => n.Name == "X");
+        double ideal = 6e-3 * 0.3e-3 + Math.PI * 0.15e-3 * 0.15e-3;
+        Assert.Equal(ideal, net.Area, ideal * 2e-2);
+    }
+
+    [Fact]
+    public void LocalFiducial_BecomesCopper()
+    {
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <LocalFiducial>
+                  <Location x="9.167" y="3.087"/>
+                  <Circle diameter="1"/>
+                </LocalFiducial>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, step));
+
+        Assert.Empty(board.Warnings);
+        var net = board.Nets.Single(n => n.Name == "X");
+        Assert.Single(net.Islands);
+        Assert.Contains(board.Pads, p =>
+            Math.Abs(p.Center.X - 9.167e-3) < 1e-9 && Math.Abs(p.Center.Y - 3.087e-3) < 1e-9);
+    }
+
+    // ---------------- via-bridge fidelity + backdrills ----------------
+
+    private const string SixLayerDecls = """
+        <Layer name="L1" layerFunction="SIGNAL" side="TOP" polarity="POSITIVE" />
+        <Layer name="L2" layerFunction="PLANE" side="INTERNAL" polarity="POSITIVE" />
+        <Layer name="L3" layerFunction="SIGNAL" side="INTERNAL" polarity="POSITIVE" />
+        <Layer name="L4" layerFunction="PLANE" side="INTERNAL" polarity="POSITIVE" />
+        <Layer name="L5" layerFunction="SIGNAL" side="INTERNAL" polarity="POSITIVE" />
+        <Layer name="L6" layerFunction="SIGNAL" side="BOTTOM" polarity="POSITIVE" />
+        <Layer name="DRILL_ALL" layerFunction="DRILL" side="ALL" polarity="POSITIVE">
+          <Span fromLayer="L1" toLayer="L6"/>
+        </Layer>
+        <Layer name="BD_TOP" layerFunction="DRILL" side="TOP" polarity="POSITIVE">
+          <Span fromLayer="L1" toLayer="L2"/>
+        </Layer>
+        """;
+
+    /// <summary>Same-net pads at (5, 5) on L1/L3/L6 + a through via there (no padstack
+    /// declaration — the Cadence pattern), plus an optional backdrill block.</summary>
+    private static string SixLayerViaStep(string extra = "") => RectProfile + """
+        <LayerFeature layerRef="L1"><Set net="V"><Features>
+          <Location x="5" y="5"/><Circle diameter="0.6"/>
+        </Features></Set></LayerFeature>
+        <LayerFeature layerRef="L3"><Set net="V"><Features>
+          <Location x="5" y="5"/><Circle diameter="0.6"/>
+        </Features></Set></LayerFeature>
+        <LayerFeature layerRef="L6"><Set net="V"><Features>
+          <Location x="5" y="5"/><Circle diameter="0.6"/>
+        </Features></Set></LayerFeature>
+        <LayerFeature layerRef="DRILL_ALL"><Set net="V">
+          <Hole name="H1" diameter="0.3" platingStatus="VIA" x="5" y="5"/>
+        </Set></LayerFeature>
+        """ + extra;
+
+    private const string BackdrillSpec = """
+        <Spec name="BD_SPEC">
+          <Backdrill type="START_LAYER"><Property text="L1"/></Backdrill>
+          <Backdrill type="MUST_NOT_CUT_LAYER"><Property text="L3"/></Backdrill>
+          <Backdrill type="MAX_STUB_LENGTH"><Property value="0.100" unit="MM"/></Backdrill>
+        </Spec>
+        """;
+
+    [Fact]
+    public void ViaWithoutPadstack_BridgesTheLayersItsCopperTouches()
+    {
+        // The Cadence pattern: no PadStack/PadStackDef anywhere — the old span-endpoint
+        // fallback bridged only {L1, L6}, silently missing the inner L3 connection.
+        var board = Read(Document(SixLayerDecls, "", SixLayerViaStep()));
+
+        Assert.Empty(board.Warnings);
+        var net = board.Nets.Single(n => n.Name == "V");
+        var bridge = Assert.Single(net.StitchingVias);
+        Assert.Equal(new[] { 1, 3, 6 }, bridge.Layers);
+    }
+
+    [Fact]
+    public void Backdrill_SeversTheDrilledLayers_AndProtectsMustNotCut()
+    {
+        // The backdrill spans L1–L2 (MUST_NOT_CUT L3 sits safely below): the via keeps
+        // exactly its remaining copper connections {L3, L6}; the backdrill hole itself
+        // never becomes a via.
+        var extra = """
+            <LayerFeature layerRef="BD_TOP"><Set>
+              <SpecRef id="BD_SPEC"/>
+              <Hole name="BD1" diameter="0.5" platingStatus="NONPLATED" x="5" y="5"/>
+            </Set></LayerFeature>
+            """;
+        var board = Read(Document(SixLayerDecls + BackdrillSpec, "", SixLayerViaStep(extra)));
+
+        Assert.Empty(board.Warnings);
+        Assert.Single(board.Vias);                               // H1 only — BD1 is not a hole
+        var net = board.Nets.Single(n => n.Name == "V");
+        var bridge = Assert.Single(net.StitchingVias);
+        Assert.Equal(new[] { 3, 6 }, bridge.Layers);
+        Assert.Contains(board.Notes, n => n.Contains("severed"));
+    }
+
+    [Fact]
+    public void Backdrill_ElsewhereOnTheBoard_TouchesNothing()
+    {
+        var extra = """
+            <LayerFeature layerRef="BD_TOP"><Set>
+              <SpecRef id="BD_SPEC"/>
+              <Hole name="BD1" diameter="0.5" platingStatus="NONPLATED" x="12" y="5"/>
+            </Set></LayerFeature>
+            """;
+        var board = Read(Document(SixLayerDecls + BackdrillSpec, "", SixLayerViaStep(extra)));
+
+        var bridge = Assert.Single(board.Nets.Single(n => n.Name == "V").StitchingVias);
+        Assert.Equal(new[] { 1, 3, 6 }, bridge.Layers);
+        Assert.DoesNotContain(board.Notes, n => n.Contains("severed"));
+    }
+
+    [Fact]
+    public void Backdrill_ProtectedLayerInsideItsOwnSpan_WarnsAndKeepsTheLayer()
+    {
+        // A self-contradictory declaration: the drill span covers L1–L3 but the spec
+        // protects L3 — honor the protection (L3 stays connected) and say so.
+        const string contradictory = """
+            <Spec name="BD_SPEC">
+              <Backdrill type="START_LAYER"><Property text="L1"/></Backdrill>
+              <Backdrill type="MUST_NOT_CUT_LAYER"><Property text="L3"/></Backdrill>
+            </Spec>
+            <Layer name="BD_DEEP" layerFunction="DRILL" side="TOP" polarity="POSITIVE">
+              <Span fromLayer="L1" toLayer="L3"/>
+            </Layer>
+            """;
+        var extra = """
+            <LayerFeature layerRef="BD_DEEP"><Set>
+              <SpecRef id="BD_SPEC"/>
+              <Hole name="BD1" diameter="0.5" platingStatus="NONPLATED" x="5" y="5"/>
+            </Set></LayerFeature>
+            """;
+        var board = Read(Document(SixLayerDecls + contradictory, "", SixLayerViaStep(extra)));
+
+        Assert.Contains(board.Warnings, w => w.Contains("protects layer 'L3' inside its own drill span"));
+        var bridge = Assert.Single(board.Nets.Single(n => n.Name == "V").StitchingVias);
+        Assert.Equal(new[] { 3, 6 }, bridge.Layers);             // L1/L2 severed, L3 protected
+    }
+
+    // ---------------- SlotCavity: cutouts + plated-slot bridging ----------------
+
+    /// <summary>An oblong slot 2×0.5 mm at (5, 5), repeated on both copper layers (the
+    /// Altium pattern — one named slot per LayerFeature it passes through), inside
+    /// same-net copper rectangles on both layers.</summary>
+    private static string SlotStep(string plating) => RectProfile + $"""
+        <LayerFeature layerRef="Top Layer"><Set net="V"><Features>
+          <Location x="5" y="5"/>
+          <RectCenter width="4" height="2"/>
+        </Features>
+        <SlotCavity name="S1" platingStatus="{plating}">
+          <Outline><Polygon>
+            <PolyBegin x="5.75" y="4.75"/>
+            <PolyStepCurve x="5.75" y="5.25" centerX="5.75" centerY="5" clockwise="false"/>
+            <PolyStepSegment x="4.25" y="5.25"/>
+            <PolyStepCurve x="4.25" y="4.75" centerX="4.25" centerY="5" clockwise="false"/>
+            <PolyStepSegment x="5.75" y="4.75"/>
+          </Polygon></Outline>
+        </SlotCavity>
+        </Set></LayerFeature>
+        <LayerFeature layerRef="Bottom Layer"><Set net="V"><Features>
+          <Location x="5" y="5"/>
+          <RectCenter width="4" height="2"/>
+        </Features>
+        <SlotCavity name="S1" platingStatus="{plating}">
+          <Outline><Polygon>
+            <PolyBegin x="5.75" y="4.75"/>
+            <PolyStepCurve x="5.75" y="5.25" centerX="5.75" centerY="5" clockwise="false"/>
+            <PolyStepSegment x="4.25" y="5.25"/>
+            <PolyStepCurve x="4.25" y="4.75" centerX="4.25" centerY="5" clockwise="false"/>
+            <PolyStepSegment x="5.75" y="4.75"/>
+          </Polygon></Outline>
+        </SlotCavity>
+        </Set></LayerFeature>
+        """;
+
+    [Fact]
+    public void PlatedSlot_BridgesItsCopper_AndCutsTheOutline()
+    {
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, SlotStep("PLATED")));
+
+        Assert.Empty(board.Warnings);
+        // The two per-layer occurrences aggregate to ONE slot: one outline cutout.
+        var hole = Assert.Single(board.Outline[0].Holes);
+        Assert.Contains(hole, p => Math.Abs(p.X - 5.75e-3) < 1e-6);
+        // The plating bridges the net's copper: barrels along the 2 mm axis, each
+        // joining both layers, welded into ONE net V.
+        var net = board.Nets.Single(n => n.Name == "V");
+        Assert.True(net.StitchingVias.Count >= 2, $"{net.StitchingVias.Count} barrels");
+        Assert.All(net.StitchingVias, b => Assert.Equal(new[] { 1, 2 }, b.Layers));
+        Assert.Contains(board.Notes, n => n.Contains("slot"));
+    }
+
+    [Fact]
+    public void NonplatedSlot_CutsTheOutline_AndBridgesNothing()
+    {
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, SlotStep("NONPLATED")));
+
+        Assert.Empty(board.Warnings);
+        Assert.Single(board.Outline[0].Holes);
+        Assert.Empty(board.Vias);
+        var net = board.Nets.Single(n => n.Name == "V");
+        Assert.Empty(net.StitchingVias);
+    }
+
+    [Fact]
+    public void PlatedSlot_TouchingTwoNets_WarnsAndDoesNotBridge()
+    {
+        // Copper of DIFFERENT nets on the two layers: a plated slot would short them —
+        // warn and refuse, never silently weld two named nets.
+        var step = SlotStep("PLATED").Replace(
+            "<LayerFeature layerRef=\"Bottom Layer\"><Set net=\"V\">",
+            "<LayerFeature layerRef=\"Bottom Layer\"><Set net=\"W\">");
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, step));
+
+        Assert.Contains(board.Warnings, w => w.Contains("plated slot 'S1'") && w.Contains("2 different nets"));
+        Assert.Empty(board.Nets.Single(n => n.Name == "V").StitchingVias);
+        Assert.Empty(board.Nets.Single(n => n.Name == "W").StitchingVias);
+    }
+
+    [Fact]
+    public void RepeatedWarnings_CollapseToOneEntryWithACount()
+    {
+        // The log-flood guard: one problem repeated N times (differing only in its line
+        // position) seals to a single entry with an (×N) suffix.
+        var step = RectProfile + """
+            <LayerFeature layerRef="Top Layer">
+              <Set net="X">
+                <Features>
+                  <BogusFeature someAttr="1" />
+                  <BogusFeature someAttr="2" />
+                  <BogusFeature someAttr="3" />
+                </Features>
+              </Set>
+            </LayerFeature>
+            """;
+        var board = Read(Document(TwoLayerDecls, TwoLayerStackup, step));
+
+        var bogus = board.Warnings.Where(w => w.Contains("<BogusFeature>")).ToList();
+        var single = Assert.Single(bogus);
+        Assert.EndsWith("(×3)", single);
     }
 
     [Fact]
@@ -703,6 +1244,71 @@ public class Ipc2581IntegrationTests
             dir = dir.Parent;
         }
         return null;
+    }
+
+    internal static string? FindCadenceExampleFile()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir.FullName, "Large_Board_Example.xml");
+            if (File.Exists(candidate)) return candidate;
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// The transform oracle that pins the Xform mirror convention empirically:
+    /// instantiating every Cadence component's LandPattern pads under the component's
+    /// placement (ROTATE first, then mirror x → −x) must land on the placed
+    /// conductor-layer pad flashes of the same componentRef + pin. Measured across the
+    /// candidate conventions: rotate-then-mirrorX 1689/1689, mirrorX-then-rotate
+    /// 523/1417 (mirrored side), rotate-then-mirrorY 56/1417, no-mirror 350/1417 —
+    /// the match rate collapses for every wrong convention, so the gate is
+    /// sign-decisive where any single synthetic fixture could be coincidentally right.
+    /// </summary>
+    [Fact]
+    public void CadenceBoard_ComponentInstantiation_LandsOnPlacedPads()
+    {
+        string? path = FindCadenceExampleFile();
+        if (path is null) return;                                // example not present
+        var design = new Ipc2581Parser().Parse(path);
+
+        // Placed conductor pads by (componentRef, pin) → centers.
+        var placed = new Dictionary<(string, string), List<OpenSim.Core.Geometry2D.Point2>>();
+        foreach (var net in design.Nets.Values)
+            foreach (var pad in net.Pads)
+                if (pad.ComponentRef is not null && pad.Pin is not null)
+                {
+                    var key = (pad.ComponentRef, pad.Pin);
+                    if (!placed.TryGetValue(key, out var list)) placed[key] = list = new();
+                    list.Add(pad.Center);
+                }
+        // Measured: 1,689 distinct (refdes, pin) keys on copper (7.5k flashes — a
+        // through-pin lands one flash per bridged layer).
+        Assert.True(placed.Count > 1500, $"only {placed.Count} component pins on copper");
+
+        int total = 0, matched = 0, mirrored = 0;
+        foreach (var component in design.Components)
+        {
+            if (component.Location is null || component.PackageRef is null) continue;
+            if (!design.Packages.TryGetValue(component.PackageRef, out var package)) continue;
+            if (component.Mirror) mirrored++;
+            foreach (var pad in package.Pads)
+            {
+                if (pad.Pin is null) continue;
+                if (!placed.TryGetValue((component.RefDes, pad.Pin), out var centers)) continue;
+                total++;
+                var expected = component.Transform.Apply(pad.Location);
+                if (centers.Any(c => (c - expected).Length < 10e-6)) matched++;
+            }
+        }
+
+        Assert.True(total > 1500, $"only {total} instantiable pads");
+        Assert.True(mirrored > 50, $"only {mirrored} mirrored components — the gate needs both sides");
+        Assert.True(matched >= total * 0.99,
+            $"only {matched}/{total} instantiated pads land on placed copper — mirror convention wrong?");
     }
 
     /// <summary>

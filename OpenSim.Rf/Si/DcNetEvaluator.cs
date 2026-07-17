@@ -33,15 +33,22 @@ public sealed record DcNetReport(
     IReadOnlyList<string> Assumptions);
 
 /// <summary>
-/// The "Evaluate DC nets" sweep: for every net on the board with at least two pads
-/// (fewer is an unusable import artifact — skipped and counted), compute the DC
-/// resistance between every unordered pad pair by the <see cref="TraceResistanceNetwork"/>
-/// nodal solve, the net's total capacitance to the reference plane by the S12
+/// The "Evaluate DC nets" sweep. Only measurements that START AND END AT A COMPONENT are
+/// reported: each reported pad must trace back to a package/pin (an IPC-2581 PinRef), so
+/// via landing pads and Gerber flashes — which carry no component identity — never
+/// terminate a row. This makes the report an IPC-2581-specific feature: a Gerber board
+/// (no PinRef anywhere) yields no rows, every net skipped.
+///
+/// For every net with at least two COMPONENT PINS (fewer is skipped and counted), it
+/// computes the DC resistance between every unordered pin pair by the
+/// <see cref="TraceResistanceNetwork"/> nodal solve (over the net's FULL copper graph —
+/// via landings and traces still conduct, they just don't terminate a measurement), the
+/// net's total capacitance to the reference plane by the S12
 /// <see cref="TraceCapacitanceExtractor"/>, and the lumped screen τ = R(pair) × C(net) —
 /// the whole net's capacitance charged through that pair's path resistance, an
 /// order-of-magnitude RC SCREEN, not a distributed/Elmore delay (stated). Only pairs
 /// with BOTH values become rows; incomplete pairs and non-conforming nets (pours,
-/// unreachable pads, no reference gap) are counted with their reasons — the sweep never
+/// unreachable pins, no reference gap) are counted with their reasons — the sweep never
 /// aborts and never emits a garbage number.
 /// </summary>
 public static class DcNetEvaluator
@@ -80,14 +87,16 @@ public static class DcNetEvaluator
 
         var assumptions = new List<string>
         {
+            "scope: only pairs whose BOTH pads are component pins (IPC-2581 PinRef → refdes.pin) "
+                + "are reported — via landings and Gerber flashes carry no component identity, so a "
+                + "Gerber board yields no rows and every net is skipped",
             "resistance: DC nodal network on trace centerlines — R = ρℓ/A per segment, "
-                + "pads as equipotential attachment points, corners/necks unmodeled, no skin effect "
+                + "pins as equipotential attachment points, corners/necks unmodeled, no skin effect "
                 + "(the FE field solve remains the per-net precision tool)",
             "capacitance: the net alone over an infinite reference plane — traces Σ C′(width, gap)·length "
                 + "+ pad plates ε₀εr·A/h (no fringing on pads, a stated lower bound); other nets absent",
-            "time constant: lumped RC screen τ = R(pad pair) × C(whole net) — not a distributed/Elmore delay",
-            "pads are named refdes.pin (part name from the file's Component data) when the source "
-                + "declares them (IPC-2581); otherwise P{index} L{layer} (x;y)mm is synthesized",
+            "time constant: lumped RC screen τ = R(pin pair) × C(whole net) — not a distributed/Elmore delay",
+            "part name is the file's Component part (footprint package as fallback) when present",
             $"conductivity {options.ConductivitySiemensPerMeter:g3} S/m, copper thickness from the stackup",
         };
 
@@ -102,16 +111,21 @@ public static class DcNetEvaluator
         try
         {
             var pads = NetTraceExtractor.PadsForNet(board, net);
-            if (pads.Count < 2)
+            // Only component pins are measured: a reported endpoint must trace back to a
+            // package/pin (IPC-2581 PinRef). Via landing pads and Gerber flashes have no
+            // component identity, so a net with fewer than two component pins produces no
+            // rows — skipped and counted (Gerber boards land entirely here, by design).
+            var pins = pads.Where(p => p.ComponentRef is not null).ToList();
+            if (pins.Count < 2)
                 return (new List<DcNetRow>(), 0, Skipped: true, null);
 
-            // The pad layers widen the stackup span so a pad on a traceless layer maps
-            // to the honest "no junction within span" note, never "outside the stackup".
+            // The graph spans EVERY pad's layer (via landings included) so the conduction
+            // path is complete; only the reported terminals narrow to the component pins.
             var graph = TraceChainBuilder.BuildGraph(
                 NetTraceExtractor.ForNet(board, net), net.StitchingVias, meshOptions,
                 net.Islands, pads.Select(p => p.LayerOrder).Distinct().ToList());
             var resistance = TraceResistanceNetwork.Solve(graph,
-                pads.Select(p => new ChainTerminal(p.Center, p.LayerOrder)).ToList(),
+                pins.Select(p => new ChainTerminal(p.Center, p.LayerOrder)).ToList(),
                 options.ConductivitySiemensPerMeter);
             if (resistance.FailureReason is not null)
                 return (new List<DcNetRow>(), 0, false, $"{label} — {resistance.FailureReason}");
@@ -129,8 +143,8 @@ public static class DcNetEvaluator
             {
                 if (pair.ResistanceOhms is not { } r) { omitted++; continue; }
                 rows.Add(new DcNetRow(label,
-                    PadLabel(pads, pair.PadA), pads[pair.PadA].PartName,
-                    PadLabel(pads, pair.PadB), pads[pair.PadB].PartName,
+                    PadLabel(pins, pair.PadA), pins[pair.PadA].PartName,
+                    PadLabel(pins, pair.PadB), pins[pair.PadB].PartName,
                     r, capacitance.TotalFarads, r * capacitance.TotalFarads, pair.Note));
             }
             return (rows, omitted, false, null);
@@ -145,16 +159,14 @@ public static class DcNetEvaluator
         }
     }
 
-    /// <summary>The pad's refdes.pin when the file declared one (IPC-2581 PinRef);
-    /// otherwise a synthesized identity — index in the net's pad list, layer, and
-    /// position in mm, with a semicolon coordinate separator so the label never needs
-    /// CSV quoting. Gerber never carries pad names (%TO attributes are discarded).</summary>
-    private static string PadLabel(IReadOnlyList<CopperPad> pads, int index)
+    /// <summary>The reported pin's refdes.pin (IPC-2581 PinRef) — every reported pad is a
+    /// component pin by construction, so <see cref="CopperPad.ComponentRef"/> is set. The
+    /// coordinate fallback survives only for the odd component pad missing a pin number,
+    /// where the refdes alone still names the component.</summary>
+    private static string PadLabel(IReadOnlyList<CopperPad> pins, int index)
     {
-        var pad = pads[index];
-        if (pad.ComponentRef is { } refDes)
-            return pad.Pin is { } pin ? $"{refDes}.{pin}" : refDes;
-        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"P{index} L{pad.LayerOrder} ({pad.Center.X * 1e3:0.###};{pad.Center.Y * 1e3:0.###})mm");
+        var pad = pins[index];
+        string refDes = pad.ComponentRef!;
+        return pad.Pin is { } pin ? $"{refDes}.{pin}" : refDes;
     }
 }

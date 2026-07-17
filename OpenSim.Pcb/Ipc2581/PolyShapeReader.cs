@@ -22,9 +22,13 @@ public static class PolyShapeReader
     /// Reads one ring from a reader positioned at a <c>Polygon</c>/<c>Cutout</c> element,
     /// consuming that element. Coordinates are multiplied by <paramref name="scale"/>
     /// (file units → meters). Returns null (with a warning) when the ring is unusable —
-    /// a bad number or fewer than 3 distinct points.
+    /// a bad number or fewer than 3 distinct points. Non-step child elements (style refs
+    /// like <c>FillDescRef</c>/<c>LineDescRef</c>, which the Cadence dialect nests INSIDE
+    /// the ring element) are passed to <paramref name="onStyleElement"/> when provided,
+    /// else ignored.
     /// </summary>
-    public static IReadOnlyList<Point2>? ReadRing(XmlReader reader, double scale, List<string> warnings)
+    public static IReadOnlyList<Point2>? ReadRing(XmlReader reader, double scale,
+        Ipc2581Diagnostics diag, Action<XmlReader>? onStyleElement = null)
     {
         string owner = reader.LocalName;
         var ring = new List<Point2>();
@@ -39,16 +43,16 @@ public static class PolyShapeReader
                 switch (sub.LocalName)
                 {
                     case "PolyBegin":
-                        if (TryPoint(sub, scale, warnings, owner, out var start)) ring.Add(start);
+                        if (TryPoint(sub, scale, diag, owner, out var start)) ring.Add(start);
                         else valid = false;
                         break;
                     case "PolyStepSegment":
-                        if (TryPoint(sub, scale, warnings, owner, out var p)) ring.Add(p);
+                        if (TryPoint(sub, scale, diag, owner, out var p)) ring.Add(p);
                         else valid = false;
                         break;
                     case "PolyStepCurve":
                         if (ring.Count > 0
-                            && TryPoint(sub, scale, warnings, owner, out var end)
+                            && TryPoint(sub, scale, diag, owner, out var end)
                             && TryAttr(sub, "centerX", scale, out double cx)
                             && TryAttr(sub, "centerY", scale, out double cy))
                         {
@@ -58,9 +62,12 @@ public static class PolyShapeReader
                         }
                         else
                         {
-                            warnings.Add($"IPC-2581: invalid PolyStepCurve in <{owner}> skipped.");
+                            diag.Warn($"IPC-2581: invalid PolyStepCurve in <{owner}> skipped.");
                             valid = false;
                         }
+                        break;
+                    default:
+                        onStyleElement?.Invoke(sub);
                         break;
                 }
             }
@@ -72,7 +79,7 @@ public static class PolyShapeReader
         if (!valid || ring.Count < 3)
         {
             if (valid)
-                warnings.Add($"IPC-2581: <{owner}> ring with fewer than 3 points skipped.");
+                diag.Warn($"IPC-2581: <{owner}> ring with fewer than 3 points skipped.");
             return null;
         }
         return ring;
@@ -110,7 +117,7 @@ public static class PolyShapeReader
     }
 
     /// <summary>Reads the (x, y) attribute pair of the current element, scaled to meters.</summary>
-    private static bool TryPoint(XmlReader reader, double scale, List<string> warnings,
+    private static bool TryPoint(XmlReader reader, double scale, Ipc2581Diagnostics diag,
         string owner, out Point2 point)
     {
         if (TryAttr(reader, "x", scale, out double x) && TryAttr(reader, "y", scale, out double y))
@@ -118,7 +125,7 @@ public static class PolyShapeReader
             point = new Point2(x, y);
             return true;
         }
-        warnings.Add($"IPC-2581: <{reader.LocalName}> in <{owner}> has a malformed coordinate" +
+        diag.Warn($"IPC-2581: <{reader.LocalName}> in <{owner}> has a malformed coordinate" +
                      $"{LinePosition(reader)}; ring skipped.");
         point = default;
         return false;

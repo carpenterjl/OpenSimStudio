@@ -2,6 +2,7 @@ using OpenSim.Core.Model;
 using OpenSim.Core.Geometry2D;
 using OpenSim.Pcb.Geometry2D;
 using OpenSim.Pcb.Import;
+using OpenSim.Pcb.Meshing2D;
 using OpenSim.Pcb.Polygons;
 
 namespace OpenSim.Pcb.Ipc2581;
@@ -26,11 +27,14 @@ public sealed class Ipc2581BoardBuilder
 
     /// <summary>The boolean work one net contributes, computed independently per net and
     /// stitched back in file order so island ids and warnings stay deterministic.
-    /// LayerCopper holds (conductor index, that layer's unioned polygons), non-empty only.</summary>
+    /// LayerCopper holds (conductor index, that layer's unioned polygons), non-empty only.
+    /// ResolvedPadOrders refines fallback-provenance holes by coincident same-net copper
+    /// (parallel to the net's hole list; null = keep the declared list).</summary>
     private sealed record NetResult(
         List<(int LayerIndex, IReadOnlyList<Polygon2> Polygons)> LayerCopper,
         List<CopperPad> Pads,
         List<TraceCenterline> Centerlines,
+        IReadOnlyList<int>?[] ResolvedPadOrders,
         long UnionMs);
 
     public PcbBoard Build(Ipc2581Board source)
@@ -40,6 +44,7 @@ public sealed class Ipc2581BoardBuilder
         var totalTimer = System.Diagnostics.Stopwatch.StartNew();
 
         var warnings = new List<string>(source.Warnings);
+        var notes = new List<string>(source.Notes);
         var conductors = source.ConductorLayers;
         var orderByName = conductors.ToDictionary(l => l.Name, l => l.CopperOrder!.Value);
         var nameByOrder = conductors.ToDictionary(l => l.CopperOrder!.Value, l => l.Name);
@@ -75,7 +80,9 @@ public sealed class Ipc2581BoardBuilder
                         sw.Stop();
                         results[i] = new NetResult(layerCopper,
                             BuildPads(net, orderByName, partByRefDes),
-                            netCenterlines, sw.ElapsedMilliseconds);
+                            netCenterlines,
+                            ResolvePadOrdersByCoincidence(net, orderByName, nameByOrder, conductors.Count),
+                            sw.ElapsedMilliseconds);
                     }
                     catch (Exception ex)
                     {
@@ -90,6 +97,11 @@ public sealed class Ipc2581BoardBuilder
             throw ae.InnerExceptions[0];
         }
         netLoopTimer.Stop();
+
+        // Backdrills sever coincident vias over their span (minus the spec's protected
+        // layers); prepared once, applied in the sequential loop below.
+        var backdrills = PrepareBackdrills(source, orderByName, conductors.Count, warnings);
+        int severedVias = 0;
 
         var islands = new List<CopperIsland>();
         var pads = new List<CopperPad>();
@@ -127,12 +139,21 @@ public sealed class Ipc2581BoardBuilder
             if (isNoNet) noNetPads.AddRange(result.Pads);
 
             var bridges = new List<ViaBridge>();
-            foreach (var hole in net.Holes)
+            for (int h = 0; h < net.Holes.Count; h++)
             {
+                var hole = net.Holes[h];
                 var via = new Via(hole.Position, hole.Diameter, hole.Plated);
                 vias.Add(via);
-                if (isNoNet) { noNetVias.Add(via); continue; }
-                var bridge = BuildBridge(hole, via, orderByName, conductors.Count);
+                var severed = SeveredOrders(backdrills, hole, ref severedVias);
+                if (isNoNet)
+                {
+                    // No-Net vias stitch geometrically (NetExtractor) — a fully severed
+                    // barrel must not stitch anything, so it degrades to unplated.
+                    noNetVias.Add(severed is null ? via : new Via(hole.Position, hole.Diameter, false));
+                    continue;
+                }
+                var bridge = BuildBridge(hole, via, orderByName, conductors.Count,
+                    result.ResolvedPadOrders[h], severed);
                 if (bridge is not null) bridges.Add(bridge);
             }
 
@@ -142,6 +163,12 @@ public sealed class Ipc2581BoardBuilder
                 warnings.Add($"IPC-2581: net '{net.Name}' produced no copper islands " +
                              "(all its features were skipped or degenerate).");
         }
+
+        // Routed slots: every slot's outline is a board cutout; a PLATED slot bridges
+        // the copper it touches through a synthesized chain of plated barrels.
+        var outline = ApplySlotCutouts(source, notes);
+        SynthesizeSlotBarrels(source, orderByName, islands, netParts, vias, noNetVias,
+            warnings, notes);
 
         // "No Net" copper has no declared connectivity — group it geometrically so each
         // disconnected blob is its own selectable net, exactly like the Gerber path.
@@ -166,23 +193,30 @@ public sealed class Ipc2581BoardBuilder
             l.CopperOrder!.Value,
             l.Side.Equals("TOP", StringComparison.OrdinalIgnoreCase))).ToList();
 
-        warnings.Add($"IPC-2581: {nets.Count} nets ({netParts.Count} named) from {islands.Count} islands " +
-                     $"on {conductors.Count} copper layers ({vias.Count(v => v.Plated)} plated holes, " +
-                     $"{pads.Count} pads).");
-        warnings.Add($"Board-build timing: copper stroke+union {netLoopTimer.ElapsedMilliseconds} ms wall " +
-                     $"({unionSumMs} ms summed across {netList.Count} parallel nets × {conductors.Count} layers), " +
-                     $"total {totalTimer.ElapsedMilliseconds} ms (excludes XML parse).");
+        if (severedVias > 0)
+            notes.Add($"IPC-2581: {severedVias} via(s) severed by {backdrills.Count} backdrill " +
+                      "hole(s) — stub removal disconnects the drilled-out layers.");
+
+        // Summary and timing are informational, not skipped-content warnings — they must
+        // never stop a conforming file from importing with zero warnings.
+        notes.Add($"IPC-2581: {nets.Count} nets ({netParts.Count} named) from {islands.Count} islands " +
+                  $"on {conductors.Count} copper layers ({vias.Count(v => v.Plated)} plated holes, " +
+                  $"{pads.Count} pads).");
+        notes.Add($"Board-build timing: copper stroke+union {netLoopTimer.ElapsedMilliseconds} ms wall " +
+                  $"({unionSumMs} ms summed across {netList.Count} parallel nets × {conductors.Count} layers), " +
+                  $"total {totalTimer.ElapsedMilliseconds} ms (excludes XML parse).");
 
         return new PcbBoard
         {
-            Outline = source.Profile,
+            Outline = outline,
             Islands = islands,
             Pads = pads,
             Vias = vias,
             Nets = nets,
             Layers = boardLayers,
             Warnings = warnings,
-            Stackup = BuildStackup(source, warnings),
+            Notes = notes,
+            Stackup = BuildStackup(source, notes),
             TraceCenterlines = centerlines
         };
     }
@@ -280,11 +314,12 @@ public sealed class Ipc2581BoardBuilder
 
     /// <summary>
     /// The copper layers a plated hole electrically joins: the padstack's declared pad
-    /// layers, restricted to the drill span. This is exact (file-declared) — no geometric
-    /// annular-ring inference needed.
+    /// layers (or the coincident-copper refinement of a fallback list), restricted to
+    /// the drill span, minus any layers a backdrill severed.
     /// </summary>
     private static ViaBridge? BuildBridge(Ipc2581Hole hole, Via via,
-        Dictionary<string, int> orderByName, int conductorCount)
+        Dictionary<string, int> orderByName, int conductorCount,
+        IReadOnlyList<int>? resolvedOrders, HashSet<int>? severed)
     {
         if (!via.Plated) return null;
 
@@ -292,22 +327,137 @@ public sealed class Ipc2581BoardBuilder
         int spanTo = orderByName.TryGetValue(hole.SpanTo, out int t) ? t : conductorCount;
         if (spanFrom > spanTo) (spanFrom, spanTo) = (spanTo, spanFrom);
 
-        var layers = hole.PadLayers
+        var declared = resolvedOrders ?? hole.PadLayers
             .Where(orderByName.ContainsKey)
             .Select(name => orderByName[name])
+            .ToList();
+        var layers = declared
             .Where(o => o >= spanFrom && o <= spanTo)
+            .Where(o => severed is null || !severed.Contains(o))
             .Distinct()
             .OrderBy(o => o)
             .ToList();
         return layers.Count >= 2 ? new ViaBridge(via, layers) : null;
     }
 
+    /// <summary>One prepared backdrill: position, radius, and the conductor orders it
+    /// severs (its span minus the spec's MUST_NOT_CUT layers).</summary>
+    private sealed record PreparedBackdrill(Point2 Position, double Radius, HashSet<int> Severed);
+
+    private static List<PreparedBackdrill> PrepareBackdrills(Ipc2581Board source,
+        Dictionary<string, int> orderByName, int conductorCount, List<string> warnings)
+    {
+        var prepared = new List<PreparedBackdrill>();
+        foreach (var bd in source.Backdrills)
+        {
+            int lo = orderByName.TryGetValue(bd.SpanFrom, out int f) ? f : 1;
+            int hi = orderByName.TryGetValue(bd.SpanTo, out int t) ? t : conductorCount;
+            if (lo > hi) (lo, hi) = (hi, lo);
+            var severed = new HashSet<int>(Enumerable.Range(lo, hi - lo + 1));
+            foreach (var name in bd.Spec?.MustNotCutLayers ?? Array.Empty<string>())
+                if (orderByName.TryGetValue(name, out int keep) && severed.Remove(keep))
+                    // A protected layer INSIDE the drill span is a self-contradictory
+                    // declaration — honor the protection and say so.
+                    warnings.Add($"IPC-2581: backdrill spec '{bd.Spec!.Name}' protects layer " +
+                                 $"'{name}' inside its own drill span; the layer is kept connected.");
+            if (severed.Count > 0)
+                prepared.Add(new PreparedBackdrill(bd.Position, bd.Diameter / 2, severed));
+        }
+        return prepared;
+    }
+
+    /// <summary>The conductor orders every backdrill coincident with this hole severs
+    /// (null when untouched). Coincidence = the barrel center inside the backdrill bore.</summary>
+    private static HashSet<int>? SeveredOrders(List<PreparedBackdrill> backdrills,
+        Ipc2581Hole hole, ref int severedVias)
+    {
+        HashSet<int>? severed = null;
+        foreach (var bd in backdrills)
+        {
+            if ((bd.Position - hole.Position).Length > bd.Radius) continue;
+            severed ??= new HashSet<int>();
+            severed.UnionWith(bd.Severed);
+        }
+        if (severed is not null && hole.Plated) severedVias++;
+        return severed;
+    }
+
+    /// <summary>
+    /// Refines a fallback pad-layer list (span endpoints / all conductors — geometric
+    /// guesses, not declarations) by coincident same-net copper: the barrel joins
+    /// exactly the span layers where a pad or fill of ITS OWN net contains the hole
+    /// center. Measured on a real 12-layer Cadence board: a through via with pads on
+    /// TOP/S05/BOTTOM previously bridged only the span endpoints {TOP, BOTTOM} —
+    /// silently missing the inner connection. Runs inside the per-net parallel body
+    /// (net-local data only, so the result stays bitwise at any DOP); a refinement
+    /// finding fewer than two layers keeps the declared fallback (a synthetic fixture
+    /// with no drawn copper must keep bridging its declared span).
+    /// </summary>
+    private static IReadOnlyList<int>?[] ResolvePadOrdersByCoincidence(Ipc2581Net net,
+        Dictionary<string, int> orderByName, Dictionary<int, string> nameByOrder, int conductorCount)
+    {
+        var resolved = new IReadOnlyList<int>?[net.Holes.Count];
+        if (net.Holes.Count == 0) return resolved;
+        bool anyFallback = net.Holes.Any(h => h.Plated
+            && h.Source is Ipc2581PadLayersSource.SpanEndpoints or Ipc2581PadLayersSource.AllConductors);
+        if (!anyFallback) return resolved;
+
+        // Per-layer candidate shapes with bounding boxes (pads AND fills — a via lands
+        // on a plane through its pour; an anti-pad hole in the pour correctly excludes).
+        var shapesByLayer = new Dictionary<string, List<(Polygon2 Shape, double MinX, double MinY, double MaxX, double MaxY)>>();
+        void AddShape(string layerRef, Polygon2 shape)
+        {
+            if (!shapesByLayer.TryGetValue(layerRef, out var list))
+                shapesByLayer[layerRef] = list = new();
+            double minX = double.MaxValue, minY = double.MaxValue,
+                   maxX = double.MinValue, maxY = double.MinValue;
+            foreach (var p in shape.Outer)
+            {
+                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+                minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y);
+            }
+            list.Add((shape, minX, minY, maxX, maxY));
+        }
+        foreach (var pad in net.Pads) AddShape(pad.LayerRef, pad.Shape);
+        foreach (var fill in net.Fills) AddShape(fill.LayerRef, fill.Shape);
+
+        for (int h = 0; h < net.Holes.Count; h++)
+        {
+            var hole = net.Holes[h];
+            if (!hole.Plated) continue;
+            if (hole.Source is not (Ipc2581PadLayersSource.SpanEndpoints
+                or Ipc2581PadLayersSource.AllConductors)) continue;
+
+            int lo = orderByName.TryGetValue(hole.SpanFrom, out int f) ? f : 1;
+            int hi = orderByName.TryGetValue(hole.SpanTo, out int t) ? t : conductorCount;
+            if (lo > hi) (lo, hi) = (hi, lo);
+
+            var found = new List<int>();
+            for (int order = lo; order <= hi; order++)
+            {
+                if (!nameByOrder.TryGetValue(order, out var layerName)) continue;
+                if (!shapesByLayer.TryGetValue(layerName, out var candidates)) continue;
+                var c = hole.Position;
+                foreach (var (shape, minX, minY, maxX, maxY) in candidates)
+                {
+                    if (c.X < minX || c.X > maxX || c.Y < minY || c.Y > maxY) continue;
+                    if (!PlanarMesher.ContainsPoint(new[] { shape }, c)) continue;
+                    found.Add(order);
+                    break;
+                }
+            }
+            if (found.Count >= 2) resolved[h] = found;
+        }
+        return resolved;
+    }
+
     /// <summary>
     /// The physical stackup from the file: per-copper-layer thickness and the dielectric
     /// sum between each consecutive copper pair. Zero thicknesses (some exporters omit
-    /// them) fall back to the engine defaults with a warning.
+    /// them) fall back to the engine defaults with a NOTE — the data is genuinely absent
+    /// from the file, so this is defaulting, not skipping declared content.
     /// </summary>
-    private static PcbStackupSettings? BuildStackup(Ipc2581Board source, List<string> warnings)
+    private static PcbStackupSettings? BuildStackup(Ipc2581Board source, List<string> notes)
     {
         var conductors = source.ConductorLayers;
         if (conductors.Count == 0) return null;
@@ -322,8 +472,8 @@ public sealed class Ipc2581BoardBuilder
             if (layer.Thickness > 0) copper.Add(layer.Thickness);
             else
             {
-                warnings.Add($"IPC-2581: conductor '{layer.Name}' has no stackup thickness; " +
-                             $"defaulting to {defaults.CopperThickness * 1e6:g3} µm.");
+                notes.Add($"IPC-2581: conductor '{layer.Name}' has no stackup thickness; " +
+                          $"defaulting to {defaults.CopperThickness * 1e6:g3} µm.");
                 copper.Add(defaults.CopperThickness);
             }
         }
@@ -342,8 +492,8 @@ public sealed class Ipc2581BoardBuilder
                     gap += ordered[i].Thickness;
             if (gap <= 0)
             {
-                warnings.Add($"IPC-2581: no dielectric thickness between '{conductors[c].Name}' and " +
-                             $"'{conductors[c + 1].Name}'; defaulting to {defaultGap * 1e3:g3} mm.");
+                notes.Add($"IPC-2581: no dielectric thickness between '{conductors[c].Name}' and " +
+                          $"'{conductors[c + 1].Name}'; defaulting to {defaultGap * 1e3:g3} mm.");
                 gap = defaultGap;
             }
             gaps.Add(gap);
@@ -363,5 +513,149 @@ public sealed class Ipc2581BoardBuilder
         for (int i = 0; i < layers.Count; i++)
             if (layers[i].Name == name) return i;
         return -1;
+    }
+
+    /// <summary>Every slot's outline becomes a HOLE in the board profile polygon that
+    /// contains it (the routed bore is gone from the meshed domain, plated or not).</summary>
+    private static IReadOnlyList<Polygon2> ApplySlotCutouts(Ipc2581Board source, List<string> notes)
+    {
+        if (source.Slots.Count == 0) return source.Profile;
+
+        var regions = source.Profile
+            .Select(p => (Outer: p.Outer, Holes: p.Holes.ToList()))
+            .ToList();
+        foreach (var slot in source.Slots)
+        {
+            var probe = Centroid(slot.Outline);
+            int region = regions.FindIndex(r =>
+                PlanarMesher.ContainsPoint(new[] { new Polygon2(r.Outer) }, probe));
+            if (region >= 0) regions[region].Holes.Add(slot.Outline);
+        }
+        notes.Add($"IPC-2581: {source.Slots.Count} routed slot(s) subtracted from the board outline.");
+        return regions.Select(r => new Polygon2(r.Outer, r.Holes)).ToList();
+    }
+
+    /// <summary>
+    /// A PLATED slot bridges the copper layers it touches. The plating is modeled as a
+    /// chain of plated barrels along the slot outline's principal axis (diameter = the
+    /// perpendicular extent, spacing ≤ half a diameter) so the existing via machinery
+    /// carries it — electrically exact for connectivity, and near-exact for resistance
+    /// on the oblong outlines slots actually are (a note names the approximation
+    /// otherwise). Each barrel joins the ONE net whose islands contain it (a plated slot
+    /// touching several nets would be a short — warned, never silently bridged); barrels
+    /// on unnamed copper stitch geometrically like any No-Net via.
+    /// </summary>
+    private static void SynthesizeSlotBarrels(Ipc2581Board source,
+        Dictionary<string, int> orderByName, List<CopperIsland> islands,
+        List<(string Name, List<CopperIsland> Islands, List<ViaBridge> Bridges)> netParts,
+        List<Via> vias, List<Via> noNetVias, List<string> warnings, List<string> notes)
+    {
+        if (!source.Slots.Any(s => s.Plated)) return;
+
+        // island index → owning named-net part (absent = No-Net copper).
+        var partByIsland = new Dictionary<int, int>();
+        for (int p = 0; p < netParts.Count; p++)
+            foreach (var island in netParts[p].Islands)
+                partByIsland[island.Index] = p;
+
+        foreach (var slot in source.Slots)
+        {
+            if (!slot.Plated) continue;
+
+            // Principal axis of the outline (2×2 covariance eigenvector), extents.
+            var mean = Centroid(slot.Outline);
+            double sxx = 0, sxy = 0, syy = 0;
+            foreach (var p in slot.Outline)
+            {
+                var d = p - mean;
+                sxx += d.X * d.X; sxy += d.X * d.Y; syy += d.Y * d.Y;
+            }
+            double angle = 0.5 * Math.Atan2(2 * sxy, sxx - syy);
+            var axis = new Point2(Math.Cos(angle), Math.Sin(angle));
+            var perp = new Point2(-axis.Y, axis.X);
+            double tMin = double.MaxValue, tMax = double.MinValue;
+            double wMin = double.MaxValue, wMax = double.MinValue;
+            foreach (var p in slot.Outline)
+            {
+                var d = p - mean;
+                double t = d.X * axis.X + d.Y * axis.Y;
+                double w = d.X * perp.X + d.Y * perp.Y;
+                tMin = Math.Min(tMin, t); tMax = Math.Max(tMax, t);
+                wMin = Math.Min(wMin, w); wMax = Math.Max(wMax, w);
+            }
+            double width = wMax - wMin;
+            double length = tMax - tMin;
+            if (width <= 0) continue;
+
+            // A non-oblong outline (area far from the capsule of these extents) is
+            // still bridged, but the barrel model is stated as an approximation.
+            double capsule = (length - width) * width + Math.PI * width * width / 4;
+            double area = new Polygon2(slot.Outline).Area();
+            if (Math.Abs(area - capsule) > 0.15 * area)
+                notes.Add($"IPC-2581: plated slot '{slot.Name}' has a non-oblong outline; " +
+                          "its plating is approximated by a barrel chain along the principal axis.");
+
+            var centers = new List<Point2>();
+            if (length <= width)
+                centers.Add(mean);
+            else
+            {
+                int steps = (int)Math.Ceiling((length - width) / (width / 2));
+                for (int s = 0; s <= steps; s++)
+                {
+                    double t = tMin + width / 2 + (length - width) * s / steps;
+                    centers.Add(mean + new Point2(axis.X * t, axis.Y * t));
+                }
+            }
+
+            // The one named net whose copper the barrels land in (per touched layer).
+            var touchedParts = new HashSet<int>();
+            bool touchesNoNet = false;
+            var barrelLayers = new List<(Point2 Center, List<int> Orders)>();
+            foreach (var center in centers)
+            {
+                var orders = new List<int>();
+                foreach (var island in islands)
+                {
+                    var (minX, minY, maxX, maxY) = island.Bounds();
+                    if (center.X < minX || center.X > maxX || center.Y < minY || center.Y > maxY)
+                        continue;
+                    if (!PlanarMesher.ContainsPoint(new[] { island.Shape }, center)) continue;
+                    if (!orders.Contains(island.LayerOrder)) orders.Add(island.LayerOrder);
+                    if (partByIsland.TryGetValue(island.Index, out int part)) touchedParts.Add(part);
+                    else touchesNoNet = true;
+                }
+                orders.Sort();
+                barrelLayers.Add((center, orders));
+            }
+
+            if (touchedParts.Count > 1)
+            {
+                warnings.Add($"IPC-2581: plated slot '{slot.Name}' touches copper of " +
+                             $"{touchedParts.Count} different nets; not bridged (a plated " +
+                             "short between nets is a design conflict).");
+                continue;
+            }
+
+            foreach (var (center, orders) in barrelLayers)
+            {
+                var via = new Via(center, width, Plated: true);
+                vias.Add(via);
+                if (touchedParts.Count == 1 && !touchesNoNet)
+                {
+                    if (orders.Count >= 2)
+                        netParts[touchedParts.First()].Bridges.Add(new ViaBridge(via, orders));
+                }
+                else
+                    noNetVias.Add(via);                          // geometric stitching
+            }
+        }
+    }
+
+    private static Point2 Centroid(IReadOnlyList<Point2> ring)
+    {
+        double x = 0, y = 0;
+        foreach (var p in ring) { x += p.X; y += p.Y; }
+        return new Point2(x / ring.Count, y / ring.Count);
     }
 }
