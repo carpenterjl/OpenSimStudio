@@ -1,8 +1,10 @@
 using System.Windows.Media;
+using OpenSim.Core.PostProcessing;
 
 namespace OpenSim.App.Rendering;
 
-/// <summary>Color maps for scalar result visualization.</summary>
+/// <summary>The two fixed color maps offered outside the colormap editor (RF/SI overlays
+/// and the Mechanical/Electrical result views).</summary>
 public enum ColormapKind
 {
     Rainbow,
@@ -14,33 +16,17 @@ public static class Colormap
     /// <summary>
     /// A horizontal gradient brush spanning texture coordinate 0..1; meshes map a
     /// normalized scalar to the U texture coordinate to get per-vertex coloring.
+    /// <para>
+    /// The two kinds resolve to the Core presets of the same name, whose stop arrays are
+    /// byte-identical to the ones that used to live here — every existing overlay, legend
+    /// and result screenshot keeps its exact colors now that colormaps are editable.
+    /// </para>
     /// </summary>
-    public static LinearGradientBrush CreateBrush(ColormapKind kind)
-    {
-        var stops = new GradientStopCollection();
-        var samples = kind == ColormapKind.Viridis ? ViridisStops : RainbowStops;
-        foreach (var (offset, color) in samples)
-            stops.Add(new GradientStop(color, offset));
-        var brush = new LinearGradientBrush(stops, new System.Windows.Point(0, 0.5), new System.Windows.Point(1, 0.5));
-        brush.Freeze();
-        return brush;
-    }
+    public static LinearGradientBrush CreateBrush(ColormapKind kind) =>
+        ColormapBrushFactory.CreateBrush(Definition(kind));
 
-    private static readonly (double, Color)[] RainbowStops =
-    {
-        (0.00, Color.FromRgb(0, 0, 255)),
-        (0.25, Color.FromRgb(0, 255, 255)),
-        (0.50, Color.FromRgb(0, 255, 0)),
-        (0.75, Color.FromRgb(255, 255, 0)),
-        (1.00, Color.FromRgb(255, 0, 0))
-    };
-
-    private static readonly (double, Color)[] ViridisStops =
-    {
-        (0.00, Color.FromRgb(68, 1, 84)),
-        (0.25, Color.FromRgb(59, 82, 139)),
-        (0.50, Color.FromRgb(33, 145, 140)),
-        (0.75, Color.FromRgb(94, 201, 98)),
-        (1.00, Color.FromRgb(253, 231, 37))
-    };
+    /// <summary>The Core colormap a fixed kind stands for.</summary>
+    public static ColormapDefinition Definition(ColormapKind kind) => kind == ColormapKind.Viridis
+        ? ColormapDefinition.Viridis
+        : ColormapDefinition.Rainbow;
 }

@@ -113,6 +113,66 @@ internal static class ScalarSolverHelpers
         return nodal;
     }
 
+    /// <summary>
+    /// Mesh region ids that no anchor can reach — the steady-state well-posedness test for an
+    /// assembly. Conduction connects the nodes of an element and a thermal contact connects
+    /// the nodes it couples, so a body joined to the rest only through contact is correctly
+    /// counted as anchored. A component with neither a prescribed temperature nor a convective
+    /// surface has an undetermined temperature level (a singular block), which the caller
+    /// turns into a message naming the bodies rather than a CG that wanders.
+    /// </summary>
+    public static IReadOnlyList<int> FindUnanchoredRegions(FeMesh mesh,
+        IReadOnlyList<ContactInterface>? contacts, IReadOnlySet<int> anchoredNodes)
+    {
+        var parent = new int[mesh.NodeCount];
+        for (int i = 0; i < parent.Length; i++) parent[i] = i;
+
+        for (int e = 0; e < mesh.ElementCount; e++)
+        {
+            var el = mesh.Elements[e];
+            Union(parent, el.N0, el.N1);
+            Union(parent, el.N0, el.N2);
+            Union(parent, el.N0, el.N3);
+        }
+        if (contacts is not null)
+            foreach (var contact in contacts)
+                foreach (var s in contact.Stamps)
+                {
+                    Union(parent, s.Node0, s.Node1);
+                    Union(parent, s.Node0, s.Node2);
+                    Union(parent, s.Node0, s.Node3);
+                }
+
+        var anchoredRoots = new HashSet<int>();
+        foreach (int node in anchoredNodes)
+            if (node >= 0 && node < parent.Length)
+                anchoredRoots.Add(Find(parent, node));
+
+        var floating = new SortedSet<int>();
+        for (int e = 0; e < mesh.ElementCount; e++)
+            if (!anchoredRoots.Contains(Find(parent, mesh.Elements[e].N0)))
+                floating.Add(mesh.RegionOf(e));
+        return floating.ToList();
+    }
+
+    private static int Find(int[] parent, int i)
+    {
+        while (parent[i] != i)
+        {
+            parent[i] = parent[parent[i]];   // path halving
+            i = parent[i];
+        }
+        return i;
+    }
+
+    private static void Union(int[] parent, int a, int b)
+    {
+        int ra = Find(parent, a), rb = Find(parent, b);
+        if (ra == rb) return;
+        // Attach the higher root to the lower one: the result never depends on visit order.
+        if (ra < rb) parent[rb] = ra; else parent[ra] = rb;
+    }
+
     public static double TriangleArea(FeMesh mesh, BoundaryTriangle t) =>
         0.5 * Vector3D.Cross(mesh.Nodes[t.B] - mesh.Nodes[t.A], mesh.Nodes[t.C] - mesh.Nodes[t.A]).Length;
 

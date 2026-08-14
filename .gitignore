@@ -8,6 +8,10 @@ Features_Checklist.md
 *.cvg
 DIAGRAMS.md
 
+# ...but the UI smokes' own fixtures are test assets, not sample CAD: without them a
+# fresh clone cannot run ui-smokes/thermal-flow-smoke.ps1 at all.
+!ui-smokes/*.step
+
 ## Visual Studio Cache, Settings, and User Files
 .vs/
 .vscode/

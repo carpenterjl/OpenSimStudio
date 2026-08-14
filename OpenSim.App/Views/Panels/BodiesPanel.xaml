@@ -1,0 +1,59 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.BodiesPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The assembly body list. Selecting a row makes that body active, so the meshing,
+         material and boundary-condition panels edit it. -->
+    <GroupBox Header="Bodies">
+        <StackPanel>
+            <Button x:Name="ImportAssemblyButton" Content="Import STEP assembly…"
+                    Command="{Binding Geometry.ImportStepAssemblyCommand}" Margin="0,0,0,4"
+                    ToolTip="Loads every part of the file as its own body, placed by the assembly's transforms"/>
+            <TextBlock Text="{Binding Bodies.Summary}" Foreground="#8A8A96" Margin="0,0,0,4"/>
+            <ListBox x:Name="BodyList" MaxHeight="220"
+                     ItemsSource="{Binding Bodies.Bodies}"
+                     SelectedItem="{Binding Bodies.SelectedBody}"
+                     HorizontalContentAlignment="Stretch">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel Margin="0,1">
+                            <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsVisible}"
+                                      VerticalAlignment="Center" Margin="0,0,6,0"
+                                      ToolTip="Show in the 3D view (a hidden body is still meshed and still solved)"/>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="#8A8A96"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <UniformGrid Columns="2" Margin="0,6,0,0">
+                <Label Content="Heat source [W]"/>
+                <TextBox x:Name="BodyHeatSourceBox"
+                         Text="{Binding Bodies.SelectedBody.HeatSourceText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Power dissipated inside the selected body; spread over its volume at solve time. Blank = none."/>
+            </UniformGrid>
+
+            <Button x:Name="ApplyMaterialToAllButton" Content="Apply material to all bodies"
+                    Command="{Binding Bodies.ApplyMaterialToAllCommand}" Margin="0,6,0,0"
+                    ToolTip="Gives every part the material selected in the Material panel — an assembly solve needs one on each body"/>
+            <Button x:Name="MeshAllBodiesButton" Content="Mesh all bodies"
+                    Command="{Binding Meshing.MeshAllBodiesCommand}" Margin="0,2,0,0"
+                    ToolTip="Meshes every part with the current meshing settings — an assembly solve needs all of them meshed"/>
+
+            <!-- Joint quality. Parts that merely touch do not conduct perfectly; this is the
+                 interfacial conductance the detected joints are given. -->
+            <UniformGrid Columns="2" Margin="0,6,0,0"
+                         Visibility="{Binding Bodies.HasAssembly, Converter={StaticResource BoolToVis}}">
+                <Label Content="Contact h [W/m²K]"/>
+                <TextBox x:Name="ContactConductanceBox" Text="{Binding Bodies.ContactConductance}"
+                         ToolTip="Interfacial conductance of every detected joint. 5e3 = dry machined metal at moderate pressure; greased or bolted joints run an order higher."/>
+                <Label Content="Gap tolerance [m]"/>
+                <TextBox x:Name="ContactGapToleranceBox" Text="{Binding Bodies.ContactGapTolerance}"
+                         ToolTip="How far apart two surfaces may be and still count as touching. 0 = auto from the mesh size."/>
+            </UniformGrid>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

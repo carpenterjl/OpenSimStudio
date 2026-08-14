@@ -65,7 +65,7 @@
                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <Label Grid.Row="0" Content="Name"/>
@@ -84,8 +84,11 @@
                 <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding ElectricalConductivity, UpdateSourceTrigger=PropertyChanged}"/>
                 <Label Grid.Row="7" Content="Relative permittivity ε_r [-]"/>
                 <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding RelativePermittivity, UpdateSourceTrigger=PropertyChanged}"/>
-                <Label Grid.Row="8" Content="Color [#RRGGBB]"/>
-                <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding Color, UpdateSourceTrigger=PropertyChanged}"/>
+                <Label Grid.Row="8" Content="Emissivity ε [0–1]"/>
+                <TextBox Grid.Row="8" Grid.Column="1" Text="{Binding Emissivity, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Total hemispherical emissivity, required for radiating environment solves. Set by the SURFACE FINISH, not the alloy: ~0.03 polished metal, 0.1–0.3 mill finish, 0.85–0.95 paint, plastic or anodizing. Leave blank if unknown."/>
+                <Label Grid.Row="9" Content="Color [#RRGGBB]"/>
+                <TextBox Grid.Row="9" Grid.Column="1" Text="{Binding Color, UpdateSourceTrigger=PropertyChanged}"/>
             </Grid>
         </DockPanel>
     </Grid>

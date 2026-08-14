@@ -1,0 +1,126 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.ColormapEditorPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Colors and thresholds of the result heat map. The two halves are separate on
+         purpose: editing COLORS only swaps the gradient brush (live, even mid-drag),
+         while editing the RANGE re-normalizes every vertex. -->
+    <GroupBox Header="Colormap">
+        <StackPanel>
+            <ComboBox x:Name="ColormapPresetCombo" Margin="0,0,0,4"
+                      ItemsSource="{Binding Colormap.Available}"
+                      SelectedItem="{Binding Colormap.SelectedPreset}"
+                      DisplayMemberPath="Name"
+                      ToolTip="Built-in and saved maps. Blank means the map has unsaved edits — pick an entry to go back to it."/>
+
+            <!-- Gradient preview with a draggable marker per stop. -->
+            <Border BorderBrush="#3A3A44" BorderThickness="1" HorizontalAlignment="Left">
+                <Rectangle x:Name="ColormapPreview" Width="200" Height="18"
+                           Fill="{Binding Colormap.PreviewBrush}"/>
+            </Border>
+            <ItemsControl x:Name="ColormapStopMarkers" ItemsSource="{Binding Colormap.Stops}"
+                          Width="200" Height="14" HorizontalAlignment="Left" Margin="0,1,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><Canvas/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemContainerStyle>
+                    <Style TargetType="ContentPresenter">
+                        <Setter Property="Canvas.Left" Value="{Binding MarkerLeft}"/>
+                    </Style>
+                </ItemsControl.ItemContainerStyle>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Thumb Width="12" Height="12" Cursor="SizeWE"
+                               DragDelta="StopThumb_DragDelta"
+                               ToolTip="Drag to move this stop (the end stops are pinned)">
+                            <Thumb.Template>
+                                <ControlTemplate TargetType="Thumb">
+                                    <Path Data="M 6,0 L 12,12 L 0,12 Z"
+                                          Fill="{Binding Swatch}" Stroke="#C9C9D2" StrokeThickness="1"/>
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ListBox x:Name="ColormapStopList" MaxHeight="86" Margin="0,4,0,0"
+                     ItemsSource="{Binding Colormap.Stops}"
+                     SelectedItem="{Binding Colormap.SelectedStop}"
+                     DisplayMemberPath="Label">
+                <!-- A data-bound ListBoxItem's automation name falls back to the item's
+                     ToString(), which would report the view-model type; name it explicitly
+                     so the row is addressable by what it displays. -->
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding Label}"/>
+                    </Style>
+                </ListBox.ItemContainerStyle>
+            </ListBox>
+
+            <DockPanel Margin="0,4,0,0">
+                <Label Content="Hex" DockPanel.Dock="Left"/>
+                <Button x:Name="ColormapRemoveStopButton" Content="−" Width="24"
+                        DockPanel.Dock="Right" Command="{Binding Colormap.RemoveStopCommand}"
+                        ToolTip="Remove the selected interior stop"/>
+                <Button x:Name="ColormapAddStopButton" Content="+" Width="24"
+                        DockPanel.Dock="Right" Command="{Binding Colormap.AddStopCommand}"
+                        ToolTip="Add a stop in the widest gap, taking the color already there"/>
+                <TextBox x:Name="ColormapHexBox" Margin="4,0"
+                         Text="{Binding Colormap.SelectedStopHex, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="#RRGGBB of the selected stop"/>
+            </DockPanel>
+
+            <ItemsControl ItemsSource="{Binding Colormap.Palette}" Margin="0,4,0,0">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Width="18" Height="18" Margin="1" Background="{Binding}"
+                                Command="{Binding DataContext.Colormap.PickSwatchCommand,
+                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <CheckBox x:Name="ColormapDiscreteCheck" Content="Banded (discrete)"
+                      IsChecked="{Binding Colormap.Discrete}" Foreground="#C9C9D2" Margin="2,6,2,2"
+                      ToolTip="One flat color per stop interval instead of a smooth gradient"/>
+
+            <!-- Thresholds: absolute field values, not fractions. -->
+            <Separator Margin="0,6"/>
+            <CheckBox x:Name="ColormapAutoRangeCheck" Content="Auto range"
+                      IsChecked="{Binding Colormap.AutoRange}" Foreground="#C9C9D2" Margin="2,0,2,4"
+                      ToolTip="Span the result's own min/max. Turn off to hold the colors fixed across frames and solves."/>
+            <UniformGrid Columns="2" IsEnabled="{Binding Colormap.ManualRange}">
+                <Label Content="Min"/>
+                <TextBox x:Name="ColormapMinBox" Text="{Binding Colormap.UserMin}"
+                         ToolTip="Lower bound in field units (K, Pa, V…)"/>
+                <Label Content="Max"/>
+                <TextBox x:Name="ColormapMaxBox" Text="{Binding Colormap.UserMax}"
+                         ToolTip="Upper bound in field units; values above saturate at the top color"/>
+            </UniformGrid>
+            <DockPanel Margin="0,4,0,0">
+                <CheckBox x:Name="ColormapLogCheck" Content="Log" DockPanel.Dock="Left"
+                          IsChecked="{Binding Colormap.UseLog}" Foreground="#C9C9D2"
+                          VerticalAlignment="Center" Margin="2,0,6,0"
+                          ToolTip="Spread the colors over decades — for fields whose structure is orders of magnitude below the peak"/>
+                <Label Content="decades" DockPanel.Dock="Right"/>
+                <TextBox x:Name="ColormapDecadesBox" Width="40" HorizontalAlignment="Left"
+                         Text="{Binding Colormap.Decades}"/>
+            </DockPanel>
+
+            <DockPanel Margin="0,6,0,0">
+                <Button x:Name="ColormapDeleteButton" Content="Delete" Width="56"
+                        DockPanel.Dock="Right" Command="{Binding Colormap.DeleteCommand}"
+                        ToolTip="Delete this user map (built-ins cannot be deleted)"/>
+                <Button x:Name="ColormapSaveButton" Content="Save" Width="48"
+                        DockPanel.Dock="Right" Margin="4,0" Command="{Binding Colormap.SaveCommand}"
+                        ToolTip="Save under this name to %AppData%\OpenSimStudio\colormaps.json"/>
+                <TextBox x:Name="ColormapNameBox" Text="{Binding Colormap.SaveName,
+                                                                 UpdateSourceTrigger=PropertyChanged}"/>
+            </DockPanel>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

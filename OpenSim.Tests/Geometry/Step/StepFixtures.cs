@@ -31,7 +31,8 @@ internal static class StepFixtures
             "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 3 1 1 }'));\nENDSEC;\nDATA;\n" +
             _data + "ENDSEC;\nEND-ISO-10303-21;\n";
 
-        public void AddUnits(Unit unit)
+        /// <summary>Emits the unit context and returns its #id (representations reference it).</summary>
+        public int AddUnits(Unit unit)
         {
             int length;
             switch (unit)
@@ -49,7 +50,7 @@ internal static class StepFixtures
                     length = Add($"(CONVERSION_BASED_UNIT('INCH',#{measure})LENGTH_UNIT()NAMED_UNIT(#{dim}))");
                     break;
             }
-            Add($"(GLOBAL_UNIT_ASSIGNED_CONTEXT((#{length}))REPRESENTATION_CONTEXT('',''))");
+            return Add($"(GLOBAL_UNIT_ASSIGNED_CONTEXT((#{length}))REPRESENTATION_CONTEXT('',''))");
         }
 
         public int Point(double x, double y, double z) =>

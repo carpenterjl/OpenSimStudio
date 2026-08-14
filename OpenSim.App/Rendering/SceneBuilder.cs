@@ -190,22 +190,13 @@ public static class SceneBuilder
     /// </summary>
     public sealed record NodalScalars(double[] Values, double Min, double Max);
 
-    /// <summary>
-    /// The scalar interval mapped onto the colormap — usually the field's full
-    /// [Min, Max], or a user-clamped Max that spends the whole gradient on the low
-    /// range while values above it saturate at the top color. Skin, section cut and
-    /// contours must all receive the SAME range so one legend describes them all.
-    /// </summary>
-    public readonly record struct ScalarRange(double Min, double Max)
-    {
-        /// <summary>Colormap coordinate, clamped to [0, 1] so out-of-range values saturate.</summary>
-        public double Normalize(double value)
-        {
-            double range = Max - Min;
-            if (range <= 0) return 0;
-            return Math.Clamp((value - Min) / range, 0, 1);
-        }
-    }
+    // The scalar interval mapped onto the colormap is a Core <see cref="FieldScale"/> —
+    // the same type the RF/SI overlays use. It was a separate ScalarRange struct here
+    // until Phase 6; linear mode is that formula exactly (pinned by
+    // OpenSim.Tests/PostProcessing/FieldScaleInverseTests), and sharing it is what lets
+    // the FE legend carry value ticks and a log option without a second scaling model.
+    // Skin, section cut and contours must all receive the SAME scale so one legend
+    // describes them all.
 
     public static NodalScalars NodalizeField(FeMesh mesh, IResultField field)
     {
@@ -252,7 +243,7 @@ public static class SceneBuilder
     /// covered by the colored cut face from <see cref="BuildSectionModel"/>).
     /// </summary>
     public static GeometryModel3D BuildResultModel(FeMesh mesh, NodalScalars scalars,
-        ScalarRange displayRange, ColormapKind colormap, NodalVectorField? displacement,
+        FieldScale displayRange, ColormapDefinition colormap, NodalVectorField? displacement,
         double deformScale, SectionPlane? clip = null)
     {
         var geometry3D = new MeshGeometry3D();
@@ -289,9 +280,78 @@ public static class SceneBuilder
         }
         geometry3D.Freeze();
 
-        var brush = Colormap.CreateBrush(colormap);
+        var brush = ColormapBrushFactory.CreateBrush(colormap);
         var material = new DiffuseMaterial(brush);
         return new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+    }
+
+    /// <summary>
+    /// The assembly skin as one colored model PER BODY, so parts can be hidden
+    /// individually while the heat map still reads as one picture.
+    /// <para>
+    /// Every body is normalized through the SAME <paramref name="displayRange"/> and
+    /// painted with the SAME brush instance: a per-body auto-range would give two parts
+    /// at different temperatures identical colors, which is exactly the misreading an
+    /// assembly result must not invite. One scale, one legend, one brush.
+    /// </para>
+    /// </summary>
+    /// <remarks>
+    /// Every body is built, including ones the user has hidden: hiding is a compose-time
+    /// filter on the returned models, which makes toggling a part free instead of a rebuild.
+    /// </remarks>
+    public static Dictionary<int, GeometryModel3D> BuildBodyResultModels(
+        FeMeshAssembler.AssembledMesh assembled, NodalScalars scalars, FieldScale displayRange,
+        ColormapDefinition colormap, NodalVectorField? displacement, double deformScale,
+        SectionPlane? clip = null)
+    {
+        var mesh = assembled.Mesh;
+        var deformed = DeformedNodes(mesh, displacement, deformScale);
+        var dispVectors = DeformedDisplacement(mesh, displacement, deformScale);
+
+        var geometries = new Dictionary<int, MeshGeometry3D>();
+        var nodeToVertex = new Dictionary<(int Body, int Node), int>();
+        foreach (var bt in mesh.BoundaryTriangles)
+        {
+            int body = assembled.BodyOfNode(bt.A);
+            if (clip is { } plane && !SectionCutter.IsTriangleVisible(mesh, bt, plane, dispVectors, 1.0))
+                continue;
+            if (!geometries.TryGetValue(body, out var geometry))
+                geometries[body] = geometry = new MeshGeometry3D();
+
+            // Vertices are shared within a body (continuous color across its triangles) but
+            // never across bodies: the merge deliberately leaves the parts topologically
+            // separate, and one model per body is what makes them individually hideable.
+            geometry.TriangleIndices.Add(MapBodyVertex(geometry, nodeToVertex, body, bt.A,
+                deformed, scalars, displayRange));
+            geometry.TriangleIndices.Add(MapBodyVertex(geometry, nodeToVertex, body, bt.B,
+                deformed, scalars, displayRange));
+            geometry.TriangleIndices.Add(MapBodyVertex(geometry, nodeToVertex, body, bt.C,
+                deformed, scalars, displayRange));
+        }
+
+        var brush = ColormapBrushFactory.CreateBrush(colormap);
+        var material = new DiffuseMaterial(brush);
+        var models = new Dictionary<int, GeometryModel3D>();
+        foreach (var (body, geometry) in geometries)
+        {
+            geometry.Freeze();
+            models[body] = new GeometryModel3D(geometry, material) { BackMaterial = material };
+        }
+        return models;
+    }
+
+    /// <summary>Interns one (body, node) pair as a vertex of that body's geometry.</summary>
+    private static int MapBodyVertex(MeshGeometry3D geometry, Dictionary<(int, int), int> interned,
+        int body, int node, OpenSim.Core.Numerics.Vector3D[] deformed, NodalScalars scalars,
+        FieldScale displayRange)
+    {
+        if (interned.TryGetValue((body, node), out int index)) return index;
+        index = geometry.Positions.Count;
+        geometry.Positions.Add(new Point3D(deformed[node].X, deformed[node].Y, deformed[node].Z));
+        geometry.TextureCoordinates.Add(
+            new System.Windows.Point(displayRange.Normalize(scalars.Values[node]), 0.5));
+        interned[(body, node)] = index;
+        return index;
     }
 
     /// <summary>
@@ -299,7 +359,7 @@ public static class SceneBuilder
     /// normalization and colormap as the skin so one legend describes both.
     /// </summary>
     public static GeometryModel3D BuildSectionModel(FeMesh mesh, NodalScalars scalars,
-        ScalarRange displayRange, ColormapKind colormap, NodalVectorField? displacement,
+        FieldScale displayRange, ColormapDefinition colormap, NodalVectorField? displacement,
         double deformScale, SectionPlane plane)
     {
         var cut = SectionCutter.Cut(mesh, plane, scalars.Values,
@@ -320,20 +380,23 @@ public static class SceneBuilder
         }
         geometry3D.Freeze();
 
-        var material = new DiffuseMaterial(Colormap.CreateBrush(colormap));
+        var material = new DiffuseMaterial(ColormapBrushFactory.CreateBrush(colormap));
         return new GeometryModel3D(geometry3D, material) { BackMaterial = material };
     }
 
     /// <summary>Contour line segments on the (optionally clipped) skin as point pairs.
     /// Levels span <paramref name="displayRange"/>, not the data range, so contours
-    /// redistribute with the user's colormap clamp.</summary>
+    /// redistribute with the user's colormap clamp. They are spaced evenly in VALUE
+    /// between the scale's bounds — under a logarithmic scale the colors band up while
+    /// the contour levels do not, which is a stated limitation, not a mismatch to fix
+    /// silently (log-spaced levels are a named refinement).</summary>
     public static Point3DCollection BuildContourSegments(FeMesh mesh, NodalScalars scalars,
-        ScalarRange displayRange, NodalVectorField? displacement, double deformScale,
+        FieldScale displayRange, NodalVectorField? displacement, double deformScale,
         int levelCount, SectionPlane? clip)
     {
         var segments = IsoLineExtractor.Extract(mesh, scalars.Values,
             DeformedDisplacement(mesh, displacement, deformScale), 1.0,
-            levelCount, displayRange.Min, displayRange.Max, clip);
+            levelCount, displayRange.EffectiveMin, displayRange.Max, clip);
         var points = new Point3DCollection(segments.Count * 2);
         foreach (var (a, b) in segments)
         {

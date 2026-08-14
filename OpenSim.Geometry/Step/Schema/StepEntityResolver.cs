@@ -50,15 +50,6 @@ public sealed class StepEntityResolver
         throw new StepImportException("no MANIFOLD_SOLID_BREP found — the file contains no solid body");
     }
 
-    /// <summary>True when assembly placement machinery is present (ignored in v1, but never silently).</summary>
-    public bool HasAssemblyTransforms()
-    {
-        foreach (var inst in _file.Instances.Values)
-            if (inst.Has("ITEM_DEFINED_TRANSFORMATION") || inst.Has("REPRESENTATION_MAP"))
-                return true;
-        return false;
-    }
-
     // ---------------- geometry primitives ----------------
 
     public Vector3D Point(int id) => Memo(id, inst =>

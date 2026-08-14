@@ -16,10 +16,11 @@ public partial class SolveViewModel : ObservableObject
     private readonly OpenSim.Solvers.JouleHeatingStudy _jouleStudy;
     private readonly MaterialsViewModel _materials;
     private readonly ElectrodesViewModel _electrodes;
+    private readonly EnvironmentViewModel _environment;
 
     public SolveViewModel(ProjectSession session, ILogService log, IEnumerable<ISolver> solvers,
         OpenSim.Solvers.JouleHeatingStudy jouleStudy, MaterialsViewModel materials,
-        ElectrodesViewModel electrodes)
+        ElectrodesViewModel electrodes, EnvironmentViewModel environment)
     {
         _session = session;
         _log = log;
@@ -27,6 +28,7 @@ public partial class SolveViewModel : ObservableObject
         _jouleStudy = jouleStudy;
         _materials = materials;
         _electrodes = electrodes;
+        _environment = environment;
     }
 
     // Transient thermal settings (surfaced in the Analysis settings panel).
@@ -46,9 +48,20 @@ public partial class SolveViewModel : ObservableObject
     /// constant DC power) instead of steady-state, using the transient settings above.</summary>
     [ObservableProperty] private bool _jouleTransient;
 
+    /// <summary>Environment heat flow: solve the final equilibrium directly instead of the
+    /// time history. The same nonlinear film/radiation coupling is iterated to convergence,
+    /// so it answers "how hot does it end up" without integrating the way there.</summary>
+    [ObservableProperty] private bool _environmentSteadyState;
+
     [RelayCommand]
     private async Task SolveAsync()
     {
+        if (_session.SelectedAnalysis.Kind == AnalysisType.EnvironmentThermal)
+        {
+            await SolveEnvironmentAsync();
+            return;
+        }
+
         var body = _session.Body;
         if (body.Mesh is null)
         {
@@ -118,6 +131,109 @@ public partial class SolveViewModel : ObservableObject
                 _log.Append(line);
 
             _session.RaiseResultsProduced(output.Fields, analysis: kind,
+                frames: output.Frames, frameAxis: output.FrameAxis);
+            _session.StatusText = "Solve complete";
+            _log.Append("Solve complete. Select a result field to display.");
+        }
+        catch (Exception ex) { _session.ReportError(ex); }
+        finally
+        {
+            _session.IsBusy = false;
+            _session.ProgressFraction = 0;
+        }
+    }
+
+    /// <summary>
+    /// Environment heat flow: the whole assembly solved at once. Every body is meshed
+    /// independently and merged here (<see cref="FeMeshAssembler"/>), the joints between
+    /// them are detected and given a finite conductance, each body's dissipation becomes a
+    /// volumetric source, and the surroundings supply convection + radiation on every
+    /// exterior face the user did not claim with a condition of their own.
+    /// </summary>
+    private async Task SolveEnvironmentAsync()
+    {
+        var bodies = _session.Bodies.ToList();
+        if (bodies.Count == 0)
+        {
+            _log.Append("The project has no bodies to solve.");
+            return;
+        }
+
+        var environment = _environment.Build();
+        _session.Project.Environment = environment;
+        var detection = (_session.Project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
+        bool transient = !EnvironmentSteadyState;
+        var solver = transient
+            ? (ISolver)_solvers.First(s => s is OpenSim.Solvers.TransientThermalSolver)
+            : _solvers.First(s => s is OpenSim.Solvers.HeatConductionSolver);
+
+        _session.IsBusy = true;
+        _session.StatusText = "Assembling…";
+        _session.ProgressFraction = 0;
+        var progress = new Progress<SolverProgress>(p =>
+        {
+            _session.StatusText = p.Stage;
+            _session.ProgressFraction = p.Fraction;
+        });
+
+        try
+        {
+            // Merge + contact detection are O(surface) on a real assembly, so they run off
+            // the UI thread with the solve rather than freezing the window first.
+            FeMeshAssembler.AssembledMesh assembled;
+            SolveInput input;
+            List<string> setup;
+            try
+            {
+                (assembled, input, setup) = await Task.Run(() =>
+                {
+                    var lines = new List<string>();
+                    var merged = FeMeshAssembler.Assemble(bodies);
+                    lines.Add($"Merged {bodies.Count} bodies: {merged.Mesh.NodeCount:N0} nodes, " +
+                              $"{merged.Mesh.ElementCount:N0} elements.");
+                    var contacts = ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, lines.Add);
+                    var source = FeMeshAssembler.BuildElementHeatSource(merged, bodies, lines.Add);
+                    lines.Add($"Environment: {environment.Describe()}.");
+                    var built = new SolveInput
+                    {
+                        Mesh = merged.Mesh,
+                        Material = bodies[0].Material!,
+                        RegionMaterials = merged.RegionMaterials,
+                        BoundaryConditions = merged.BoundaryConditions,
+                        ElementHeatSource = source,
+                        ThermalContacts = contacts,
+                        Environment = environment,
+                        TransientThermal = transient
+                            ? new TransientThermalSettings
+                            {
+                                InitialTemperature = InitialTemperature,
+                                Duration = TransientDuration,
+                                TimeStep = TransientTimeStep
+                            }
+                            : null
+                    };
+                    solver.Validate(built);
+                    return (merged, built, lines);
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                // A part with no mesh, no material, or a body nothing anchors: all of these
+                // are things the user must fix, not failures of the run.
+                _log.Append($"Validation: {ex.Message}");
+                _session.StatusText = "Validation failed";
+                return;
+            }
+            foreach (var line in setup) _log.Append(line);
+
+            var output = await Task.Run(() => solver.Solve(input, progress));
+            foreach (var line in output.Log)
+                _log.Append(line);
+
+            // Published before the results so the scene, which rebuilds on the result
+            // event, already knows which merged node belongs to which body.
+            _session.SetAssembledMesh(assembled);
+            _session.RaiseResultsProduced(output.Fields, analysis: AnalysisType.EnvironmentThermal,
                 frames: output.Frames, frameAxis: output.FrameAxis);
             _session.StatusText = "Solve complete";
             _log.Append("Solve complete. Select a result field to display.");

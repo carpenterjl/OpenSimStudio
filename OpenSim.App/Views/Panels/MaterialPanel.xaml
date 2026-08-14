@@ -4,7 +4,8 @@
     <GroupBox Header="Material"
               Visibility="{Binding Session.IsPcbMode, Converter={StaticResource InverseBoolToVis}}">
         <StackPanel>
-            <ComboBox ItemsSource="{Binding Materials.Materials}" SelectedItem="{Binding Session.SelectedMaterial}"
+            <ComboBox x:Name="MaterialCombo"
+                      ItemsSource="{Binding Materials.Materials}" SelectedItem="{Binding Session.SelectedMaterial}"
                       DisplayMemberPath="Name"/>
             <UniformGrid Columns="2" Margin="0,4,0,0">
                 <Label Content="E [Pa]"/>

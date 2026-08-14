@@ -36,7 +36,17 @@ public sealed class ScalarDiffusionAssembler
     /// terms (which keep the system symmetric positive definite).
     /// </summary>
     public CsrMatrix AssembleStiffness(IReadOnlyList<RobinTerm>? robinTerms = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        AssembleStiffness(robinTerms, null, cancellationToken);
+
+    /// <summary>
+    /// Assembles the global diffusion matrix with Robin surface terms and inter-body contact
+    /// coupling. Each contact stamp scatters h_c·w·s·sᵀ — a positive multiple of a rank-1
+    /// Gram matrix, so the system stays symmetric positive semi-definite and the shared CG
+    /// still applies. Passing null contacts reproduces the plain assembly bitwise.
+    /// </summary>
+    public CsrMatrix AssembleStiffness(IReadOnlyList<RobinTerm>? robinTerms,
+        IReadOnlyList<ContactInterface>? contacts, CancellationToken cancellationToken)
     {
         var builder = new SparseMatrixBuilder(DofCount, DofCount);
         Span<int> nodes = stackalloc int[4];
@@ -56,17 +66,30 @@ public sealed class ScalarDiffusionAssembler
         }
 
         if (robinTerms is not null)
-        {
-            // Consistent surface mass matrix of a linear triangle: ∫NᵢNⱼdA = A/12·(1+δᵢⱼ).
-            Span<int> tn = stackalloc int[3];
             foreach (var term in robinTerms)
+                AddRobinSurface(builder, _mesh, term.Triangle, term.Coefficient);
+
+        if (contacts is not null)
+        {
+            // Sequential scatter in interface then stamp order: the accumulation order of a
+            // matrix entry is what makes the assembly reproducible run to run.
+            Span<int> cn = stackalloc int[4];
+            Span<double> cs = stackalloc double[4];
+            foreach (var contact in contacts)
             {
-                var t = term.Triangle;
-                tn[0] = t.A; tn[1] = t.B; tn[2] = t.C;
-                double a12 = term.Coefficient * TriangleArea(t) / 12.0;
-                for (int i = 0; i < 3; i++)
-                    for (int j = 0; j < 3; j++)
-                        builder.Add(tn[i], tn[j], i == j ? 2 * a12 : a12);
+                double h = contact.Conductance;
+                foreach (var stamp in contact.Stamps)
+                {
+                    cn[0] = stamp.Node0; cn[1] = stamp.Node1; cn[2] = stamp.Node2; cn[3] = stamp.Node3;
+                    cs[0] = stamp.S0; cs[1] = stamp.S1; cs[2] = stamp.S2; cs[3] = stamp.S3;
+                    double hw = h * stamp.Weight;
+                    // hw·(sᵢ·sⱼ), NOT (hw·sᵢ)·sⱼ: IEEE multiplication is commutative but not
+                    // associative, so only this grouping makes the (i,j) and (j,i) scatters
+                    // bitwise identical — and with them the whole matrix bitwise symmetric.
+                    for (int i = 0; i < 4; i++)
+                        for (int j = 0; j < 4; j++)
+                            builder.Add(cn[i], cn[j], hw * (cs[i] * cs[j]));
+                }
             }
         }
         return builder.Build();
@@ -98,6 +121,31 @@ public sealed class ScalarDiffusionAssembler
         return builder.Build();
     }
 
+    /// <summary>
+    /// Scatters one Robin surface term h·∫NᵢNⱼdA into a matrix under construction. The
+    /// consistent surface mass matrix of a linear triangle is analytic: A/12·(1+δᵢⱼ).
+    /// <para>
+    /// Exposed because the environment's film coefficients change every nonlinear iterate
+    /// and are stamped onto an already-assembled volume matrix rather than triggering a
+    /// full re-assembly. One implementation, so a Robin term means exactly the same thing
+    /// however it arrived.
+    /// </para>
+    /// </summary>
+    public static void AddRobinSurface(SparseMatrixBuilder builder, FeMesh mesh,
+        BoundaryTriangle triangle, double coefficient)
+    {
+        double a12 = coefficient * SurfaceArea(mesh, triangle) / 12.0;
+        Span<int> tn = stackalloc int[3];
+        tn[0] = triangle.A; tn[1] = triangle.B; tn[2] = triangle.C;
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++)
+                builder.Add(tn[i], tn[j], i == j ? 2 * a12 : a12);
+    }
+
+    /// <summary>Area of one boundary triangle [m²].</summary>
+    public static double SurfaceArea(FeMesh mesh, BoundaryTriangle t) =>
+        0.5 * Vector3D.Cross(mesh.Nodes[t.B] - mesh.Nodes[t.A], mesh.Nodes[t.C] - mesh.Nodes[t.A]).Length;
+
     /// <summary>Constant field gradient ∇φ of one element from the global solution vector.</summary>
     public Vector3D ElementGradient(int element, ReadOnlySpan<double> values)
     {
@@ -106,6 +154,4 @@ public sealed class ScalarDiffusionAssembler
         return g[0] * values[e.N0] + g[1] * values[e.N1] + g[2] * values[e.N2] + g[3] * values[e.N3];
     }
 
-    private double TriangleArea(BoundaryTriangle t) =>
-        0.5 * Vector3D.Cross(_mesh.Nodes[t.B] - _mesh.Nodes[t.A], _mesh.Nodes[t.C] - _mesh.Nodes[t.A]).Length;
 }

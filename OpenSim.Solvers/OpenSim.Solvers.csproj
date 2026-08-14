@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenSim.Core\OpenSim.Core.csproj" />
+    <InternalsVisibleTo Include="OpenSim.Tests" />
   </ItemGroup>
 
   <PropertyGroup>

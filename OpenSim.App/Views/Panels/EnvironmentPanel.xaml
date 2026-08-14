@@ -1,0 +1,47 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.EnvironmentPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- What the bodies sit in. The medium chooses the heat paths: a vacuum radiates
+         only, a still fluid adds buoyancy-driven convection, a moving fluid adds forced
+         convection at the free-stream velocity. -->
+    <GroupBox Header="Environment">
+        <StackPanel>
+            <UniformGrid Columns="2">
+                <Label Content="Medium"/>
+                <ComboBox x:Name="MediumCombo" ItemsSource="{Binding Environment.Mediums}"
+                          SelectedItem="{Binding Environment.SelectedMedium}"
+                          DisplayMemberPath="Label"/>
+                <Label Content="Ambient [K]"/>
+                <TextBox x:Name="AmbientBox" Text="{Binding Environment.AmbientTemperature}"
+                         ToolTip="Far-field temperature: the convective sink and the radiative surroundings"/>
+            </UniformGrid>
+
+            <UniformGrid Columns="2"
+                         Visibility="{Binding Environment.NeedsFluid, Converter={StaticResource BoolToVis}}">
+                <Label Content="Fluid"/>
+                <ComboBox x:Name="FluidCombo" ItemsSource="{Binding Environment.Fluids}"
+                          SelectedItem="{Binding Environment.SelectedFluid}"
+                          DisplayMemberPath="Name"/>
+                <Label Content="Gravity dir."/>
+                <TextBox x:Name="GravityBox" Text="{Binding Environment.GravityDirection}"
+                         ToolTip="Direction of gravity — classifies surfaces as vertical, facing up, or facing down"/>
+            </UniformGrid>
+
+            <UniformGrid Columns="2"
+                         Visibility="{Binding Environment.NeedsFlow, Converter={StaticResource BoolToVis}}">
+                <Label Content="Speed [m/s]"/>
+                <TextBox x:Name="FlowSpeedBox" Text="{Binding Environment.FlowSpeed}"/>
+                <Label Content="Flow dir."/>
+                <TextBox x:Name="FlowDirectionBox" Text="{Binding Environment.FlowDirection}"/>
+            </UniformGrid>
+
+            <CheckBox x:Name="RadiationCheck" Content="Include thermal radiation"
+                      IsChecked="{Binding Environment.IncludeRadiation}"
+                      Foreground="#C9C9D2" Margin="2,4"
+                      ToolTip="Surfaces radiate to the ambient using each material's emissivity"/>
+
+            <TextBlock Text="{Binding Environment.Description}" TextWrapping="Wrap"
+                       Foreground="#8A8A96" Margin="0,4,0,0"/>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

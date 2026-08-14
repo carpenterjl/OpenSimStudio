@@ -33,6 +33,14 @@ public sealed record Material
     /// <summary>Relative permeability μ_r [-].</summary>
     public double? RelativePermeability { get; init; }
 
+    /// <summary>
+    /// Total hemispherical emissivity ε [-], in [0, 1]. Null means "unknown", which is a
+    /// hard failure for a radiating solve rather than a default: ε spans 0.03 (polished
+    /// aluminium) to 0.95 (paint) on the SAME metal depending only on its finish, so a
+    /// silent 0.9 would be a fabricated 30× on the dominant heat path in a vacuum.
+    /// </summary>
+    public double? Emissivity { get; init; }
+
     /// <summary>Display colour as #RRGGBB.</summary>
     public string Color { get; init; } = "#B0B0B0";
 
@@ -73,6 +81,20 @@ public sealed record Material
         if (Density <= 0)
             throw new InvalidOperationException(
                 $"Material '{Name}': density must be positive for a transient thermal solve.");
+    }
+
+    /// <summary>Throws if the material cannot radiate to the surroundings (needs a known
+    /// emissivity). Only called when the environment has radiation switched on.</summary>
+    public void ValidateRadiative()
+    {
+        if (Emissivity is null)
+            throw new InvalidOperationException(
+                $"Material '{Name}': emissivity is not set, and radiation is switched on for this " +
+                "environment. Set the surface emissivity (0.03 for polished metal, 0.2–0.4 for " +
+                "machined metal, 0.85–0.95 for paint, plastic or anodizing), or switch radiation off.");
+        if (Emissivity is < 0 or > 1)
+            throw new InvalidOperationException(
+                $"Material '{Name}': emissivity {Emissivity} must lie in [0, 1].");
     }
 
     /// <summary>Throws if the mechanical properties are physically invalid.</summary>

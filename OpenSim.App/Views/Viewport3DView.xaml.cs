@@ -179,6 +179,14 @@ public partial class Viewport3DView : UserControl
                     e.Handled = true;
                     return;
                 }
+                // A solved assembly renders one model per body, not one per face.
+                int? bodyIndex = _viewModel.Scene.GetBodyForModel(model);
+                if (bodyIndex is not null)
+                {
+                    _viewModel.OnBodyClicked(bodyIndex.Value);
+                    e.Handled = true;
+                    return;
+                }
             }
         }
     }

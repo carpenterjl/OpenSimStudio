@@ -2,6 +2,7 @@ using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 using OpenSim.Core.Results;
+using OpenSim.Solvers.Environment;
 
 namespace OpenSim.Solvers;
 
@@ -75,6 +76,14 @@ public sealed class TransientThermalSolver : ISolver
                 throw new InvalidOperationException(
                     $"Convection '{c.Name}': the heat transfer coefficient must be positive.");
         }
+
+        EnvironmentBoundaryModel.ValidateMaterials(input);
+
+        // No anchoring requirement here, unlike the steady solver: M/Δt regularizes every
+        // step, so a body that only stores and receives heat is perfectly well-posed.
+        if (input.ThermalContacts is not null)
+            foreach (var contact in input.ThermalContacts)
+                contact.Validate(input.Mesh.NodeCount);
     }
 
     public SolveOutput Solve(SolveInput input, IProgress<SolverProgress>? progress = null,
@@ -94,7 +103,8 @@ public sealed class TransientThermalSolver : ISolver
         foreach (var convection in input.BoundaryConditions.OfType<Convection>())
             foreach (var t in mesh.GetFaceTriangles(convection.FaceIds))
                 robin.Add(new ScalarDiffusionAssembler.RobinTerm(t, convection.Coefficient));
-        var conduction = assembler.AssembleStiffness(robin, cancellationToken);
+        // Contacts enter the conduction matrix only: an interface exchanges heat, it stores none.
+        var conduction = assembler.AssembleStiffness(robin, input.ThermalContacts, cancellationToken);
         var mass = assembler.AssembleMass(el =>
         {
             var m = input.MaterialOf(el);
@@ -109,6 +119,7 @@ public sealed class TransientThermalSolver : ISolver
         var system = systemBuilder.Build();
         log.Add($"Assembled {system.RowCount} DOF system, {system.NonZeroCount} non-zeros" +
                 (robin.Count > 0 ? $" including {robin.Count} convective surface triangles." : "."));
+        HeatConductionSolver.LogContacts(input, log);
 
         progress?.Report(new SolverProgress("Applying boundary conditions", 0.05));
         var constantLoads = ScalarSolverHelpers.AssembleThermalLoads(input, log);
@@ -128,7 +139,12 @@ public sealed class TransientThermalSolver : ISolver
         foreach (var (node, value) in prescribed)
             temperature_[node] = value;
 
-        var frames = new List<ResultFrame> { MakeFrame(0.0, temperature_, mesh, assembler, input) };
+        var environment = EnvironmentBoundaryModel.Build(input, log);
+        var film = environment?.Evaluate(temperature_);
+        var frames = new List<ResultFrame>
+        {
+            MakeFrame(0.0, temperature_, mesh, assembler, input, film)
+        };
         var cg = new ConjugateGradientSolver
         {
             Tolerance = 1e-10,
@@ -137,32 +153,87 @@ public sealed class TransientThermalSolver : ISolver
         var massTimesT = new double[mesh.NodeCount];
         var fullRhs = new double[mesh.NodeCount];
         long totalIterations = 0;
+        long nonlinearIterations = 0;
 
         for (int n = 1; n <= steps; n++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             mass.Multiply(temperature_, massTimesT);
-            for (int i = 0; i < fullRhs.Length; i++)
-                fullRhs[i] = massTimesT[i] / dt + constantLoads[i];
 
-            var rhs = reduced.ReduceLoads(fullRhs);
-            var free = reduced.Restrict(temperature_);   // warm start from the previous step
-            var iterations = cg.Solve(reduced.Reduced, rhs, free, cancellationToken);
-            if (!iterations.Converged)
-                throw new InvalidOperationException(
-                    $"Time step {n} did not converge after {iterations.Iterations} CG iterations " +
-                    $"(residual {iterations.ResidualNorm:g3}). Check materials and mesh quality.");
-            totalIterations += iterations.Iterations;
-            temperature_ = reduced.Expand(free);
+            // Without an environment this loop runs exactly once and reuses the system
+            // reduced before the time loop — the linear path, unchanged to the last bit.
+            // With one, each pass re-evaluates the surface film coefficients at the latest
+            // iterate: the lagged-coefficient fixed point of the backward-Euler step.
+            var iterate = temperature_;
+            int picard = 0;
+            double change = 0;
+            while (true)
+            {
+                picard++;
+                ConstrainedSystemSolver.ReducedSystem stepSystem;
+                if (environment is null)
+                {
+                    stepSystem = reduced;
+                    for (int i = 0; i < fullRhs.Length; i++)
+                        fullRhs[i] = massTimesT[i] / dt + constantLoads[i];
+                }
+                else
+                {
+                    film = environment.Evaluate(iterate);
+                    stepSystem = ConstrainedSystemSolver.Reduce(
+                        EnvironmentThermalTerms.WithFilm(system, mesh, film), prescribed,
+                        allowUnconstrained: true);
+                    var stepLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, film);
+                    for (int i = 0; i < fullRhs.Length; i++)
+                        fullRhs[i] = massTimesT[i] / dt + stepLoads[i];
+                }
+
+                var rhs = stepSystem.ReduceLoads(fullRhs);
+                var free = stepSystem.Restrict(iterate);   // warm start from the previous step
+                var iterations = cg.Solve(stepSystem.Reduced, rhs, free, cancellationToken);
+                if (!iterations.Converged)
+                    throw new InvalidOperationException(
+                        $"Time step {n} did not converge after {iterations.Iterations} CG iterations " +
+                        $"(residual {iterations.ResidualNorm:g3}). Check materials and mesh quality.");
+                totalIterations += iterations.Iterations;
+                var next = stepSystem.Expand(free);
+
+                if (environment is null)
+                {
+                    iterate = next;
+                    break;
+                }
+                nonlinearIterations++;
+                change = EnvironmentThermalTerms.MaxChange(iterate, next);
+                iterate = next;
+                if (picard >= 2 && change < EnvironmentThermalTerms.Threshold(iterate)) break;
+                if (picard >= EnvironmentThermalTerms.MaxTransientIterations)
+                    throw new InvalidOperationException(
+                        $"Time step {n}: the environment's surface coefficients did not settle " +
+                        $"after {picard} iterations (last change {change:g3} K). Reduce the time " +
+                        "step — a step that moves the surface temperature far in one go makes the " +
+                        "film coefficients chase it.");
+            }
+            temperature_ = iterate;
 
             if (n % stride == 0 || n == steps)
-                frames.Add(MakeFrame(n * dt, temperature_, mesh, assembler, input));
+                frames.Add(MakeFrame(n * dt, temperature_, mesh, assembler, input, film));
             progress?.Report(new SolverProgress($"Time step {n}/{steps}", 0.05 + 0.95 * n / steps));
         }
 
         double endTime = steps * dt;
         log.Add($"Backward Euler: {steps} steps of Δt = {dt:g4} s to t = {endTime:g4} s " +
                 $"({totalIterations} CG iterations total); {frames.Count} frames stored.");
+        if (environment is not null)
+        {
+            log.Add($"Environment: {nonlinearIterations} nonlinear iterations over {steps} steps " +
+                    $"({(double)nonlinearIterations / steps:F1} per step).");
+            var (minFilm, maxFilm) = film!.CoefficientRange();
+            log.Add($"Final film coefficient over the exposed surface: " +
+                    $"{minFilm:g4} … {maxFilm:g4} W/(m²·K).");
+            foreach (string note in environment.DrainNotes())
+                log.Add("  " + note);
+        }
         double min = temperature_.Min(), max = temperature_.Max();
         log.Add($"Final temperature range: {min:g4} … {max:g4} K.");
 
@@ -197,7 +268,7 @@ public sealed class TransientThermalSolver : ISolver
     }
 
     private static ResultFrame MakeFrame(double time, double[] temperature, FeMesh mesh,
-        ScalarDiffusionAssembler assembler, SolveInput input)
+        ScalarDiffusionAssembler assembler, SolveInput input, SurfaceFilmModel? film)
     {
         // Flux recovery only for STORED frames — O(stored), not O(steps).
         var flux = new Vector3D[mesh.ElementCount];
@@ -205,11 +276,16 @@ public sealed class TransientThermalSolver : ISolver
             flux[e] = assembler.ElementGradient(e, temperature)
                       * -input.MaterialOf(e).ThermalConductivity!.Value;   // q = −k∇T
 
-        var fields = new IResultField[]
+        var fields = new List<IResultField>
         {
             new NodalScalarField("Temperature", "K", (double[])temperature.Clone()),
             new NodalVectorField("Heat flux", "W/m²", ScalarSolverHelpers.NodalAverage(mesh, flux))
         };
+        // Present in EVERY frame of an environment run, so the frame field sets stay
+        // identical and the UI keeps its selected field while scrubbing.
+        if (film is not null)
+            fields.Add(new NodalScalarField("Film coefficient", "W/(m²·K)",
+                EnvironmentThermalTerms.NodalFilmField(mesh, film)));
         return new ResultFrame($"t = {time:g4} s", time, fields) { Unit = "s" };
     }
 

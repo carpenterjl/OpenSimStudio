@@ -87,6 +87,58 @@ public partial class MeshingViewModel : ObservableObject
         finally { _session.IsBusy = false; }
     }
 
+    /// <summary>
+    /// Meshes every body of the project with the current settings — an assembly solve needs
+    /// all of them meshed, and meshing them one selection at a time is the same work done by
+    /// hand. Each body is meshed on its OWN geometry (so "auto" edge length still follows
+    /// each part's size); a failure names the body and leaves the rest alone.
+    /// </summary>
+    [RelayCommand]
+    private async Task MeshAllBodiesAsync()
+    {
+        var bodies = _session.Bodies.ToList();
+        if (bodies.Count == 0) return;
+
+        var settings = new MeshSettings
+        {
+            TargetEdgeLength = TargetEdgeLength,
+            ElementOrder = QuadraticElements ? ElementOrder.Quadratic : ElementOrder.Linear
+        };
+        _session.IsBusy = true;
+        try
+        {
+            for (int i = 0; i < bodies.Count; i++)
+            {
+                var body = bodies[i];
+                if (body.Geometry is not { } geometry)
+                {
+                    _log.Append($"Body '{body.Name}' has no geometry — skipped.");
+                    continue;
+                }
+                _session.StatusText = $"Meshing {i + 1}/{bodies.Count}: {body.Name}…";
+                _session.ProgressFraction = (double)i / bodies.Count;
+                try
+                {
+                    body.MeshSettings = settings;
+                    body.Mesh = await Task.Run(() => _meshGenerator.Generate(geometry, settings));
+                    _log.Append($"Mesh '{body.Name}': {body.Mesh.NodeCount:N0} nodes, " +
+                                $"{body.Mesh.ElementCount:N0} tetrahedra.");
+                }
+                catch (Exception ex)
+                {
+                    _log.Append($"Mesh '{body.Name}' failed: {ex.Message}");
+                }
+            }
+            _session.RaiseMeshChanged();
+            _session.StatusText = "Meshes ready";
+        }
+        finally
+        {
+            _session.IsBusy = false;
+            _session.ProgressFraction = 0;
+        }
+    }
+
     /// <summary>Recomputes the info readout from the session body's mesh.</summary>
     private void RefreshMeshInfo()
     {

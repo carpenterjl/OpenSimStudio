@@ -42,6 +42,7 @@ public partial class MaterialEditorViewModel : ObservableObject
     [ObservableProperty] private string _specificHeat = "";
     [ObservableProperty] private string _electricalConductivity = "";
     [ObservableProperty] private string _relativePermittivity = "";
+    [ObservableProperty] private string _emissivity = "";
     [ObservableProperty] private string _color = "#B0B0B0";
     [ObservableProperty] private string _errorText = "";
     [ObservableProperty] private bool _selectedIsBuiltIn;
@@ -59,6 +60,7 @@ public partial class MaterialEditorViewModel : ObservableObject
         SpecificHeat = Format(value.SpecificHeat);
         ElectricalConductivity = Format(value.ElectricalConductivity);
         RelativePermittivity = Format(value.RelativePermittivity);
+        Emissivity = Format(value.Emissivity);
         Color = value.Color;
     }
 
@@ -89,11 +91,13 @@ public partial class MaterialEditorViewModel : ObservableObject
                 SpecificHeat = ParseOptional(SpecificHeat, "specific heat"),
                 ElectricalConductivity = ParseOptional(ElectricalConductivity, "electrical conductivity"),
                 RelativePermittivity = ParseOptional(RelativePermittivity, "relative permittivity"),
+                Emissivity = ParseOptional(Emissivity, "emissivity"),
                 Color = string.IsNullOrWhiteSpace(Color) ? "#B0B0B0" : Color.Trim()
             };
             material.ValidateMechanical();
             if (material.ThermalConductivity is not null) material.ValidateThermal();
             if (material.ElectricalConductivity is not null) material.ValidateElectrical();
+            if (material.Emissivity is not null) material.ValidateRadiative();
 
             _library.AddOrUpdateUserMaterial(material);
             RefreshFromLibrary(material.Name);

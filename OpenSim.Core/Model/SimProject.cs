@@ -35,7 +35,9 @@ public sealed record MeshSettings
 
 /// <summary>
 /// A single simulated body: its surface geometry, mesh settings, generated FE mesh,
-/// assigned material and boundary conditions. Milestone 1 supports one body per project.
+/// assigned material and boundary conditions. A project holds one body for the
+/// single-part workflows and one per part for an imported assembly, each meshed
+/// independently and merged for the solve.
 /// </summary>
 public sealed class Body
 {
@@ -48,6 +50,13 @@ public sealed class Body
     public MeshSettings MeshSettings { get; set; } = new();
     public FeMesh? Mesh { get; set; }
     public Material? Material { get; set; }
+
+    /// <summary>
+    /// Uniform heat dissipated inside this body [W] — the natural way to say "this chip
+    /// burns 3 W". Null means no internal source. It is spread over the body's VOLUME at
+    /// solve time (q = P/V), which is why it lives here and not on a face condition.
+    /// </summary>
+    public double? HeatSourcePower { get; set; }
 
     /// <summary>
     /// Per-region material names (region id → library material name) for multi-material
@@ -73,6 +82,15 @@ public sealed class SimProject
 
     /// <summary>The PCB stackup, when this project was built from a board import. Null otherwise.</summary>
     public PcbStackupSettings? Stackup { get; set; }
+
+    /// <summary>What surrounds the bodies (vacuum / still fluid / moving fluid) for
+    /// environment heat-flow studies. Null — the value every older project loads with —
+    /// means no environment, so those projects solve exactly as they always did.</summary>
+    public EnvironmentSettings? Environment { get; set; }
+
+    /// <summary>How the bodies are joined when several are solved together (contact
+    /// conductance, gap tolerance). Null — every older project — means the defaults.</summary>
+    public AssemblySettings? Assembly { get; set; }
 
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
     public List<Body> Bodies { get; } = new();

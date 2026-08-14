@@ -94,6 +94,13 @@
                                        FontSize="11" Foreground="#8A8A96"/>
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource Tile}" Command="{Binding HomeImportAssemblyCommand}">
+                        <StackPanel>
+                            <TextBlock Text="🧩  Import STEP assembly…" FontWeight="Bold"/>
+                            <TextBlock Text="Every part as its own body: heat flow in an environment (Thermal &amp; Flow workspace)"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
                     <Button Style="{StaticResource Tile}" Command="{Binding HomeImportPcbCommand}">
                         <StackPanel>
                             <TextBlock Text="🖳  Import PCB…" FontWeight="Bold"/>
@@ -102,19 +109,32 @@
                         </StackPanel>
                     </Button>
 
+                    <!-- Ids on the tiles: their subtitles name other workspaces ("…(Thermal &
+                         Flow workspace)" on the assembly import), so any by-text search finds
+                         the wrong tile and fires an import instead of navigating. -->
                     <TextBlock Text="Workspaces" FontSize="16" FontWeight="Bold"
                                Foreground="#C9C9D2" Margin="0,14,0,8"/>
-                    <Button Style="{StaticResource Tile}" Command="{Binding EnterMechanicalCommand}">
+                    <Button x:Name="HomeMechanicalTile" Style="{StaticResource Tile}"
+                            Command="{Binding EnterMechanicalCommand}">
                         <StackPanel>
                             <TextBlock Text="🔧  Mechanical" FontWeight="Bold"/>
                             <TextBlock Text="Structural + thermal analysis on primitives and STL parts"
                                        FontSize="11" Foreground="#8A8A96"/>
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource Tile}" Command="{Binding EnterElectricalCommand}">
+                    <Button x:Name="HomeElectricalTile" Style="{StaticResource Tile}"
+                            Command="{Binding EnterElectricalCommand}">
                         <StackPanel>
                             <TextBlock Text="⚡  Electrical" FontWeight="Bold"/>
                             <TextBlock Text="PCB import, DC conduction and Joule heating"
+                                       FontSize="11" Foreground="#8A8A96"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="HomeThermalFlowTile" Style="{StaticResource Tile}"
+                            Command="{Binding EnterThermalFlowCommand}">
+                        <StackPanel>
+                            <TextBlock Text="🌡  Thermal &amp; Flow" FontWeight="Bold"/>
+                            <TextBlock Text="Assemblies in free space, air or a fluid: transient heat flow"
                                        FontSize="11" Foreground="#8A8A96"/>
                         </StackPanel>
                     </Button>

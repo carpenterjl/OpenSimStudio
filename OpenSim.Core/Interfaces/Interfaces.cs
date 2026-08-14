@@ -55,6 +55,22 @@ public sealed record SolveInput
     /// </summary>
     public TransientThermalSettings? TransientThermal { get; init; }
 
+    /// <summary>
+    /// Optional inter-body thermal contacts for an assembly merged by
+    /// <see cref="FeMeshAssembler"/>. Consumed by the thermal solvers; null (every
+    /// single-body solve) leaves the assembled matrices bitwise unchanged.
+    /// </summary>
+    public IReadOnlyList<ContactInterface>? ThermalContacts { get; init; }
+
+    /// <summary>
+    /// What surrounds the bodies (vacuum / still fluid / moving fluid). When set, the
+    /// thermal solvers add convection and radiation on every exterior face the user has
+    /// NOT claimed with a condition of their own, with film coefficients that depend on
+    /// the surface temperature — which is what makes those solves nonlinear. Null leaves
+    /// every existing solver path bitwise unchanged.
+    /// </summary>
+    public EnvironmentSettings? Environment { get; init; }
+
     /// <summary>Settings for a modal analysis. Null (the default mode count applies)
     /// or ignored outside the modal solver.</summary>
     public ModalSettings? Modal { get; init; }

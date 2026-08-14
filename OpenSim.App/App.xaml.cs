@@ -38,6 +38,7 @@ public partial class App : Application
         services.AddSingleton<JouleHeatingStudy>();
 
         services.AddSingleton<MaterialLibrary>();
+        services.AddSingleton<ColormapLibrary>();
         services.AddSingleton<ProjectSerializer>();
 
         // Shared app state + the per-concern view models the shell exposes.
@@ -53,6 +54,9 @@ public partial class App : Application
         services.AddSingleton<InductanceViewModel>();
         services.AddSingleton<AntennaViewModel>();
         services.AddSingleton<SignalIntegrityViewModel>();
+        services.AddSingleton<BodiesViewModel>();
+        services.AddSingleton<EnvironmentViewModel>();
+        services.AddSingleton<ColormapViewModel>();
         services.AddSingleton<SceneViewModel>();
         services.AddSingleton<SolveViewModel>();
         services.AddSingleton<PcbViewModel>();

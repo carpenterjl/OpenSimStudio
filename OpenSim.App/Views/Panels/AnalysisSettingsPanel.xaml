@@ -10,6 +10,10 @@
                           IsChecked="{Binding Solve.JouleTransient}" Foreground="#C9C9D2" Margin="2,1,2,3"
                           Visibility="{Binding Session.IsJouleAnalysis, Converter={StaticResource BoolToVis}}"
                           ToolTip="Unchecked: steady-state temperature. Checked: time history of the heat-up at the DC solve's constant power."/>
+                <CheckBox x:Name="EnvironmentSteadyCheck" Content="Steady state (skip the time history)"
+                          IsChecked="{Binding Solve.EnvironmentSteadyState}" Foreground="#C9C9D2" Margin="2,1,2,3"
+                          Visibility="{Binding Session.IsEnvironmentThermalAnalysis, Converter={StaticResource BoolToVis}}"
+                          ToolTip="Solves the final equilibrium directly. The same nonlinear convection/radiation coupling is iterated to convergence — it answers how hot the parts end up, not how they got there."/>
                 <UniformGrid Columns="2">
                     <Label Content="Initial temperature [K]"/>
                     <TextBox x:Name="InitialTemperatureBox" Text="{Binding Solve.InitialTemperature}"/>

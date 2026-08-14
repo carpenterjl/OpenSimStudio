@@ -1,7 +1,8 @@
 <UserControl x:Class="OpenSim.App.Views.Viewport3DView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:helix="http://helix-toolkit.org/wpf">
+             xmlns:helix="http://helix-toolkit.org/wpf"
+             xmlns:panels="clr-namespace:OpenSim.App.Views.Panels">
     <Grid>
         <helix:HelixViewport3D x:Name="Viewport"
                                Background="#26262E"
@@ -62,12 +63,61 @@
             <StackPanel Width="160">
                 <TextBlock Text="{Binding Results.SelectedField.Name}" FontWeight="Bold" Margin="0,0,0,4"/>
                 <Rectangle Height="14" Fill="{Binding Scene.LegendBrush}" RadiusX="2" RadiusY="2"/>
+                <!-- Value ticks at the colormap's own stops. The row's height comes from the
+                     view model (0 when there are no ticks) because an empty Canvas measures
+                     to nothing: a fixed height would shift every legacy legend by its size. -->
+                <ItemsControl x:Name="LegendTicks" ItemsSource="{Binding Scene.LegendTicks}"
+                              Height="{Binding Scene.LegendTickRowHeight}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><Canvas/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Width="44">
+                                <Rectangle Width="1" Height="3" Fill="#8A8A96" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding Label}" FontSize="9" Foreground="#8A8A96"
+                                           TextAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <DockPanel Margin="0,2,0,0">
-                    <TextBlock Text="{Binding Scene.LegendMin}" DockPanel.Dock="Left" FontSize="11"/>
-                    <TextBlock Text="{Binding Scene.LegendMax}" DockPanel.Dock="Right" FontSize="11" HorizontalAlignment="Right"/>
+                    <!-- The bounds carry ids because they are what a colormap-threshold check
+                         reads: the enclosing Border has no automation peer of its own. -->
+                    <TextBlock Text="{Binding Scene.LegendMin}" DockPanel.Dock="Left" FontSize="11"
+                               AutomationProperties.AutomationId="LegendMin"/>
+                    <TextBlock Text="{Binding Scene.LegendMax}" DockPanel.Dock="Right" FontSize="11"
+                               HorizontalAlignment="Right"
+                               AutomationProperties.AutomationId="LegendMax"/>
                 </DockPanel>
             </StackPanel>
         </Border>
+
+        <!-- Result playback timeline. Bottom-CENTRE on purpose: Helix draws its coordinate
+             system bottom-left and the FE legend sits bottom-right. Shown only where a
+             timeline is meaningful — a Thermal & Flow solve with a non-degenerate axis. -->
+        <panels:TimelinePanel HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                              Margin="0,0,0,12">
+            <panels:TimelinePanel.Style>
+                <Style TargetType="panels:TimelinePanel">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding Session.ActiveWorkspace}" Value="ThermalFlow"/>
+                                <Condition Binding="{Binding Results.HasTimeline}" Value="True"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </panels:TimelinePanel.Style>
+        </panels:TimelinePanel>
 
         <!-- Field-overlay legend (antenna/SI): same style, its own pipeline — the FE
              legend's title and visibility belong to the Results VM's selected field. -->

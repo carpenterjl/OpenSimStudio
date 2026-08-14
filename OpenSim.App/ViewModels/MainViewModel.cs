@@ -18,9 +18,12 @@ namespace OpenSim.App.ViewModels;
 /// Scene → {Results, Electrodes} (display state), Pcb → {Meshing, Electrodes, Materials}
 /// (edge length, pad hand-off, material lookup), Solve/Electrodes → Materials
 /// (region-material resolution), Solve → Electrodes (pad-electrode boundary conditions
-/// for the AC-sweep/Joule analyses), Pcb → {Inductance, Antenna} (board hand-off for
+/// for the AC-sweep/Joule analyses), Solve → Environment (the surroundings the assembly
+/// heat-flow study runs in), Pcb → {Inductance, Antenna} (board hand-off for
 /// the PEEC self/mutual/loop analysis and the antenna simulator), Antenna → Electrodes
-/// (the selected source pad places the feed on net-sourced antennas).
+/// (the selected source pad places the feed on net-sourced antennas), Scene → Bodies
+/// (per-body visibility for the assembly scene), Scene → Colormap (the colors and value
+/// range the result view paints through).
 /// </summary>
 public partial class MainViewModel : ObservableObject
 {
@@ -31,7 +34,8 @@ public partial class MainViewModel : ObservableObject
         MaterialsViewModel materials, MeshingViewModel meshing, BoundaryConditionsViewModel conditions,
         PcbViewModel pcb, ElectrodesViewModel electrodes, InductanceViewModel inductance,
         AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, SolveViewModel solve,
-        ResultsViewModel results, SceneViewModel scene,
+        ResultsViewModel results, SceneViewModel scene, BodiesViewModel bodies,
+        EnvironmentViewModel environment, ColormapViewModel colormap,
         ProjectSerializer serializer, RecentProjectsService recentProjects)
     {
         Session = session;
@@ -48,8 +52,14 @@ public partial class MainViewModel : ObservableObject
         Solve = solve;
         Results = results;
         Scene = scene;
+        Bodies = bodies;
+        Environment = environment;
+        Colormap = colormap;
         _serializer = serializer;
         _recentProjects = recentProjects;
+        // Switching the active body re-syncs the panels that mirror body state, exactly as
+        // opening a project does.
+        session.ActiveBodyChanged += (_, _) => AdoptActiveBody();
         RefreshRecentProjects();
         log.Append("Ready. Create a primitive or import an STL file to begin.");
     }
@@ -68,14 +78,51 @@ public partial class MainViewModel : ObservableObject
     public SolveViewModel Solve { get; }
     public ResultsViewModel Results { get; }
     public SceneViewModel Scene { get; }
+    public BodiesViewModel Bodies { get; }
+    public EnvironmentViewModel Environment { get; }
+    public ColormapViewModel Colormap { get; }
 
-    /// <summary>Viewport left-click on a face: pad clicks assign electrodes, everything
-    /// else toggles the boundary-condition face selection.</summary>
+    /// <summary>
+    /// Re-points the body-mirroring panels (material, meshing, conditions) at the active
+    /// body. Deliberately NOT a geometry replacement: in an assembly the scene already
+    /// shows every part, and treating a selection as a replacement would throw away the
+    /// results the user is looking at. The previous body keeps its material because the
+    /// session writes material choices through as they are made.
+    /// </summary>
+    private void AdoptActiveBody()
+    {
+        Materials.AdoptProjectMaterial(Session.Body.Material);
+        Meshing.TargetEdgeLength = Session.Body.MeshSettings.TargetEdgeLength;
+        // Face ids mean different things on different bodies, so the selection cannot
+        // survive the switch.
+        Session.SelectedFaces.Clear();
+        Conditions.ResyncFromBody();
+        Geometry.RefreshFromBody();
+        Session.RaiseMeshChanged();
+        Session.RaiseHighlightsInvalidated();
+    }
+
+    /// <summary>
+    /// Viewport left-click on a face: pad clicks assign electrodes, everything else toggles
+    /// the boundary-condition face selection. In an assembly the id is assembly-wide, so it
+    /// first selects the part that owns the face — a condition always lands on the body the
+    /// user just pointed at.
+    /// </summary>
     public void OnFaceClicked(int faceId)
     {
+        if (Session.ResolveBodyForFace(faceId) is { } hit)
+        {
+            Bodies.SelectByIndex(hit.BodyIndex);
+            Conditions.ToggleFaceSelection(hit.LocalFaceId);
+            return;
+        }
         if (Electrodes.TryAssignElectrode(faceId)) return;
         Conditions.ToggleFaceSelection(faceId);
     }
+
+    /// <summary>Viewport left-click on a solved assembly part (the result scene has one
+    /// model per body, no face models): selects that part.</summary>
+    public void OnBodyClicked(int bodyIndex) => Bodies.SelectByIndex(bodyIndex);
 
     // ---------------- Home / workspace navigation ----------------
 
@@ -110,6 +157,13 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void EnterThermalFlow()
+    {
+        Session.ActiveWorkspace = WorkspaceKind.ThermalFlow;
+        Session.IsHomeActive = false;
+    }
+
+    [RelayCommand]
     private void NewProject()
     {
         Session.Project = new Core.Model.SimProject();
@@ -138,6 +192,16 @@ public partial class MainViewModel : ObservableObject
         Session.ActiveWorkspace = WorkspaceKind.Mechanical;
         Session.IsHomeActive = false;
         await Geometry.ImportStepCommand.ExecuteAsync(null);
+    }
+
+    /// <summary>Home tile: a STEP assembly lands in the Thermal &amp; Flow workspace, the
+    /// only one that solves several bodies together.</summary>
+    [RelayCommand]
+    private async Task HomeImportAssemblyAsync()
+    {
+        Session.ActiveWorkspace = WorkspaceKind.ThermalFlow;
+        Session.IsHomeActive = false;
+        await Geometry.ImportStepAssemblyCommand.ExecuteAsync(null);
     }
 
     /// <summary>Home tile: PCB import lands in the Electrical workspace.</summary>

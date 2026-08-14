@@ -101,6 +101,58 @@ public partial class GeometryViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Imports a STEP file as an ASSEMBLY: one project body per part, each placed by the
+    /// file's own transforms. This REPLACES the project's bodies — an assembly is a whole
+    /// model, not something to merge into whatever was open.
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportStepAssemblyAsync()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "STEP files (*.step;*.stp)|*.step;*.stp|All files (*.*)|*.*"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        _session.IsBusy = true;
+        _session.StatusText = "Importing STEP assembly…";
+        try
+        {
+            var report = await Task.Run(() => _stepImporter.ImportAssembly(dialog.FileName));
+            foreach (var note in report.Notes) _log.Append($"STEP: {note}");
+
+            string source = System.IO.Path.GetFileName(dialog.FileName);
+            var bodies = _session.Project.Bodies;
+            bodies.Clear();
+            foreach (var part in report.Bodies)
+            {
+                bodies.Add(new Body
+                {
+                    Name = part.Name,
+                    Geometry = part.Mesh,
+                    GeometrySource = $"{source} — {part.Name}"
+                });
+                if (!part.Mesh.IsWatertight())
+                    _log.Append($"Warning: '{part.Name}' is not watertight; meshing will fail until repaired.");
+            }
+            _session.Body = bodies[0];
+            _session.IsPcbMode = false;
+
+            _session.RaiseBodiesChanged();
+            _session.RaiseGeometryReplaced(leavingPcbMode: true);
+            _session.RaiseMeshChanged();
+            _log.Append($"Assembly imported: {bodies.Count} bod{(bodies.Count == 1 ? "y" : "ies")} " +
+                        "— assign a material and mesh each one.");
+        }
+        catch (Exception ex) { _session.ReportError(ex); }
+        finally
+        {
+            _session.IsBusy = false;
+            _session.StatusText = "";
+        }
+    }
+
     private void WarnIfNotWatertight(TriangleMesh mesh)
     {
         if (!mesh.IsWatertight())
@@ -122,8 +174,9 @@ public partial class GeometryViewModel : ObservableObject
         _log.Append($"Geometry set: {GeometryInfo}");
     }
 
-    /// <summary>Recomputes the info readout from the session body.</summary>
-    private void RefreshFromBody()
+    /// <summary>Recomputes the info readout from the session body. Called directly when the
+    /// ACTIVE body of an assembly changes.</summary>
+    public void RefreshFromBody()
     {
         var geometry = _session.Body.Geometry;
         GeometryInfo = geometry is null

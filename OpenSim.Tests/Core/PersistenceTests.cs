@@ -24,7 +24,8 @@ public class ProjectSerializerTests
             Mesh = mesh,
             Material = new Material
             {
-                Name = "Test steel", YoungsModulus = 200e9, PoissonRatio = 0.3, Density = 7850
+                Name = "Test steel", YoungsModulus = 200e9, PoissonRatio = 0.3, Density = 7850,
+                Emissivity = 0.35
             }
         };
         body.BoundaryConditions.Add(new FixedSupport { Name = "Wall", FaceIds = new[] { 0 } });
@@ -58,6 +59,13 @@ public class ProjectSerializerTests
             Assert.Equal(0.008, loadedBody.MeshSettings.TargetEdgeLength);
             Assert.Equal("Test steel", loadedBody.Material!.Name);
             Assert.Equal(200e9, loadedBody.Material.YoungsModulus);
+            Assert.Equal(0.35, loadedBody.Material.Emissivity);
+            // An older project has no emissivity at all, which must stay distinguishable
+            // from a black body or a mirror — radiation asks for it explicitly instead.
+            Assert.Null(new Material
+            {
+                Name = "Old", YoungsModulus = 1, PoissonRatio = 0.3, Density = 1
+            }.Emissivity);
 
             Assert.Equal(3, loadedBody.BoundaryConditions.Count);
             Assert.IsType<FixedSupport>(loadedBody.BoundaryConditions[0]);
@@ -108,6 +116,54 @@ public class ProjectSerializerTests
             var bare = new PcbStackupSettings();
             Assert.Empty(bare.DielectricGapPermittivities);
             Assert.Empty(bare.DielectricGapLossTangents);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void AssemblySettings_EnvironmentAndPerBodyHeatSource_RoundTrip()
+    {
+        // The assembly-era additions. Both project-level records are nullable, so the
+        // interesting half of this gate is that they SURVIVE a round trip while an older
+        // project — which has neither — still loads with them null and behaves as before.
+        var project = new SimProject
+        {
+            Name = "Enclosure",
+            Assembly = new AssemblySettings { ContactConductance = 1.2e4, ContactGapTolerance = 5e-5 },
+            Environment = new EnvironmentSettings
+            {
+                Medium = MediumKind.MovingFluid,
+                AmbientTemperature = 310.5,
+                FluidName = FluidLibrary.Air.Name,
+                FlowVelocity = new Vector3D(2.5, 0, 0),
+                IncludeRadiation = false
+            }
+        };
+        project.Bodies.Add(new Body { Name = "Chip", HeatSourcePower = 3.5 });
+        project.Bodies.Add(new Body { Name = "Heatsink" });
+
+        string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".ossproj");
+        try
+        {
+            var serializer = new ProjectSerializer();
+            serializer.Save(project, path);
+            var loaded = serializer.Load(path);
+
+            Assert.Equal(1.2e4, loaded.Assembly!.ContactConductance);
+            Assert.Equal(5e-5, loaded.Assembly.ContactGapTolerance);
+            Assert.Equal(MediumKind.MovingFluid, loaded.Environment!.Medium);
+            Assert.Equal(310.5, loaded.Environment.AmbientTemperature);
+            Assert.Equal(2.5, loaded.Environment.FlowVelocity.X);
+            Assert.False(loaded.Environment.IncludeRadiation);
+            Assert.Equal(3.5, loaded.Bodies[0].HeatSourcePower);
+            Assert.Null(loaded.Bodies[1].HeatSourcePower);   // no source ≠ a source of zero
+
+            var older = new SimProject();
+            Assert.Null(older.Assembly);
+            Assert.Null(older.Environment);
         }
         finally
         {

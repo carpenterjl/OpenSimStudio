@@ -55,7 +55,65 @@ public partial class ProjectSession : ObservableObject
     }
 
     public SimProject Project { get; set; }
+
+    /// <summary>The ACTIVE body — the one the meshing, material and boundary-condition
+    /// panels edit and the single-body analyses solve. A project can hold several
+    /// (a STEP assembly); see <see cref="Bodies"/>.</summary>
     public Body Body { get; set; }
+
+    /// <summary>Every body in the project, in import order. That order is load-bearing:
+    /// it is the region-id order the merged assembly mesh uses, so it must not be
+    /// resorted for display.</summary>
+    public IReadOnlyList<Body> Bodies => Project.Bodies;
+
+    /// <summary>
+    /// The merged assembly mesh the last multi-body solve ran on, kept so the result scene
+    /// and viewport picking can map merged nodes/faces back to bodies. Session-transient
+    /// like the results themselves — never serialized, dropped whenever the geometry or a
+    /// mesh changes underneath it.
+    /// </summary>
+    public FeMeshAssembler.AssembledMesh? AssembledMesh { get; private set; }
+
+    /// <summary>Publishes the merged mesh a solve just ran on.</summary>
+    public void SetAssembledMesh(FeMeshAssembler.AssembledMesh? assembled) => AssembledMesh = assembled;
+
+    /// <summary>
+    /// Splits an assembly-wide face id into the body that owns it and that body's own local
+    /// face id — the mapping a viewport click needs to say "you picked part 3, face 5".
+    /// Returns null for a single-body project, where face ids are already body-local and
+    /// every consumer must keep behaving exactly as it always has.
+    /// </summary>
+    public (int BodyIndex, int LocalFaceId)? ResolveBodyForFace(int faceId)
+    {
+        if (Bodies.Count < 2 || faceId < 0) return null;
+        var bases = FeMeshAssembler.FaceIdBases(Bodies);
+        for (int b = bases.Length - 1; b >= 0; b--)
+            if (faceId >= bases[b])
+                return (b, faceId - bases[b]);
+        return null;
+    }
+
+    /// <summary>Raised when bodies are added, removed, or renamed (assembly import,
+    /// project load) so the body list rebuilds.</summary>
+    public event EventHandler? BodiesChanged;
+
+    /// <summary>Raised after <see cref="Body"/> switches to another body of the project.</summary>
+    public event EventHandler? ActiveBodyChanged;
+
+    public void RaiseBodiesChanged() => BodiesChanged?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Makes <paramref name="body"/> the active one. The body must belong to the
+    /// project — silently accepting a stranger would leave the panels editing an object
+    /// that is never solved or saved.</summary>
+    public void SelectActiveBody(Body body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        if (!Project.Bodies.Contains(body))
+            throw new ArgumentException($"Body '{body.Name}' does not belong to this project.", nameof(body));
+        if (ReferenceEquals(Body, body)) return;
+        Body = body;
+        ActiveBodyChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Faces picked in the viewport, targets for new boundary conditions.</summary>
     public ObservableCollection<int> SelectedFaces { get; } = new();
@@ -83,6 +141,7 @@ public partial class ProjectSession : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsModalAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsAcElectricalAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsJouleAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsEnvironmentThermalAnalysis))]
     [NotifyPropertyChangedFor(nameof(ShowsTransientSettings))]
     private AnalysisOption _selectedAnalysis = AnalysisOption.All[0];
 
@@ -101,18 +160,32 @@ public partial class ProjectSession : ObservableObject
     public bool IsElectricalAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical };
     public bool IsThermalAnalysis => SelectedAnalysis
-        is { Kind: AnalysisType.Thermal or AnalysisType.JouleCoupled or AnalysisType.TransientThermal };
+        is { Kind: AnalysisType.Thermal or AnalysisType.JouleCoupled or AnalysisType.TransientThermal
+                or AnalysisType.EnvironmentThermal };
     public bool IsTransientThermalAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.TransientThermal };
     public bool IsModalAnalysis => SelectedAnalysis is { Kind: AnalysisType.Modal };
     public bool IsAcElectricalAnalysis => SelectedAnalysis is { Kind: AnalysisType.AcElectrical };
     public bool IsJouleAnalysis => SelectedAnalysis is { Kind: AnalysisType.JouleCoupled };
+    public bool IsEnvironmentThermalAnalysis => SelectedAnalysis
+        is { Kind: AnalysisType.EnvironmentThermal };
 
-    /// <summary>The transient settings apply to the transient-thermal analysis and to the
-    /// Joule study's optional transient thermal leg.</summary>
-    public bool ShowsTransientSettings => IsTransientThermalAnalysis || IsJouleAnalysis;
+    /// <summary>The transient settings apply to the transient-thermal analysis, to the
+    /// Joule study's optional transient thermal leg, and to environment heat flow (which
+    /// is a transient study by nature — the user watches the parts warm up).</summary>
+    public bool ShowsTransientSettings =>
+        IsTransientThermalAnalysis || IsJouleAnalysis || IsEnvironmentThermalAnalysis;
 
     [ObservableProperty] private Material? _selectedMaterial;
+
+    /// <summary>The material panel edits the ACTIVE body, so the choice is written through
+    /// immediately. Deferring it to save/solve time was harmless with one body; with an
+    /// assembly it would attribute the choice to whichever body happened to be active when
+    /// the deferred write ran.</summary>
+    partial void OnSelectedMaterialChanged(Material? value)
+    {
+        if (value is not null) Body.Material = value;
+    }
 
     /// <summary>True from PCB import until the user returns to generic geometry (primitive,
     /// STL, or project open). Hides the primitive/meshing/material panels, which don't
@@ -136,10 +209,17 @@ public partial class ProjectSession : ObservableObject
     /// <summary>Raised when face paint state (selection, electrodes) changed.</summary>
     public event EventHandler? HighlightsInvalidated;
 
-    public void RaiseGeometryReplaced(bool leavingPcbMode) =>
+    public void RaiseGeometryReplaced(bool leavingPcbMode)
+    {
+        AssembledMesh = null;   // the merge described geometry that no longer exists
         GeometryReplaced?.Invoke(this, new GeometryReplacedEventArgs { LeavingPcbMode = leavingPcbMode });
+    }
 
-    public void RaiseMeshChanged() => MeshChanged?.Invoke(this, EventArgs.Empty);
+    public void RaiseMeshChanged()
+    {
+        AssembledMesh = null;   // re-meshing one body invalidates the merge it took part in
+        MeshChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public void RaiseResultsProduced(IReadOnlyList<IResultField> fields,
         AnalysisType? analysis = null, string? preferFieldName = null,

@@ -31,6 +31,14 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="ThermalFlowOnly" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="ThermalFlow">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -46,11 +54,15 @@
             <DockPanel Grid.Row="0" Margin="6,4">
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Label Content="Workspace:" VerticalAlignment="Center"/>
-                    <Button Content="Mechanical" Command="{Binding EnterMechanicalCommand}" Margin="0,0,2,0"/>
-                    <Button Content="Electrical" Command="{Binding EnterElectricalCommand}"/>
+                    <Button x:Name="WorkspaceMechanicalButton" Content="Mechanical"
+                            Command="{Binding EnterMechanicalCommand}" Margin="0,0,2,0"/>
+                    <Button x:Name="WorkspaceElectricalButton" Content="Electrical"
+                            Command="{Binding EnterElectricalCommand}" Margin="0,0,2,0"/>
+                    <Button x:Name="WorkspaceThermalFlowButton" Content="Thermal &amp; Flow"
+                            Command="{Binding EnterThermalFlowCommand}"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <Button Content="⌂ Home" Command="{Binding GoHomeCommand}" Margin="0,0,12,0"/>
+                    <Button x:Name="GoHomeButton" Content="⌂ Home" Command="{Binding GoHomeCommand}" Margin="0,0,12,0"/>
                     <Button Content="Open project…" Command="{Binding OpenProjectCommand}" Margin="0,0,4,0"/>
                     <Button Content="Save project…" Command="{Binding SaveProjectCommand}" Margin="0,0,16,0"/>
                     <Button Content="Import STL…" Command="{Binding Geometry.ImportStlCommand}" Margin="0,0,4,0"/>
@@ -60,7 +72,8 @@
                     <ComboBox x:Name="AnalysisCombo"
                               ItemsSource="{Binding Session.AnalysisOptions}" SelectedItem="{Binding Session.SelectedAnalysis}"
                               DisplayMemberPath="Label" MinWidth="220" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                    <Button Content="Solve" Command="{Binding Solve.SolveCommand}" FontWeight="Bold" Margin="0,0,16,0"/>
+                    <Button x:Name="SolveButton" Content="Solve" Command="{Binding Solve.SolveCommand}"
+                            FontWeight="Bold" Margin="0,0,16,0"/>
                     <Button Content="Clear face selection" Command="{Binding Conditions.ClearSelectionCommand}"/>
                     <CheckBox Content="Show mesh" IsChecked="{Binding Scene.ShowMeshEdges}"
                               Foreground="#C9C9D2" VerticalAlignment="Center" Margin="16,0,0,0"/>
@@ -88,6 +101,10 @@
                                             </StackPanel>
                                             <StackPanel Style="{StaticResource ElectricalOnly}">
                                                 <panels:PcbNetsPanel/>
+                                                <panels:GeometryInfoPanel/>
+                                            </StackPanel>
+                                            <StackPanel Style="{StaticResource ThermalFlowOnly}">
+                                                <panels:BodiesPanel/>
                                                 <panels:GeometryInfoPanel/>
                                             </StackPanel>
                                             <panels:BoundaryConditionsListPanel/>
@@ -127,6 +144,15 @@
                                                 <panels:ThermalConditionsPanel/>
                                                 <panels:AnalysisSettingsPanel/>
                                                 <panels:ResultDisplayPanel/>
+                                            </StackPanel>
+                                            <StackPanel Style="{StaticResource ThermalFlowOnly}">
+                                                <panels:EnvironmentPanel/>
+                                                <panels:MeshingPanel/>
+                                                <panels:MaterialPanel/>
+                                                <panels:ThermalConditionsPanel/>
+                                                <panels:AnalysisSettingsPanel/>
+                                                <panels:ResultDisplayPanel/>
+                                                <panels:ColormapEditorPanel/>
                                             </StackPanel>
                                         </StackPanel>
                                     </ScrollViewer>

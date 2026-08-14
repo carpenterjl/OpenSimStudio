@@ -196,7 +196,7 @@ public class StepGoldenSolidTests
     {
         var report = Import(StepFixtures.TwoBoxes()); // 1 mm³ and 8 mm³ boxes
         Assert.Equal(8e-9, report.Mesh.ComputeSignedVolume(), 1e-20);
-        Assert.Contains(report.Notes, n => n.Contains("2 solids") && n.Contains("Phase 4"));
+        Assert.Contains(report.Notes, n => n.Contains("2 solids") && n.Contains("assembly import"));
     }
 
     [Fact]

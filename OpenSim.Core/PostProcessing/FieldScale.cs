@@ -55,4 +55,23 @@ public sealed record FieldScale(FieldScaleMode Mode, double Min, double Max, int
         if (hi <= lo) return 0;
         return Math.Clamp((value - lo) / (hi - lo), 0, 1);
     }
+
+    /// <summary>The inverse of <see cref="Normalize"/>: the field value a colormap
+    /// coordinate stands for. This is what puts numbers on a legend — a tick drawn at
+    /// a colormap stop must read the value that stop actually colors, under log scaling
+    /// as much as linear. Degenerate ranges return the lower bound rather than NaN, for
+    /// the same reason <see cref="Normalize"/> returns 0 there: this is display state.</summary>
+    public double ValueAt(double u)
+    {
+        u = Math.Clamp(u, 0, 1);
+        if (double.IsNaN(u)) u = 0;
+        double lo = EffectiveMin, hi = Max;
+        if (Mode == FieldScaleMode.Logarithmic)
+        {
+            if (hi <= 0 || lo <= 0 || hi <= lo) return lo;
+            return Math.Pow(10, Math.Log10(lo) + u * (Math.Log10(hi) - Math.Log10(lo)));
+        }
+        if (hi <= lo) return lo;
+        return lo + u * (hi - lo);
+    }
 }

@@ -185,8 +185,10 @@ public partial class BoundaryConditionsViewModel : ObservableObject
         _session.RaiseHighlightsInvalidated();
     }
 
-    /// <summary>Mirrors the (possibly replaced) body's conditions and drops the face selection.</summary>
-    private void ResyncFromBody()
+    /// <summary>Mirrors the (possibly replaced) body's conditions and drops the face selection.
+    /// Also called directly when the ACTIVE body of an assembly changes, which re-points the
+    /// list without the rest of a geometry replacement.</summary>
+    public void ResyncFromBody()
     {
         BoundaryConditions.Clear();
         foreach (var bc in _session.Body.BoundaryConditions)

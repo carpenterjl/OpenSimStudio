@@ -41,9 +41,6 @@ public sealed class StepImporter : IGeometryImporter
         notes.Add(unitNote);
 
         var resolver = new StepEntityResolver(file, units.MetersPerUnit);
-        if (resolver.HasAssemblyTransforms())
-            notes.Add("assembly placement transforms are ignored in v1; solids import in their local frames");
-
         var solids = resolver.ResolveSolids();
         TriangleMesh? bestMesh = null;
         double bestVolume = double.MinValue;
@@ -62,10 +59,60 @@ public sealed class StepImporter : IGeometryImporter
             throw new StepGeometryException("no solid could be tessellated"); // unreachable: ResolveSolids throws first
         if (solids.Count > 1)
             notes.Add($"file contains {solids.Count} solids; imported the largest (#{bestId}) — " +
-                      "multi-body assemblies are planned for Phase 4");
+                      "use assembly import to load all bodies with their placements");
 
         notes.Add($"solid #{bestId}: {bestMesh.Vertices.Count} vertices, " +
                   $"{bestMesh.Triangles.Count} triangles, {bestMesh.FaceCount} faces");
         return new StepImportReport(bestMesh, notes);
+    }
+
+    /// <summary>
+    /// Imports EVERY body of an assembly, each placed in the root frame.
+    /// <para>
+    /// This is deliberately OFF the <see cref="IGeometryImporter"/> seam, which returns one
+    /// mesh: forcing a multi-body result through it would make every other importer
+    /// (STL, primitives) pretend to be an assembly importer. The concrete type is what the
+    /// DI container hands the view model, exactly as for <see cref="ImportWithNotes"/>.
+    /// </para>
+    /// Each distinct solid is tessellated ONCE and instanced by transform, so a fastener
+    /// used forty times costs one tessellation.
+    /// </summary>
+    public StepAssemblyReport ImportAssembly(string filePath) =>
+        ImportAssemblyText(File.ReadAllText(filePath));
+
+    /// <summary>Assembly import from STEP text (the file-less entry point tests drive).</summary>
+    public StepAssemblyReport ImportAssemblyText(string text)
+    {
+        var notes = new List<string>();
+        var file = Part21Parser.Parse(text);
+        var units = StepUnits.Resolve(file);
+        notes.Add(FormattableString.Invariant($"length unit: {units.MetersPerUnit} m per model unit"));
+
+        var resolver = new StepEntityResolver(file, units.MetersPerUnit);
+        var solids = resolver.ResolveSolids();
+        var placed = new StepAssemblyResolver(file, resolver, notes)
+            .Resolve(solids.Select(s => s.Id).ToList());
+
+        // One tessellation per distinct solid; instances differ only by placement.
+        var tessellated = new Dictionary<int, (TriangleMesh Mesh, double Volume)>();
+        var bodies = new List<StepAssemblyBody>(placed.Count);
+        foreach (var occurrence in placed)
+        {
+            if (!tessellated.TryGetValue(occurrence.SolidId, out var baseMesh))
+            {
+                var solid = solids.First(s => s.Id == occurrence.SolidId);
+                baseMesh = SolidTessellator.Tessellate(solid, _options, notes, units.UncertaintyMeters);
+                tessellated[occurrence.SolidId] = baseMesh;
+            }
+            var mesh = MeshTransformer.Apply(baseMesh.Mesh, occurrence.Transform);
+            bodies.Add(new StepAssemblyBody(occurrence.Name, mesh, baseMesh.Volume,
+                occurrence.SolidId, occurrence.PlacedByAssembly));
+        }
+
+        int instanced = bodies.Count - tessellated.Count;
+        notes.Add($"assembly: {bodies.Count} bod{(bodies.Count == 1 ? "y" : "ies")} from " +
+                  $"{tessellated.Count} distinct solid{(tessellated.Count == 1 ? "" : "s")}" +
+                  (instanced > 0 ? $" ({instanced} instanced)" : ""));
+        return new StepAssemblyReport(bodies, notes);
     }
 }

@@ -1,0 +1,246 @@
+namespace OpenSim.Core.Model;
+
+/// <summary>
+/// Merges the independently meshed bodies of an assembly into the ONE <see cref="FeMesh"/>
+/// the existing solvers consume — nodes and elements concatenated, per-element region ids
+/// set to the body index, geometric face ids offset into disjoint per-body ranges, and
+/// every body's boundary conditions cloned onto those offset ids.
+///
+/// Bodies are meshed one at a time (each with its own auto edge length) and merged after,
+/// never triangulated together: one Delaunay pass over concatenated parts bridges bodies
+/// closer than the mesher's near-surface keep band and mistags skin faces by nearest
+/// centroid.
+///
+/// Nodes are NEVER re-welded across bodies. Merging coincident nodes would fake perfect
+/// thermal contact wherever two tessellations happened to land on the same point and leave
+/// the rest of the interface disconnected — contact is a modeled interface with a finite
+/// conductance (<see cref="ContactDetector"/>), not an accident of vertex coordinates.
+///
+/// Body order is the single deterministic ordering that runs through the whole assembly
+/// path: STEP resolver tree order = <see cref="SimProject.Bodies"/> order = the region ids
+/// produced here. Merged face ids are solve-transient (never persisted, never shown), so
+/// only their non-collision matters.
+/// </summary>
+public static class FeMeshAssembler
+{
+    /// <summary>The merged mesh plus the offsets needed to map results back to bodies.</summary>
+    /// <param name="Mesh">The merged mesh; <c>ElementRegionIds[e]</c> is the body index.</param>
+    /// <param name="NodeBases">First merged node index of each body.</param>
+    /// <param name="ElementBases">First merged element index of each body.</param>
+    /// <param name="FaceIdBases">First merged face id of each body.</param>
+    /// <param name="BoundaryConditions">Every body's conditions, face ids offset and names prefixed.</param>
+    /// <param name="RegionMaterials">Body index → that body's material (by reference).</param>
+    public sealed record AssembledMesh(
+        FeMesh Mesh,
+        IReadOnlyList<int> NodeBases,
+        IReadOnlyList<int> ElementBases,
+        IReadOnlyList<int> FaceIdBases,
+        IReadOnlyList<BoundaryCondition> BoundaryConditions,
+        IReadOnlyDictionary<int, Material> RegionMaterials)
+    {
+        public int BodyCount => NodeBases.Count;
+
+        /// <summary>The body a merged node belongs to.</summary>
+        public int BodyOfNode(int node)
+        {
+            if (node < 0 || node >= Mesh.NodeCount)
+                throw new ArgumentOutOfRangeException(nameof(node), node,
+                    $"The merged mesh has {Mesh.NodeCount} nodes.");
+            return LastBaseAtOrBelow(NodeBases, node);
+        }
+
+        /// <summary>The body a merged element belongs to (identical to its region id).</summary>
+        public int BodyOfElement(int element)
+        {
+            if (element < 0 || element >= Mesh.ElementCount)
+                throw new ArgumentOutOfRangeException(nameof(element), element,
+                    $"The merged mesh has {Mesh.ElementCount} elements.");
+            return Mesh.RegionOf(element);
+        }
+
+        /// <summary>
+        /// The body a merged face id belongs to — the mapping a viewport pick needs to turn
+        /// a clicked face into the part that owns it.
+        /// </summary>
+        public int BodyOfFace(int faceId)
+        {
+            if (faceId < 0)
+                throw new ArgumentOutOfRangeException(nameof(faceId), faceId, "Face ids are non-negative.");
+            return LastBaseAtOrBelow(FaceIdBases, faceId);
+        }
+
+        private static int LastBaseAtOrBelow(IReadOnlyList<int> bases, int value)
+        {
+            for (int b = bases.Count - 1; b >= 0; b--)
+                if (value >= bases[b]) return b;
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Merges the bodies in the given order. Every body must carry a linear (TET4) mesh
+    /// and a material; anything else is a typed failure naming the body.
+    /// </summary>
+    public static AssembledMesh Assemble(IReadOnlyList<Body> bodies)
+    {
+        if (bodies is null || bodies.Count == 0)
+            throw new InvalidOperationException("The assembly has no bodies to merge.");
+
+        foreach (var body in bodies)
+        {
+            var mesh = body.Mesh ?? throw new InvalidOperationException(
+                $"Body '{body.Name}' has no mesh. Generate a mesh for every body before solving.");
+            if (mesh.ElementCount == 0)
+                throw new InvalidOperationException($"Body '{body.Name}' has an empty mesh (no elements).");
+            if (mesh.IsQuadratic)
+                throw new InvalidOperationException(
+                    $"Body '{body.Name}' carries a quadratic (TET10) mesh; assembly solves are " +
+                    "linear (TET4) only. Re-generate that body's mesh with linear elements.");
+            if (mesh.ElementRegionIds is not null)
+                throw new InvalidOperationException(
+                    $"Body '{body.Name}' already carries per-element regions (a multi-material PCB " +
+                    "mesh). Assemblies of multi-region bodies are out of scope — the merged region " +
+                    "ids identify bodies.");
+            if (body.Material is null)
+                throw new InvalidOperationException(
+                    $"Body '{body.Name}' has no material assigned. Every body of an assembly needs one.");
+        }
+
+        var nodeBases = new int[bodies.Count];
+        var elementBases = new int[bodies.Count];
+        var faceIdBases = FaceIdBases(bodies);
+        int nodeTotal = 0, elementTotal = 0;
+        for (int b = 0; b < bodies.Count; b++)
+        {
+            var mesh = bodies[b].Mesh!;
+            nodeBases[b] = nodeTotal;
+            elementBases[b] = elementTotal;
+            nodeTotal += mesh.NodeCount;
+            elementTotal += mesh.ElementCount;
+        }
+
+        var nodes = new Numerics.Vector3D[nodeTotal];
+        var elements = new Tet4[elementTotal];
+        var regions = new int[elementTotal];
+        var triangles = new List<BoundaryTriangle>();
+        var conditions = new List<BoundaryCondition>();
+        var materials = new Dictionary<int, Material>();
+
+        for (int b = 0; b < bodies.Count; b++)
+        {
+            var body = bodies[b];
+            var mesh = body.Mesh!;
+            int nb = nodeBases[b], eb = elementBases[b], fb = faceIdBases[b];
+
+            for (int i = 0; i < mesh.NodeCount; i++)
+                nodes[nb + i] = mesh.Nodes[i];   // rigid copy: coordinates are bitwise unchanged
+
+            for (int e = 0; e < mesh.ElementCount; e++)
+            {
+                var t = mesh.Elements[e];
+                elements[eb + e] = new Tet4(t.N0 + nb, t.N1 + nb, t.N2 + nb, t.N3 + nb);
+                regions[eb + e] = b;
+            }
+
+            foreach (var t in mesh.BoundaryTriangles)
+                triangles.Add(new BoundaryTriangle(t.A + nb, t.B + nb, t.C + nb, t.FaceId + fb));
+
+            foreach (var bc in body.BoundaryConditions)
+                conditions.Add(bc with
+                {
+                    Name = $"{body.Name}: {bc.Name}",
+                    FaceIds = bc.FaceIds.Select(f => f + fb).ToArray()
+                });
+
+            materials[b] = body.Material!;
+        }
+
+        var merged = new FeMesh(nodes, elements, triangles, regions);
+        return new AssembledMesh(merged, nodeBases, elementBases, faceIdBases, conditions, materials);
+    }
+
+    /// <summary>
+    /// First global face id of each body — the offset that turns a body-local face id into
+    /// the assembly-wide one, and back. The viewport needs this BEFORE anything is meshed
+    /// (to show and pick the parts of an assembly), so it is computed from whatever the
+    /// body carries — geometry, mesh, or conditions — and never from the merge alone.
+    /// </summary>
+    public static int[] FaceIdBases(IReadOnlyList<Body> bodies)
+    {
+        var bases = new int[bodies.Count];
+        int total = 0;
+        for (int b = 0; b < bodies.Count; b++)
+        {
+            bases[b] = total;
+            total += FaceIdStride(bodies[b]);
+        }
+        return bases;
+    }
+
+    /// <summary>
+    /// Width of one body's face-id range. Computed from the body's own ids rather than a
+    /// fixed base: a real CAD part can carry thousands of faces, so any constant stride
+    /// eventually collides. (The PCB pad-face base is a persisted contract; these ids are
+    /// not — they exist only for the duration of a solve.)
+    /// <para>
+    /// Geometry, mesh and conditions all widen it. The geometry's ids matter because the
+    /// pre-mesh scene partitions face ids with the same function the merge later uses, and
+    /// the two must agree; a face too small to survive meshing would otherwise shrink the
+    /// stride and move every later body's range.
+    /// </para>
+    /// </summary>
+    private static int FaceIdStride(Body body)
+    {
+        int max = -1;
+        if (body.Mesh is { } mesh)
+            foreach (var t in mesh.BoundaryTriangles)
+                if (t.FaceId > max) max = t.FaceId;
+        if (body.Geometry is { } geometry)
+            foreach (int f in geometry.TriangleFaceIds)
+                if (f > max) max = f;
+        // A condition may name a face the skin does not carry; the solver reports that, but
+        // the stride must still cover it so the offset cannot land in the next body's range.
+        foreach (var bc in body.BoundaryConditions)
+            foreach (int f in bc.FaceIds)
+                if (f > max) max = f;
+        return max + 1;
+    }
+
+    /// <summary>
+    /// Turns each body's <see cref="Body.HeatSourcePower"/> [W] into the per-element
+    /// volumetric source [W/m³] the thermal solvers consume: q = P / V, with V the body's
+    /// own MESHED volume, so the integral of q over the body reproduces P exactly whatever
+    /// the mesher did to the geometry.
+    /// <para>
+    /// Returns null when no body dissipates anything, which keeps a source-free assembly
+    /// solve bitwise identical to one that never knew about heat sources.
+    /// </para>
+    /// </summary>
+    public static double[]? BuildElementHeatSource(AssembledMesh assembled,
+        IReadOnlyList<Body> bodies, Action<string>? log = null)
+    {
+        if (!bodies.Any(b => b.HeatSourcePower is not null and not 0)) return null;
+
+        var mesh = assembled.Mesh;
+        var source = new double[mesh.ElementCount];
+        for (int b = 0; b < bodies.Count; b++)
+        {
+            if (bodies[b].HeatSourcePower is not { } power || power == 0) continue;
+            int first = assembled.ElementBases[b];
+            int last = b + 1 < bodies.Count ? assembled.ElementBases[b + 1] : mesh.ElementCount;
+
+            double volume = 0;
+            for (int e = first; e < last; e++) volume += Math.Abs(mesh.ElementVolume(e));
+            if (volume <= 0)
+                throw new InvalidOperationException(
+                    $"Body '{bodies[b].Name}' dissipates {power:g4} W but its mesh has zero volume, " +
+                    "so the source has nowhere to go.");
+
+            double q = power / volume;
+            for (int e = first; e < last; e++) source[e] = q;
+            log?.Invoke($"Heat source '{bodies[b].Name}': {power:g4} W over {volume:g4} m³ " +
+                        $"= {q:g4} W/m³.");
+        }
+        return source;
+    }
+}

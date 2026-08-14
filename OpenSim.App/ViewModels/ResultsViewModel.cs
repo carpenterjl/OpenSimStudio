@@ -1,14 +1,19 @@
 using System.Collections.ObjectModel;
+using System.Windows.Media;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
+using OpenSim.Core.PostProcessing;
 using OpenSim.Core.Results;
 
 namespace OpenSim.App.ViewModels;
 
 /// <summary>
 /// Result fields plus every post-processing display option (deform scale, colormap,
-/// clamp, contours, section plane). Raises <see cref="DisplayOptionsChanged"/> exactly
-/// once per user-visible change; <see cref="SceneViewModel"/> rebuilds the scene on it.
+/// clamp, contours, section plane) and the playback timeline over a multi-frame solve.
+/// Raises <see cref="DisplayOptionsChanged"/> exactly once per user-visible change;
+/// <see cref="SceneViewModel"/> rebuilds the scene on it.
 /// </summary>
 public partial class ResultsViewModel : ObservableObject
 {
@@ -16,6 +21,16 @@ public partial class ResultsViewModel : ObservableObject
     {
         session.ResultsProduced += (_, e) => SetResults(e);
         session.GeometryReplaced += (_, _) => ClearSilently();
+        session.PropertyChanged += (_, e) =>
+        {
+            // The timeline is part of one workspace's viewport. Navigating away with the
+            // head running would keep animating — and rebuilding — a scene the user can no
+            // longer pause, so leaving the view stops playback.
+            if (e.PropertyName is nameof(ProjectSession.ActiveWorkspace)
+                                or nameof(ProjectSession.IsHomeActive))
+                StopPlayback();
+        };
+        _playTimer.Tick += (_, _) => AdvancePlayback();
     }
 
     public ObservableCollection<IResultField> ResultFields { get; } = new();
@@ -39,6 +54,175 @@ public partial class ResultsViewModel : ObservableObject
         SelectedFrameIndex >= 0 && SelectedFrameIndex < Frames.Count
             ? Frames[SelectedFrameIndex].Label
             : string.Empty;
+
+    // ---------------- Timeline ----------------
+    //
+    // The timeline drags a continuous AXIS VALUE (seconds, hertz), not a frame index: a
+    // transient solve whose step changes mid-run has frames that are not evenly spaced, so
+    // an index-proportional thumb would move at a rate unrelated to the physics. The frame
+    // index stays the single source of truth for what is rendered — the time is mapped onto
+    // it by FrameTimeline, and the two are kept in sync in both directions so the older
+    // index scrubber in the Results panel keeps working unchanged.
+
+    /// <summary>Wall-clock seconds one 1x pass over the whole axis takes.</summary>
+    private const double SweepSeconds = 5;
+
+    private readonly Dispatcher _dispatcher = Dispatcher.CurrentDispatcher;
+
+    private readonly DispatcherTimer _playTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
+
+    /// <summary>Real elapsed time between playback ticks. Playback advances by measured
+    /// wall-clock, not by the nominal interval, so a scene rebuild that overruns a tick
+    /// drops frames instead of playing the transient in slow motion.</summary>
+    private readonly System.Diagnostics.Stopwatch _playClock = new();
+
+    /// <summary>Frame axis values, ascending — the timeline's coordinate system.</summary>
+    private double[] _frameValues = Array.Empty<double>();
+
+    /// <summary>Guards the time to index to time round trip against re-entry.</summary>
+    private bool _syncingTime;
+
+    private bool _renderQueued;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurrentTimeLabel))]
+    private double _currentFrameTime;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlayButtonLabel))]
+    private bool _isPlaying;
+
+    [ObservableProperty] private double _playSpeed = 1;
+    [ObservableProperty] private bool _loopPlayback = true;
+
+    /// <summary>Playback rates as multiples of the 5-second full-axis sweep.</summary>
+    public IReadOnlyList<double> PlaySpeedOptions { get; } = new[] { 0.25, 0.5, 1.0, 2.0, 4.0 };
+
+    /// <summary>Axis unit of <see cref="ResultFrame.Value"/> ("s", "Hz"); null when the
+    /// axis is dimensionless (mode number) or when the frames carry no unit.</summary>
+    public string? FrameUnit { get; private set; }
+
+    public double FrameTimeMin => _frameValues.Length > 0 ? _frameValues[0] : 0;
+    public double FrameTimeMax => _frameValues.Length > 0 ? _frameValues[^1] : 0;
+
+    /// <summary>Slider tick positions: the frames themselves. With snap-to-tick this gives
+    /// a time-proportional thumb AND exact frame landing in one property — the dragged
+    /// value is always a real frame value, so nothing has to be rounded back afterwards.</summary>
+    public DoubleCollection FrameTicks { get; private set; } = new();
+
+    public IReadOnlyList<TimelineTickMark> TimelineTickLabels { get; private set; } =
+        Array.Empty<TimelineTickMark>();
+
+    public string CurrentTimeLabel => FrameTimeline.Format(CurrentFrameTime, FrameUnit);
+
+    public string PlayButtonLabel => IsPlaying ? "❚❚" : "▶";
+
+    /// <summary>The timeline needs an axis with real extent. Frames that all share one
+    /// value (a degenerate axis) keep the index scrubber and hide the timeline rather than
+    /// showing a slider whose ends coincide.</summary>
+    public bool HasTimeline => _frameValues.Length > 1 && FrameTimeMax > FrameTimeMin;
+
+    /// <summary>Starts or stops playback. Pressing play while parked at the end replays
+    /// from the start instead of doing nothing.</summary>
+    [RelayCommand]
+    private void TogglePlay()
+    {
+        if (IsPlaying) { StopPlayback(); return; }
+        if (!HasTimeline) return;
+        if (CurrentFrameTime >= FrameTimeMax) CurrentFrameTime = FrameTimeMin;
+        IsPlaying = true;
+        _playClock.Restart();
+        _playTimer.Start();
+    }
+
+    private void StopPlayback()
+    {
+        _playTimer.Stop();
+        _playClock.Reset();
+        IsPlaying = false;
+    }
+
+    private void AdvancePlayback()
+    {
+        double elapsed = _playClock.Elapsed.TotalSeconds;
+        _playClock.Restart();
+        if (!HasTimeline) { StopPlayback(); return; }
+
+        double delta = (FrameTimeMax - FrameTimeMin) * PlaySpeed * elapsed / SweepSeconds;
+        CurrentFrameTime = FrameTimeline.Advance(CurrentFrameTime, delta,
+            FrameTimeMin, FrameTimeMax, LoopPlayback, out bool wrapped);
+        if (wrapped && !LoopPlayback) StopPlayback();
+    }
+
+    /// <summary>Rebuilds the timeline for the current frame set. Called whenever the frame
+    /// collection changes, which also ends any playback of the frames that just went away.</summary>
+    private void RebuildTimeline()
+    {
+        StopPlayback();
+        _frameValues = Frames.Select(f => f.Value).ToArray();
+        FrameUnit = Frames.Count > 0 ? Frames[0].Unit : null;
+
+        // Frames are emitted in axis order by contract. If a solver ever breaks that, fall
+        // back to a plain index axis instead of throwing out of a property setter: the
+        // labels visibly become frame numbers, which is a legible symptom, and the scrubber
+        // keeps working.
+        for (int i = 1; i < _frameValues.Length; i++)
+            if (_frameValues[i] < _frameValues[i - 1])
+            {
+                _frameValues = Enumerable.Range(0, Frames.Count).Select(v => (double)v).ToArray();
+                FrameUnit = null;
+                break;
+            }
+
+        FrameTicks = new DoubleCollection(_frameValues);
+        FrameTicks.Freeze();
+        TimelineTickLabels = FrameTimeline.TickLabels(_frameValues, FrameUnit)
+            .Select(t => TimelineTickMark.At(t.Fraction, t.Label))
+            .ToArray();
+
+        _syncingTime = true;
+        try
+        {
+            CurrentFrameTime = SelectedFrameIndex >= 0 && SelectedFrameIndex < _frameValues.Length
+                ? _frameValues[SelectedFrameIndex]
+                : 0;
+        }
+        finally { _syncingTime = false; }
+
+        OnPropertyChanged(nameof(FrameUnit));
+        OnPropertyChanged(nameof(FrameTimeMin));
+        OnPropertyChanged(nameof(FrameTimeMax));
+        OnPropertyChanged(nameof(FrameTicks));
+        OnPropertyChanged(nameof(TimelineTickLabels));
+        OnPropertyChanged(nameof(HasTimeline));
+        OnPropertyChanged(nameof(CurrentTimeLabel));
+    }
+
+    partial void OnCurrentFrameTimeChanged(double value)
+    {
+        if (_syncingTime || _frameValues.Length == 0) return;
+        int index = FrameTimeline.NearestFrameIndex(_frameValues, value);
+        if (index == SelectedFrameIndex) return;
+        // The flag keeps the index change from snapping the time back under a live drag.
+        _syncingTime = true;
+        try { SelectedFrameIndex = index; }
+        finally { _syncingTime = false; }
+    }
+
+    /// <summary>Renders the newly selected frame immediately, but at most once per
+    /// dispatcher pass. Scrubbing selects frames far faster than the scene can rebuild;
+    /// routing it through the 140 ms burst debounce instead would show nothing until the
+    /// drag stopped, which is the opposite of what a timeline is for.</summary>
+    private void QueueFrameRender()
+    {
+        if (_renderQueued) return;
+        _renderQueued = true;
+        _dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() =>
+        {
+            _renderQueued = false;
+            DisplayOptionsChanged?.Invoke(this, new DisplayOptionsChangedEventArgs { Burst = false });
+        }));
+    }
 
     // Result display
     [ObservableProperty] private double _deformScale = 1;
@@ -101,6 +285,7 @@ public partial class ResultsViewModel : ObservableObject
 
     private void NotifyFrameShapeChanged()
     {
+        RebuildTimeline();
         OnPropertyChanged(nameof(HasFrames));
         OnPropertyChanged(nameof(FrameMaxIndex));
         OnPropertyChanged(nameof(SelectedFrameLabel));
@@ -117,7 +302,8 @@ public partial class ResultsViewModel : ObservableObject
             AnalysisType.Modal => ResultFields.FirstOrDefault(f => f.Name == "Mode shape"),
             AnalysisType.Electrical => ResultFields.FirstOrDefault(f => f.Name == "Electric potential"),
             AnalysisType.AcElectrical => ResultFields.FirstOrDefault(f => f.Name == "Potential magnitude"),
-            AnalysisType.Thermal or AnalysisType.JouleCoupled or AnalysisType.TransientThermal =>
+            AnalysisType.Thermal or AnalysisType.JouleCoupled or AnalysisType.TransientThermal
+                or AnalysisType.EnvironmentThermal =>
                 ResultFields.FirstOrDefault(f => f.Name == "Temperature"),
             _ => null
         };
@@ -169,7 +355,16 @@ public partial class ResultsViewModel : ObservableObject
                 ?? ResultFields.FirstOrDefault();
         }
         finally { _suppressDisplayEvents = false; }
-        DisplayOptionsChanged?.Invoke(this, new DisplayOptionsChangedEventArgs { Burst = false });
+
+        // Keep the timeline's playback head on the frame that is actually shown, unless the
+        // timeline is what moved it (a live drag owns the thumb position between frames).
+        if (!_syncingTime && value < _frameValues.Length)
+        {
+            _syncingTime = true;
+            try { CurrentFrameTime = _frameValues[value]; }
+            finally { _syncingTime = false; }
+        }
+        QueueFrameRender();
     }
 
     partial void OnSelectedFieldChanged(IResultField? value)
