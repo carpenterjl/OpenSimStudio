@@ -56,6 +56,7 @@ public partial class App : Application
         services.AddSingleton<SignalIntegrityViewModel>();
         services.AddSingleton<BodiesViewModel>();
         services.AddSingleton<EnvironmentViewModel>();
+        services.AddSingleton<FlowVisualizationViewModel>();
         services.AddSingleton<ColormapViewModel>();
         services.AddSingleton<SceneViewModel>();
         services.AddSingleton<SolveViewModel>();

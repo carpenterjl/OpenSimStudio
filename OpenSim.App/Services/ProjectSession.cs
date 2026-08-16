@@ -77,6 +77,26 @@ public partial class ProjectSession : ObservableObject
     /// <summary>Publishes the merged mesh a solve just ran on.</summary>
     public void SetAssembledMesh(FeMeshAssembler.AssembledMesh? assembled) => AssembledMesh = assembled;
 
+    /// <summary>The resolved flow field of the last conjugate (CFD) solve, kept for the
+    /// flow visualizations. Session-transient like every result.</summary>
+    public OpenSim.Cfd.FlowSolution? FlowSolution { get; private set; }
+
+    /// <summary>The voxelized domain that flow was solved on (cell classification the
+    /// visualizations use to stay out of the solids).</summary>
+    public OpenSim.Cfd.VoxelizedDomain? FlowDomain { get; private set; }
+
+    /// <summary>Raised whenever the flow result changes (a conjugate solve finished, or
+    /// the result was cleared by new geometry/meshing).</summary>
+    public event EventHandler? FlowResultChanged;
+
+    /// <summary>Publishes (or clears, with nulls) the last conjugate solve's flow leg.</summary>
+    public void SetFlowResult(OpenSim.Cfd.FlowSolution? flow, OpenSim.Cfd.VoxelizedDomain? domain)
+    {
+        FlowSolution = flow;
+        FlowDomain = domain;
+        FlowResultChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>
     /// Splits an assembly-wide face id into the body that owns it and that body's own local
     /// face id — the mapping a viewport click needs to say "you picked part 3, face 5".
@@ -142,6 +162,7 @@ public partial class ProjectSession : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsAcElectricalAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsJouleAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsEnvironmentThermalAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsConjugateHeatFlowAnalysis))]
     [NotifyPropertyChangedFor(nameof(ShowsTransientSettings))]
     private AnalysisOption _selectedAnalysis = AnalysisOption.All[0];
 
@@ -161,7 +182,7 @@ public partial class ProjectSession : ObservableObject
         is { Kind: AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical };
     public bool IsThermalAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.Thermal or AnalysisType.JouleCoupled or AnalysisType.TransientThermal
-                or AnalysisType.EnvironmentThermal };
+                or AnalysisType.EnvironmentThermal or AnalysisType.ConjugateHeatFlow };
     public bool IsTransientThermalAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.TransientThermal };
     public bool IsModalAnalysis => SelectedAnalysis is { Kind: AnalysisType.Modal };
@@ -169,12 +190,15 @@ public partial class ProjectSession : ObservableObject
     public bool IsJouleAnalysis => SelectedAnalysis is { Kind: AnalysisType.JouleCoupled };
     public bool IsEnvironmentThermalAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.EnvironmentThermal };
+    public bool IsConjugateHeatFlowAnalysis => SelectedAnalysis
+        is { Kind: AnalysisType.ConjugateHeatFlow };
 
     /// <summary>The transient settings apply to the transient-thermal analysis, to the
-    /// Joule study's optional transient thermal leg, and to environment heat flow (which
-    /// is a transient study by nature — the user watches the parts warm up).</summary>
+    /// Joule study's optional transient thermal leg, and to both environment heat-flow
+    /// analyses (transient studies by nature — the user watches the parts warm up).</summary>
     public bool ShowsTransientSettings =>
-        IsTransientThermalAnalysis || IsJouleAnalysis || IsEnvironmentThermalAnalysis;
+        IsTransientThermalAnalysis || IsJouleAnalysis || IsEnvironmentThermalAnalysis
+        || IsConjugateHeatFlowAnalysis;
 
     [ObservableProperty] private Material? _selectedMaterial;
 

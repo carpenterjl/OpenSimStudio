@@ -38,9 +38,13 @@ public sealed class HeatConductionSolver : ISolver
             foreach (var material in input.RegionMaterials.Values)
                 material.ValidateThermal();
 
+        // The film/environment conflict is more fundamental than any environment detail,
+        // so it is checked FIRST — a missing emissivity is irrelevant when the whole
+        // environment should not be there.
+        ValidatePrescribedFilm(input);
         EnvironmentBoundaryModel.ValidateMaterials(input);
         if (!input.BoundaryConditions.Any(bc => bc is FixedTemperature or Convection)
-            && !EnvironmentCouples(input))
+            && !EnvironmentCouples(input) && !PrescribedFilmCouples(input))
             throw new InvalidOperationException(
                 "At least one fixed temperature or convection condition is required; " +
                 "with only heat inflows the temperature level is undetermined.");
@@ -104,6 +108,20 @@ public sealed class HeatConductionSolver : ISolver
             }
         }
 
+        // A prescribed film anchors exactly the triangles it wets.
+        if (input.PrescribedFilm is { } prescribedFilm)
+        {
+            for (int t = 0; t < input.Mesh.BoundaryTriangles.Count; t++)
+            {
+                if (!prescribedFilm.IsWetted(t) || prescribedFilm.TriangleFilmCoefficient[t] <= 0)
+                    continue;
+                var triangle = input.Mesh.BoundaryTriangles[t];
+                anchored.Add(triangle.A);
+                anchored.Add(triangle.B);
+                anchored.Add(triangle.C);
+            }
+        }
+
         var floating = ScalarSolverHelpers.FindUnanchoredRegions(
             input.Mesh, input.ThermalContacts, anchored);
         if (floating.Count == 0) return;
@@ -114,6 +132,38 @@ public sealed class HeatConductionSolver : ISolver
             "directly or through a thermal contact, so their temperature level is undetermined. " +
             "Give those bodies a condition, or check that they actually touch the rest of the " +
             "assembly (a gap wider than the contact tolerance leaves them floating).");
+    }
+
+    /// <summary>A prescribed film with any positive coefficient anchors the temperature level.</summary>
+    private static bool PrescribedFilmCouples(SolveInput input) =>
+        input.PrescribedFilm is { } film
+        && film.TriangleFilmCoefficient.Any(h => !double.IsNaN(h) && h > 0);
+
+    /// <summary>Shared by the steady and transient solvers: a prescribed film must fit the
+    /// mesh, and it replaces — never stacks with — an environment.</summary>
+    internal static void ValidatePrescribedFilm(SolveInput input)
+    {
+        if (input.PrescribedFilm is not { } film) return;
+        if (input.Environment is not null)
+            throw new InvalidOperationException(
+                "A prescribed film and an environment cannot both be set: each is a complete " +
+                "surface-exchange model, and applying both would double-count the film.");
+        if (film.TriangleFilmCoefficient.Count != input.Mesh.BoundaryTriangles.Count)
+            throw new InvalidOperationException(
+                $"The prescribed film has {film.TriangleFilmCoefficient.Count} triangle coefficients " +
+                $"but the mesh has {input.Mesh.BoundaryTriangles.Count} boundary triangles.");
+        if (film.TriangleReferenceTemperature is { } refs
+            && refs.Count != film.TriangleFilmCoefficient.Count)
+            throw new InvalidOperationException(
+                "The prescribed film's per-triangle reference temperatures must parallel its coefficients.");
+        for (int t = 0; t < film.TriangleFilmCoefficient.Count; t++)
+        {
+            double h = film.TriangleFilmCoefficient[t];
+            if (!double.IsNaN(h) && h < 0)
+                throw new InvalidOperationException(
+                    $"The prescribed film has a negative coefficient ({h:g3} W/(m²·K)) at boundary " +
+                    $"triangle {t}; a negative film would make the system indefinite.");
+        }
     }
 
     /// <summary>
@@ -168,7 +218,22 @@ public sealed class HeatConductionSolver : ISolver
         var environment = EnvironmentBoundaryModel.Build(input, log);
         double[] temperatureField;
         SurfaceFilmModel? film = null;
-        if (environment is null)
+        if (input.PrescribedFilm is { } prescribedFilm)
+        {
+            // The film is one FIXED iterate of an outer conjugate loop, so this solve is
+            // linear: fold its Robin terms in and solve once. The nonlinearity lives in
+            // whoever supplies the film.
+            film = prescribedFilm;
+            var system = EnvironmentThermalTerms.WithFilm(conduction, mesh, film);
+            var rhs = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
+            var result = ConstrainedSystemSolver.Solve(system, rhs, prescribed,
+                cancellationToken: cancellationToken, allowUnconstrained: true);
+            log.Add($"Prescribed film ({film.Origin}): {film.WettedCount} wetted triangles; " +
+                    $"CG converged in {result.Iterations.Iterations} iterations " +
+                    $"(residual {result.Iterations.ResidualNorm:g3}).");
+            temperatureField = result.Displacements;
+        }
+        else if (environment is null)
         {
             var result = ConstrainedSystemSolver.Solve(conduction, loads, prescribed,
                 cancellationToken: cancellationToken, allowUnconstrained: robin.Count > 0);

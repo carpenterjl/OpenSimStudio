@@ -53,6 +53,8 @@
             <ModelVisual3D Content="{Binding Antenna.FarFieldLobeModel}"/>
             <ModelVisual3D Content="{Binding Antenna.GroundPlaneModel}"/>
             <ModelVisual3D Content="{Binding Antenna.SurfaceCurrentModel}"/>
+            <!-- CFD flow overlay: arrows + streamlines + speed slice from the flow panel. -->
+            <ModelVisual3D Content="{Binding Flow.OverlayModel}"/>
             <helix:LinesVisual3D x:Name="AntennaWireLines" Color="#FF7BE0" Thickness="1.6"/>
         </helix:HelixViewport3D>
 

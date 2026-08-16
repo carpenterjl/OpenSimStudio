@@ -764,6 +764,132 @@ public static class SceneBuilder
 
     /// <summary>One arrow (4-sided shaft prism + pyramid head) appended to the shared
     /// mesh, colored by texture coordinate <paramref name="u"/>.</summary>
+    // ================================================================ flow (CFD) overlays
+
+    /// <summary>
+    /// The flow field as one batched arrow mesh: each sample gets an arrow along its
+    /// velocity, colored LINEARLY by speed (flow speeds live within a decade, unlike the
+    /// RF fields' log ranges) through the shared colormap texture. Same batched-mesh
+    /// discipline as the RF arrows — thousands of Visual3Ds would melt the viewport.
+    /// </summary>
+    public static GeometryModel3D BuildFlowArrowsModel(
+        IReadOnlyList<OpenSim.Core.Numerics.Vector3D> points,
+        IReadOnlyList<OpenSim.Core.Numerics.Vector3D> velocities,
+        ColormapKind colormap, double arrowLength, int maxArrows = 8192)
+    {
+        double max = 0;
+        foreach (var v in velocities) max = Math.Max(max, v.Length);
+        int stride = Math.Max(1, (points.Count + maxArrows - 1) / maxArrows);
+
+        var geometry3D = new MeshGeometry3D();
+        for (int i = 0; i < points.Count; i += stride)
+        {
+            double speed = velocities[i].Length;
+            if (speed <= 0 || max <= 0) continue;
+            double u = speed / max;
+            AddArrow(geometry3D, points[i], velocities[i] * (1.0 / speed),
+                arrowLength * (0.2 + 0.8 * u), u);
+        }
+        geometry3D.Freeze();
+        var material = new DiffuseMaterial(Colormap.CreateBrush(colormap));
+        return new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+    }
+
+    /// <summary>
+    /// A translucent axis-aligned slice through the flow domain colored linearly by a
+    /// scalar (speed or temperature): shared-vertex quads over a row-major (n1 × n2)
+    /// lattice, the board-overlay pattern with a linear scale.
+    /// </summary>
+    public static GeometryModel3D BuildFlowSliceModel(
+        IReadOnlyList<OpenSim.Core.Numerics.Vector3D> points, IReadOnlyList<double> values,
+        int n1, int n2, ColormapKind colormap, double min, double max, double opacity)
+    {
+        if (points.Count != n1 * n2)
+            throw new ArgumentException($"Slice has {points.Count} points, expected {n1}×{n2}.");
+        double span = Math.Max(max - min, 1e-30);
+
+        var geometry3D = new MeshGeometry3D();
+        for (int i = 0; i < points.Count; i++)
+        {
+            var p = points[i];
+            geometry3D.Positions.Add(new Point3D(p.X, p.Y, p.Z));
+            geometry3D.TextureCoordinates.Add(new System.Windows.Point(
+                Math.Clamp((values[i] - min) / span, 0, 1), 0.5));
+        }
+        for (int y = 0; y < n2 - 1; y++)
+            for (int x = 0; x < n1 - 1; x++)
+            {
+                int v00 = y * n1 + x, v10 = v00 + 1, v01 = v00 + n1, v11 = v01 + 1;
+                geometry3D.TriangleIndices.Add(v00);
+                geometry3D.TriangleIndices.Add(v10);
+                geometry3D.TriangleIndices.Add(v11);
+                geometry3D.TriangleIndices.Add(v00);
+                geometry3D.TriangleIndices.Add(v11);
+                geometry3D.TriangleIndices.Add(v01);
+            }
+        geometry3D.Freeze();
+        var brush = Colormap.CreateBrush(colormap).Clone();
+        brush.Opacity = Math.Clamp(opacity, 0, 1);
+        brush.Freeze();
+        var material = new DiffuseMaterial(brush);
+        material.Freeze();
+        var model = new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+        model.Freeze();
+        return model;
+    }
+
+    /// <summary>
+    /// Streamlines as one batched ribbon mesh: every polyline segment becomes two thin
+    /// crossed quads (view-independent, no per-frame re-tessellation — the frozen-mesh
+    /// rule that killed LinesVisual3D for board previews applies just as hard here).
+    /// </summary>
+    public static GeometryModel3D BuildStreamlinesModel(
+        IReadOnlyList<IReadOnlyList<OpenSim.Core.Numerics.Vector3D>> polylines,
+        double thickness, Color color)
+    {
+        var geometry3D = new MeshGeometry3D();
+        foreach (var line in polylines)
+        {
+            for (int i = 0; i + 1 < line.Count; i++)
+            {
+                var a = line[i];
+                var b = line[i + 1];
+                var axis = b - a;
+                if (axis.Length <= 0) continue;
+                var dir = axis * (1.0 / axis.Length);
+                var reference = Math.Abs(dir.Z) < 0.9
+                    ? OpenSim.Core.Numerics.Vector3D.UnitZ
+                    : OpenSim.Core.Numerics.Vector3D.UnitX;
+                var s1 = OpenSim.Core.Numerics.Vector3D.Cross(dir, reference).Normalized() * (thickness / 2);
+                var s2 = OpenSim.Core.Numerics.Vector3D.Cross(dir, s1).Normalized() * (thickness / 2);
+                AddRibbon(geometry3D, a, b, s1);
+                AddRibbon(geometry3D, a, b, s2);
+            }
+        }
+        geometry3D.Freeze();
+        var material = new DiffuseMaterial(new SolidColorBrush(color));
+        material.Freeze();
+        var model = new GeometryModel3D(geometry3D, material) { BackMaterial = material };
+        model.Freeze();
+        return model;
+
+        static void AddRibbon(MeshGeometry3D mesh, OpenSim.Core.Numerics.Vector3D a,
+            OpenSim.Core.Numerics.Vector3D b, OpenSim.Core.Numerics.Vector3D side)
+        {
+            int i0 = mesh.Positions.Count;
+            mesh.Positions.Add(new Point3D(a.X - side.X, a.Y - side.Y, a.Z - side.Z));
+            mesh.Positions.Add(new Point3D(a.X + side.X, a.Y + side.Y, a.Z + side.Z));
+            mesh.Positions.Add(new Point3D(b.X + side.X, b.Y + side.Y, b.Z + side.Z));
+            mesh.Positions.Add(new Point3D(b.X - side.X, b.Y - side.Y, b.Z - side.Z));
+            mesh.TriangleIndices.Add(i0);
+            mesh.TriangleIndices.Add(i0 + 1);
+            mesh.TriangleIndices.Add(i0 + 2);
+            mesh.TriangleIndices.Add(i0);
+            mesh.TriangleIndices.Add(i0 + 2);
+            mesh.TriangleIndices.Add(i0 + 3);
+        }
+    }
+
     private static void AddArrow(MeshGeometry3D geometry3D, OpenSim.Core.Numerics.Vector3D origin,
         OpenSim.Core.Numerics.Vector3D direction, double length, double u)
     {

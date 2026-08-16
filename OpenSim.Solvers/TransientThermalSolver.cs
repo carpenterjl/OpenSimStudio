@@ -78,6 +78,7 @@ public sealed class TransientThermalSolver : ISolver
         }
 
         EnvironmentBoundaryModel.ValidateMaterials(input);
+        HeatConductionSolver.ValidatePrescribedFilm(input);
 
         // No anchoring requirement here, unlike the steady solver: M/Δt regularizes every
         // step, so a body that only stores and receives heat is perfectly well-posed.
@@ -123,6 +124,18 @@ public sealed class TransientThermalSolver : ISolver
 
         progress?.Report(new SolverProgress("Applying boundary conditions", 0.05));
         var constantLoads = ScalarSolverHelpers.AssembleThermalLoads(input, log);
+
+        // A prescribed film is FIXED over the whole transient (the frozen-flow contract of
+        // the conjugate study): fold its Robin terms into the step matrix and loads once,
+        // and the plain linear time loop below runs unchanged — no Picard needed.
+        SurfaceFilmModel? prescribedFilm = input.PrescribedFilm;
+        if (prescribedFilm is not null)
+        {
+            system = EnvironmentThermalTerms.WithFilm(system, mesh, prescribedFilm);
+            constantLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, prescribedFilm);
+            log.Add($"Prescribed film ({prescribedFilm.Origin}): {prescribedFilm.WettedCount} wetted " +
+                    "triangles, held constant over the transient.");
+        }
         var prescribed = new Dictionary<int, double>();
         foreach (var temperature in input.BoundaryConditions.OfType<FixedTemperature>())
         {
@@ -140,7 +153,7 @@ public sealed class TransientThermalSolver : ISolver
             temperature_[node] = value;
 
         var environment = EnvironmentBoundaryModel.Build(input, log);
-        var film = environment?.Evaluate(temperature_);
+        var film = prescribedFilm ?? environment?.Evaluate(temperature_);
         var frames = new List<ResultFrame>
         {
             MakeFrame(0.0, temperature_, mesh, assembler, input, film)

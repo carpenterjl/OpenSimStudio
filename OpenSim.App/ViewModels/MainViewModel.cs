@@ -36,6 +36,7 @@ public partial class MainViewModel : ObservableObject
         AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, SolveViewModel solve,
         ResultsViewModel results, SceneViewModel scene, BodiesViewModel bodies,
         EnvironmentViewModel environment, ColormapViewModel colormap,
+        FlowVisualizationViewModel flow,
         ProjectSerializer serializer, RecentProjectsService recentProjects)
     {
         Session = session;
@@ -55,6 +56,7 @@ public partial class MainViewModel : ObservableObject
         Bodies = bodies;
         Environment = environment;
         Colormap = colormap;
+        Flow = flow;
         _serializer = serializer;
         _recentProjects = recentProjects;
         // Switching the active body re-syncs the panels that mirror body state, exactly as
@@ -81,6 +83,7 @@ public partial class MainViewModel : ObservableObject
     public BodiesViewModel Bodies { get; }
     public EnvironmentViewModel Environment { get; }
     public ColormapViewModel Colormap { get; }
+    public FlowVisualizationViewModel Flow { get; }
 
     /// <summary>
     /// Re-points the body-mirroring panels (material, meshing, conditions) at the active

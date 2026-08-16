@@ -53,12 +53,21 @@ public partial class SolveViewModel : ObservableObject
     /// so it answers "how hot does it end up" without integrating the way there.</summary>
     [ObservableProperty] private bool _environmentSteadyState;
 
+    /// <summary>CFD cell size [m] for the conjugate analysis; 0 = automatic (smallest
+    /// body extent / 24, coarsened to the cell budget — the choice is logged).</summary>
+    [ObservableProperty] private double _cfdCellSize;
+
     [RelayCommand]
     private async Task SolveAsync()
     {
         if (_session.SelectedAnalysis.Kind == AnalysisType.EnvironmentThermal)
         {
             await SolveEnvironmentAsync();
+            return;
+        }
+        if (_session.SelectedAnalysis.Kind == AnalysisType.ConjugateHeatFlow)
+        {
+            await SolveConjugateAsync();
             return;
         }
 
@@ -237,6 +246,124 @@ public partial class SolveViewModel : ObservableObject
                 frames: output.Frames, frameAxis: output.FrameAxis);
             _session.StatusText = "Solve complete";
             _log.Append("Solve complete. Select a result field to display.");
+        }
+        catch (Exception ex) { _session.ReportError(ex); }
+        finally
+        {
+            _session.IsBusy = false;
+            _session.ProgressFraction = 0;
+        }
+    }
+
+    /// <summary>
+    /// Conjugate heat flow (Stage 2): the same assembly composition as the environment
+    /// solve, but the surroundings are RESOLVED — a first-party laminar CFD solve on a
+    /// voxel grid computes the flow and fluid temperature around the bodies, and its wall
+    /// heat flux drives the solid conduction through the same <see cref="SurfaceFilmModel"/>
+    /// seam the Stage 1 correlations fill. Steady exchanges wall temperatures in an outer
+    /// loop; transient holds the flow frozen while the solids warm (stated in the log).
+    /// </summary>
+    private async Task SolveConjugateAsync()
+    {
+        var bodies = _session.Bodies.ToList();
+        if (bodies.Count == 0)
+        {
+            _log.Append("The project has no bodies to solve.");
+            return;
+        }
+
+        var environment = _environment.Build();
+        _session.Project.Environment = environment;
+        if (environment.Medium == MediumKind.Vacuum)
+        {
+            _log.Append("Validation: a vacuum has no fluid to resolve — use 'Heat flow in an " +
+                        "environment', whose radiation-only exchange is exact.");
+            _session.StatusText = "Validation failed";
+            return;
+        }
+        if (environment.Medium == MediumKind.StillFluid && environment.Gravity.Length <= 0)
+        {
+            _log.Append("Validation: still fluid with zero gravity has no way to carry heat " +
+                        "away (no stream, no buoyant plume) — no steady flow state exists. " +
+                        "Restore gravity or give the fluid a velocity.");
+            _session.StatusText = "Validation failed";
+            return;
+        }
+
+        var detection = (_session.Project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
+        bool transient = !EnvironmentSteadyState;
+        var cfd = OpenSim.Core.Model.CfdSettings.ForExternalFlow(environment.FlowVelocity)
+            with { CellSize = CfdCellSize };
+
+        _session.IsBusy = true;
+        _session.StatusText = "Assembling…";
+        _session.ProgressFraction = 0;
+        var progress = new Progress<SolverProgress>(p =>
+        {
+            _session.StatusText = p.Stage;
+            _session.ProgressFraction = p.Fraction;
+        });
+
+        try
+        {
+            FeMeshAssembler.AssembledMesh assembled;
+            SolveInput input;
+            List<string> setup;
+            try
+            {
+                (assembled, input, setup) = await Task.Run(() =>
+                {
+                    var lines = new List<string>();
+                    var merged = FeMeshAssembler.Assemble(bodies);
+                    lines.Add($"Merged {bodies.Count} bodies: {merged.Mesh.NodeCount:N0} nodes, " +
+                              $"{merged.Mesh.ElementCount:N0} elements.");
+                    var contacts = ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, lines.Add);
+                    var source = FeMeshAssembler.BuildElementHeatSource(merged, bodies, lines.Add);
+                    lines.Add($"Environment (resolved by CFD): {environment.Describe()}.");
+                    var built = new SolveInput
+                    {
+                        Mesh = merged.Mesh,
+                        Material = bodies[0].Material!,
+                        RegionMaterials = merged.RegionMaterials,
+                        BoundaryConditions = merged.BoundaryConditions,
+                        ElementHeatSource = source,
+                        ThermalContacts = contacts,
+                        // Environment stays NULL on purpose: the conjugate study supplies
+                        // the surface exchange itself through the prescribed film.
+                        TransientThermal = transient
+                            ? new TransientThermalSettings
+                            {
+                                InitialTemperature = InitialTemperature,
+                                Duration = TransientDuration,
+                                TimeStep = TransientTimeStep
+                            }
+                            : null
+                    };
+                    return (merged, built, lines);
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _log.Append($"Validation: {ex.Message}");
+                _session.StatusText = "Validation failed";
+                return;
+            }
+            foreach (var line in setup) _log.Append(line);
+
+            var result = await Task.Run(() => OpenSim.Cfd.ConjugateHeatStudy.Run(
+                input, assembled.NodeBases, environment, cfd, progress));
+            foreach (var line in result.Thermal.Log)
+                _log.Append(line);
+
+            _session.SetAssembledMesh(assembled);
+            _session.SetFlowResult(result.Flow, result.Domain);
+            _session.RaiseResultsProduced(result.Thermal.Fields,
+                analysis: AnalysisType.ConjugateHeatFlow,
+                frames: result.Thermal.Frames, frameAxis: result.Thermal.FrameAxis);
+            _session.StatusText = "Solve complete";
+            _log.Append($"Conjugate solve complete: peak fluid speed " +
+                        $"{result.Flow.MaxSpeed():G3} m/s. Use the flow panel to visualize " +
+                        "the airflow, or select a result field for the solids.");
         }
         catch (Exception ex) { _session.ReportError(ex); }
         finally

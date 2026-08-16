@@ -48,8 +48,10 @@ internal static class EnvironmentThermalTerms
     }
 
     /// <summary>The nodal loads plus the film's ambient term h·T_ref·∫NᵢdA = h·T_ref·A/3
-    /// per triangle node. Returns a new vector; the caller's constant loads are reused
-    /// unchanged across iterates.</summary>
+    /// per triangle node — with T_ref the triangle's OWN reference when the film carries
+    /// per-triangle references (the CFD film drives toward the local fluid temperature).
+    /// Returns a new vector; the caller's constant loads are reused unchanged across
+    /// iterates.</summary>
     public static double[] WithFilmLoads(IReadOnlyList<double> constantLoads, FeMesh mesh,
         SurfaceFilmModel film)
     {
@@ -59,7 +61,7 @@ internal static class EnvironmentThermalTerms
             double h = film.TriangleFilmCoefficient[t];
             if (double.IsNaN(h) || h == 0) continue;
             var triangle = mesh.BoundaryTriangles[t];
-            double share = h * film.ReferenceTemperature
+            double share = h * film.ReferenceTemperatureOf(t)
                            * ScalarDiffusionAssembler.SurfaceArea(mesh, triangle) / 3.0;
             loads[triangle.A] += share;
             loads[triangle.B] += share;

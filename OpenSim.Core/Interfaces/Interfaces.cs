@@ -71,6 +71,17 @@ public sealed record SolveInput
     /// </summary>
     public EnvironmentSettings? Environment { get; init; }
 
+    /// <summary>
+    /// An externally computed surface film — the CFD stage's wall heat flux expressed as
+    /// the SAME record the Stage 1 correlations produce. When set, the thermal solvers
+    /// apply it as a FIXED Robin exchange (per-triangle h and reference temperature)
+    /// instead of building one from <see cref="Environment"/>: the film is one iterate of
+    /// an OUTER conjugate loop, so the inner solve is linear on purpose. Mutually
+    /// exclusive with <see cref="Environment"/> — two film sources would double-count
+    /// the surface exchange.
+    /// </summary>
+    public SurfaceFilmModel? PrescribedFilm { get; init; }
+
     /// <summary>Settings for a modal analysis. Null (the default mode count applies)
     /// or ignored outside the modal solver.</summary>
     public ModalSettings? Modal { get; init; }

@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenSim.Core\OpenSim.Core.csproj" />
+    <!-- The conjugate study composes the CFD flow leg with the existing FE thermal
+         solvers (the JouleHeatingStudy precedent; the Rf→Pcb lateral reference is the
+         dependency precedent). Solvers itself never references Cfd. -->
+    <ProjectReference Include="..\OpenSim.Solvers\OpenSim.Solvers.csproj" />
+    <InternalsVisibleTo Include="OpenSim.Tests" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

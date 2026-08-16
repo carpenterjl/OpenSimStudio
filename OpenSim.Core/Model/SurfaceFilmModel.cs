@@ -25,6 +25,19 @@ public sealed record SurfaceFilmModel
     /// <summary>The temperature the film drives toward [K] — the ambient in Stage 1.</summary>
     public required double ReferenceTemperature { get; init; }
 
+    /// <summary>
+    /// Optional PER-TRIANGLE reference temperature [K], parallel to
+    /// <see cref="TriangleFilmCoefficient"/>. Null (every Stage 1 correlation film) means
+    /// every triangle drives toward the single <see cref="ReferenceTemperature"/>. The CFD
+    /// film needs this: its exchange drives toward the LOCAL fluid temperature next to the
+    /// wall, which is the whole point of resolving the flow.
+    /// </summary>
+    public IReadOnlyList<double>? TriangleReferenceTemperature { get; init; }
+
+    /// <summary>The temperature triangle <paramref name="triangleIndex"/> drives toward [K].</summary>
+    public double ReferenceTemperatureOf(int triangleIndex) =>
+        TriangleReferenceTemperature?[triangleIndex] ?? ReferenceTemperature;
+
     /// <summary>Where these coefficients came from, printed with the solve assumptions.</summary>
     public required string Origin { get; init; }
 

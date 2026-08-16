@@ -14,7 +14,13 @@ public enum AnalysisType
     /// <summary>Multi-body transient heat flow in an environment (vacuum, still air, or a
     /// moving fluid): radiation and convection come from the environment settings rather
     /// than hand-entered film coefficients.</summary>
-    EnvironmentThermal
+    EnvironmentThermal,
+
+    /// <summary>Conjugate heat transfer: the surrounding airflow is actually COMPUTED
+    /// (first-party laminar CFD on a voxel grid) and its wall heat flux drives the solid
+    /// conduction solve — Stage 2 of the environment track, replacing the Stage 1
+    /// correlations with a resolved flow field.</summary>
+    ConjugateHeatFlow
 }
 
 /// <summary>The task-focused workspaces the main window can show.</summary>
@@ -43,7 +49,8 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
         new AnalysisOption("Thermal (transient)", AnalysisType.TransientThermal),
         new AnalysisOption("Modal (natural frequencies)", AnalysisType.Modal),
         new AnalysisOption("Electrical (AC sweep — quasistatic)", AnalysisType.AcElectrical),
-        new AnalysisOption("Heat flow in an environment", AnalysisType.EnvironmentThermal)
+        new AnalysisOption("Heat flow in an environment", AnalysisType.EnvironmentThermal),
+        new AnalysisOption("Heat flow with computed airflow (CFD)", AnalysisType.ConjugateHeatFlow)
     };
 
     private static AnalysisOption Of(AnalysisType kind) => All.First(o => o.Kind == kind);
@@ -65,7 +72,7 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
             },
             WorkspaceKind.ThermalFlow => new[]
             {
-                Of(AnalysisType.EnvironmentThermal)
+                Of(AnalysisType.EnvironmentThermal), Of(AnalysisType.ConjugateHeatFlow)
             },
             _ => throw new ArgumentOutOfRangeException(nameof(workspace), workspace,
                 "No analysis list registered for this workspace.")
@@ -76,7 +83,7 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
     {
         AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical
             => WorkspaceKind.Electrical,
-        AnalysisType.EnvironmentThermal => WorkspaceKind.ThermalFlow,
+        AnalysisType.EnvironmentThermal or AnalysisType.ConjugateHeatFlow => WorkspaceKind.ThermalFlow,
         _ => WorkspaceKind.Mechanical
     };
 }
