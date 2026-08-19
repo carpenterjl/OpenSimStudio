@@ -4,14 +4,42 @@
     <GroupBox Header="Results">
         <StackPanel>
             <ListBox ItemsSource="{Binding Results.ResultFields}" SelectedItem="{Binding Results.SelectedField}"
-                     MinHeight="60" MaxHeight="150" DisplayMemberPath="Name"/>
+                     MinHeight="60" MaxHeight="150" DisplayMemberPath="Name"
+                     AutomationProperties.AutomationId="ResultFieldList"/>
+
+            <!-- Component picker: only for a tensor field, which is the only kind that has
+                 components. Von Mises is first, so a tensor field opens unchanged. -->
+            <ComboBox ItemsSource="{Binding Results.TensorComponents}"
+                      SelectedItem="{Binding Results.SelectedComponent}"
+                      Margin="0,4,0,0"
+                      AutomationProperties.AutomationId="TensorComponentCombo"
+                      Visibility="{Binding Results.HasTensorComponents, Converter={StaticResource BoolToVis}}"/>
+
+            <!-- The three numbers a result report carries. Both averages are shown with
+                 their definitions: the unweighted one is mesh-density weighted (what Ansys
+                 reports), the volume-weighted one is not. -->
+            <TextBlock Text="{Binding Results.FieldStatistics}" Margin="0,4,0,0" FontSize="11"
+                       Foreground="{DynamicResource TextMutedBrush}" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="FieldStatisticsText"/>
+
+            <WrapPanel Margin="0,6,0,0">
+                <Button Content="Summary CSV…" Padding="6,2" Margin="0,0,4,4"
+                        AutomationProperties.AutomationId="ExportSummaryCsvButton"
+                        Command="{Binding Results.ExportSummaryCsvCommand}"/>
+                <Button Content="Field CSV…" Padding="6,2" Margin="0,0,4,4"
+                        AutomationProperties.AutomationId="ExportFieldCsvButton"
+                        Command="{Binding Results.ExportFieldCsvCommand}"/>
+                <Button Content="Image…" Padding="6,2" Margin="0,0,0,4"
+                        AutomationProperties.AutomationId="ExportViewportImageButton"
+                        Command="{Binding Scene.ExportViewportImageCommand}"/>
+            </WrapPanel>
             <!-- Frame scrubber: only for multi-frame solves (time steps / modes / frequencies). -->
             <StackPanel Visibility="{Binding Results.HasFrames, Converter={StaticResource BoolToVis}}"
                         Margin="0,6,0,0">
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Left" Text="{Binding Results.FrameAxis}" FontWeight="Bold"/>
                     <TextBlock Text="{Binding Results.SelectedFrameLabel}" TextAlignment="Right"
-                               Foreground="#C9C9D2"/>
+                               Foreground="{DynamicResource TextMutedBrush}"/>
                 </DockPanel>
                 <Slider x:Name="FrameSlider" Minimum="0" Maximum="{Binding Results.FrameMaxIndex}"
                         Value="{Binding Results.SelectedFrameIndex}"

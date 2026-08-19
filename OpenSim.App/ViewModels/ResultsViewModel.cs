@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
 using OpenSim.Core.PostProcessing;
+using OpenSim.Core.Model;
 using OpenSim.Core.Results;
 
 namespace OpenSim.App.ViewModels;
@@ -17,8 +18,11 @@ namespace OpenSim.App.ViewModels;
 /// </summary>
 public partial class ResultsViewModel : ObservableObject
 {
+    private readonly ProjectSession _session;
+
     public ResultsViewModel(ProjectSession session)
     {
+        _session = session;
         session.ResultsProduced += (_, e) => SetResults(e);
         session.GeometryReplaced += (_, _) => ClearSilently();
         session.PropertyChanged += (_, e) =>
@@ -36,6 +40,128 @@ public partial class ResultsViewModel : ObservableObject
     public ObservableCollection<IResultField> ResultFields { get; } = new();
 
     [ObservableProperty] private IResultField? _selectedField;
+
+    /// <summary>
+    /// The tensor components and invariants offered when the selected field is a tensor.
+    /// The default is von Mises, which is what the field showed before components existed.
+    /// </summary>
+    public IReadOnlyList<TensorComponentOption> TensorComponents { get; } = TensorComponentOption.All;
+
+    [ObservableProperty] private TensorComponentOption _selectedComponent = TensorComponentOption.All[0];
+
+    /// <summary>The component picker only appears for a field that HAS components.</summary>
+    public bool HasTensorComponents => SelectedField is ElementTensorField;
+
+    /// <summary>
+    /// What the viewport actually renders: the selected field, or a component view of it
+    /// when the user picked one. Kept separate from <see cref="SelectedField"/> so the list
+    /// selection, the frame-preserving lookup by name and the default-field rule all keep
+    /// working on the field the solver emitted.
+    /// </summary>
+    public IResultField? DisplayField =>
+        SelectedField is ElementTensorField tensor ? tensor.View(SelectedComponent.Component) : SelectedField;
+
+    /// <summary>Min / max / average of the displayed field, both averages named.</summary>
+    [ObservableProperty] private string _fieldStatistics = "";
+
+    private void RefreshStatistics()
+    {
+        var field = DisplayField;
+        var mesh = _session.AssembledMesh?.Mesh ?? _session.Body.Mesh;
+        if (field is null || mesh is null || field.Count == 0)
+        {
+            FieldStatistics = "";
+            return;
+        }
+        try
+        {
+            var s = OpenSim.Core.PostProcessing.FieldStatistics.Compute(field, mesh);
+            FieldStatistics =
+                $"min {Format(s.Min, field.Unit)}   max {Format(s.Max, field.Unit)}\n" +
+                $"average {Format(s.Mean, field.Unit)} over {s.Count} {(field.Location == FieldLocation.Node ? "nodes" : "elements")}, " +
+                $"volume-weighted {Format(s.VolumeWeightedMean, field.Unit)}";
+        }
+        catch (Exception)
+        {
+            // A field whose length does not match the displayed mesh (a stale frame during
+            // a rebuild) is not worth an error dialog — just show nothing until it settles.
+            FieldStatistics = "";
+        }
+    }
+
+    private static string Format(double value, string unit) => $"{value:g4} {unit}".TrimEnd();
+
+    /// <summary>
+    /// The context every export carries in its preamble, so a CSV read later still says what
+    /// was solved. Assembled here because only the app knows the project and analysis.
+    /// </summary>
+    private ResultReportContext BuildReportContext() => new()
+    {
+        ProjectName = _session.Project.Name,
+        BodyName = _session.AssembledMesh is null ? _session.Body.Name : "assembly",
+        Analysis = _session.SelectedAnalysis.Label,
+        Material = _session.AssembledMesh is null ? _session.Body.Material : null,
+        BoundaryConditions = _session.AssembledMesh?.BoundaryConditions
+                             ?? (IReadOnlyList<BoundaryCondition>)_session.Body.BoundaryConditions,
+        FrameLabel = HasFrames ? SelectedFrameLabel : null,
+        Notes = new[]
+        {
+            "safety factor is capped at 15 where the stress vanishes",
+            "no timestamp: this export is a deterministic function of the solve"
+        }
+    };
+
+    private OpenSim.Core.Model.FeMesh? ReportMesh =>
+        _session.AssembledMesh?.Mesh ?? _session.Body.Mesh;
+
+    /// <summary>Exports one row per field: min, max and both averages — the report table.</summary>
+    [RelayCommand]
+    private void ExportSummaryCsv()
+    {
+        if (ReportMesh is not { } mesh || ResultFields.Count == 0)
+        {
+            _session.StatusText = "Solve first — there are no results to export.";
+            return;
+        }
+        SaveCsv("result-summary.csv", "Export result summary (CSV)",
+            () => ResultReportCsv.WriteSummary(ResultFields, mesh, BuildReportContext()),
+            $"{ResultFields.Count} field(s)");
+    }
+
+    /// <summary>Exports every value of the displayed field, with its node/element position.</summary>
+    [RelayCommand]
+    private void ExportFieldCsv()
+    {
+        if (ReportMesh is not { } mesh || DisplayField is not { } field)
+        {
+            _session.StatusText = "Select a result field to export.";
+            return;
+        }
+        SaveCsv("result-field.csv", $"Export {field.Name} (CSV)",
+            () => ResultReportCsv.WriteField(field, mesh, BuildReportContext()),
+            $"{field.Count} value(s) of '{field.Name}'");
+    }
+
+    private void SaveCsv(string suggestedName, string title, Func<string> render, string what)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = title,
+            FileName = suggestedName,
+            Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+            DefaultExt = ".csv"
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            System.IO.File.WriteAllText(dialog.FileName, render(), System.Text.Encoding.UTF8);
+            _session.StatusText = $"Exported {what} to {System.IO.Path.GetFileName(dialog.FileName)}.";
+        }
+        catch (Exception ex)
+        {
+            _session.ReportError(ex);
+        }
+    }
 
     // Multi-frame results (time steps / modes / frequency points)
     public ObservableCollection<ResultFrame> Frames { get; } = new();
@@ -369,8 +495,22 @@ public partial class ResultsViewModel : ObservableObject
 
     partial void OnSelectedFieldChanged(IResultField? value)
     {
+        OnPropertyChanged(nameof(HasTensorComponents));
+        OnPropertyChanged(nameof(DisplayField));
+        RefreshStatistics();
         if (_suppressDisplayEvents) return;
         // New field ⇒ new scale: reset the clamp without a second, redundant rebuild.
+        _suppressDisplayEvents = true;
+        ResultClampFraction = 1.0;
+        _suppressDisplayEvents = false;
+        DisplayOptionsChanged?.Invoke(this, new DisplayOptionsChangedEventArgs { Burst = false });
+    }
+
+    partial void OnSelectedComponentChanged(TensorComponentOption value)
+    {
+        OnPropertyChanged(nameof(DisplayField));
+        RefreshStatistics();
+        if (_suppressDisplayEvents || SelectedField is not ElementTensorField) return;
         _suppressDisplayEvents = true;
         ResultClampFraction = 1.0;
         _suppressDisplayEvents = false;

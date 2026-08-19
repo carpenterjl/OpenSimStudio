@@ -37,11 +37,11 @@
 
             <CheckBox x:Name="RadiationCheck" Content="Include thermal radiation"
                       IsChecked="{Binding Environment.IncludeRadiation}"
-                      Foreground="#C9C9D2" Margin="2,4"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,4"
                       ToolTip="Surfaces radiate to the ambient using each material's emissivity"/>
 
             <TextBlock Text="{Binding Environment.Description}" TextWrapping="Wrap"
-                       Foreground="#8A8A96" Margin="0,4,0,0"/>
+                       Foreground="{DynamicResource TextFaintBrush}" Margin="0,4,0,0"/>
         </StackPanel>
     </GroupBox>
 </UserControl>

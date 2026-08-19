@@ -28,15 +28,19 @@ public static class FeMeshAssembler
     /// <param name="NodeBases">First merged node index of each body.</param>
     /// <param name="ElementBases">First merged element index of each body.</param>
     /// <param name="FaceIdBases">First merged face id of each body.</param>
-    /// <param name="BoundaryConditions">Every body's conditions, face ids offset and names prefixed.</param>
+    /// <param name="BoundaryConditions">Every body's conditions, scope ids offset and names prefixed.</param>
     /// <param name="RegionMaterials">Body index → that body's material (by reference).</param>
+    /// <param name="EdgeIdBases">First merged geometric-edge id of each body.</param>
+    /// <param name="VertexIdBases">First merged geometric-vertex id of each body.</param>
     public sealed record AssembledMesh(
         FeMesh Mesh,
         IReadOnlyList<int> NodeBases,
         IReadOnlyList<int> ElementBases,
         IReadOnlyList<int> FaceIdBases,
         IReadOnlyList<BoundaryCondition> BoundaryConditions,
-        IReadOnlyDictionary<int, Material> RegionMaterials)
+        IReadOnlyDictionary<int, Material> RegionMaterials,
+        IReadOnlyList<int> EdgeIdBases,
+        IReadOnlyList<int> VertexIdBases)
     {
         public int BodyCount => NodeBases.Count;
 
@@ -119,6 +123,25 @@ public static class FeMeshAssembler
             elementTotal += mesh.ElementCount;
         }
 
+        // Geometric edge and vertex ids are DERIVED from the merged skin, so they need
+        // their own offsets — a record `with` would copy a body-local id straight into the
+        // merged space unchanged. A plain cumulative count is the right offset because the
+        // merge preserves the ordering the ids are assigned in: bodies are never re-welded,
+        // so each body's skin keeps its own node range and its own contiguous, ascending
+        // face range, and both keys of the ordering (FaceA, FaceB, then lowest node) only
+        // shift by a constant per body. The identity is gated, not assumed.
+        var edgeIdBases = new int[bodies.Count];
+        var vertexIdBases = new int[bodies.Count];
+        int edgeTotal = 0, vertexTotal = 0;
+        for (int b = 0; b < bodies.Count; b++)
+        {
+            var localEdges = bodies[b].Mesh!.Edges;
+            edgeIdBases[b] = edgeTotal;
+            vertexIdBases[b] = vertexTotal;
+            edgeTotal += localEdges.Edges.Count;
+            vertexTotal += localEdges.Vertices.Count;
+        }
+
         var nodes = new Numerics.Vector3D[nodeTotal];
         var elements = new Tet4[elementTotal];
         var regions = new int[elementTotal];
@@ -145,18 +168,22 @@ public static class FeMeshAssembler
             foreach (var t in mesh.BoundaryTriangles)
                 triangles.Add(new BoundaryTriangle(t.A + nb, t.B + nb, t.C + nb, t.FaceId + fb));
 
+            int gb = edgeIdBases[b], vb = vertexIdBases[b];
             foreach (var bc in body.BoundaryConditions)
                 conditions.Add(bc with
                 {
                     Name = $"{body.Name}: {bc.Name}",
-                    FaceIds = bc.FaceIds.Select(f => f + fb).ToArray()
+                    FaceIds = bc.FaceIds.Select(f => f + fb).ToArray(),
+                    EdgeIds = bc.EdgeIds?.Select(e => e + gb).ToArray(),
+                    VertexIds = bc.VertexIds?.Select(v => v + vb).ToArray()
                 });
 
             materials[b] = body.Material!;
         }
 
         var merged = new FeMesh(nodes, elements, triangles, regions);
-        return new AssembledMesh(merged, nodeBases, elementBases, faceIdBases, conditions, materials);
+        return new AssembledMesh(merged, nodeBases, elementBases, faceIdBases, conditions, materials,
+            edgeIdBases, vertexIdBases);
     }
 
     /// <summary>

@@ -13,7 +13,7 @@
                       ToolTip="Built-in and saved maps. Blank means the map has unsaved edits — pick an entry to go back to it."/>
 
             <!-- Gradient preview with a draggable marker per stop. -->
-            <Border BorderBrush="#3A3A44" BorderThickness="1" HorizontalAlignment="Left">
+            <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" HorizontalAlignment="Left">
                 <Rectangle x:Name="ColormapPreview" Width="200" Height="18"
                            Fill="{Binding Colormap.PreviewBrush}"/>
             </Border>
@@ -35,7 +35,7 @@
                             <Thumb.Template>
                                 <ControlTemplate TargetType="Thumb">
                                     <Path Data="M 6,0 L 12,12 L 0,12 Z"
-                                          Fill="{Binding Swatch}" Stroke="#C9C9D2" StrokeThickness="1"/>
+                                          Fill="{Binding Swatch}" Stroke="{DynamicResource TextMutedBrush}" StrokeThickness="1"/>
                                 </ControlTemplate>
                             </Thumb.Template>
                         </Thumb>
@@ -85,13 +85,13 @@
             </ItemsControl>
 
             <CheckBox x:Name="ColormapDiscreteCheck" Content="Banded (discrete)"
-                      IsChecked="{Binding Colormap.Discrete}" Foreground="#C9C9D2" Margin="2,6,2,2"
+                      IsChecked="{Binding Colormap.Discrete}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,6,2,2"
                       ToolTip="One flat color per stop interval instead of a smooth gradient"/>
 
             <!-- Thresholds: absolute field values, not fractions. -->
             <Separator Margin="0,6"/>
             <CheckBox x:Name="ColormapAutoRangeCheck" Content="Auto range"
-                      IsChecked="{Binding Colormap.AutoRange}" Foreground="#C9C9D2" Margin="2,0,2,4"
+                      IsChecked="{Binding Colormap.AutoRange}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,2,4"
                       ToolTip="Span the result's own min/max. Turn off to hold the colors fixed across frames and solves."/>
             <UniformGrid Columns="2" IsEnabled="{Binding Colormap.ManualRange}">
                 <Label Content="Min"/>
@@ -103,7 +103,7 @@
             </UniformGrid>
             <DockPanel Margin="0,4,0,0">
                 <CheckBox x:Name="ColormapLogCheck" Content="Log" DockPanel.Dock="Left"
-                          IsChecked="{Binding Colormap.UseLog}" Foreground="#C9C9D2"
+                          IsChecked="{Binding Colormap.UseLog}" Foreground="{DynamicResource TextMutedBrush}"
                           VerticalAlignment="Center" Margin="2,0,6,0"
                           ToolTip="Spread the colors over decades — for fields whose structure is orders of magnitude below the peak"/>
                 <Label Content="decades" DockPanel.Dock="Right"/>

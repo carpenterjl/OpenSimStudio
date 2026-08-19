@@ -1,0 +1,27 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.SolvePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The Solve step's pane (design screen 05): run the study, watch progress and
+         status. The button routes through MainViewModel.SolveActive so the RF/SI
+         UI-dispatch analyses run their own pipelines. -->
+    <StackPanel>
+        <GroupBox Header="Run">
+            <StackPanel>
+                <TextBlock Text="{Binding Session.SelectedAnalysis.Label}"
+                           Style="{StaticResource MonoText}" FontSize="12" Margin="0,0,0,6"/>
+                <Button x:Name="SolveStepButton" Content="Solve"
+                        Style="{StaticResource AccentButton}"
+                        Command="{Binding SolveActiveCommand}"/>
+            </StackPanel>
+        </GroupBox>
+        <GroupBox Header="Progress">
+            <StackPanel>
+                <ProgressBar Value="{Binding Session.ProgressFraction, Mode=OneWay}"
+                             Maximum="1" Margin="0,4,0,8"/>
+                <TextBlock Text="{Binding Session.StatusText}" Style="{StaticResource MutedText}"/>
+                <TextBlock Text="The view stays interactive during the solve. Details stream to the log below the viewport."
+                           Style="{StaticResource FaintText}" Margin="0,6,0,0"/>
+            </StackPanel>
+        </GroupBox>
+    </StackPanel>
+</UserControl>

@@ -7,7 +7,7 @@
          anywhere — scrubbing has to show frames while the mouse is still down. -->
     <!-- No AutomationId here on purpose: a Border has no automation peer, so an id on it
          is invisible to UI automation. The panel is probed by TimelineSlider instead. -->
-    <Border Background="#CC1E1E24" CornerRadius="4" Padding="8">
+    <Border Background="{DynamicResource ScrimBrush}" CornerRadius="4" Padding="8">
         <StackPanel Width="400">
             <DockPanel Margin="0,0,0,2">
                 <Button x:Name="TimelinePlayButton" DockPanel.Dock="Left" Width="30" Padding="0"
@@ -27,7 +27,7 @@
                     </ComboBox.ItemTemplate>
                 </ComboBox>
                 <CheckBox x:Name="TimelineLoopCheck" DockPanel.Dock="Right" Content="Loop"
-                          IsChecked="{Binding Results.LoopPlayback}" Foreground="#C9C9D2"
+                          IsChecked="{Binding Results.LoopPlayback}" Foreground="{DynamicResource TextMutedBrush}"
                           VerticalAlignment="Center" Margin="0,0,6,0"
                           ToolTip="Restart at the first frame instead of stopping at the last"/>
                 <TextBlock x:Name="TimelineTimeText" Text="{Binding Results.CurrentTimeLabel}"
@@ -58,7 +58,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding Label}" Width="64" FontSize="9"
-                                   Foreground="#8A8A96" TextAlignment="Center"/>
+                                   Foreground="{DynamicResource TextFaintBrush}" TextAlignment="Center"/>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

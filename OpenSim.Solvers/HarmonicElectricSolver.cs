@@ -60,11 +60,7 @@ public sealed class HarmonicElectricSolver : ISolver
                 throw new InvalidOperationException(
                     $"Boundary condition '{bc.Name}' ({bc.GetType().Name}) does not apply to an AC electrical solve. " +
                     "Use voltage potentials and current flows.");
-            if (bc.FaceIds.Count == 0)
-                throw new InvalidOperationException($"Boundary condition '{bc.Name}' has no faces assigned.");
-            if (input.Mesh.GetFaceNodes(bc.FaceIds).Count == 0)
-                throw new InvalidOperationException(
-                    $"Boundary condition '{bc.Name}' targets faces that do not exist on the mesh.");
+            BoundaryScope.Validate(bc, input.Mesh);
         }
 
         // Early feedback: the spread is worst at one end of the sweep, so checking both
@@ -141,7 +137,7 @@ public sealed class HarmonicElectricSolver : ISolver
         var prescribed = new Dictionary<int, Complex>();
         foreach (var voltage in input.BoundaryConditions.OfType<VoltagePotential>())
         {
-            var nodes = mesh.GetFaceNodes(voltage.FaceIds);
+            var nodes = mesh.GetScopeNodes(voltage);
             foreach (int node in nodes)
                 prescribed[node] = voltage.Volts;
             log.Add($"Voltage '{voltage.Name}': {voltage.Volts:g4} V (peak, 0° phase) on {nodes.Count} nodes.");
@@ -330,7 +326,7 @@ public sealed class HarmonicElectricSolver : ISolver
 
         var driven = electrodes[0].Volts > electrodes[1].Volts ? electrodes[0] : electrodes[1];
         Complex current = Complex.Zero;
-        foreach (int node in mesh.GetFaceNodes(driven.FaceIds))
+        foreach (int node in mesh.GetScopeNodes(driven))
             current += reactions[node];
         if (current == Complex.Zero)
             return null;

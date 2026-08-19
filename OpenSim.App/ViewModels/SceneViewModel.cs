@@ -98,9 +98,14 @@ public partial class SceneViewModel : ObservableObject
         {
             InvalidateMeshCaches();
             RefreshMeshEdges();
+            RefreshSelectedEdges();
         };
         session.ResultsProduced += (_, _) => _nodalizeCache.Clear();
-        session.HighlightsInvalidated += (_, _) => UpdateFaceHighlights();
+        session.HighlightsInvalidated += (_, _) =>
+        {
+            UpdateFaceHighlights();
+            RefreshSelectedEdges();
+        };
         results.DisplayOptionsChanged += (_, e) =>
         {
             _burstRebuildTimer.Stop();
@@ -138,6 +143,59 @@ public partial class SceneViewModel : ObservableObject
     /// <summary>Height of the legend's tick row: zero when there are no ticks, so a legend
     /// without them keeps exactly the layout it had before ticks existed.</summary>
     public double LegendTickRowHeight => LegendTicks.Count > 0 ? 15 : 0;
+
+    /// <summary>
+    /// Renders the viewport (3D scene plus the legend overlay) to a bitmap. Set ONCE by
+    /// <c>Viewport3DView</c> — the only thing that can rasterise a live visual tree — and
+    /// left null in any host that has no viewport. This is a deliberately narrow seam: the
+    /// view supplies the pixels, the viewmodel decides where they go.
+    /// </summary>
+    public Func<double, System.Windows.Media.Imaging.BitmapSource?>? CaptureViewport { get; set; }
+
+    /// <summary>
+    /// Saves the viewport as a PNG. The framing follows the current window, which is stated
+    /// rather than corrected: re-laying out to a fixed size would change the camera framing
+    /// the user set up. The supersampling factor is fixed, so the same window always yields
+    /// the same pixel size.
+    /// </summary>
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void ExportViewportImage()
+    {
+        if (CaptureViewport is null)
+        {
+            _session.StatusText = "The viewport is not available to capture.";
+            return;
+        }
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export viewport image (PNG)",
+            FileName = "result-view.png",
+            Filter = "PNG images (*.png)|*.png",
+            DefaultExt = ".png"
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            const double supersample = 2.0;
+            var bitmap = CaptureViewport(supersample);
+            if (bitmap is null)
+            {
+                _session.StatusText = "The viewport had nothing to capture.";
+                return;
+            }
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+            using var stream = System.IO.File.Create(dialog.FileName);
+            encoder.Save(stream);
+            _session.StatusText =
+                $"Exported {bitmap.PixelWidth}x{bitmap.PixelHeight} image to " +
+                System.IO.Path.GetFileName(dialog.FileName) + ".";
+        }
+        catch (Exception ex)
+        {
+            _session.ReportError(ex);
+        }
+    }
 
     /// <summary>Reverse lookup used by viewport hit testing.</summary>
     public int? GetFaceIdForModel(GeometryModel3D model)
@@ -271,13 +329,13 @@ public partial class SceneViewModel : ObservableObject
 
     private void ShowResultScene()
     {
-        if (_session.AssembledMesh is { } assembled && _results.SelectedField is not null)
+        if (_session.AssembledMesh is { } assembled && _results.DisplayField is not null)
         {
             ShowMultiBodyResultScene(assembled);
             return;
         }
         var mesh = _session.Body.Mesh;
-        var field = _results.SelectedField;
+        var field = _results.DisplayField;
         if (mesh is null || field is null)
         {
             ShowGeometryScene();
@@ -321,7 +379,7 @@ public partial class SceneViewModel : ObservableObject
     private void ShowMultiBodyResultScene(OpenSim.Core.Model.FeMeshAssembler.AssembledMesh assembled)
     {
         var mesh = assembled.Mesh;
-        var field = _results.SelectedField!;
+        var field = _results.DisplayField!;
         if (!_nodalizeCache.TryGetValue(field, out var scalars))
             _nodalizeCache[field] = scalars = SceneBuilder.NodalizeField(mesh, field);
         var colormap = CurrentColormap;
@@ -357,7 +415,7 @@ public partial class SceneViewModel : ObservableObject
     /// fixed Rainbow/Viridis pair and the plain auto range it has always used, so the
     /// Mechanical and Electrical workspaces are unaffected by anything edited here.
     /// </summary>
-    private bool UsesEditableColormap => _session.ActiveWorkspace == WorkspaceKind.ThermalFlow;
+    private bool UsesEditableColormap => _session.ActiveWorkspace == WorkspaceKind.Flow;
 
     /// <summary>The colormap the result scene paints with.</summary>
     private ColormapDefinition CurrentColormap => UsesEditableColormap
@@ -486,6 +544,19 @@ public partial class SceneViewModel : ObservableObject
         MeshEdges = _session.Body.Mesh is null
             ? new Point3DCollection()
             : SceneBuilder.BuildBoundaryEdges(_session.Body.Mesh);
+    }
+
+    /// <summary>
+    /// The selected geometric edges, drawn over the wireframe. Face highlighting recolours
+    /// a whole face model; an edge owns no model, so it is drawn as its own line set.
+    /// </summary>
+    [ObservableProperty] private Point3DCollection _selectedEdgeLines = new();
+
+    private void RefreshSelectedEdges()
+    {
+        SelectedEdgeLines = _session.Body.Mesh is null || _session.SelectedEdges.Count == 0
+            ? new Point3DCollection()
+            : SceneBuilder.BuildEdgeHighlight(_session.Body.Mesh, _session.SelectedEdges);
     }
 
     /// <summary>

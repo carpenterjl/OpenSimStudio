@@ -9,12 +9,12 @@
             <TextBlock Text="{Binding Pcb.SelectedNet.Label, FallbackValue='No net selected — pick one in the PCB nets list or click copper in the view.'}"
                        TextWrapping="Wrap" Margin="0,0,0,2"/>
             <TextBlock Text="Mesh the net from the Meshing panel." FontSize="11"
-                       Foreground="#8A8A96" Margin="0,0,0,2"/>
+                       Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
 
             <!-- Step 2: electrodes -->
             <TextBlock Text="2. Electrodes" FontWeight="Bold" Margin="0,8,0,2"/>
             <TextBlock Text="{Binding Electrodes.ElectrodeInfo}" TextWrapping="Wrap" Margin="0,0,0,4"
-                       Foreground="#C9C9D2"/>
+                       Foreground="{DynamicResource TextMutedBrush}"/>
             <UniformGrid Columns="2">
                 <Label Content="Source (＋)"/>
                 <ComboBox x:Name="SourceCombo"
@@ -26,18 +26,18 @@
                           DisplayMemberPath="Label"/>
             </UniformGrid>
             <TextBlock Text="Gold = selectable pad, green = source, red = sink. Click pads in the view to assign."
-                       TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
 
             <!-- Step 3: excitation + solve -->
             <TextBlock Text="3. Excitation &amp; solve" FontWeight="Bold" Margin="0,8,0,2"/>
             <UniformGrid Columns="2">
                 <RadioButton x:Name="VoltageDrive" Content="Voltage [V]" GroupName="Excitation"
-                             IsChecked="True" Foreground="#C9C9D2"
+                             IsChecked="True" Foreground="{DynamicResource TextMutedBrush}"
                              VerticalAlignment="Center" Margin="2,1"/>
                 <TextBox Text="{Binding Electrodes.TestVoltage}"
                          IsEnabled="{Binding IsChecked, ElementName=VoltageDrive}"/>
                 <RadioButton x:Name="CurrentDrive" Content="Current [A]" GroupName="Excitation"
-                             IsChecked="{Binding Electrodes.DriveWithCurrent, Mode=TwoWay}" Foreground="#C9C9D2"
+                             IsChecked="{Binding Electrodes.DriveWithCurrent, Mode=TwoWay}" Foreground="{DynamicResource TextMutedBrush}"
                              VerticalAlignment="Center" Margin="2,1"
                              ToolTip="Inject this current at the source pad; the sink is held at 0 V"/>
                 <TextBox Text="{Binding Electrodes.TestCurrent}"
@@ -45,7 +45,7 @@
             </UniformGrid>
             <Button Content="Run electrical test" Command="{Binding Electrodes.RunElectricalTestCommand}"/>
             <TextBlock Text="{Binding Electrodes.ElectricalResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,4,0,0"/>
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
 
             <!-- Step 4: lumped AC impedance estimate -->
             <TextBlock Text="4. AC impedance (R + jωL estimate)" FontWeight="Bold" Margin="0,8,0,2"/>
@@ -60,7 +60,7 @@
             <Button x:Name="EstimateAcButton" Content="Estimate AC impedance"
                     Command="{Binding Electrodes.EstimateAcImpedanceCommand}"/>
             <TextBlock Text="{Binding Electrodes.AcResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,4,0,0"/>
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
             <ItemsControl ItemsSource="{Binding Electrodes.AcSweep}" Margin="0,2,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -73,12 +73,12 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBlock Text="{Binding Electrodes.AcAssumptions}" TextWrapping="Wrap"
-                       FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
 
             <!-- Step 5: PEEC inductance from centerlines (no meshing needed) -->
             <TextBlock Text="5. Inductance (PEEC, from centerlines)" FontWeight="Bold" Margin="0,8,0,2"/>
             <TextBlock Text="Works from the imported board — no meshing needed. Failures name the exact reason."
-                       TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,0,0,2"/>
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
             <UniformGrid Columns="2">
                 <Label Content="Net"/>
                 <ComboBox x:Name="InductanceNetCombo"
@@ -88,7 +88,7 @@
             </UniformGrid>
             <Button Content="Compute self inductance" Command="{Binding Inductance.ComputeSelfCommand}"/>
             <TextBlock Text="{Binding Inductance.SelfResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <UniformGrid Columns="2" Margin="0,4,0,0">
                 <Label Content="Second net"/>
                 <ComboBox x:Name="SecondNetCombo"
@@ -99,13 +99,13 @@
             <Button x:Name="ComputeMutualButton" Content="Compute mutual (M, k)"
                     Command="{Binding Inductance.ComputeMutualCommand}"/>
             <TextBlock Text="{Binding Inductance.MutualResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <UniformGrid Columns="2" Margin="0,4,0,0">
                 <RadioButton x:Name="ReturnNetRadio" Content="Return: second net" GroupName="LoopReturn"
-                             IsChecked="True" Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"/>
+                             IsChecked="True" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
                 <RadioButton x:Name="ReturnPlaneRadio" Content="Return: plane layer" GroupName="LoopReturn"
                              IsChecked="{Binding Inductance.ReturnIsPlane, Mode=TwoWay}"
-                             Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"/>
+                             Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
                 <Label Content="Plane layer"/>
                 <ComboBox x:Name="PlaneLayerCombo"
                           ItemsSource="{Binding Inductance.PlaneLayers}"
@@ -116,303 +116,10 @@
             <Button x:Name="ComputeLoopButton" Content="Compute loop inductance"
                     Command="{Binding Inductance.ComputeLoopCommand}"/>
             <TextBlock Text="{Binding Inductance.LoopResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <TextBlock Text="{Binding Inductance.InductanceAssumptions}" TextWrapping="Wrap"
-                       FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
 
-            <!-- Step 6: antenna simulator (thin-wire + RWG surface MoM; free space,
-                 PEC ground, or a dielectric substrate via the layered Green's function) -->
-            <TextBlock Text="6. Antenna (RF, method of moments)" FontWeight="Bold" Margin="0,8,0,2"/>
-            <TextBlock Text="Thin wires and RWG surfaces in free space or over an infinite PEC ground (image theory). Surface metal can sit on a dielectric substrate (εr, tanδ): a rigorous layered-media Green's function with surface waves — set εr = 1 for air. Works from the imported board's centerlines, a copper island, or a wizard shape; no meshing needed."
-                       TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,0,0,2"/>
-            <UniformGrid Columns="2">
-                <Label Content="Geometry"/>
-                <ComboBox x:Name="AntennaSourceCombo"
-                          ItemsSource="{Binding Antenna.SourceModes}"
-                          SelectedItem="{Binding Antenna.SourceMode}"/>
-                <Label Content="Net"/>
-                <ComboBox x:Name="AntennaNetCombo"
-                          ItemsSource="{Binding Antenna.Nets}"
-                          SelectedItem="{Binding Antenna.AntennaNet}"
-                          DisplayMemberPath="Label"/>
-                <Label Content="Dipole length [mm]"/>
-                <TextBox Text="{Binding Antenna.DipoleLengthMm}"/>
-                <Label Content="Loop radius [mm]"/>
-                <TextBox Text="{Binding Antenna.LoopRadiusMm}"/>
-                <Label Content="Monopole height [mm]"/>
-                <TextBox Text="{Binding Antenna.MonopoleHeightMm}"/>
-                <Label Content="Wire radius [mm]"/>
-                <TextBox Text="{Binding Antenna.WireRadiusMm}"/>
-                <Label Content="Plate/patch W×L [mm]"/>
-                <UniformGrid Columns="2">
-                    <TextBox x:Name="PlateWidthBox" Text="{Binding Antenna.PlateWidthMm}" Margin="0,0,2,0"/>
-                    <TextBox x:Name="PlateLengthBox" Text="{Binding Antenna.PlateLengthMm}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <Label Content="Patch height [mm]"/>
-                <TextBox x:Name="PatchHeightBox" Text="{Binding Antenna.PatchHeightMm}"
-                         ToolTip="Gap between the patch metal and the ground plane (RWG patch mode). With a substrate εr &gt; 1 this is the dielectric slab thickness."/>
-                <Label Content="Substrate εr / tanδ"/>
-                <UniformGrid Columns="2">
-                    <TextBox x:Name="SubstrateEpsRBox" Text="{Binding Antenna.SubstrateEpsR}" Margin="0,0,2,0"
-                             ToolTip="Dielectric constant of the slab filling the gap under surface (RWG) metal. εr = 1 = air (PEC image theory); εr &gt; 1 engages the rigorous layered-media Green's function, surface waves included."/>
-                    <TextBox Text="{Binding Antenna.SubstrateTanD}" Margin="2,0,0,0"
-                             ToolTip="Substrate loss tangent (0 = lossless)"/>
-                </UniformGrid>
-                <Label Content="Probe x/y [mm] (probe-fed patch)"/>
-                <UniformGrid Columns="2">
-                    <TextBox Text="{Binding Antenna.ProbeXMm}" Margin="0,0,2,0"
-                             ToolTip="Coaxial probe feed position from the patch centre (Stage E). The probe snaps to the nearest mesh vertex; a good inset off the radiating edge sets the input resistance ∝ cos²(πx/L)."/>
-                    <TextBox Text="{Binding Antenna.ProbeYMm}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <Label Content="Probe bore [mm] / segments"/>
-                <UniformGrid Columns="2">
-                    <TextBox Text="{Binding Antenna.ProbeRadiusMm}" Margin="0,0,2,0"
-                             ToolTip="Coax inner-conductor radius. The slab must be thick enough that each tube segment ≥ 2·radius (the reduced thin-wire kernel's validity floor)."/>
-                    <TextBox Text="{Binding Antenna.ProbeSegments}" Margin="2,0,0,0"
-                             ToolTip="Number of vertical tube segments across the slab (≥ 2)."/>
-                </UniformGrid>
-                <Label Content="Cover thickness [mm] (covered patch)"/>
-                <TextBox Text="{Binding Antenna.CoverThicknessMm}"
-                         ToolTip="Dielectric cover thickness above the buried patch (covered-patch mode, Stage F multi-layer). The cover shares the substrate's εr/tanδ (a homogeneous slab split at the metal); it loads the patch, so the resonance drops below the bare patch's."/>
-                <Label Content="Island (RWG)"/>
-                <ComboBox x:Name="AntennaIslandCombo"
-                          ItemsSource="{Binding Antenna.AntennaIslands}"
-                          SelectedItem="{Binding Antenna.AntennaIsland}"
-                          DisplayMemberPath="Label"/>
-                <CheckBox x:Name="GroundPlaneCheck" Content="Ground plane (PEC)"
-                          IsChecked="{Binding Antenna.UseGroundPlane}"
-                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Infinite perfect-conductor ground via image theory. The monopole always uses it."/>
-                <TextBox Text="{Binding Antenna.GroundZMm}"
-                         ToolTip="Ground plane z [mm]"/>
-                <Label Content="Height above ground [mm]"/>
-                <TextBox Text="{Binding Antenna.HeightAboveGroundMm}"
-                         ToolTip="Wizard dipole/loop shapes are lifted this far above the plane; net geometry keeps its board coordinates."/>
-                <Label Content="f [MHz]"/>
-                <TextBox x:Name="FrequencyBox" Text="{Binding Antenna.FrequencyMHz}"/>
-                <Label Content="Sweep f min [MHz]"/>
-                <TextBox Text="{Binding Antenna.SweepFMinMHz}"/>
-                <Label Content="Sweep f max [MHz]"/>
-                <TextBox x:Name="SweepFMaxBox" Text="{Binding Antenna.SweepFMaxMHz}"/>
-                <Label Content="Sweep points"/>
-                <TextBox x:Name="SweepPointsBox" Text="{Binding Antenna.SweepPoints}"/>
-            </UniformGrid>
-            <Button x:Name="SolveAntennaButton" Content="Solve antenna (Zin sweep)"
-                    Command="{Binding Antenna.SolveAntennaCommand}"/>
-            <TextBlock Text="{Binding Antenna.AntennaResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
-            <ItemsControl ItemsSource="{Binding Antenna.ZinSweep}" Margin="0,2,0,0">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <UniformGrid Columns="3">
-                            <TextBlock Text="{Binding FrequencyHz, StringFormat='f = {0:g3} Hz'}" FontSize="11"/>
-                            <TextBlock Text="{Binding Resistance, StringFormat='R = {0:g4} Ω'}" FontSize="11"/>
-                            <TextBlock Text="{Binding Reactance, StringFormat='X = {0:g4} Ω'}" FontSize="11"/>
-                        </UniformGrid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <UniformGrid Columns="2" Margin="0,4,0,0">
-                <Label Content="Field grid (n³)"/>
-                <TextBox Text="{Binding Antenna.GridResolution}"/>
-            </UniformGrid>
-            <UniformGrid Columns="3">
-                <Button x:Name="NearFieldButton" Content="Near-field map"
-                        Command="{Binding Antenna.ComputeNearFieldCommand}"/>
-                <Button x:Name="FarFieldButton" Content="Far-field lobe"
-                        Command="{Binding Antenna.ShowFarFieldCommand}"/>
-                <Button Content="Clear overlays" Command="{Binding Antenna.ClearOverlaysCommand}"/>
-            </UniformGrid>
-
-            <!-- Board field overlay (SIwave-style): a translucent |field| heatmap plane
-                 over the PCB/structure with user scale/range/opacity controls. E only in
-                 v1; picking H surfaces a typed follow-up message until the H kernels ship. -->
-            <TextBlock Text="Field overlay over the board" FontWeight="Bold" Margin="0,8,0,2"/>
-            <UniformGrid Columns="4">
-                <Label Content="Field"/>
-                <ComboBox x:Name="OverlayFieldCombo"
-                          ItemsSource="{Binding Antenna.OverlayFieldTypes}"
-                          SelectedItem="{Binding Antenna.OverlayFieldType}"/>
-                <Label Content="Scale"/>
-                <ComboBox x:Name="OverlayScaleCombo"
-                          ItemsSource="{Binding Antenna.OverlayScaleModes}"
-                          SelectedItem="{Binding Antenna.OverlayScaleMode}"/>
-                <Label Content="Height above metal [mm]"/>
-                <TextBox x:Name="OverlayHeightBox" Text="{Binding Antenna.OverlayHeightMm}"
-                         ToolTip="The overlay plane hovers this far above the structure's top metal. Values within ~an element of metal are surface-scale approximations."/>
-                <Label Content="Grid (n²)"/>
-                <TextBox x:Name="OverlayGridBox" Text="{Binding Antenna.OverlayGridN}"/>
-                <CheckBox x:Name="OverlayAutoRangeCheck" Content="Auto range"
-                          IsChecked="{Binding Antenna.OverlayAutoRange}"
-                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Color range from the sampled data; log mode spans the top N decades below the peak."/>
-                <TextBox x:Name="OverlayDecadesBox" Text="{Binding Antenna.OverlayDecades}"
-                         ToolTip="Log mode: decades below the peak an auto range spans"/>
-                <Label Content="Range min/max [V/m]"/>
-                <UniformGrid Columns="2">
-                    <TextBox x:Name="OverlayMinBox" Text="{Binding Antenna.OverlayMinVPerM}" Margin="0,0,2,0"
-                             ToolTip="Range minimum (V/m), used when auto range is off. In log mode a non-positive min falls back to max/10^decades."/>
-                    <TextBox x:Name="OverlayMaxBox" Text="{Binding Antenna.OverlayMaxVPerM}" Margin="2,0,0,0"
-                             ToolTip="Range maximum (V/m), used when auto range is off. Samples above it saturate (legend shows ▲)."/>
-                </UniformGrid>
-                <Label Content="Opacity [%]"/>
-                <Slider x:Name="OverlayOpacitySlider" Minimum="5" Maximum="100"
-                        Value="{Binding Antenna.OverlayOpacityPercent}"
-                        TickFrequency="5" IsSnapToTickEnabled="True"
-                        ToolTip="Overlay plane transparency over the copper preview"/>
-            </UniformGrid>
-            <CheckBox x:Name="OverlayOverBoardCheck" Content="Over the board outline (per copper layer)"
-                      IsChecked="{Binding Antenna.OverlayOverBoard}"
-                      Visibility="{Binding Antenna.HasBoardOverlay, Converter={StaticResource BoolToVis}}"
-                      Foreground="#C9C9D2" Margin="2,3,0,0"
-                      ToolTip="Paint the field masked to the board outline at each copper-layer height (the SIwave board view), instead of one plane above the net"/>
-            <Button x:Name="FieldOverlayButton" Content="Field overlay on board"
-                    Command="{Binding Antenna.ShowFieldOverlayCommand}"/>
-            <TextBlock Text="{Binding Antenna.FieldResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding Antenna.AntennaAssumptions}" TextWrapping="Wrap"
-                       FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
-
-            <!-- Step 7: signal integrity (SI track) — coupled microstrip wizard →
-                 RLGC → MTL network → S-params/Touchstone → PRBS transient + eye. -->
-            <TextBlock Text="7. Signal integrity (coupled lines)" FontWeight="Bold" Margin="0,8,0,2"/>
-            <TextBlock Text="N coupled microstrips on the substrate: per-unit-length RLGC (2D quasi-static BEM over the layered dielectric), the exact frequency-domain coupled-line network, S-parameter export, and PRBS eye diagrams with crosstalk. Thevenin driver + R∥C receiver."
-                       TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,0,0,2"/>
-            <UniformGrid Columns="4">
-                <Label Content="Lines / driven"/>
-                <UniformGrid Columns="2">
-                    <TextBox x:Name="SiLineCountBox" Text="{Binding SignalIntegrity.LineCount}" Margin="0,0,2,0"/>
-                    <TextBox x:Name="SiDrivenLineBox" Text="{Binding SignalIntegrity.DrivenLine}" Margin="2,0,0,0"
-                             ToolTip="1-based index of the driven (victim) line"/>
-                </UniformGrid>
-                <Label Content="Width / gap [mm]"/>
-                <UniformGrid Columns="2">
-                    <TextBox x:Name="SiWidthBox" Text="{Binding SignalIntegrity.TraceWidthMm}" Margin="0,0,2,0"/>
-                    <TextBox x:Name="SiGapBox" Text="{Binding SignalIntegrity.TraceGapMm}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <Label Content="Substrate h [mm] / εr"/>
-                <UniformGrid Columns="2">
-                    <TextBox x:Name="SiHeightBox" Text="{Binding SignalIntegrity.SubstrateHeightMm}" Margin="0,0,2,0"/>
-                    <TextBox x:Name="SiEpsRBox" Text="{Binding SignalIntegrity.SiEpsR}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <Label Content="tanδ / copper [µm]"/>
-                <UniformGrid Columns="2">
-                    <TextBox Text="{Binding SignalIntegrity.SiTanD}" Margin="0,0,2,0"/>
-                    <TextBox Text="{Binding SignalIntegrity.CopperThicknessUm}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <Label Content="Length [mm]"/>
-                <TextBox x:Name="SiLengthBox" Text="{Binding SignalIntegrity.LineLengthMm}"/>
-                <Label Content="Signal"/>
-                <ComboBox x:Name="SiSignalCombo"
-                          ItemsSource="{Binding SignalIntegrity.SignalTypes}"
-                          SelectedItem="{Binding SignalIntegrity.SignalType}"/>
-                <Label Content="Bit rate [Gb/s]"/>
-                <TextBox x:Name="SiBitRateBox" Text="{Binding SignalIntegrity.BitRateGbps}"/>
-                <Label Content="Rise [% UI] / amp [V]"/>
-                <UniformGrid Columns="2">
-                    <TextBox Text="{Binding SignalIntegrity.RiseFractionPercent}" Margin="0,0,2,0"/>
-                    <TextBox Text="{Binding SignalIntegrity.AmplitudeVolts}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <Label Content="Driver Rs [Ω]"/>
-                <TextBox Text="{Binding SignalIntegrity.SourceOhms}"/>
-                <Label Content="Receiver R [Ω] / C [pF]"/>
-                <UniformGrid Columns="2">
-                    <TextBox Text="{Binding SignalIntegrity.LoadOhms}" Margin="0,0,2,0"/>
-                    <TextBox Text="{Binding SignalIntegrity.LoadPicofarads}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <CheckBox x:Name="SiAggressorsCheck" Content="Aggressors on"
-                          IsChecked="{Binding SignalIntegrity.AggressorsEnabled}"
-                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
-                <CheckBox x:Name="SiProximityCheck" Content="Proximity R(f)"
-                          IsChecked="{Binding SignalIntegrity.ProximityEffect}"
-                          Foreground="#C9C9D2" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Frequency-dependent R(f) and internal L(f) from the 2D filament solve (current crowding + skin effect) — replaces max(R_dc, R_s√f)"/>
-            </UniformGrid>
-
-            <!-- Board extraction (Stage S6): pick 2+ parallel signal nets from the imported
-                 board; the coupled cross-section replaces the wizard geometry above. -->
-            <Border BorderBrush="#3A3A46" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0"
-                    Visibility="{Binding SignalIntegrity.HasBoard, Converter={StaticResource BoolToVis}}">
-                <StackPanel>
-                    <TextBlock Text="From board nets (2+ parallel for coupling; 1+ for C to ground):"
-                               FontSize="11" Foreground="#C9C9D2" Margin="0,0,0,2"/>
-                    <ListBox x:Name="SiBoardNetsList" MaxHeight="110"
-                             ItemsSource="{Binding SignalIntegrity.BoardNets}"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             Background="#22222A" BorderBrush="#3A3A46">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}"
-                                          Foreground="#C9C9D2"/>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                    <Button x:Name="SiBoardExtractButton" Content="Extract coupled section from nets"
-                            Command="{Binding SignalIntegrity.ExtractFromBoardNetsCommand}"
-                            Margin="0,3,0,0"/>
-                    <CheckBox Content="Use board geometry (uncheck for wizard)"
-                              IsChecked="{Binding SignalIntegrity.UseBoardNets}"
-                              Foreground="#C9C9D2" Margin="2,3,0,0"/>
-                    <TextBlock Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
-                               FontSize="11" Foreground="#7FD0A0" Margin="0,2,0,0"/>
-                    <Button x:Name="SiTraceCapButton" Content="Per-trace C to ground"
-                            Command="{Binding SignalIntegrity.ComputeTraceCapacitanceCommand}"
-                            Margin="0,3,0,0"
-                            ToolTip="Capacitance of each selected net to its reference plane: Σ C′(width, gap) × routed centerline length + parallel-plate pad terms, over the stackup dielectric (2D BEM). Bends and branches count; one net is enough."/>
-                    <TextBlock Text="{Binding SignalIntegrity.TraceCapResult}" TextWrapping="Wrap"
-                               FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
-                    <Button x:Name="SiDcNetsButton" Content="Evaluate DC nets (R, C, τ → CSV)"
-                            Command="{Binding SignalIntegrity.EvaluateDcNetsCommand}"
-                            Margin="0,3,0,0"
-                            ToolTip="Board-wide DC screen over EVERY net with 2+ pads: resistance between each pad pair (nodal network on the trace graph — branches and parallel paths solve exactly), the net's total C to the reference plane, and the lumped time constant τ = R·C, saved as a CSV report. Nets that can't be priced appear as typed note rows."/>
-                    <TextBlock Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
-                               FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
-                </StackPanel>
-            </Border>
-
-            <!-- IBIS driver (Stage S11): a nonlinear behavioral buffer replaces the Thevenin
-                 driver for a single line; the eye then runs the nonlinear engine. -->
-            <Border BorderBrush="#3A3A46" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0">
-                <StackPanel>
-                    <UniformGrid Columns="3">
-                        <Button x:Name="SiIbisLoadButton" Content="IBIS model…"
-                                Command="{Binding SignalIntegrity.LoadIbisCommand}"
-                                ToolTip="Load an .ibs behavioral buffer and drive the eye with its nonlinear V-I curves (single line)"/>
-                        <ComboBox x:Name="SiIbisModelCombo" Margin="2,0"
-                                  ItemsSource="{Binding SignalIntegrity.IbisModelNames}"
-                                  SelectedItem="{Binding SignalIntegrity.SelectedIbisModel}"/>
-                        <ComboBox x:Name="SiIbisCornerCombo"
-                                  ItemsSource="{Binding SignalIntegrity.IbisCorners}"
-                                  SelectedItem="{Binding SignalIntegrity.IbisCorner}"/>
-                    </UniformGrid>
-                    <CheckBox x:Name="SiUseIbisCheck" Content="Use IBIS driver (nonlinear)"
-                              IsChecked="{Binding SignalIntegrity.UseIbisDriver}"
-                              Foreground="#C9C9D2" Margin="2,3,0,0"/>
-                    <TextBlock Text="{Binding SignalIntegrity.IbisStatus}" TextWrapping="Wrap"
-                               FontSize="11" Foreground="#8A8A96" Margin="0,1,0,0"/>
-                </StackPanel>
-            </Border>
-
-            <UniformGrid Columns="3" Margin="0,4,0,0">
-                <Button x:Name="SiExtractButton" Content="Extract RLGC"
-                        Command="{Binding SignalIntegrity.ExtractRlgcCommand}"/>
-                <Button x:Name="SiSparamButton" Content="S-params (Touchstone)"
-                        Command="{Binding SignalIntegrity.ComputeSParametersCommand}"/>
-                <Button x:Name="SiEyeButton" Content="Transient + eye"
-                        Command="{Binding SignalIntegrity.RunEyeDiagramCommand}"/>
-            </UniformGrid>
-            <TextBlock Text="{Binding SignalIntegrity.RlgcResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding SignalIntegrity.SParamResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding SignalIntegrity.EyeResult}" TextWrapping="Wrap"
-                       FontWeight="Bold" Foreground="#FFD060" Margin="0,2,0,0"/>
-            <Image Source="{Binding SignalIntegrity.EyeImage}" MaxHeight="180" Margin="0,4,0,0"
-                   Stretch="Uniform" RenderOptions.BitmapScalingMode="Linear"
-                   AutomationProperties.AutomationId="SiEyeImage"/>
-            <TextBlock Text="{Binding SignalIntegrity.SiAssumptions}" TextWrapping="Wrap"
-                       FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
         </StackPanel>
     </GroupBox>
 </UserControl>

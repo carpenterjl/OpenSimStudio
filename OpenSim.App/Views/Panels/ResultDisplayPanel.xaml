@@ -16,7 +16,7 @@
                         <Setter Property="Foreground" Value="#C9C9D2"/>
                         <Setter Property="Margin" Value="2,4"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="ThermalFlow">
+                            <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Flow">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                             </DataTrigger>
                         </Style.Triggers>
@@ -30,17 +30,17 @@
                         ToolTip="Drag left to clamp the colormap maximum: values above saturate at the top color so fine low-value gradients become visible"/>
             </DockPanel>
             <CheckBox Content="Contour lines" IsChecked="{Binding Results.ShowContours}"
-                      Foreground="#C9C9D2" Margin="2,4"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,4"
                       ToolTip="Iso-value lines of the displayed field on the surface"/>
             <CheckBox Content="Section plane" IsChecked="{Binding Results.SectionEnabled}"
-                      Foreground="#C9C9D2" Margin="2,4"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,4"
                       ToolTip="Cut the model open; the cross-section is colored by the same field"/>
             <DockPanel IsEnabled="{Binding Results.SectionEnabled}" Margin="2,0">
                 <ComboBox DockPanel.Dock="Left" Width="52"
                           ItemsSource="{Binding Results.SectionAxisOptions}"
                           SelectedItem="{Binding Results.SectionAxis}"/>
                 <CheckBox Content="Flip" DockPanel.Dock="Right" VerticalAlignment="Center"
-                          IsChecked="{Binding Results.SectionFlip}" Foreground="#C9C9D2" Margin="4,0,0,0"
+                          IsChecked="{Binding Results.SectionFlip}" Foreground="{DynamicResource TextMutedBrush}" Margin="4,0,0,0"
                           ToolTip="Keep the other side of the plane"/>
                 <Slider Minimum="0" Maximum="1" SmallChange="0.02" LargeChange="0.1"
                         Value="{Binding Results.SectionOffsetFraction, Delay=150}" Margin="4,0"

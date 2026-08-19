@@ -12,8 +12,6 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Dirkster.AvalonDock" Version="4.74.1" />
-    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="4.74.1" />
     <PackageReference Include="HelixToolkit.Wpf" Version="3.1.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
   </ItemGroup>

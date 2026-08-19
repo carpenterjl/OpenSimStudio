@@ -32,12 +32,14 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel(ProjectSession session, ILogService log, GeometryViewModel geometry,
         MaterialsViewModel materials, MeshingViewModel meshing, BoundaryConditionsViewModel conditions,
+        ScopeSelectionViewModel scopeSelection,
         PcbViewModel pcb, ElectrodesViewModel electrodes, InductanceViewModel inductance,
         AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, SolveViewModel solve,
         ResultsViewModel results, SceneViewModel scene, BodiesViewModel bodies,
         EnvironmentViewModel environment, ColormapViewModel colormap,
-        FlowVisualizationViewModel flow,
-        ProjectSerializer serializer, RecentProjectsService recentProjects)
+        FlowVisualizationViewModel flow, StudyRailViewModel studyRail,
+        ProjectSerializer serializer, RecentProjectsService recentProjects,
+        ThemeService theme)
     {
         Session = session;
         Log = log;
@@ -45,6 +47,7 @@ public partial class MainViewModel : ObservableObject
         Materials = materials;
         Meshing = meshing;
         Conditions = conditions;
+        ScopeSelection = scopeSelection;
         Pcb = pcb;
         Electrodes = electrodes;
         Inductance = inductance;
@@ -57,11 +60,20 @@ public partial class MainViewModel : ObservableObject
         Environment = environment;
         Colormap = colormap;
         Flow = flow;
+        StudyRail = studyRail;
+        Theme = theme;
         _serializer = serializer;
         _recentProjects = recentProjects;
         // Switching the active body re-syncs the panels that mirror body state, exactly as
         // opening a project does.
         session.ActiveBodyChanged += (_, _) => AdoptActiveBody();
+        session.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(ProjectSession.ActiveWorkspace)
+                or nameof(ProjectSession.IsHomeActive))
+                RefreshWorkspaceNav();
+        };
+        RefreshWorkspaceNav();
         RefreshRecentProjects();
         log.Append("Ready. Create a primitive or import an STL file to begin.");
     }
@@ -72,6 +84,9 @@ public partial class MainViewModel : ObservableObject
     public MaterialsViewModel Materials { get; }
     public MeshingViewModel Meshing { get; }
     public BoundaryConditionsViewModel Conditions { get; }
+
+    /// <summary>Geometric edge and vertex selection for boundary-condition scoping.</summary>
+    public ScopeSelectionViewModel ScopeSelection { get; }
     public PcbViewModel Pcb { get; }
     public ElectrodesViewModel Electrodes { get; }
     public InductanceViewModel Inductance { get; }
@@ -84,6 +99,33 @@ public partial class MainViewModel : ObservableObject
     public EnvironmentViewModel Environment { get; }
     public ColormapViewModel Colormap { get; }
     public FlowVisualizationViewModel Flow { get; }
+
+    /// <summary>The gated study-steps rail; its selected step drives the properties pane.</summary>
+    public StudyRailViewModel StudyRail { get; }
+
+    /// <summary>Dark/light theme switching (the ribbon's Theme button).</summary>
+    public ThemeService Theme { get; }
+
+    [RelayCommand]
+    private void ToggleTheme() => Theme.Toggle();
+
+    /// <summary>One nav-rail row per workspace (icon geometry resolved from the app's
+    /// icon dictionary; active state follows the session).</summary>
+    public IReadOnlyList<WorkspaceNavItem> WorkspaceNav { get; } = new[]
+    {
+        new WorkspaceNavItem(WorkspaceKind.Structural, "Struct", "IconBox", "WorkspaceStructuralButton"),
+        new WorkspaceNavItem(WorkspaceKind.Thermal, "Thermal", "IconThermometer", "WorkspaceThermalButton"),
+        new WorkspaceNavItem(WorkspaceKind.Electrical, "Elec", "IconZap", "WorkspaceElectricalButton"),
+        new WorkspaceNavItem(WorkspaceKind.Rf, "RF", "IconRadioTower", "WorkspaceRfButton"),
+        new WorkspaceNavItem(WorkspaceKind.SignalIntegrity, "SI", "IconActivity", "WorkspaceSignalIntegrityButton"),
+        new WorkspaceNavItem(WorkspaceKind.Flow, "Flow", "IconWind", "WorkspaceFlowButton")
+    };
+
+    private void RefreshWorkspaceNav()
+    {
+        foreach (var item in WorkspaceNav)
+            item.IsActive = !Session.IsHomeActive && Session.ActiveWorkspace == item.Kind;
+    }
 
     /// <summary>
     /// Re-points the body-mirroring panels (material, meshing, conditions) at the active
@@ -145,25 +187,41 @@ public partial class MainViewModel : ObservableObject
         Session.IsHomeActive = true;
     }
 
+    /// <summary>Nav-rail navigation: one command, the workspace as its parameter.</summary>
     [RelayCommand]
-    private void EnterMechanical()
+    private void EnterWorkspace(WorkspaceKind workspace)
     {
-        Session.ActiveWorkspace = WorkspaceKind.Mechanical;
+        Session.ActiveWorkspace = workspace;
         Session.IsHomeActive = false;
     }
 
+    /// <summary>
+    /// The ribbon's Solve routes by analysis kind: the UI-dispatch kinds (antenna, signal
+    /// integrity) run their own view-model pipelines, everything else goes through the
+    /// ISolver path. Routing lives HERE because MainViewModel is the documented place
+    /// where cross-view-model edges are allowed.
+    /// </summary>
     [RelayCommand]
-    private void EnterElectrical()
+    private void SolveActive()
     {
-        Session.ActiveWorkspace = WorkspaceKind.Electrical;
-        Session.IsHomeActive = false;
-    }
-
-    [RelayCommand]
-    private void EnterThermalFlow()
-    {
-        Session.ActiveWorkspace = WorkspaceKind.ThermalFlow;
-        Session.IsHomeActive = false;
+        switch (Session.SelectedAnalysis.Kind)
+        {
+            case AnalysisType.Antenna:
+                if (Antenna.SolveAntennaCommand.CanExecute(null))
+                    Antenna.SolveAntennaCommand.Execute(null);
+                else
+                    Log.Append("Antenna solve is not ready — pick a geometry source in the RF panel first.");
+                break;
+            case AnalysisType.SignalIntegrity:
+                if (SignalIntegrity.RunEyeDiagramCommand.CanExecute(null))
+                    SignalIntegrity.RunEyeDiagramCommand.Execute(null);
+                else
+                    Log.Append("Eye run is not ready — extract a cross-section in the SI panel first.");
+                break;
+            default:
+                Solve.SolveCommand.Execute(null);
+                break;
+        }
     }
 
     [RelayCommand]
@@ -172,37 +230,37 @@ public partial class MainViewModel : ObservableObject
         Session.Project = new Core.Model.SimProject();
         Session.Body = new Core.Model.Body { Name = "Body 1" };
         Session.Project.Bodies.Add(Session.Body);
-        Session.ActiveWorkspace = WorkspaceKind.Mechanical;
+        Session.ActiveWorkspace = WorkspaceKind.Structural;
         Session.IsHomeActive = false;
         Session.RaiseGeometryReplaced(leavingPcbMode: true);
         Session.RaiseMeshChanged();
         Log.Append("New project. Create a primitive or import an STL file to begin.");
     }
 
-    /// <summary>Home tile: STL import belongs to the Mechanical workspace.</summary>
+    /// <summary>Home tile: STL import belongs to the Structural workspace.</summary>
     [RelayCommand]
     private void HomeImportStl()
     {
-        Session.ActiveWorkspace = WorkspaceKind.Mechanical;
+        Session.ActiveWorkspace = WorkspaceKind.Structural;
         Session.IsHomeActive = false;
         Geometry.ImportStlCommand.Execute(null);
     }
 
-    /// <summary>Home tile: STEP import belongs to the Mechanical workspace.</summary>
+    /// <summary>Home tile: STEP import belongs to the Structural workspace.</summary>
     [RelayCommand]
     private async Task HomeImportStepAsync()
     {
-        Session.ActiveWorkspace = WorkspaceKind.Mechanical;
+        Session.ActiveWorkspace = WorkspaceKind.Structural;
         Session.IsHomeActive = false;
         await Geometry.ImportStepCommand.ExecuteAsync(null);
     }
 
-    /// <summary>Home tile: a STEP assembly lands in the Thermal &amp; Flow workspace, the
-    /// only one that solves several bodies together.</summary>
+    /// <summary>Home tile: a STEP assembly lands in the Flow workspace, the only one
+    /// that solves several bodies together.</summary>
     [RelayCommand]
     private async Task HomeImportAssemblyAsync()
     {
-        Session.ActiveWorkspace = WorkspaceKind.ThermalFlow;
+        Session.ActiveWorkspace = WorkspaceKind.Flow;
         Session.IsHomeActive = false;
         await Geometry.ImportStepAssemblyCommand.ExecuteAsync(null);
     }

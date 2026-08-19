@@ -61,7 +61,18 @@ public sealed class FeMesh
         BoundaryTriangles = boundaryTriangles;
         ElementRegionIds = elementRegionIds;
         MidEdgeNodes = midEdgeNodes;
+        _edges = new Lazy<BoundaryEdgeSet>(() => BoundaryEdgeSet.Extract(this));
     }
+
+    private readonly Lazy<BoundaryEdgeSet> _edges;
+
+    /// <summary>
+    /// The geometric edges and vertices of the boundary skin, derived on first use and
+    /// cached. Derived rather than stored: the ids are a function of the skin and its face
+    /// tags, so a second copy could only ever disagree with them.
+    /// </summary>
+    [JsonIgnore]
+    public BoundaryEdgeSet Edges => _edges.Value;
 
     /// <summary>Region id of one element; 0 when the mesh carries no region information.</summary>
     public int RegionOf(int elementIndex) => ElementRegionIds?[elementIndex] ?? 0;
@@ -120,5 +131,65 @@ public sealed class FeMesh
     {
         var faces = faceIds as ISet<int> ?? new HashSet<int>(faceIds);
         return BoundaryTriangles.Where(bt => faces.Contains(bt.FaceId)).ToList();
+    }
+
+    /// <summary>All distinct node indices lying on the given geometric edges.</summary>
+    public IReadOnlySet<int> GetEdgeNodes(IEnumerable<int> edgeIds)
+    {
+        var nodes = new HashSet<int>();
+        foreach (int id in edgeIds)
+            if (Edges.EdgeById(id) is { } edge)
+                foreach (int n in edge.NodeIds)
+                    nodes.Add(n);
+        return nodes;
+    }
+
+    /// <summary>The node indices of the given geometric vertices.</summary>
+    public IReadOnlySet<int> GetVertexNodes(IEnumerable<int> vertexIds)
+    {
+        var nodes = new HashSet<int>();
+        foreach (int id in vertexIds)
+            if (Edges.VertexById(id) is { } vertex)
+                nodes.Add(vertex.NodeId);
+        return nodes;
+    }
+
+    /// <summary>
+    /// Every CORNER node a boundary condition scope resolves to, across faces, edges and
+    /// vertices. The single seam every solver goes through, so a new scope kind is picked
+    /// up everywhere at once.
+    /// </summary>
+    public IReadOnlySet<int> GetScopeNodes(BoundaryCondition condition)
+    {
+        var nodes = new HashSet<int>(GetFaceNodes(condition.FaceIds));
+        if (condition.EdgeIds is { Count: > 0 } edgeIds) nodes.UnionWith(GetEdgeNodes(edgeIds));
+        if (condition.VertexIds is { Count: > 0 } vertexIds) nodes.UnionWith(GetVertexNodes(vertexIds));
+        return nodes;
+    }
+
+    /// <summary>
+    /// The mesh edges a boundary condition scope covers: the three edges of every face
+    /// triangle, plus the segments of every named geometric edge.
+    /// <para>
+    /// A quadratic (TET10) solve must also constrain the MID-EDGE node of each of these.
+    /// Pinning only corners leaves the mid-nodes free, which is spurious compliance at a
+    /// support and a leak at a Dirichlet boundary. A vertex contributes no segment — it is
+    /// a single node and has no mid-node to speak of.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<BoundaryEdgeSegment> GetScopeSegments(BoundaryCondition condition)
+    {
+        var segments = new List<BoundaryEdgeSegment>();
+        foreach (var t in GetFaceTriangles(condition.FaceIds))
+        {
+            segments.Add(BoundaryEdgeSegment.Sorted(t.A, t.B));
+            segments.Add(BoundaryEdgeSegment.Sorted(t.B, t.C));
+            segments.Add(BoundaryEdgeSegment.Sorted(t.C, t.A));
+        }
+        if (condition.EdgeIds is { Count: > 0 } edgeIds)
+            foreach (int id in edgeIds)
+                if (Edges.EdgeById(id) is { } edge)
+                    segments.AddRange(edge.Segments);
+        return segments;
     }
 }

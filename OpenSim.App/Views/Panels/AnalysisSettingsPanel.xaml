@@ -7,11 +7,11 @@
                   Visibility="{Binding Session.ShowsTransientSettings, Converter={StaticResource BoolToVis}}">
             <StackPanel>
                 <CheckBox x:Name="JouleTransientCheck" Content="Transient thermal leg (constant DC power)"
-                          IsChecked="{Binding Solve.JouleTransient}" Foreground="#C9C9D2" Margin="2,1,2,3"
+                          IsChecked="{Binding Solve.JouleTransient}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
                           Visibility="{Binding Session.IsJouleAnalysis, Converter={StaticResource BoolToVis}}"
                           ToolTip="Unchecked: steady-state temperature. Checked: time history of the heat-up at the DC solve's constant power."/>
                 <CheckBox x:Name="EnvironmentSteadyCheck" Content="Steady state (skip the time history)"
-                          IsChecked="{Binding Solve.EnvironmentSteadyState}" Foreground="#C9C9D2" Margin="2,1,2,3"
+                          IsChecked="{Binding Solve.EnvironmentSteadyState}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
                           Visibility="{Binding Session.IsEnvironmentThermalAnalysis, Converter={StaticResource BoolToVis}}"
                           ToolTip="Solves the final equilibrium directly. The same nonlinear convection/radiation coupling is iterated to convergence — it answers how hot the parts end up, not how they got there."/>
                 <UniformGrid Columns="2">
@@ -23,7 +23,7 @@
                     <TextBox x:Name="TransientTimeStepBox" Text="{Binding Solve.TransientTimeStep}"/>
                 </UniformGrid>
                 <TextBlock Text="Backward Euler — stable at any step size; smaller steps sharpen the early transient. Results appear as scrubbable time frames."
-                           TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </GroupBox>
 
@@ -36,7 +36,7 @@
                     <TextBox x:Name="ModeCountBox" Text="{Binding Solve.ModeCount}"/>
                 </UniformGrid>
                 <TextBlock Text="Needs at least one fixed support (a free body has zero-frequency rigid modes). Loads are ignored. Pick modes in the Results panel; the deform scale sets the displayed amplitude."
-                           TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </GroupBox>
 
@@ -53,7 +53,7 @@
                     <TextBox x:Name="AcPointCountBox" Text="{Binding Solve.AcPointCount}"/>
                 </UniformGrid>
                 <TextBlock Text="Electro-quasistatic (σ + jωε) — for dielectric/capacitive studies. Conductor+dielectric composites are rejected (same conditioning ban as DC); use the trace R + jωL estimate for copper. Scrub frequencies in the Results panel."
-                           TextWrapping="Wrap" FontSize="11" Foreground="#8A8A96" Margin="0,2,0,0"/>
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </GroupBox>
     </StackPanel>

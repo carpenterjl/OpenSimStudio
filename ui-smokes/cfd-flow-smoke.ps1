@@ -190,7 +190,7 @@ try {
     if ($null -eq $win) { "FAIL: window not found"; exit 1 }
 
     # ---------- 1. Workspace + assembly import ----------
-    "NAV:      $(Invoke-ById $win 'HomeThermalFlowTile')"
+    "NAV:      $(Invoke-ById $win 'HomeWorkspaceFlow')"
     Start-Sleep -Seconds 2
     "IMPORT:   $(Invoke-ById $win 'ImportAssemblyButton')"
     "DIALOG:   $(Drive-FileDialog $Step)"
@@ -269,7 +269,7 @@ try {
     Check ($null -ne $slider) "the timeline appeared for the frozen-flow transient"
 
     # ---------- 6. Mechanical carries no CFD control ----------
-    "NAV:      $(Invoke-ById $win 'WorkspaceMechanicalButton')"
+    "NAV:      $(Invoke-ById $win 'WorkspaceStructuralButton')"
     Start-Sleep -Seconds 2
     $cfd2 = Find-ById $win 'CfdCellSizeBox'
     Check ($null -eq $cfd2 -or $cfd2.Current.IsOffscreen) "no CFD controls in the Mechanical workspace"

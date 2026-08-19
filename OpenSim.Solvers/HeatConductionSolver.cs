@@ -60,11 +60,7 @@ public sealed class HeatConductionSolver : ISolver
                 throw new InvalidOperationException(
                     $"Boundary condition '{bc.Name}' ({bc.GetType().Name}) does not apply to a thermal solve. " +
                     "Use fixed temperatures, heat fluxes, or convection.");
-            if (bc.FaceIds.Count == 0)
-                throw new InvalidOperationException($"Boundary condition '{bc.Name}' has no faces assigned.");
-            if (input.Mesh.GetFaceNodes(bc.FaceIds).Count == 0)
-                throw new InvalidOperationException(
-                    $"Boundary condition '{bc.Name}' targets faces that do not exist on the mesh.");
+            BoundaryScope.Validate(bc, input.Mesh);
             if (bc is Convection { Coefficient: <= 0 } c)
                 throw new InvalidOperationException(
                     $"Convection '{c.Name}': the heat transfer coefficient must be positive.");
@@ -89,7 +85,7 @@ public sealed class HeatConductionSolver : ISolver
         var anchored = new HashSet<int>();
         foreach (var bc in input.BoundaryConditions)
             if (bc is FixedTemperature or Convection)
-                anchored.UnionWith(input.Mesh.GetFaceNodes(bc.FaceIds));
+                anchored.UnionWith(input.Mesh.GetScopeNodes(bc));
 
         // An environment that exchanges heat anchors every exterior face it is allowed to
         // act on — which is every face the user did not claim for themselves.
@@ -208,7 +204,7 @@ public sealed class HeatConductionSolver : ISolver
         var prescribed = new Dictionary<int, double>();
         foreach (var temperature in input.BoundaryConditions.OfType<FixedTemperature>())
         {
-            var nodes = mesh.GetFaceNodes(temperature.FaceIds);
+            var nodes = mesh.GetScopeNodes(temperature);
             foreach (int node in nodes)
                 prescribed[node] = temperature.Kelvin;
             log.Add($"Temperature '{temperature.Name}': {temperature.Kelvin:g4} K on {nodes.Count} nodes.");

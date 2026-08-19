@@ -13,15 +13,15 @@
             </UniformGrid>
 
             <TextBlock x:Name="FlowSummaryText" Text="{Binding Flow.FlowSummary}"
-                       Foreground="#9A9AA5" TextWrapping="Wrap" Margin="2,4"/>
+                       Foreground="{DynamicResource TextFaintBrush}" TextWrapping="Wrap" Margin="2,4"/>
 
             <StackPanel Visibility="{Binding Flow.HasFlowResult, Converter={StaticResource BoolToVis}}">
                 <CheckBox x:Name="FlowArrowsCheck" Content="Velocity arrows"
-                          IsChecked="{Binding Flow.ShowArrows}" Foreground="#C9C9D2" Margin="2,2"/>
+                          IsChecked="{Binding Flow.ShowArrows}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
                 <CheckBox x:Name="FlowStreamlinesCheck" Content="Streamlines"
-                          IsChecked="{Binding Flow.ShowStreamlines}" Foreground="#C9C9D2" Margin="2,2"/>
+                          IsChecked="{Binding Flow.ShowStreamlines}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
                 <CheckBox x:Name="FlowSliceCheck" Content="Speed slice"
-                          IsChecked="{Binding Flow.ShowSlice}" Foreground="#C9C9D2" Margin="2,2"/>
+                          IsChecked="{Binding Flow.ShowSlice}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
                 <UniformGrid Columns="2"
                              Visibility="{Binding Flow.ShowSlice, Converter={StaticResource BoolToVis}}">
                     <Label Content="Slice normal"/>

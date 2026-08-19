@@ -6,13 +6,13 @@
         <StackPanel>
             <UniformGrid Columns="2">
                 <Label Content="Box X [m]"/>
-                <TextBox Text="{Binding Geometry.BoxSizeX}"/>
+                <TextBox x:Name="BoxSizeXBox" Text="{Binding Geometry.BoxSizeX}"/>
                 <Label Content="Box Y [m]"/>
-                <TextBox Text="{Binding Geometry.BoxSizeY}"/>
+                <TextBox x:Name="BoxSizeYBox" Text="{Binding Geometry.BoxSizeY}"/>
                 <Label Content="Box Z [m]"/>
-                <TextBox Text="{Binding Geometry.BoxSizeZ}"/>
+                <TextBox x:Name="BoxSizeZBox" Text="{Binding Geometry.BoxSizeZ}"/>
             </UniformGrid>
-            <Button Content="Create box" Command="{Binding Geometry.CreateBoxCommand}"/>
+            <Button x:Name="CreateBoxButton" Content="Create box" Command="{Binding Geometry.CreateBoxCommand}"/>
             <UniformGrid Columns="2" Margin="0,8,0,0">
                 <Label Content="Radius [m]"/>
                 <TextBox Text="{Binding Geometry.CylinderRadius}"/>

@@ -45,10 +45,12 @@ public partial class App : Application
         services.AddSingleton<ILogService, LogService>();
         services.AddSingleton<ProjectSession>();
         services.AddSingleton<RecentProjectsService>();
+        services.AddSingleton<ThemeService>();
         services.AddSingleton<GeometryViewModel>();
         services.AddSingleton<MaterialsViewModel>();
         services.AddSingleton<MeshingViewModel>();
         services.AddSingleton<BoundaryConditionsViewModel>();
+        services.AddSingleton<ScopeSelectionViewModel>();
         services.AddSingleton<ResultsViewModel>();
         services.AddSingleton<ElectrodesViewModel>();
         services.AddSingleton<InductanceViewModel>();
@@ -58,6 +60,7 @@ public partial class App : Application
         services.AddSingleton<EnvironmentViewModel>();
         services.AddSingleton<FlowVisualizationViewModel>();
         services.AddSingleton<ColormapViewModel>();
+        services.AddSingleton<StudyRailViewModel>();
         services.AddSingleton<SceneViewModel>();
         services.AddSingleton<SolveViewModel>();
         services.AddSingleton<PcbViewModel>();
@@ -65,6 +68,10 @@ public partial class App : Application
         services.AddSingleton<MainWindow>();
 
         _services = services.BuildServiceProvider();
+
+        // Apply the persisted theme before the window materializes so the first
+        // frame already carries the right tokens (no dark->light flash).
+        _services.GetRequiredService<ThemeService>().ApplySaved();
 
         var window = _services.GetRequiredService<MainWindow>();
         MainWindow = window;

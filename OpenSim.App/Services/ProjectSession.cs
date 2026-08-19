@@ -138,19 +138,51 @@ public partial class ProjectSession : ObservableObject
     /// <summary>Faces picked in the viewport, targets for new boundary conditions.</summary>
     public ObservableCollection<int> SelectedFaces { get; } = new();
 
-    /// <summary>The analyses offered by the active workspace's analysis picker.</summary>
-    public IReadOnlyList<AnalysisOption> AnalysisOptions => AnalysisOption.ForWorkspace(ActiveWorkspace);
+    /// <summary>
+    /// Geometric edges ticked in the scope panel. Kept beside the faces rather than in one
+    /// tagged collection because a condition scopes to faces AND edges AND vertices at
+    /// once — they are three independent selections, not three modes of one.
+    /// </summary>
+    public ObservableCollection<int> SelectedEdges { get; } = new();
+
+    /// <summary>Geometric vertices ticked in the scope panel.</summary>
+    public ObservableCollection<int> SelectedVertices { get; } = new();
+
+    /// <summary>Drops every scope selection — face, edge and vertex.</summary>
+    public void ClearScopeSelection()
+    {
+        SelectedFaces.Clear();
+        SelectedEdges.Clear();
+        SelectedVertices.Clear();
+    }
+
+    /// <summary>
+    /// The analyses offered by the active workspace's analysis picker. ONE mutated
+    /// ObservableCollection on purpose: replacing the ItemsSource wholesale makes the
+    /// picker clear its selection through the item generator's DEFERRED reset, which
+    /// lands after any synchronous coerce-back and leaves the picker visually empty
+    /// (found live on the redesigned ribbon — a re-notify could not outrace it).
+    /// Mutating in place keeps the binding stable; the selection is re-asserted
+    /// explicitly after the repopulate below.
+    /// </summary>
+    public System.Collections.ObjectModel.ObservableCollection<AnalysisOption> AnalysisOptions { get; }
+        = new(AnalysisOption.ForWorkspace(WorkspaceKind.Structural));
 
     /// <summary>True while the start (project) screen covers the workspace UI.</summary>
     [ObservableProperty] private bool _isHomeActive = true;
 
-    [ObservableProperty] private WorkspaceKind _activeWorkspace = WorkspaceKind.Mechanical;
+    [ObservableProperty] private WorkspaceKind _activeWorkspace = WorkspaceKind.Structural;
 
     partial void OnActiveWorkspaceChanged(WorkspaceKind value)
     {
-        OnPropertyChanged(nameof(AnalysisOptions));
-        if (!AnalysisOptions.Contains(SelectedAnalysis))
-            SelectedAnalysis = AnalysisOptions[0];
+        var previous = SelectedAnalysis;
+        AnalysisOptions.Clear();   // pushes a transient null; tolerated while empty
+        foreach (var option in AnalysisOption.ForWorkspace(value))
+            AnalysisOptions.Add(option);
+        // Re-assert AFTER the items exist, from outside any binding transfer, so the
+        // picker reliably displays it.
+        SelectedAnalysis = AnalysisOptions.Contains(previous) ? previous : AnalysisOptions[0];
+        OnPropertyChanged(nameof(SelectedAnalysis));
     }
 
     [ObservableProperty]
@@ -168,10 +200,11 @@ public partial class ProjectSession : ObservableObject
 
     partial void OnSelectedAnalysisChanged(AnalysisOption value)
     {
-        // A workspace switch resets the picker's ItemsSource, and WPF momentarily pushes
-        // a null SelectedItem through the two-way binding. Coerce straight back so the
-        // selection is never observably null.
-        if (value is null)
+        // A workspace switch repopulates the picker's collection, and WPF momentarily
+        // pushes a null SelectedItem through the two-way binding. Coerce straight back
+        // once options exist (mid-repopulate the collection is briefly empty and
+        // OnActiveWorkspaceChanged re-asserts the selection itself).
+        if (value is null && AnalysisOptions.Count > 0)
             SelectedAnalysis = AnalysisOptions[0];
     }
 

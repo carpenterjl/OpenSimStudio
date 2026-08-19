@@ -213,7 +213,7 @@ try {
 
     # ---------- 1. Workspace + assembly import ----------
     # The app opens on the home screen, so the way in is the home TILE.
-    "NAV:    $(Invoke-ById $win 'HomeThermalFlowTile')"
+    "NAV:    $(Invoke-ById $win 'HomeWorkspaceFlow')"
     Start-Sleep -Seconds 2
     $baseline = @(Get-AppWindows $p.Id)
     "WINDOWS BEFORE: $($baseline.Count) — $($baseline -join ' ; ')"
@@ -377,7 +377,7 @@ try {
     "SHOW BODY 1: $(Set-Check $vis $true)"
 
     # ---------- 7. The other workspaces are untouched ----------
-    "NAV:      $(Invoke-ById $win 'WorkspaceMechanicalButton')"
+    "NAV:      $(Invoke-ById $win 'WorkspaceStructuralButton')"
     Start-Sleep -Seconds 2
     $t2 = Find-ById $win 'TimelineSlider'
     Check ($null -eq $t2 -or $t2.Current.IsOffscreen) "no timeline in the Mechanical workspace"

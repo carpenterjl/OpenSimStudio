@@ -185,6 +185,28 @@ public static class SceneBuilder
     }
 
     /// <summary>
+    /// Line segments of the named geometric edges, for highlighting a boundary-condition
+    /// scope. Drawn rather than picked: the edges carry no model of their own, so this is
+    /// display only and never hit-tested.
+    /// </summary>
+    public static Point3DCollection BuildEdgeHighlight(FeMesh mesh, IEnumerable<int> edgeIds)
+    {
+        var points = new Point3DCollection();
+        foreach (int id in edgeIds)
+        {
+            if (mesh.Edges.EdgeById(id) is not { } edge) continue;
+            foreach (var s in edge.Segments)
+            {
+                var pa = mesh.Nodes[s.A];
+                var pb = mesh.Nodes[s.B];
+                points.Add(new Point3D(pa.X, pa.Y, pa.Z));
+                points.Add(new Point3D(pb.X, pb.Y, pb.Z));
+            }
+        }
+        return points;
+    }
+
+    /// <summary>
     /// Result of scalar-field preparation: per-node scalars plus the data min/max.
     /// Element fields are volume-averaged to nodes for smooth contours.
     /// </summary>

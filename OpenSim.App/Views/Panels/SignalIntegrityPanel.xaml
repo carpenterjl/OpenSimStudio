@@ -1,0 +1,148 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.SignalIntegrityPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Moved verbatim out of ElectricalSetupPanel when SI became its own workspace (design screens 13-14); bindings go through the shell DataContext unchanged. -->
+    <GroupBox Header="Signal integrity (coupled lines)">
+        <StackPanel>
+            <!-- Step 7: signal integrity (SI track) — coupled microstrip wizard →
+                 RLGC → MTL network → S-params/Touchstone → PRBS transient + eye. -->
+            <TextBlock Text="N coupled microstrips on the substrate: per-unit-length RLGC (2D quasi-static BEM over the layered dielectric), the exact frequency-domain coupled-line network, S-parameter export, and PRBS eye diagrams with crosstalk. Thevenin driver + R∥C receiver."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <UniformGrid Columns="4">
+                <Label Content="Lines / driven"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="SiLineCountBox" Text="{Binding SignalIntegrity.LineCount}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="SiDrivenLineBox" Text="{Binding SignalIntegrity.DrivenLine}" Margin="2,0,0,0"
+                             ToolTip="1-based index of the driven (victim) line"/>
+                </UniformGrid>
+                <Label Content="Width / gap [mm]"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="SiWidthBox" Text="{Binding SignalIntegrity.TraceWidthMm}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="SiGapBox" Text="{Binding SignalIntegrity.TraceGapMm}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Substrate h [mm] / εr"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="SiHeightBox" Text="{Binding SignalIntegrity.SubstrateHeightMm}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="SiEpsRBox" Text="{Binding SignalIntegrity.SiEpsR}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="tanδ / copper [µm]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SignalIntegrity.SiTanD}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding SignalIntegrity.CopperThicknessUm}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Length [mm]"/>
+                <TextBox x:Name="SiLengthBox" Text="{Binding SignalIntegrity.LineLengthMm}"/>
+                <Label Content="Signal"/>
+                <ComboBox x:Name="SiSignalCombo"
+                          ItemsSource="{Binding SignalIntegrity.SignalTypes}"
+                          SelectedItem="{Binding SignalIntegrity.SignalType}"/>
+                <Label Content="Bit rate [Gb/s]"/>
+                <TextBox x:Name="SiBitRateBox" Text="{Binding SignalIntegrity.BitRateGbps}"/>
+                <Label Content="Rise [% UI] / amp [V]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SignalIntegrity.RiseFractionPercent}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding SignalIntegrity.AmplitudeVolts}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Driver Rs [Ω]"/>
+                <TextBox Text="{Binding SignalIntegrity.SourceOhms}"/>
+                <Label Content="Receiver R [Ω] / C [pF]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SignalIntegrity.LoadOhms}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding SignalIntegrity.LoadPicofarads}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <CheckBox x:Name="SiAggressorsCheck" Content="Aggressors on"
+                          IsChecked="{Binding SignalIntegrity.AggressorsEnabled}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
+                <CheckBox x:Name="SiProximityCheck" Content="Proximity R(f)"
+                          IsChecked="{Binding SignalIntegrity.ProximityEffect}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Frequency-dependent R(f) and internal L(f) from the 2D filament solve (current crowding + skin effect) — replaces max(R_dc, R_s√f)"/>
+            </UniformGrid>
+
+            <!-- Board extraction (Stage S6): pick 2+ parallel signal nets from the imported
+                 board; the coupled cross-section replaces the wizard geometry above. -->
+            <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0"
+                    Visibility="{Binding SignalIntegrity.HasBoard, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <TextBlock Text="From board nets (2+ parallel for coupling; 1+ for C to ground):"
+                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,2"/>
+                    <ListBox x:Name="SiBoardNetsList" MaxHeight="110"
+                             ItemsSource="{Binding SignalIntegrity.BoardNets}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             Background="{DynamicResource SurfaceContainerLowestBrush}" BorderBrush="{DynamicResource PanelBorderBrush}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}"
+                                          Foreground="{DynamicResource TextMutedBrush}"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <Button x:Name="SiBoardExtractButton" Content="Extract coupled section from nets"
+                            Command="{Binding SignalIntegrity.ExtractFromBoardNetsCommand}"
+                            Margin="0,3,0,0"/>
+                    <CheckBox Content="Use board geometry (uncheck for wizard)"
+                              IsChecked="{Binding SignalIntegrity.UseBoardNets}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"/>
+                    <TextBlock Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
+                               FontSize="11" Foreground="{DynamicResource SuccessBrush}" Margin="0,2,0,0"/>
+                    <Button x:Name="SiTraceCapButton" Content="Per-trace C to ground"
+                            Command="{Binding SignalIntegrity.ComputeTraceCapacitanceCommand}"
+                            Margin="0,3,0,0"
+                            ToolTip="Capacitance of each selected net to its reference plane: Σ C′(width, gap) × routed centerline length + parallel-plate pad terms, over the stackup dielectric (2D BEM). Bends and branches count; one net is enough."/>
+                    <TextBlock Text="{Binding SignalIntegrity.TraceCapResult}" TextWrapping="Wrap"
+                               FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                    <Button x:Name="SiDcNetsButton" Content="Evaluate DC nets (R, C, τ → CSV)"
+                            Command="{Binding SignalIntegrity.EvaluateDcNetsCommand}"
+                            Margin="0,3,0,0"
+                            ToolTip="Board-wide DC screen over EVERY net with 2+ pads: resistance between each pad pair (nodal network on the trace graph — branches and parallel paths solve exactly), the net's total C to the reference plane, and the lumped time constant τ = R·C, saved as a CSV report. Nets that can't be priced appear as typed note rows."/>
+                    <TextBlock Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
+                               FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- IBIS driver (Stage S11): a nonlinear behavioral buffer replaces the Thevenin
+                 driver for a single line; the eye then runs the nonlinear engine. -->
+            <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0">
+                <StackPanel>
+                    <UniformGrid Columns="3">
+                        <Button x:Name="SiIbisLoadButton" Content="IBIS model…"
+                                Command="{Binding SignalIntegrity.LoadIbisCommand}"
+                                ToolTip="Load an .ibs behavioral buffer and drive the eye with its nonlinear V-I curves (single line)"/>
+                        <ComboBox x:Name="SiIbisModelCombo" Margin="2,0"
+                                  ItemsSource="{Binding SignalIntegrity.IbisModelNames}"
+                                  SelectedItem="{Binding SignalIntegrity.SelectedIbisModel}"/>
+                        <ComboBox x:Name="SiIbisCornerCombo"
+                                  ItemsSource="{Binding SignalIntegrity.IbisCorners}"
+                                  SelectedItem="{Binding SignalIntegrity.IbisCorner}"/>
+                    </UniformGrid>
+                    <CheckBox x:Name="SiUseIbisCheck" Content="Use IBIS driver (nonlinear)"
+                              IsChecked="{Binding SignalIntegrity.UseIbisDriver}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"/>
+                    <TextBlock Text="{Binding SignalIntegrity.IbisStatus}" TextWrapping="Wrap"
+                               FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,1,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <UniformGrid Columns="3" Margin="0,4,0,0">
+                <Button x:Name="SiExtractButton" Content="Extract RLGC"
+                        Command="{Binding SignalIntegrity.ExtractRlgcCommand}"/>
+                <Button x:Name="SiSparamButton" Content="S-params (Touchstone)"
+                        Command="{Binding SignalIntegrity.ComputeSParametersCommand}"/>
+                <Button x:Name="SiEyeButton" Content="Transient + eye"
+                        Command="{Binding SignalIntegrity.RunEyeDiagramCommand}"/>
+            </UniformGrid>
+            <TextBlock Text="{Binding SignalIntegrity.RlgcResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding SignalIntegrity.SParamResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding SignalIntegrity.EyeResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+            <Image Source="{Binding SignalIntegrity.EyeImage}" MaxHeight="180" Margin="0,4,0,0"
+                   Stretch="Uniform" RenderOptions.BitmapScalingMode="Linear"
+                   AutomationProperties.AutomationId="SiEyeImage"/>
+            <TextBlock Text="{Binding SignalIntegrity.SiAssumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

@@ -36,11 +36,7 @@ public sealed class ModalAnalysisSolver : ISolver
                 throw new InvalidOperationException(
                     $"Boundary condition '{bc.Name}' ({bc.GetType().Name}) does not apply to a modal solve. " +
                     "Use fixed supports (loads are ignored — they cannot affect natural frequencies).");
-            if (bc.FaceIds.Count == 0)
-                throw new InvalidOperationException($"Boundary condition '{bc.Name}' has no faces assigned.");
-            if (input.Mesh.GetFaceNodes(bc.FaceIds).Count == 0)
-                throw new InvalidOperationException(
-                    $"Boundary condition '{bc.Name}' targets faces that do not exist on the mesh.");
+            BoundaryScope.Validate(bc, input.Mesh);
         }
 
         if (!input.BoundaryConditions.OfType<FixedSupport>().Any())
@@ -148,17 +144,13 @@ public sealed class ModalAnalysisSolver : ISolver
         var prescribed = new Dictionary<int, double>();
         foreach (var support in input.BoundaryConditions.OfType<FixedSupport>())
         {
-            var nodes = new HashSet<int>(mesh.GetFaceNodes(support.FaceIds));
+            var nodes = new HashSet<int>(mesh.GetScopeNodes(support));
             if (edgeMid is not null)
             {
-                // Pinning only the corners of a quadratic face leaves its mid-edge
+                // Pinning only the corners of a quadratic scope leaves its mid-edge
                 // nodes free — spurious compliance at the support. Pin them too.
-                foreach (var t in mesh.GetFaceTriangles(support.FaceIds))
-                {
-                    nodes.Add(edgeMid[Edge(t.A, t.B)]);
-                    nodes.Add(edgeMid[Edge(t.B, t.C)]);
-                    nodes.Add(edgeMid[Edge(t.C, t.A)]);
-                }
+                foreach (var segment in mesh.GetScopeSegments(support))
+                    nodes.Add(edgeMid[Edge(segment.A, segment.B)]);
             }
             foreach (int node in nodes)
             {

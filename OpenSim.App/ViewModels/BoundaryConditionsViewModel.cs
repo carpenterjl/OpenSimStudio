@@ -57,25 +57,27 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [RelayCommand]
     private void ClearSelection()
     {
-        _session.SelectedFaces.Clear();
+        _session.ClearScopeSelection();
         _session.RaiseHighlightsInvalidated();
     }
 
     [RelayCommand]
     private void AddFixedSupport()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: true)) return;
         AddCondition(new FixedSupport
         {
             Name = $"Fixed support {BoundaryConditions.Count + 1}",
-            FaceIds = _session.SelectedFaces.ToList()
+            FaceIds = _session.SelectedFaces.ToList(),
+            EdgeIds = SelectedEdgesOrNull(),
+            VertexIds = SelectedVerticesOrNull()
         });
     }
 
     [RelayCommand]
     private void AddForce()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: false)) return;
         AddCondition(new ForceLoad
         {
             Name = $"Force {BoundaryConditions.Count + 1}",
@@ -87,7 +89,7 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [RelayCommand]
     private void AddPressure()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: false)) return;
         AddCondition(new PressureLoad
         {
             Name = $"Pressure {BoundaryConditions.Count + 1}",
@@ -99,11 +101,13 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [RelayCommand]
     private void AddVoltage()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: true)) return;
         AddCondition(new VoltagePotential
         {
             Name = $"Voltage {BoundaryConditions.Count + 1}",
             FaceIds = _session.SelectedFaces.ToList(),
+            EdgeIds = SelectedEdgesOrNull(),
+            VertexIds = SelectedVerticesOrNull(),
             Volts = VoltageValue
         });
     }
@@ -111,7 +115,7 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [RelayCommand]
     private void AddCurrent()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: false)) return;
         AddCondition(new CurrentFlow
         {
             Name = $"Current {BoundaryConditions.Count + 1}",
@@ -123,11 +127,13 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [RelayCommand]
     private void AddTemperature()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: true)) return;
         AddCondition(new FixedTemperature
         {
             Name = $"Temperature {BoundaryConditions.Count + 1}",
             FaceIds = _session.SelectedFaces.ToList(),
+            EdgeIds = SelectedEdgesOrNull(),
+            VertexIds = SelectedVerticesOrNull(),
             Kelvin = TemperatureValue
         });
     }
@@ -135,7 +141,7 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [RelayCommand]
     private void AddHeatFlux()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: false)) return;
         AddCondition(new HeatFlux
         {
             Name = $"Heat flow {BoundaryConditions.Count + 1}",
@@ -147,7 +153,7 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [RelayCommand]
     private void AddConvection()
     {
-        if (!ValidateFaceSelection()) return;
+        if (!ValidateScopeSelection(allowZeroArea: false)) return;
         AddCondition(new Convection
         {
             Name = $"Convection {BoundaryConditions.Count + 1}",
@@ -166,22 +172,46 @@ public partial class BoundaryConditionsViewModel : ObservableObject
         _log.Append($"Removed '{condition.Name}'.");
     }
 
-    private bool ValidateFaceSelection()
+    /// <summary>
+    /// A scope must name something, and a DISTRIBUTED quantity must name something with
+    /// area. A total force or heat flow is spread area-weighted over its scope, and the
+    /// area of a curve or a point is zero — so an edge selection is refused here rather
+    /// than reaching the solver, which refuses it again with the same rule.
+    /// </summary>
+    private bool ValidateScopeSelection(bool allowZeroArea)
     {
-        if (_session.SelectedFaces.Count == 0)
+        bool hasZeroArea = _session.SelectedEdges.Count > 0 || _session.SelectedVertices.Count > 0;
+        if (_session.SelectedFaces.Count == 0 && !hasZeroArea)
         {
-            _log.Append("Select one or more faces in the 3D view first (left-click).");
+            _log.Append("Select one or more faces in the 3D view (left-click), " +
+                        "or tick edges or vertices in the Scope panel.");
             return false;
+        }
+        if (hasZeroArea && !allowZeroArea)
+        {
+            if (_session.SelectedFaces.Count == 0)
+            {
+                _log.Append("This condition distributes a total quantity over its scope, so it needs a " +
+                            "face — the area of an edge or a vertex is zero. Select a face instead.");
+                return false;
+            }
+            _log.Append("Note: edges and vertices carry no area, so this condition uses the selected faces only.");
         }
         return true;
     }
+
+    private IReadOnlyList<int>? SelectedEdgesOrNull() =>
+        _session.SelectedEdges.Count > 0 ? _session.SelectedEdges.ToList() : null;
+
+    private IReadOnlyList<int>? SelectedVerticesOrNull() =>
+        _session.SelectedVertices.Count > 0 ? _session.SelectedVertices.ToList() : null;
 
     private void AddCondition(BoundaryCondition condition)
     {
         BoundaryConditions.Add(condition);
         _session.Body.BoundaryConditions.Add(condition);
-        _log.Append($"Added {condition.GetType().Name} '{condition.Name}' on faces [{string.Join(", ", condition.FaceIds)}].");
-        _session.SelectedFaces.Clear();
+        _log.Append($"Added {condition.GetType().Name} '{condition.Name}' on {condition.ScopeSummary}.");
+        _session.ClearScopeSelection();
         _session.RaiseHighlightsInvalidated();
     }
 
@@ -193,6 +223,6 @@ public partial class BoundaryConditionsViewModel : ObservableObject
         BoundaryConditions.Clear();
         foreach (var bc in _session.Body.BoundaryConditions)
             BoundaryConditions.Add(bc);
-        _session.SelectedFaces.Clear();
+        _session.ClearScopeSelection();
     }
 }

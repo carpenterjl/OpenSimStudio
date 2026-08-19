@@ -5,7 +5,7 @@
              xmlns:panels="clr-namespace:OpenSim.App.Views.Panels">
     <Grid>
         <helix:HelixViewport3D x:Name="Viewport"
-                               Background="#26262E"
+                               Background="{DynamicResource PanelBgRaisedBrush}"
                                ShowCoordinateSystem="True"
                                ShowViewCube="True"
                                Orthographic="True"
@@ -45,6 +45,9 @@
             <helix:LinesVisual3D x:Name="BoardOutlineLines" Color="#7BA05B" Thickness="1.2"/>
             <helix:LinesVisual3D x:Name="SelectedNetLines" Color="#FFB000" Thickness="2.0"/>
             <helix:LinesVisual3D x:Name="MeshEdgeLines" Color="#66D9EF" Thickness="0.6"/>
+            <!-- Selected geometric edges: a boundary-condition scope that owns no face model,
+                 so it is drawn rather than recoloured. Display only, never hit-tested. -->
+            <helix:LinesVisual3D x:Name="SelectedEdgeLines" Color="Orange" Thickness="3"/>
             <helix:LinesVisual3D x:Name="ContourLineVisual" Color="#101014" Thickness="1.0"/>
             <!-- RF / antenna overlays: free-space field visuals from the Antenna panel. -->
             <ModelVisual3D Content="{Binding Antenna.VectorFieldModel}"/>
@@ -60,7 +63,7 @@
 
         <!-- Legend overlay -->
         <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,12,12"
-                Background="#CC1E1E24" CornerRadius="4" Padding="8"
+                Background="{DynamicResource ScrimBrush}" CornerRadius="4" Padding="8"
                 x:Name="LegendPanel" Visibility="Collapsed">
             <StackPanel Width="160">
                 <TextBlock Text="{Binding Results.SelectedField.Name}" FontWeight="Bold" Margin="0,0,0,4"/>
@@ -81,8 +84,8 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Width="44">
-                                <Rectangle Width="1" Height="3" Fill="#8A8A96" HorizontalAlignment="Center"/>
-                                <TextBlock Text="{Binding Label}" FontSize="9" Foreground="#8A8A96"
+                                <Rectangle Width="1" Height="3" Fill="{DynamicResource TextFaintBrush}" HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding Label}" FontSize="9" Foreground="{DynamicResource TextFaintBrush}"
                                            TextAlignment="Center"/>
                             </StackPanel>
                         </DataTemplate>
@@ -111,7 +114,7 @@
                     <Style.Triggers>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding Session.ActiveWorkspace}" Value="ThermalFlow"/>
+                                <Condition Binding="{Binding Session.ActiveWorkspace}" Value="Flow"/>
                                 <Condition Binding="{Binding Results.HasTimeline}" Value="True"/>
                             </MultiDataTrigger.Conditions>
                             <Setter Property="Visibility" Value="Visible"/>
@@ -124,7 +127,7 @@
         <!-- Field-overlay legend (antenna/SI): same style, its own pipeline — the FE
              legend's title and visibility belong to the Results VM's selected field. -->
         <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,12,0"
-                Background="#CC1E1E24" CornerRadius="4" Padding="8"
+                Background="{DynamicResource ScrimBrush}" CornerRadius="4" Padding="8"
                 x:Name="FieldOverlayLegendPanel" Visibility="Collapsed"
                 AutomationProperties.AutomationId="FieldOverlayLegend">
             <StackPanel Width="160">

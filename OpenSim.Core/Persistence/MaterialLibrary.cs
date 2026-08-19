@@ -158,6 +158,7 @@ public sealed class MaterialLibrary
             Name = "Structural steel", YoungsModulus = 200e9, PoissonRatio = 0.30, Density = 7850,
             ThermalConductivity = 45, SpecificHeat = 480, ElectricalConductivity = 1.45e6,
             Emissivity = 0.80,
+            YieldStrength = 250e6, UltimateTensileStrength = 460e6,
             Color = "#8C9BAB", IsBuiltIn = true
         },
         new Material
@@ -166,6 +167,7 @@ public sealed class MaterialLibrary
             Name = "Stainless steel 304", YoungsModulus = 193e9, PoissonRatio = 0.29, Density = 8000,
             ThermalConductivity = 16.2, SpecificHeat = 500, ElectricalConductivity = 1.39e6,
             Emissivity = 0.30,
+            YieldStrength = 215e6, UltimateTensileStrength = 505e6,
             Color = "#AEB6BD", IsBuiltIn = true
         },
         new Material
@@ -173,6 +175,7 @@ public sealed class MaterialLibrary
             Name = "Aluminum 6061-T6", YoungsModulus = 68.9e9, PoissonRatio = 0.33, Density = 2700,
             ThermalConductivity = 167, SpecificHeat = 896, ElectricalConductivity = 2.5e7,
             Emissivity = 0.10,
+            YieldStrength = 276e6, UltimateTensileStrength = 310e6,
             Color = "#C8CDD2", IsBuiltIn = true
         },
         new Material
@@ -180,6 +183,7 @@ public sealed class MaterialLibrary
             Name = "Aluminum 7075-T6", YoungsModulus = 71.7e9, PoissonRatio = 0.33, Density = 2810,
             ThermalConductivity = 130, SpecificHeat = 960, ElectricalConductivity = 1.9e7,
             Emissivity = 0.10,
+            YieldStrength = 503e6, UltimateTensileStrength = 572e6,
             Color = "#BAC4CE", IsBuiltIn = true
         },
         new Material
@@ -187,6 +191,7 @@ public sealed class MaterialLibrary
             Name = "Copper (annealed)", YoungsModulus = 110e9, PoissonRatio = 0.34, Density = 8960,
             ThermalConductivity = 401, SpecificHeat = 385, ElectricalConductivity = 5.96e7,
             Emissivity = 0.15,
+            YieldStrength = 70e6, UltimateTensileStrength = 220e6,
             Color = "#C87533", IsBuiltIn = true
         },
         new Material
@@ -194,6 +199,7 @@ public sealed class MaterialLibrary
             Name = "Brass (C26000)", YoungsModulus = 110e9, PoissonRatio = 0.31, Density = 8530,
             ThermalConductivity = 120, SpecificHeat = 380, ElectricalConductivity = 1.6e7,
             Emissivity = 0.10,
+            YieldStrength = 125e6, UltimateTensileStrength = 350e6,
             Color = "#C9A44C", IsBuiltIn = true
         },
         new Material
@@ -202,6 +208,7 @@ public sealed class MaterialLibrary
             Name = "Titanium Ti-6Al-4V", YoungsModulus = 113.8e9, PoissonRatio = 0.342, Density = 4430,
             ThermalConductivity = 6.7, SpecificHeat = 526, ElectricalConductivity = 5.8e5,
             Emissivity = 0.30,
+            YieldStrength = 880e6, UltimateTensileStrength = 950e6,
             Color = "#9AA0A8", IsBuiltIn = true
         },
         new Material
@@ -223,6 +230,7 @@ public sealed class MaterialLibrary
             Name = "Nickel (pure)", YoungsModulus = 200e9, PoissonRatio = 0.31, Density = 8908,
             ThermalConductivity = 90.9, SpecificHeat = 444, ElectricalConductivity = 1.43e7,
             Emissivity = 0.12,
+            YieldStrength = 148e6, UltimateTensileStrength = 462e6,
             Color = "#B8B8A8", IsBuiltIn = true
         },
         new Material
@@ -247,6 +255,7 @@ public sealed class MaterialLibrary
             Name = "ABS", YoungsModulus = 2.3e9, PoissonRatio = 0.35, Density = 1040,
             ThermalConductivity = 0.17, SpecificHeat = 1400, ElectricalConductivity = 1e-16,
             Emissivity = 0.90,
+            YieldStrength = 27.44e6, UltimateTensileStrength = 36.26e6,
             Color = "#D9822B", IsBuiltIn = true
         },
         new Material
@@ -254,6 +263,7 @@ public sealed class MaterialLibrary
             Name = "Polycarbonate", YoungsModulus = 2.38e9, PoissonRatio = 0.37, Density = 1200,
             ThermalConductivity = 0.20, SpecificHeat = 1250, ElectricalConductivity = 1e-16,
             RelativePermittivity = 2.9, Emissivity = 0.90,
+            YieldStrength = 62e6, UltimateTensileStrength = 66e6,
             Color = "#8FD0E8", IsBuiltIn = true
         },
         new Material
@@ -268,6 +278,7 @@ public sealed class MaterialLibrary
             Name = "PTFE", YoungsModulus = 0.50e9, PoissonRatio = 0.46, Density = 2200,
             ThermalConductivity = 0.25, SpecificHeat = 1000, ElectricalConductivity = 1e-16,
             RelativePermittivity = 2.1, Emissivity = 0.92,
+            YieldStrength = 9e6, UltimateTensileStrength = 25e6,
             Color = "#F4F4F4", IsBuiltIn = true
         },
 

@@ -41,6 +41,23 @@ public sealed record Material
     /// </summary>
     public double? Emissivity { get; init; }
 
+    /// <summary>
+    /// Yield strength [Pa] — the onset of permanent deformation, and the denominator of a
+    /// safety factor. Null means "not characterised", which is honest for a brittle material
+    /// that has no yield point at all (alumina, glass, silicon) as well as for one whose
+    /// value was simply never entered; a safety factor is then not offered rather than
+    /// invented. Values are strongly temper- and process-dependent, so a library number is
+    /// a typical value, not a specification.
+    /// </summary>
+    public double? YieldStrength { get; init; }
+
+    /// <summary>
+    /// Ultimate tensile strength [Pa] — the stress at fracture. Null means the same as for
+    /// <see cref="YieldStrength"/>. This is the threshold a "stress beyond UTS" view paints
+    /// against, which is why it is a material property rather than a display setting.
+    /// </summary>
+    public double? UltimateTensileStrength { get; init; }
+
     /// <summary>Display colour as #RRGGBB.</summary>
     public string Color { get; init; } = "#B0B0B0";
 
@@ -106,5 +123,15 @@ public sealed record Material
             throw new InvalidOperationException($"Material '{Name}': Poisson's ratio must lie in (-1, 0.5).");
         if (Density <= 0)
             throw new InvalidOperationException($"Material '{Name}': density must be positive.");
+        if (YieldStrength is <= 0)
+            throw new InvalidOperationException($"Material '{Name}': yield strength must be positive.");
+        if (UltimateTensileStrength is <= 0)
+            throw new InvalidOperationException(
+                $"Material '{Name}': ultimate tensile strength must be positive.");
+        // Ordering is physics, not preference: a material cannot fracture before it yields.
+        if (YieldStrength is { } yield && UltimateTensileStrength is { } ultimate && yield > ultimate)
+            throw new InvalidOperationException(
+                $"Material '{Name}': yield strength {yield:g4} Pa exceeds the ultimate tensile " +
+                $"strength {ultimate:g4} Pa.");
     }
 }

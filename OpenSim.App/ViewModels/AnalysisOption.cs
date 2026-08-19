@@ -20,21 +20,39 @@ public enum AnalysisType
     /// (first-party laminar CFD on a voxel grid) and its wall heat flux drives the solid
     /// conduction solve — Stage 2 of the environment track, replacing the Stage 1
     /// correlations with a resolved flow field.</summary>
-    ConjugateHeatFlow
+    ConjugateHeatFlow,
+
+    /// <summary>Antenna method-of-moments study (Zin sweep, near/far field). A UI-dispatch
+    /// kind: the ribbon routes Solve to the antenna view model rather than an ISolver.</summary>
+    Antenna,
+
+    /// <summary>Coupled-line signal integrity (RLGC, S-parameters, PRBS transient + eye).
+    /// A UI-dispatch kind like <see cref="Antenna"/>.</summary>
+    SignalIntegrity
 }
 
-/// <summary>The task-focused workspaces the main window can show.</summary>
+/// <summary>The task-focused workspaces the main window can show — one per physics,
+/// matching the design's six-workspace nav rail.</summary>
 public enum WorkspaceKind
 {
-    /// <summary>Generic geometry (primitives, STL): structural + thermal analyses.</summary>
-    Mechanical,
+    /// <summary>Generic geometry (primitives, STL, STEP): static + modal analysis.</summary>
+    Structural,
 
-    /// <summary>PCB workflow + DC electrical + Joule heating (also on generic geometry).</summary>
+    /// <summary>Steady-state and transient heat conduction on a single part.</summary>
+    Thermal,
+
+    /// <summary>PCB workflow + DC/AC electrical + Joule heating (also on generic geometry).</summary>
     Electrical,
 
-    /// <summary>Multi-body assemblies in an environment: transient heat flow, and (later)
-    /// the airflow that drives it.</summary>
-    ThermalFlow
+    /// <summary>Antenna simulation: thin-wire and RWG surface method of moments.</summary>
+    Rf,
+
+    /// <summary>Coupled-line signal integrity: RLGC, S-parameters, eyes, board nets.</summary>
+    SignalIntegrity,
+
+    /// <summary>Multi-body assemblies in an environment: transient heat flow and the
+    /// computed airflow that drives it.</summary>
+    Flow
 }
 
 /// <summary>A display entry for the analysis-type selector.</summary>
@@ -50,7 +68,9 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
         new AnalysisOption("Modal (natural frequencies)", AnalysisType.Modal),
         new AnalysisOption("Electrical (AC sweep — quasistatic)", AnalysisType.AcElectrical),
         new AnalysisOption("Heat flow in an environment", AnalysisType.EnvironmentThermal),
-        new AnalysisOption("Heat flow with computed airflow (CFD)", AnalysisType.ConjugateHeatFlow)
+        new AnalysisOption("Heat flow with computed airflow (CFD)", AnalysisType.ConjugateHeatFlow),
+        new AnalysisOption("Antenna (Zin sweep)", AnalysisType.Antenna),
+        new AnalysisOption("Transient + eye (PRBS)", AnalysisType.SignalIntegrity)
     };
 
     private static AnalysisOption Of(AnalysisType kind) => All.First(o => o.Kind == kind);
@@ -61,16 +81,21 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
     public static IReadOnlyList<AnalysisOption> ForWorkspace(WorkspaceKind workspace) =>
         workspace switch
         {
-            WorkspaceKind.Mechanical => new[]
+            WorkspaceKind.Structural => new[]
             {
-                Of(AnalysisType.Static), Of(AnalysisType.Modal),
+                Of(AnalysisType.Static), Of(AnalysisType.Modal)
+            },
+            WorkspaceKind.Thermal => new[]
+            {
                 Of(AnalysisType.Thermal), Of(AnalysisType.TransientThermal)
             },
             WorkspaceKind.Electrical => new[]
             {
                 Of(AnalysisType.Electrical), Of(AnalysisType.AcElectrical), Of(AnalysisType.JouleCoupled)
             },
-            WorkspaceKind.ThermalFlow => new[]
+            WorkspaceKind.Rf => new[] { Of(AnalysisType.Antenna) },
+            WorkspaceKind.SignalIntegrity => new[] { Of(AnalysisType.SignalIntegrity) },
+            WorkspaceKind.Flow => new[]
             {
                 Of(AnalysisType.EnvironmentThermal), Of(AnalysisType.ConjugateHeatFlow)
             },
@@ -83,7 +108,10 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
     {
         AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical
             => WorkspaceKind.Electrical,
-        AnalysisType.EnvironmentThermal or AnalysisType.ConjugateHeatFlow => WorkspaceKind.ThermalFlow,
-        _ => WorkspaceKind.Mechanical
+        AnalysisType.Thermal or AnalysisType.TransientThermal => WorkspaceKind.Thermal,
+        AnalysisType.Antenna => WorkspaceKind.Rf,
+        AnalysisType.SignalIntegrity => WorkspaceKind.SignalIntegrity,
+        AnalysisType.EnvironmentThermal or AnalysisType.ConjugateHeatFlow => WorkspaceKind.Flow,
+        _ => WorkspaceKind.Structural
     };
 }

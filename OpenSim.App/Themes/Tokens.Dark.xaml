@@ -1,0 +1,72 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- OpenSim Studio design tokens, DARK theme.
+         Source of truth: the Claude Design handoff (OpenSim Studio UI.dc.html [data-theme]
+         block). Semantic aliases at the bottom are what controls/styles reference; the
+         raw ramp is kept so new aliases stay honest to the design system. -->
+
+    <!-- Surface ramp -->
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#0B1326"/>
+    <SolidColorBrush x:Key="SurfaceBrightBrush" Color="#31394D"/>
+    <SolidColorBrush x:Key="SurfaceContainerLowestBrush" Color="#060D20"/>
+    <SolidColorBrush x:Key="SurfaceContainerLowBrush" Color="#131B2E"/>
+    <SolidColorBrush x:Key="SurfaceContainerBrush" Color="#171F33"/>
+    <SolidColorBrush x:Key="SurfaceContainerHighBrush" Color="#222A3E"/>
+    <SolidColorBrush x:Key="SurfaceContainerHighestBrush" Color="#2D3449"/>
+
+    <!-- On-surface / outline -->
+    <SolidColorBrush x:Key="OnSurfaceBrush" Color="#DBE2FD"/>
+    <SolidColorBrush x:Key="OnSurfaceVariantBrush" Color="#BCC9CD"/>
+    <SolidColorBrush x:Key="HeadingBrush" Color="#E2E8F0"/>
+    <SolidColorBrush x:Key="OutlineBrush" Color="#869397"/>
+    <SolidColorBrush x:Key="OutlineVariantBrush" Color="#3D494C"/>
+
+    <!-- Accent (primary = cyan) -->
+    <SolidColorBrush x:Key="PrimaryBrush" Color="#4CD7F6"/>
+    <SolidColorBrush x:Key="OnPrimaryBrush" Color="#003640"/>
+    <SolidColorBrush x:Key="PrimaryContainerBrush" Color="#06B6D4"/>
+    <SolidColorBrush x:Key="PrimaryFixedBrush" Color="#ACEDFF"/>
+    <SolidColorBrush x:Key="SecondaryBrush" Color="#C0C1FF"/>
+    <SolidColorBrush x:Key="SecondaryContainerBrush" Color="#424479"/>
+    <SolidColorBrush x:Key="TertiaryBrush" Color="#4EDEA3"/>
+    <SolidColorBrush x:Key="TertiaryContainerBrush" Color="#1CBD85"/>
+
+    <!-- Status -->
+    <SolidColorBrush x:Key="ErrorBrush" Color="#FFB4AB"/>
+    <SolidColorBrush x:Key="ErrorContainerBrush" Color="#93000A"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="#E0B341"/>
+
+    <!-- Data-kind palette (net layers, geometry-source icons, workspace tints) -->
+    <SolidColorBrush x:Key="KindFunctionBrush" Color="#7AA2F7"/>
+    <SolidColorBrush x:Key="KindTypeBrush" Color="#C39AF0"/>
+    <SolidColorBrush x:Key="KindConstantBrush" Color="#E0AF68"/>
+    <SolidColorBrush x:Key="KindVariableBrush" Color="#7DCFFF"/>
+    <SolidColorBrush x:Key="KindModuleBrush" Color="#9ECE6A"/>
+    <SolidColorBrush x:Key="KindMacroBrush" Color="#F7768E"/>
+    <SolidColorBrush x:Key="KindInterfaceBrush" Color="#2AC3A2"/>
+
+    <!-- Semantic aliases (what styles bind) -->
+    <SolidColorBrush x:Key="AppBgBrush" Color="#0B1326"/>
+    <SolidColorBrush x:Key="PanelBgBrush" Color="#131B2E"/>
+    <SolidColorBrush x:Key="PanelBgRaisedBrush" Color="#171F33"/>
+    <SolidColorBrush x:Key="PanelBgHoverBrush" Color="#222A3E"/>
+    <SolidColorBrush x:Key="PanelBorderBrush" Color="#3D494C"/>
+    <SolidColorBrush x:Key="RailBgBrush" Color="#060D20"/>
+    <SolidColorBrush x:Key="TextHeadingBrush" Color="#E2E8F0"/>
+    <SolidColorBrush x:Key="TextBodyBrush" Color="#DBE2FD"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="#BCC9CD"/>
+    <SolidColorBrush x:Key="TextFaintBrush" Color="#869397"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="#4CD7F6"/>
+    <SolidColorBrush x:Key="AccentSolidBrush" Color="#06B6D4"/>
+    <SolidColorBrush x:Key="AccentOnBrush" Color="#003640"/>
+    <SolidColorBrush x:Key="AccentGlowBrush" Color="#2E4CD7F6"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#4EDEA3"/>
+    <SolidColorBrush x:Key="DangerBrush" Color="#FFB4AB"/>
+    <SolidColorBrush x:Key="SelectionBgBrush" Color="#1B3A4A"/>
+    <SolidColorBrush x:Key="ScrimBrush" Color="#99060D20"/>
+
+    <Color x:Key="ShadowColor">#000000</Color>
+    <system:Double xmlns:system="clr-namespace:System;assembly=mscorlib"
+                   x:Key="ShadowOpacity">0.22</system:Double>
+</ResourceDictionary>

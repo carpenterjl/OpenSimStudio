@@ -4,8 +4,8 @@ using OpenSim.Core.Numerics;
 namespace OpenSim.Core.Model;
 
 /// <summary>
-/// A boundary condition applied to one or more geometric faces of a body.
-/// Solvers resolve the face ids to mesh nodes/triangles via <see cref="FeMesh"/>.
+/// A boundary condition applied to one or more geometric faces, edges or vertices of a
+/// body. Solvers resolve the scope to mesh nodes/triangles via <see cref="FeMesh"/>.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(FixedSupport), "fixedSupport")]
@@ -22,6 +22,46 @@ public abstract record BoundaryCondition
 
     /// <summary>Geometric face ids this condition applies to.</summary>
     public required IReadOnlyList<int> FaceIds { get; init; }
+
+    /// <summary>
+    /// Geometric edge ids this condition additionally applies to (see
+    /// <see cref="BoundaryEdgeSet"/>). Null — never an empty list from an old file —
+    /// means face scoping only, so every existing project deserializes unchanged and
+    /// every existing solver path is bitwise untouched.
+    /// </summary>
+    public IReadOnlyList<int>? EdgeIds { get; init; }
+
+    /// <summary>
+    /// Geometric vertex ids this condition additionally applies to. Null means none, for
+    /// the same back-compatibility reason as <see cref="EdgeIds"/>.
+    /// </summary>
+    public IReadOnlyList<int>? VertexIds { get; init; }
+
+    /// <summary>Whether this condition names any edge or vertex — a zero-AREA scope.</summary>
+    [JsonIgnore]
+    public bool HasZeroAreaScope => EdgeIds is { Count: > 0 } || VertexIds is { Count: > 0 };
+
+    /// <summary>Whether this condition names nothing at all.</summary>
+    [JsonIgnore]
+    public bool IsEmptyScope =>
+        FaceIds.Count == 0 && EdgeIds is not { Count: > 0 } && VertexIds is not { Count: > 0 };
+
+    /// <summary>
+    /// A human-readable summary of the scope, for solver logs and the conditions list.
+    /// Derived, so it is never persisted — the ids are the record.
+    /// </summary>
+    [JsonIgnore]
+    public string ScopeSummary
+    {
+        get
+        {
+            var parts = new List<string>(3);
+            if (FaceIds.Count > 0) parts.Add($"{FaceIds.Count} face(s)");
+            if (EdgeIds is { Count: > 0 } e) parts.Add($"{e.Count} edge(s)");
+            if (VertexIds is { Count: > 0 } v) parts.Add($"{v.Count} vertex/vertices");
+            return parts.Count == 0 ? "nothing" : string.Join(" + ", parts);
+        }
+    }
 }
 
 /// <summary>All translational degrees of freedom fixed on the selected faces.</summary>

@@ -41,7 +41,34 @@ public partial class Viewport3DView : UserControl
         viewModel.Results.PropertyChanged += OnResultsPropertyChanged;
         viewModel.Pcb.PropertyChanged += OnPcbPropertyChanged;
         viewModel.Antenna.PropertyChanged += OnAntennaPropertyChanged;
+        // Rasterising a live visual tree is something only the view can do; where the
+        // pixels go is the viewmodel's decision.
+        viewModel.Scene.CaptureViewport = CaptureViewport;
         UpdateBodyVisual();
+    }
+
+    /// <summary>
+    /// Renders this control — 3D scene, legend and every overlay — into a bitmap at
+    /// <paramref name="supersample"/> times its on-screen size. Visual behaviour, so it
+    /// lives in code-behind like hit testing and zoom-to-fit.
+    /// </summary>
+    /// <summary>The ribbon's Fit button: frame the whole scene. Camera-only.</summary>
+    public void ZoomToFit() => Viewport.ZoomExtents(400);
+
+    private System.Windows.Media.Imaging.BitmapSource? CaptureViewport(double supersample)
+    {
+        double width = ActualWidth, height = ActualHeight;
+        if (width <= 0 || height <= 0) return null;
+
+        // 96 DPI is WPF device-independent unit; scaling the DPI is what supersamples,
+        // and it keeps layout (and therefore the camera framing) untouched.
+        double dpi = 96 * supersample;
+        var target = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            (int)Math.Ceiling(width * supersample), (int)Math.Ceiling(height * supersample),
+            dpi, dpi, System.Windows.Media.PixelFormats.Pbgra32);
+        target.Render(this);
+        target.Freeze();
+        return target;
     }
 
     /// <summary>The body content is code-behind-managed (see the XAML comment on
@@ -85,6 +112,9 @@ public partial class Viewport3DView : UserControl
             case nameof(SceneViewModel.SceneRoot):
             case nameof(SceneViewModel.ShowBody):
                 UpdateBodyVisual();
+                break;
+            case nameof(SceneViewModel.SelectedEdgeLines):
+                SelectedEdgeLines.Points = _viewModel!.Scene.SelectedEdgeLines;
                 break;
             case nameof(SceneViewModel.ContourPoints):
                 ContourLineVisual.Points = _viewModel!.Scene.ContourPoints;

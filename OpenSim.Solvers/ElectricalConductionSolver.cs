@@ -41,11 +41,7 @@ public sealed class ElectricalConductionSolver : ISolver
                 throw new InvalidOperationException(
                     $"Boundary condition '{bc.Name}' ({bc.GetType().Name}) does not apply to an electrical solve. " +
                     "Use voltage potentials and current flows.");
-            if (bc.FaceIds.Count == 0)
-                throw new InvalidOperationException($"Boundary condition '{bc.Name}' has no faces assigned.");
-            if (input.Mesh.GetFaceNodes(bc.FaceIds).Count == 0)
-                throw new InvalidOperationException(
-                    $"Boundary condition '{bc.Name}' targets faces that do not exist on the mesh.");
+            BoundaryScope.Validate(bc, input.Mesh);
         }
     }
 
@@ -73,7 +69,7 @@ public sealed class ElectricalConductionSolver : ISolver
         var prescribed = new Dictionary<int, double>();
         foreach (var voltage in input.BoundaryConditions.OfType<VoltagePotential>())
         {
-            var nodes = mesh.GetFaceNodes(voltage.FaceIds);
+            var nodes = mesh.GetScopeNodes(voltage);
             foreach (int node in nodes)
                 prescribed[node] = voltage.Volts;
             log.Add($"Voltage '{voltage.Name}': {voltage.Volts:g4} V on {nodes.Count} nodes.");
@@ -134,7 +130,7 @@ public sealed class ElectricalConductionSolver : ISolver
 
         var electrodes = input.BoundaryConditions.OfType<VoltagePotential>()
             .Select(v => (v.Name, v.Volts,
-                Current: input.Mesh.GetFaceNodes(v.FaceIds).Sum(n => reactions[n])))
+                Current: input.Mesh.GetScopeNodes(v).Sum(n => reactions[n])))
             .ToList();
         foreach (var e in electrodes)
             log.Add($"Electrode '{e.Name}' ({e.Volts:g4} V): net current {e.Current:g4} A.");

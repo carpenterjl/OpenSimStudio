@@ -4,16 +4,16 @@
     <GroupBox Header="Structural conditions (select faces first)"
               Visibility="{Binding Session.IsStructuralAnalysis, Converter={StaticResource BoolToVis}}">
         <StackPanel>
-            <Button Content="Add fixed support" Command="{Binding Conditions.AddFixedSupportCommand}"/>
+            <Button x:Name="AddFixedSupportButton" Content="Add fixed support" Command="{Binding Conditions.AddFixedSupportCommand}"/>
             <UniformGrid Columns="2" Margin="0,6,0,0">
                 <Label Content="Fx [N]"/>
                 <TextBox Text="{Binding Conditions.ForceX}"/>
                 <Label Content="Fy [N]"/>
-                <TextBox Text="{Binding Conditions.ForceY}"/>
+                <TextBox x:Name="ForceYBox" Text="{Binding Conditions.ForceY}"/>
                 <Label Content="Fz [N]"/>
                 <TextBox Text="{Binding Conditions.ForceZ}"/>
             </UniformGrid>
-            <Button Content="Add force" Command="{Binding Conditions.AddForceCommand}"/>
+            <Button x:Name="AddForceButton" Content="Add force" Command="{Binding Conditions.AddForceCommand}"/>
             <UniformGrid Columns="2" Margin="0,6,0,0">
                 <Label Content="Pressure [Pa]"/>
                 <TextBox Text="{Binding Conditions.PressureMagnitude}"/>

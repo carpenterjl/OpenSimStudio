@@ -9,7 +9,10 @@
                         <Button DockPanel.Dock="Right" Content="✕" Padding="4,0" Margin="4,0,0,0"
                                 Command="{Binding DataContext.Conditions.RemoveConditionCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                 CommandParameter="{Binding}"/>
-                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                        <StackPanel>
+                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ScopeSummary}" Opacity="0.7" FontSize="10"/>
+                        </StackPanel>
                     </DockPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>

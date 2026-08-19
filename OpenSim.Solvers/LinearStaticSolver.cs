@@ -39,11 +39,7 @@ public sealed class LinearStaticSolver : ISolver
 
         foreach (var bc in input.BoundaryConditions)
         {
-            if (bc.FaceIds.Count == 0)
-                throw new InvalidOperationException($"Boundary condition '{bc.Name}' has no faces assigned.");
-            if (input.Mesh.GetFaceNodes(bc.FaceIds).Count == 0)
-                throw new InvalidOperationException(
-                    $"Boundary condition '{bc.Name}' targets faces that do not exist on the mesh.");
+            BoundaryScope.Validate(bc, input.Mesh);
         }
     }
 
@@ -77,7 +73,7 @@ public sealed class LinearStaticSolver : ISolver
                 $"(residual {result.Iterations.ResidualNorm:g3}).");
 
         progress?.Report(new SolverProgress("Recovering stresses", 0.85));
-        var fields = BuildResultFields(mesh, assembler, result.Displacements);
+        var fields = BuildResultFields(mesh, assembler, input.Material, result.Displacements);
         progress?.Report(new SolverProgress("Done", 1.0));
 
         return new SolveOutput { Fields = fields, Log = log };
@@ -155,17 +151,13 @@ public sealed class LinearStaticSolver : ISolver
         var prescribed = new Dictionary<int, double>();
         foreach (var support in conditions.OfType<FixedSupport>())
         {
-            var nodes = new HashSet<int>(mesh.GetFaceNodes(support.FaceIds));
+            var nodes = new HashSet<int>(mesh.GetScopeNodes(support));
             if (edgeMid is not null)
             {
-                // Pinning only the corners of a quadratic face leaves its mid-edge
+                // Pinning only the corners of a quadratic scope leaves its mid-edge
                 // nodes free — spurious compliance at the support. Pin them too.
-                foreach (var t in mesh.GetFaceTriangles(support.FaceIds))
-                {
-                    nodes.Add(edgeMid[Edge(t.A, t.B)]);
-                    nodes.Add(edgeMid[Edge(t.B, t.C)]);
-                    nodes.Add(edgeMid[Edge(t.C, t.A)]);
-                }
+                foreach (var segment in mesh.GetScopeSegments(support))
+                    nodes.Add(edgeMid[Edge(segment.A, segment.B)]);
             }
             foreach (int node in nodes)
             {
@@ -181,7 +173,7 @@ public sealed class LinearStaticSolver : ISolver
     private static (int, int) Edge(int a, int b) => a < b ? (a, b) : (b, a);
 
     private static IReadOnlyList<IResultField> BuildResultFields(FeMesh mesh,
-        IElasticityAssembler assembler, double[] u)
+        IElasticityAssembler assembler, Material material, double[] u)
     {
         var displacement = new Vector3D[mesh.NodeCount];
         for (int i = 0; i < mesh.NodeCount; i++)
@@ -195,30 +187,70 @@ public sealed class LinearStaticSolver : ISolver
             strain[e] = assembler.ElementStrain(e, u);
         }
 
-        // Volume-weighted nodal average of element von Mises for smooth contours.
+        // Volume-weighted nodal averages for smooth contours. Equivalent elastic strain is
+        // averaged alongside von Mises rather than derived from the averaged stress: the
+        // two agree exactly per element (E·ε_eq = σ_vm), and averaging each invariant
+        // separately keeps that true of the nodal values as well.
         var nodalVm = new double[mesh.NodeCount];
+        var nodalStrain = new double[mesh.NodeCount];
         var nodalWeight = new double[mesh.NodeCount];
+        double nu = material.PoissonRatio;
         for (int e = 0; e < mesh.ElementCount; e++)
         {
             double vm = stress[e].VonMises();
+            double eq = strain[e].EquivalentStrain(nu);
             double w = mesh.ElementVolume(e);
             foreach (int n in mesh.GetElementNodes(e))     // all 10 nodes when quadratic
             {
                 nodalVm[n] += vm * w;
+                nodalStrain[n] += eq * w;
                 nodalWeight[n] += w;
             }
         }
         for (int i = 0; i < mesh.NodeCount; i++)
             if (nodalWeight[i] > 0)
+            {
                 nodalVm[i] /= nodalWeight[i];
+                nodalStrain[i] /= nodalWeight[i];
+            }
 
-        return new IResultField[]
+        var fields = new List<IResultField>
         {
             new NodalVectorField("Displacement", "m", displacement),
             new NodalScalarField("Stress (von Mises)", "Pa", nodalVm),
+            new NodalScalarField("Equivalent elastic strain", "m/m", nodalStrain),
             new ElementTensorField("Stress tensor", "Pa", stress),
             new ElementTensorField("Strain tensor", "-", strain)
         };
+
+        // Safety factor is offered ONLY when the material carries a strength. A default
+        // would be a fabricated allowable, and a brittle material has no yield point at all.
+        if (material.YieldStrength is { } yield)
+            fields.Add(new NodalScalarField("Safety factor (yield)", "-",
+                SafetyFactor(nodalVm, yield)));
+        if (material.UltimateTensileStrength is { } ultimate)
+            fields.Add(new NodalScalarField("Safety factor (ultimate)", "-",
+                SafetyFactor(nodalVm, ultimate)));
+
+        return fields;
+    }
+
+    /// <summary>
+    /// Strength / von Mises, per node. Capped rather than left to run to infinity where the
+    /// stress vanishes: an unstressed node is not usefully "infinitely safe", and one
+    /// infinity would flatten the whole colour scale so no real margin could be read off it.
+    /// The cap is not encoded in the field name; it is stated here and in the exported report.
+    /// </summary>
+    private const double MaxReportedSafetyFactor = 15.0;
+
+    private static double[] SafetyFactor(double[] nodalVonMises, double strength)
+    {
+        var factors = new double[nodalVonMises.Length];
+        for (int i = 0; i < factors.Length; i++)
+            factors[i] = nodalVonMises[i] <= 0
+                ? MaxReportedSafetyFactor
+                : Math.Min(strength / nodalVonMises[i], MaxReportedSafetyFactor);
+        return factors;
     }
 
     private static double TriangleArea(FeMesh mesh, BoundaryTriangle t) =>

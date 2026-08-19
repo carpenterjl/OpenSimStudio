@@ -8,7 +8,7 @@
             <Button x:Name="ImportAssemblyButton" Content="Import STEP assembly…"
                     Command="{Binding Geometry.ImportStepAssemblyCommand}" Margin="0,0,0,4"
                     ToolTip="Loads every part of the file as its own body, placed by the assembly's transforms"/>
-            <TextBlock Text="{Binding Bodies.Summary}" Foreground="#8A8A96" Margin="0,0,0,4"/>
+            <TextBlock Text="{Binding Bodies.Summary}" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,4"/>
             <ListBox x:Name="BodyList" MaxHeight="220"
                      ItemsSource="{Binding Bodies.Bodies}"
                      SelectedItem="{Binding Bodies.SelectedBody}"
@@ -22,7 +22,7 @@
                             <StackPanel>
                                 <TextBlock Text="{Binding Name}" FontWeight="Bold"
                                            TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="#8A8A96"/>
+                                <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
                             </StackPanel>
                         </DockPanel>
                     </DataTemplate>

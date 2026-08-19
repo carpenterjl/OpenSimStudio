@@ -1,10 +1,17 @@
 <Window x:Class="OpenSim.App.MaterialEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Material editor" Width="640" Height="480"
+        Title="Material editor" Width="720" Height="560"
         WindowStartupLocation="CenterOwner"
-        Background="#1E1E24">
-    <Grid Margin="10">
+        Background="{DynamicResource PanelBgBrush}"
+        Foreground="{DynamicResource TextBodyBrush}">
+    <DockPanel Margin="18,14,18,16">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock Text="Materials" Style="{StaticResource PanelTitle}"/>
+            <TextBlock Text="Every property the six workspaces read. Blank means the material cannot be used for that physics."
+                       Style="{StaticResource MutedText}" Margin="0,4,0,0"/>
+        </StackPanel>
+    <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="230"/>
             <ColumnDefinition Width="10"/>
@@ -12,7 +19,7 @@
         </Grid.ColumnDefinitions>
 
         <DockPanel Grid.Column="0">
-            <TextBlock DockPanel.Dock="Top" Text="Library" FontWeight="Bold" Margin="0,0,0,4"/>
+            <TextBlock DockPanel.Dock="Top" Text="LIBRARY" Style="{StaticResource MicroHeader}"/>
             <ListBox ItemsSource="{Binding Materials}" SelectedItem="{Binding SelectedMaterial}">
                 <ListBox.ItemTemplate>
                     <DataTemplate>
@@ -20,7 +27,7 @@
                             <Border Width="10" Height="10" Margin="0,0,6,0" VerticalAlignment="Center"
                                     Background="{Binding Color}"/>
                             <TextBlock Text="{Binding Name}"/>
-                            <TextBlock Text=" (built-in)" Foreground="#8A8A96">
+                            <TextBlock Text=" (built-in)" Foreground="{DynamicResource TextFaintBrush}">
                                 <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="Visibility" Value="Collapsed"/>
@@ -39,20 +46,20 @@
         </DockPanel>
 
         <DockPanel Grid.Column="2">
-            <TextBlock DockPanel.Dock="Top" Text="Properties (SI units)" FontWeight="Bold" Margin="0,0,0,4"/>
+            <TextBlock DockPanel.Dock="Top" Text="PROPERTIES (SI UNITS)" Style="{StaticResource MicroHeader}"/>
 
             <StackPanel DockPanel.Dock="Bottom">
-                <TextBlock Text="{Binding ErrorText}" Foreground="#E06C75" TextWrapping="Wrap"
+                <TextBlock Text="{Binding ErrorText}" Foreground="{DynamicResource DangerBrush}" TextWrapping="Wrap"
                            Margin="0,4"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button Content="New from selected" Command="{Binding NewFromSelectedCommand}"
                             Margin="0,0,6,0"/>
-                    <Button Content="Save to user library" Command="{Binding SaveCommand}" Margin="0,0,6,0"/>
+                    <Button Content="Save library" Command="{Binding SaveCommand}" Style="{StaticResource AccentButton}" Margin="0,0,6,0"/>
                     <Button Content="Delete" Command="{Binding DeleteCommand}" Margin="0,0,6,0"/>
                     <Button Content="Close" Click="Close_Click"/>
                 </StackPanel>
                 <TextBlock Text="Built-in materials cannot be edited in place — 'New from selected' copies one; saving under a built-in name overrides it."
-                           Foreground="#8A8A96" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                           Foreground="{DynamicResource TextFaintBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
             </StackPanel>
 
             <Grid>
@@ -92,4 +99,5 @@
             </Grid>
         </DockPanel>
     </Grid>
+    </DockPanel>
 </Window>
