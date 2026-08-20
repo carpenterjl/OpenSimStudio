@@ -6,12 +6,6 @@
     <GroupBox Header="Airflow (CFD)"
               Visibility="{Binding Session.IsConjugateHeatFlowAnalysis, Converter={StaticResource BoolToVis}}">
         <StackPanel>
-            <UniformGrid Columns="2">
-                <Label Content="CFD cell size [m]"/>
-                <TextBox x:Name="CfdCellSizeBox" Text="{Binding Solve.CfdCellSize}"
-                         ToolTip="0 = automatic: smallest body extent / 24, coarsened to the cell budget (the choice is logged)"/>
-            </UniformGrid>
-
             <TextBlock x:Name="FlowSummaryText" Text="{Binding Flow.FlowSummary}"
                        Foreground="{DynamicResource TextFaintBrush}" TextWrapping="Wrap" Margin="2,4"/>
 
@@ -20,10 +14,17 @@
                           IsChecked="{Binding Flow.ShowArrows}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
                 <CheckBox x:Name="FlowStreamlinesCheck" Content="Streamlines"
                           IsChecked="{Binding Flow.ShowStreamlines}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
-                <CheckBox x:Name="FlowSliceCheck" Content="Speed slice"
+                <CheckBox x:Name="FlowSliceCheck" Content="Contour slice"
                           IsChecked="{Binding Flow.ShowSlice}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
                 <UniformGrid Columns="2"
                              Visibility="{Binding Flow.ShowSlice, Converter={StaticResource BoolToVis}}">
+                    <Label Content="Quantity"/>
+                    <ComboBox x:Name="SliceQuantityCombo" SelectedIndex="{Binding Flow.SliceQuantity}"
+                              ToolTip="Temperature is the heat-exchanger view: the fluid contour through the passage">
+                        <ComboBoxItem Content="Speed"/>
+                        <ComboBoxItem Content="Temperature"/>
+                        <ComboBoxItem Content="Pressure"/>
+                    </ComboBox>
                     <Label Content="Slice normal"/>
                     <ComboBox x:Name="SliceAxisCombo" SelectedIndex="{Binding Flow.SliceAxis}">
                         <ComboBoxItem Content="X"/>
@@ -35,6 +36,22 @@
                             Value="{Binding Flow.SliceFraction}"
                             IsMoveToPointEnabled="True"/>
                 </UniformGrid>
+                <StackPanel Visibility="{Binding Flow.ShowSlice, Converter={StaticResource BoolToVis}}">
+                    <CheckBox x:Name="SliceFixedRangeCheck" Content="Fixed colour range"
+                              IsChecked="{Binding Flow.SliceFixedRange}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"
+                              ToolTip="Pins the colour scale so two runs (or a run and a published figure) compare directly"/>
+                    <UniformGrid Columns="2"
+                                 Visibility="{Binding Flow.SliceFixedRange, Converter={StaticResource BoolToVis}}">
+                        <Label Content="Min"/>
+                        <TextBox x:Name="SliceMinBox" Text="{Binding Flow.SliceMin}"/>
+                        <Label Content="Max"/>
+                        <TextBox x:Name="SliceMaxBox" Text="{Binding Flow.SliceMax}"/>
+                    </UniformGrid>
+                    <TextBlock x:Name="SliceLegendText" Text="{Binding Flow.SliceLegend}"
+                               Foreground="{DynamicResource TextFaintBrush}" TextWrapping="Wrap"
+                               Margin="2,2"/>
+                </StackPanel>
             </StackPanel>
         </StackPanel>
     </GroupBox>

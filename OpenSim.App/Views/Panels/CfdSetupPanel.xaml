@@ -1,0 +1,77 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.CfdSetupPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The CFD case. Only the conjugate analysis has one; the Stage 1 correlation
+         environment never grows CFD controls (the same locked scope rule the flow
+         visualization panel follows). -->
+    <GroupBox Header="CFD domain and openings"
+              Visibility="{Binding Session.IsConjugateHeatFlowAnalysis, Converter={StaticResource BoolToVis}}">
+        <StackPanel>
+            <UniformGrid Columns="2">
+                <Label Content="Domain"/>
+                <ComboBox x:Name="CfdDomainModeCombo" SelectedIndex="{Binding CfdSetup.DomainMode}"
+                          ToolTip="External wraps a box around the bodies (flow AROUND a part). Internal fits the box to the body marked as a fluid volume (flow THROUGH a passage).">
+                    <ComboBoxItem Content="External — around the bodies"/>
+                    <ComboBoxItem Content="Internal — fitted to the fluid volume"/>
+                </ComboBox>
+
+                <Label Content="CFD cell size [m]"/>
+                <TextBox x:Name="CfdCellSizeBox" Text="{Binding Solve.CfdCellSize}"
+                         ToolTip="0 = automatic: smallest body extent / 24, coarsened to the cell budget (the choice is logged)"/>
+            </UniformGrid>
+
+            <StackPanel Visibility="{Binding CfdSetup.IsInternal, Converter={StaticResource BoolToVis}}">
+                <UniformGrid Columns="2">
+                    <Label Content="Working fluid"/>
+                    <ComboBox x:Name="CfdFluidCombo" ItemsSource="{Binding CfdSetup.FluidNames}"
+                              SelectedItem="{Binding CfdSetup.FluidName}"
+                              ToolTip="The fluid INSIDE the passage. The surroundings keep the Environment panel's own fluid — that is what makes water-in-copper-in-air one model."/>
+                    <Label Content="Wall margin [mm]"/>
+                    <TextBox x:Name="CfdWallMarginBox" Text="{Binding CfdSetup.WallMarginMillimetres}"
+                             ToolTip="How far the domain reaches past the fluid volume into the metal, clamped to the solid. Without it the passage would touch an adiabatic box face along its tangent lines."/>
+                </UniformGrid>
+
+                <Button x:Name="CfdDetectOpeningsButton" Content="Detect openings from the fluid volume"
+                        Command="{Binding CfdSetup.DetectOpeningsCommand}" Margin="0,6,0,2"
+                        ToolTip="Finds every place the fluid body reaches a face of the domain box — the bore mouths"/>
+
+                <TextBlock x:Name="CfdOpeningsStatus" Text="{Binding CfdSetup.Status}"
+                           Foreground="{DynamicResource TextFaintBrush}" TextWrapping="Wrap"
+                           Margin="2,2,2,4"/>
+
+                <ItemsControl x:Name="CfdOpeningsList" ItemsSource="{Binding CfdSetup.Openings}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                                    Padding="0,3">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Label}" FontWeight="Bold"/>
+                                    <UniformGrid Columns="2">
+                                        <Label Content="Role"/>
+                                        <ComboBox SelectedIndex="{Binding Role}"
+                                                  AutomationProperties.AutomationId="{Binding Index, StringFormat=OpeningRole{0}}">
+                                            <ComboBoxItem Content="Wall (unused)"/>
+                                            <ComboBoxItem Content="Inlet"/>
+                                            <ComboBoxItem Content="Outlet"/>
+                                        </ComboBox>
+                                    </UniformGrid>
+                                    <UniformGrid Columns="2"
+                                                 Visibility="{Binding IsInlet, Converter={StaticResource BoolToVis}}">
+                                        <Label Content="Speed [m/s]"/>
+                                        <TextBox Text="{Binding Speed}"
+                                                 AutomationProperties.AutomationId="{Binding Index, StringFormat=OpeningSpeed{0}}"
+                                                 ToolTip="Stream speed through this port; the direction is the face's inward normal"/>
+                                        <Label Content="Temperature [K]"/>
+                                        <TextBox Text="{Binding Temperature}"
+                                                 AutomationProperties.AutomationId="{Binding Index, StringFormat=OpeningTemp{0}}"
+                                                 ToolTip="Temperature of the stream arriving here — NOT the ambient, which is the surroundings"/>
+                                    </UniformGrid>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

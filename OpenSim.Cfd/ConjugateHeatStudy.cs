@@ -1,4 +1,4 @@
-using OpenSim.Core.Interfaces;
+﻿using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 using OpenSim.Solvers;
@@ -39,7 +39,11 @@ public static class ConjugateHeatStudy
     /// <summary>Everything a conjugate solve produces: the solid-side results (the
     /// standard output every results consumer knows), the resolved flow field for the
     /// flow visualizations, and the voxelized domain the two exchange across.</summary>
-    public sealed record Result(SolveOutput Thermal, FlowSolution Flow, VoxelizedDomain Domain);
+    /// <param name="Outlets">The open-boundary mass and enthalpy ledger — the mixing-cup
+    /// outlet temperature a heat-exchanger study is actually about. Null when the flow
+    /// carried no energy equation.</param>
+    public sealed record Result(SolveOutput Thermal, FlowSolution Flow, VoxelizedDomain Domain,
+        FlowOutletReport? Outlets = null);
 
     /// <param name="solidInput">The merged-assembly thermal input (mesh, materials, BCs,
     /// contacts, heat sources; <see cref="SolveInput.TransientThermal"/> selects the
@@ -65,7 +69,10 @@ public static class ConjugateHeatStudy
         var log = new List<string>();
         var mesh = solidInput.Mesh;
         double ambient = environment.AmbientTemperature;
-        var fluidProps = environment.ResolveFluid()!;
+        // The CFD working fluid. A NAMED fluid on the settings marks an internal circuit
+        // (water through a copper block) whose surroundings are a different fluid
+        // entirely; null keeps the external-flow meaning, where the CFD IS the environment.
+        var fluidProps = cfd.ResolveFluid() ?? environment.ResolveFluid()!;
         // Film-state properties at the ambient: the conjugate loop could re-evaluate at
         // the film temperature per iteration, but property drift is a few percent over
         // tens of kelvin — a named refinement, stated here rather than silently skipped.
@@ -73,6 +80,25 @@ public static class ConjugateHeatStudy
         log.Add($"Conjugate heat: {fluidProps.Name} at {ambient:F2} K " +
                 $"(ν = {fluid.KinematicViscosity:G3} m²/s, α = {fluid.ThermalDiffusivity:G3} m²/s, " +
                 "properties at ambient — film-temperature update is a named refinement).");
+
+        // ---- The surroundings, when the CFD does not resolve them. An internal circuit
+        //      leaves the block outer skin exposed to whatever the environment says it
+        //      sits in, and that leg is still the Stage 1 correlation film (convection in
+        //      the ENVIRONMENT fluid + factored radiation). When the CFD resolves the
+        //      surroundings themselves this stays null and only radiation joins the film,
+        //      which is the pre-existing path, byte for byte.
+        EnvironmentBoundaryModel? surroundings = null;
+        if (!cfd.ResolvesSurroundings)
+        {
+            var probe = solidInput with { Environment = environment };
+            EnvironmentBoundaryModel.ValidateMaterials(probe);
+            surroundings = EnvironmentBoundaryModel.Build(probe, log);
+            log.Add(surroundings is null
+                ? "Surroundings: every exterior face is claimed or wetted — the correlation " +
+                  "film adds nothing."
+                : $"Surroundings: {environment.Describe()} on every triangle the flow does not " +
+                  "wet (the CFD film wins wherever it is defined).");
+        }
 
         // ---- Voxelize.
         progress?.Report(new SolverProgress("Voxelizing the fluid domain", 0.02));
@@ -103,19 +129,81 @@ public static class ConjugateHeatStudy
 
         if (transient)
         {
-            // ---- Frozen-flow transient: one flow solve, one film, one solid march.
-            progress?.Report(new SolverProgress("Solving the flow field (frozen-flow)", 0.1));
-            var flow = flowSolver.SolveSteady(wallT, cancellationToken,
+            // ---- Frozen-MOMENTUM, time-accurate ENERGY transient.
+            //
+            // The velocity field is solved once and held: momentum settles in L/U, which
+            // is short against the march (checked and logged below). The fluid
+            // TEMPERATURE is NOT held — a thermal front travelling down a channel is the
+            // phenomenon itself, and a film frozen at t = 0 would hold every wall at the
+            // inlet-time state. So the fluid energy equation marches in lockstep with the
+            // solid: each solid step advances the fluid by the same interval on the frozen
+            // velocities, then hands the solid the film that fluid state implies. The
+            // exchange is EXPLICIT (the fluid sees the solid at the step start), first
+            // order in the step — the same order as the backward-Euler solid march.
+            var settings = solidInput.TransientThermal!;
+            progress?.Report(new SolverProgress("Solving the flow field", 0.1));
+            // Isothermal: at t = 0 the fluid is uniform, so the buoyancy force is exactly
+            // zero and this IS the flow at the initial state the momentum field is frozen
+            // at. Marching the energy equation here would freeze the momentum at the final
+            // temperature state instead — and on a heated passage there may be no steady
+            // coupled state to march to at all.
+            var steadyFlow = flowSolver.SolveSteady(wallT, cancellationToken,
                 (step, residual) => progress?.Report(new SolverProgress(
-                    $"Flow march: step {step}, residual {residual:G2}", 0.1)));
-            var film = BuildFilm(domain, flow, fluid.ThermalConductivity, mesh, ambient,
-                claimed, environment, solidInput, nodeBases, SurfaceTemperatures(mesh, wallT, domain));
-            LogFrozenFlowValidity(log, environment, domain, flow, solidInput);
+                    $"Flow march: step {step}, residual {residual:G2}", 0.1)),
+                marchEnergy: false);
+            LogFrozenFlowValidity(log, environment, domain, steadyFlow, solidInput);
 
-            progress?.Report(new SolverProgress("Solid transient march", 0.3));
+            // Restart the fluid at the assembly initial temperature: before the stream
+            // arrives, the passage holds fluid at the same state as the metal around it.
+            flowSolver.ResetTemperature(startWallT);
+            var latestFlow = flowSolver.Snapshot(steadyFlow.Steps, steadyFlow.Residual);
+            double stepSeconds = settings.TimeStep;
+            int subSteps = 0;
+            var outletTrace = new List<string>();
+            int quasiSteadySteps = 0;
+
+            SurfaceFilmModel Schedule(int step, double time, IReadOnlyList<double> nodal)
+            {
+                if (step > 0)
+                {
+                    for (int idx = 0; idx < wallT.Length; idx++)
+                    {
+                        var wallTri = mesh.BoundaryTriangles[domain.WallFaces[idx].BoundaryTriangle];
+                        wallT[idx] = (nodal[wallTri.A] + nodal[wallTri.B] + nodal[wallTri.C]) / 3.0;
+                    }
+                    var march = flowSolver.AdvanceEnergy(stepSeconds, wallT, cancellationToken);
+                    subSteps += march.Steps;
+                    if (march.Settled) quasiSteadySteps++;
+                    latestFlow = flowSolver.Snapshot(steadyFlow.Steps, steadyFlow.Residual);
+                }
+                // The outlet temperature is what a heat-exchanger study reports, and it is
+                // a TIME SERIES here — one line per step, so the arrival of the front is
+                // visible in the log rather than only in the final frame.
+                var ledger = FlowOutletReporter.Build(latestFlow, cfd, fluid.Density, fluid.SpecificHeat);
+                var port = ledger.Outlets.OrderBy(x => x.MassFlow).FirstOrDefault();
+                if (port is not null)
+                    outletTrace.Add($"  t = {time,8:F3} s: outlet mixing-cup T = " +
+                                    $"{port.MixedTemperature:F2} K");
+
+                return BuildFilm(domain, latestFlow, fluid.ThermalConductivity, mesh, ambient,
+                    claimed, environment, solidInput, nodeBases, TriangleMeans(mesh, nodal),
+                    surroundings, nodal);
+            }
+
+            progress?.Report(new SolverProgress("Coupled transient march", 0.3));
             var thermal = new TransientThermalSolver().Solve(
-                solidInput with { PrescribedFilm = film }, progress, cancellationToken);
-            return Finish(thermal, flow, domain, log);
+                solidInput with { PrescribedFilmSchedule = Schedule }, progress, cancellationToken);
+            if (surroundings is not null) log.AddRange(surroundings.DrainNotes());
+            log.Add($"Conjugate transient: the fluid energy equation marched {subSteps:N0} CFL " +
+                    "sub-steps on the frozen velocity field, one film handed to the solid per " +
+                    "solid time step (explicit partitioned exchange, first order in the step).");
+            if (quasiSteadySteps > 0)
+                log.Add($"The fluid reached its steady state inside {quasiSteadySteps} of the solid " +
+                        "steps (the step is long against the fluid residence time), so those steps " +
+                        "stopped marching it early — the remaining interval changes nothing.");
+            log.Add("Outlet temperature history:");
+            log.AddRange(outletTrace);
+            return Finish(thermal, latestFlow, domain, cfd, fluid, log);
         }
 
         // ---- Steady conjugate loop.
@@ -137,9 +225,10 @@ public static class ConjugateHeatStudy
                     fraction)));
             lastFlow = flow;
             var surfaceT = TriangleMeanTemperatures(mesh, solidOutput);
+            var nodalPrev = NodalTemperatures(solidOutput) ?? UniformNodal(mesh, startWallT);
             var film = BuildFilm(domain, flow, fluid.ThermalConductivity, mesh, ambient,
                 claimed, environment, solidInput, nodeBases,
-                surfaceT ?? UniformSurface(mesh, startWallT));
+                surfaceT ?? UniformSurface(mesh, startWallT), surroundings, nodalPrev);
 
             solidOutput = new HeatConductionSolver().Solve(
                 solidInput with { PrescribedFilm = film }, null, cancellationToken);
@@ -169,7 +258,8 @@ public static class ConjugateHeatStudy
 
         log.Add($"Conjugate exchange settled in {outer} outer iterations " +
                 $"(last wall-temperature change {change:G3} K, relaxation {Relaxation}).");
-        return Finish(solidOutput!, lastFlow!, domain, log);
+        if (surroundings is not null) log.AddRange(surroundings.DrainNotes());
+        return Finish(solidOutput!, lastFlow!, domain, cfd, fluid, log);
     }
 
     // ================================================================ film composition
@@ -183,10 +273,39 @@ public static class ConjugateHeatStudy
     private static SurfaceFilmModel BuildFilm(VoxelizedDomain domain, FlowSolution flow,
         double fluidConductivity, FeMesh mesh, double ambient,
         IReadOnlySet<int> claimed, EnvironmentSettings environment, SolveInput solidInput,
-        IReadOnlyList<int> nodeBases, double[] surfaceTemperature)
+        IReadOnlyList<int> nodeBases, double[] surfaceTemperature,
+        EnvironmentBoundaryModel? surroundings, IReadOnlyList<double> nodalTemperature)
     {
         var film = WallFluxExtractor.Extract(domain, flow, fluidConductivity, mesh, ambient,
             claimed);
+
+        if (surroundings is not null)
+        {
+            // Composition rule: the CFD film wins per TRIANGLE wherever it is defined
+            // (that is the resolved answer), and the correlation film carries the rest.
+            // NaN already means "not wetted" on one side and "user-claimed" on the other,
+            // so the merge needs no extra bookkeeping.
+            var outsideFilm = surroundings.Evaluate(nodalTemperature);
+            var h = film.TriangleFilmCoefficient.ToArray();
+            var tRef = film.TriangleReferenceTemperature!.ToArray();
+            int carried = 0;
+            for (int t = 0; t < h.Length; t++)
+            {
+                if (!double.IsNaN(h[t])) continue;
+                double outside = outsideFilm.TriangleFilmCoefficient[t];
+                if (double.IsNaN(outside)) continue;
+                h[t] = outside;
+                tRef[t] = ambient;
+                carried++;
+            }
+            return film with
+            {
+                TriangleFilmCoefficient = h,
+                TriangleReferenceTemperature = tRef,
+                Origin = film.Origin + $" + Stage 1 surroundings on {carried} unwetted triangles"
+            };
+        }
+
         if (!environment.IncludeRadiation) return film;
 
         var coefficients = film.TriangleFilmCoefficient.ToArray();
@@ -234,7 +353,7 @@ public static class ConjugateHeatStudy
     // ================================================================ helpers
 
     private static Result Finish(SolveOutput thermal, FlowSolution flow,
-        VoxelizedDomain domain, List<string> log)
+        VoxelizedDomain domain, CfdSettings cfd, FluidState fluid, List<string> log)
     {
         log.AddRange(flow.Notes);
         var summary = new Dictionary<string, double>(
@@ -244,12 +363,42 @@ public static class ConjugateHeatStudy
             ["Flow steps"] = flow.Steps,
             ["Max flow divergence (1/s)"] = flow.MaxDivergence
         };
+
+        FlowOutletReport? outlets = null;
+        if (flow.Temperature is not null)
+        {
+            outlets = FlowOutletReporter.Build(flow, cfd, fluid.Density, fluid.SpecificHeat);
+            log.AddRange(outlets.Describe());
+            // "The outlet" of a report is the port the most mass leaves through; ports
+            // are signed INTO the domain, so that is the most negative mass flow.
+            var outlet = outlets.Outlets.OrderBy(p => p.MassFlow).FirstOrDefault();
+            if (outlet is not null)
+            {
+                summary["Outlet temperature (K)"] = outlet.MixedTemperature;
+                summary["Outlet mass flow (kg/s)"] = Math.Abs(outlet.MassFlow);
+            }
+            summary["Heat carried out by the stream (W)"] = outlets.HeatRemoved;
+        }
+
         return new Result(thermal with
         {
             Log = log.Concat(thermal.Log).ToList(),
             Summary = summary
-        }, flow, domain);
+        }, flow, domain, outlets);
     }
+
+    /// <summary>Every node at one temperature — the correlation film input before any
+    /// solid solve has run.</summary>
+    private static double[] UniformNodal(FeMesh mesh, double value)
+    {
+        var nodal = new double[mesh.NodeCount];
+        Array.Fill(nodal, value);
+        return nodal;
+    }
+
+    private static IReadOnlyList<double>? NodalTemperatures(SolveOutput? output) =>
+        output is null ? null
+            : ((Core.Results.NodalScalarField)output.Fields.First(f => f.Name == "Temperature")).Values;
 
     private static IReadOnlySet<int> ClaimedFaceIds(SolveInput input)
     {
@@ -267,6 +416,18 @@ public static class ConjugateHeatStudy
         if (output is null) return null;
         var nodal = ((Core.Results.NodalScalarField)output.Fields
             .First(f => f.Name == "Temperature")).Values;
+        var result = new double[mesh.BoundaryTriangles.Count];
+        for (int t = 0; t < result.Length; t++)
+        {
+            var tri = mesh.BoundaryTriangles[t];
+            result[t] = (nodal[tri.A] + nodal[tri.B] + nodal[tri.C]) / 3.0;
+        }
+        return result;
+    }
+
+    /// <summary>Per-boundary-triangle mean of a nodal field.</summary>
+    private static double[] TriangleMeans(FeMesh mesh, IReadOnlyList<double> nodal)
+    {
         var result = new double[mesh.BoundaryTriangles.Count];
         for (int t = 0; t < result.Length; t++)
         {

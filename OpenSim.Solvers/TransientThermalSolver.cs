@@ -1,4 +1,4 @@
-using OpenSim.Core.Interfaces;
+﻿using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 using OpenSim.Core.Results;
@@ -124,8 +124,16 @@ public sealed class TransientThermalSolver : ISolver
         // A prescribed film is FIXED over the whole transient (the frozen-flow contract of
         // the conjugate study): fold its Robin terms into the step matrix and loads once,
         // and the plain linear time loop below runs unchanged — no Picard needed.
+        // A SCHEDULE means the film changes every step, so it must NOT be folded into the
+        // base system here: the base stays film-free and each step folds its own.
+        var filmSchedule = input.PrescribedFilmSchedule;
         SurfaceFilmModel? prescribedFilm = input.PrescribedFilm;
-        if (prescribedFilm is not null)
+        if (filmSchedule is not null)
+        {
+            log.Add("Prescribed film schedule: the film is re-evaluated every time step " +
+                    "(time-accurate conjugate coupling), so the step matrix is refolded per step.");
+        }
+        else if (prescribedFilm is not null)
         {
             system = EnvironmentThermalTerms.WithFilm(system, mesh, prescribedFilm);
             constantLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, prescribedFilm);
@@ -149,7 +157,7 @@ public sealed class TransientThermalSolver : ISolver
             temperature_[node] = value;
 
         var environment = EnvironmentBoundaryModel.Build(input, log);
-        var film = prescribedFilm ?? environment?.Evaluate(temperature_);
+        var film = filmSchedule?.Invoke(0, 0.0, temperature_) ?? prescribedFilm ?? environment?.Evaluate(temperature_);
         var frames = new List<ResultFrame>
         {
             MakeFrame(0.0, temperature_, mesh, assembler, input, film)
@@ -180,7 +188,21 @@ public sealed class TransientThermalSolver : ISolver
             {
                 picard++;
                 ConstrainedSystemSolver.ReducedSystem stepSystem;
-                if (environment is null)
+                if (filmSchedule is not null)
+                {
+                    // Linear step, like the fixed film — only the film's own numbers move,
+                    // so there is nothing to iterate on: pull this step's film, fold it,
+                    // solve once. The reduce is O(nnz) and there are as many steps as the
+                    // user asked for, which is what makes this affordable.
+                    film = filmSchedule(n, n * dt, iterate);
+                    stepSystem = ConstrainedSystemSolver.Reduce(
+                        EnvironmentThermalTerms.WithFilm(system, mesh, film), prescribed,
+                        allowUnconstrained: true);
+                    var scheduledLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, film);
+                    for (int i = 0; i < fullRhs.Length; i++)
+                        fullRhs[i] = massTimesT[i] / dt + scheduledLoads[i];
+                }
+                else if (environment is null)
                 {
                     stepSystem = reduced;
                     for (int i = 0; i < fullRhs.Length; i++)

@@ -1,7 +1,18 @@
-using OpenSim.Core.Model;
+﻿using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 
 namespace OpenSim.Cfd;
+
+/// <summary>
+/// What one <see cref="IncompressibleFlowSolver.AdvanceEnergy"/> call did.
+/// </summary>
+/// <param name="Steps">Sub-steps actually taken.</param>
+/// <param name="Planned">Sub-steps the CFL asked for over the marched WINDOW (the
+/// interval, or four fluid transits, whichever is shorter).</param>
+/// <param name="Settled">True when the field stopped changing before the interval ran
+/// out — the solid step is long against the fluid residence time, so the fluid is
+/// quasi-steady over it.</param>
+public readonly record struct EnergyMarch(int Steps, int Planned, bool Settled);
 
 /// <summary>
 /// First-party incompressible laminar flow solver: Chorin projection on the staggered
@@ -213,6 +224,12 @@ public sealed class IncompressibleFlowSolver
 
     // ================================================================ public API
 
+    /// <summary>Everything this solver chose or warned about so far — available before
+    /// the march so a construction-time note (the Reynolds line) can be read without
+    /// paying for a solve.</summary>
+    public IReadOnlyList<string> Notes => _notes;
+
+
     /// <summary>
     /// Marches to steady state. Typed failure when the march does not converge within
     /// <see cref="CfdSettings.MaxSteps"/> — with the residual story, because an
@@ -224,9 +241,22 @@ public sealed class IncompressibleFlowSolver
     /// <param name="progress">Called every few steps with (step, residual) — a march of
     /// thousands of pseudo-time steps with no heartbeat is indistinguishable from a hang
     /// (found live, on the first end-to-end run).</param>
+    /// <param name="marchEnergy">Whether the energy equation marches with the momentum.
+    /// False solves the ISOTHERMAL flow: the temperature field is left at its initial
+    /// state and the march converges on velocity alone.
+    /// <para>
+    /// This is what a TRANSIENT wants. Its frozen momentum field is defined at the
+    /// INITIAL state, where the fluid is uniform, so the Boussinesq force is identically
+    /// zero — marching the energy equation first would freeze the momentum at the wrong
+    /// (final) temperature state instead. It also matters practically: a heated passage
+    /// at Ra ~ 1e7 has NO steady state, so a march that waits for the coupled field to
+    /// settle waits forever, while the isothermal duct flow it actually needs settles in
+    /// about one transit.
+    /// </para></param>
     public FlowSolution SolveSteady(double[]? wallFaceTemperatures = null,
         CancellationToken cancellationToken = default,
-        Action<int, double>? progress = null)
+        Action<int, double>? progress = null,
+        bool marchEnergy = true)
     {
         if (wallFaceTemperatures is not null)
         {
@@ -241,14 +271,15 @@ public sealed class IncompressibleFlowSolver
         _wallTemps = wallFaceTemperatures;
         if (_thermal is not null)
         {
-            double span = _thermal.BoundarySpan();
-            if (_wallTemps is not null)
-                foreach (double t in _wallTemps)
-                    span = Math.Max(span, Math.Abs(t - _thermal.AmbientTemperature));
             // Nothing imposes a temperature ⇒ T stays at ambient up to numeric dust; an
-            // infinite scale keeps that dust out of the march residual instead of
-            // dividing by an arbitrary epsilon.
-            _tScale = span > 0 ? span : double.PositiveInfinity;
+            // infinite scale (inside EnergyScale) keeps that dust out of the march
+            // residual instead of dividing by an arbitrary epsilon. An OPENING's stream
+            // temperature counts as imposed, exactly like a face or a wall: reading only
+            // the face temperatures made an inlet-driven case scale-free, the residual
+            // then ignored the temperature entirely, and the march stopped as soon as the
+            // VELOCITY settled — with the thermal front still halfway down the channel.
+            double span = EnergyScale();
+            _tScale = span;
             if (_thermal.IncludeBuoyancy && _beta * span > 0.1)
                 _notes.Add($"WARNING: β·ΔT = {_beta * span:G3} > 0.1 — the Boussinesq " +
                            "linearization is stretched; treat buoyancy magnitudes as approximate.");
@@ -303,7 +334,7 @@ public sealed class IncompressibleFlowSolver
                            $"(|u|max = {maxSpeed:G3} m/s).");
             }
 
-            residual = Step(cancellationToken);
+            residual = Step(cancellationToken, marchEnergy);
             history.Add(residual);
             // Step 1 reports immediately: the very first step carries the expensive
             // cold-start CG solves, and a silent first minute reads as a hang.
@@ -329,9 +360,178 @@ public sealed class IncompressibleFlowSolver
             _thermal is null ? null : (double[])_t.Clone());
     }
 
+    /// <summary>How many fluid transits count as "the fluid has caught up with the walls"
+    /// when a solid time step is much longer than the passage's residence time. Four is
+    /// 98% of an exponential approach, and the settling test normally stops earlier.</summary>
+    public const double TransitsToQuasiSteady = 4.0;
+
+    /// <summary>
+    /// Resets the fluid temperature field to one uniform value, the way a transient
+    /// starts. The velocity field is untouched: a conjugate transient wants the flow
+    /// ALREADY settled (momentum settles in L/U, a fraction of a second here) and the
+    /// temperature at its initial state, which is exactly a steady solve followed by
+    /// this call.
+    /// </summary>
+    public void ResetTemperature(double value)
+    {
+        if (_thermal is null)
+            throw new InvalidOperationException(
+                "This solver carries no energy equation; there is no temperature to reset.");
+        Array.Fill(_t, value);
+        for (int n = 0; n < _tN; n++) _tSolution[n] = value;
+    }
+
+    /// <summary>
+    /// Marches the fluid energy equation over REAL time on the frozen velocity field:
+    /// the fluid half of a time-accurate conjugate transient. Advection is explicit
+    /// upwind, so the sub-step obeys the same CFL the steady march does; diffusion stays
+    /// implicit, so nothing else constrains it. The sub-step is chosen to divide the
+    /// requested duration EXACTLY, because a partial last step would silently integrate a
+    /// different interval than the caller asked for.
+    /// <para>
+    /// Why the flow is not re-solved: over one solid time step the momentum field is
+    /// stationary to far better than the thermal field moves (t_flow = L/U against the
+    /// front transit), which is the frozen-flow contract stated on the study. What this
+    /// method removes is the far cruder assumption that the fluid TEMPERATURE is frozen
+    /// too — a thermal front travelling down a channel is the whole phenomenon.
+    /// </para>
+    /// </summary>
+    /// <param name="duration">Real time to advance [s].</param>
+    /// <param name="wallFaceTemperatures">Solid surface temperature per wall face [K],
+    /// or null for adiabatic walls; parallel to the domain wall-face list.</param>
+    /// <returns>How the march went: sub-steps taken, sub-steps planned, and whether the
+    /// field settled before the interval ran out.</returns>
+    public EnergyMarch AdvanceEnergy(double duration, double[]? wallFaceTemperatures,
+        CancellationToken cancellationToken = default)
+    {
+        if (_thermal is null)
+            throw new InvalidOperationException(
+                "A time-accurate energy march needs an energy equation — construct the solver " +
+                "with thermal options.");
+        if (!(duration > 0))
+            throw new ArgumentOutOfRangeException(nameof(duration),
+                $"The energy march needs a positive duration (got {duration}).");
+        if (wallFaceTemperatures is not null
+            && wallFaceTemperatures.Length != _domain.WallFaces.Count)
+            throw new ArgumentException(
+                $"Expected one wall temperature per wall face ({_domain.WallFaces.Count}), " +
+                $"got {wallFaceTemperatures.Length}.", nameof(wallFaceTemperatures));
+
+        _wallTemps = wallFaceTemperatures;
+        double speed = Math.Max(MaxAbsFaceSpeed(), 1e-30);
+        double cfl = 0.5 * _h / speed;
+
+        // A solid time step far longer than the fluid RESIDENCE time asks for something
+        // the fluid cannot supply: it has already reached the state those wall
+        // temperatures imply, and every further sub-step reproduces it. Four transits is
+        // where an exponential approach has 98% arrived, so the window is capped there
+        // and the settling test below usually stops it sooner. Without the cap a 1e4 s
+        // solid step over a 75 s passage marches ten thousand sub-steps to arrive where
+        // it stood after three hundred.
+        //
+        // The residence time is V_fluid / Q, the EXACT mean residence of a flow-through
+        // domain — not domain-extent/speed, which under-reads badly on a folded passage:
+        // a 1.4 m serpentine inside a 0.3 m block would claim to flush five times faster
+        // than it does, and the cap would then truncate a march that had not finished.
+        // With no through-flow at all (a sealed enclosure, a buoyant plume) there is no
+        // residence time and the extent/speed bound is the honest fallback.
+        var (inflow, _) = BoundaryFlux();
+        double fluidVolume = _domain.FluidCellCount * _h * _h * _h;
+        double transit = inflow > 0
+            ? fluidVolume / inflow
+            : _h * Math.Max(_grid.Nx, Math.Max(_grid.Ny, _grid.Nz)) / speed;
+        double window = Math.Min(duration, TransitsToQuasiSteady * transit);
+        int steps = Math.Max(1, (int)Math.Ceiling(window / cfl));
+        double saved = _dt;
+        _dt = window / steps;
+        BuildEnergySystem();
+        int taken = 0;
+        bool settled = false;
+        try
+        {
+            // Scale for the settling test: the largest excursion anything imposes on this
+            // fluid. Without it a field already at the ambient would divide by ~0.
+            double scale = EnergyScale();
+            for (int n = 0; n < steps; n++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                AdvanceTemperature(cancellationToken);
+                taken++;
+                // A solid time step MUCH longer than the fluid residence time leaves the
+                // fluid quasi-steady: once it stops moving, integrating the rest of the
+                // interval changes nothing, and marching it anyway would cost thousands of
+                // solves per solid step. Stopping there is exact to the same tolerance the
+                // steady march converges to, not an approximation.
+                if (MaxTemperatureChange() / scale >= _settings.SteadyTolerance) continue;
+                settled = true;
+                break;
+            }
+        }
+        finally
+        {
+            // Leave the solver exactly as it was found: a later steady march must not
+            // inherit this call’s time step.
+            _dt = saved;
+            BuildEnergySystem();
+        }
+        return new EnergyMarch(taken, steps, settled);
+    }
+
+    /// <summary>
+    /// The largest temperature excursion from the ambient that anything imposes on this
+    /// fluid: face temperatures, wall temperatures, OPENING stream temperatures, and the
+    /// current field. This is the scale every relative temperature test divides by, so it
+    /// must see every source — an inlet whose temperature it could not see made the
+    /// residual blind to the energy equation altogether.
+    /// Positive infinity when nothing imposes anything, which keeps numeric dust out of a
+    /// relative test rather than dividing by an epsilon.
+    /// </summary>
+    private double EnergyScale()
+    {
+        double span = _thermal!.BoundarySpan();
+        if (_wallTemps is not null)
+            foreach (double t in _wallTemps)
+                span = Math.Max(span, Math.Abs(t - _thermal.AmbientTemperature));
+        foreach (var opening in _settings.Openings)
+            if (opening.Temperature is { } t)
+                span = Math.Max(span, Math.Abs(t - _thermal.AmbientTemperature));
+        for (int n = 0; n < _tN; n++)
+            span = Math.Max(span, Math.Abs(_t[_tCells[n]] - _thermal.AmbientTemperature));
+        return span > 0 ? span : double.PositiveInfinity;
+    }
+
+    /// <summary>Largest change the last energy sub-step made [K].</summary>
+    private double MaxTemperatureChange()
+    {
+        double max = 0;
+        for (int n = 0; n < _tN; n++)
+        {
+            int c = _tCells[n];
+            double d = Math.Abs(_t[c] - _tPrev[c]);
+            if (d > max) max = d;
+        }
+        return max;
+    }
+
+    /// <summary>The current state as a <see cref="FlowSolution"/> — the same record the
+    /// steady march returns, so every downstream consumer (films, ledgers, overlays)
+    /// works on a transient snapshot unchanged.</summary>
+    public FlowSolution Snapshot(int steps, double residual)
+    {
+        var pressure = _grid.AllocateCellField();
+        for (int c = 0; c < pressure.Length; c++) pressure[c] = _rho * _phi[c];
+        var (inflow, outflow) = BoundaryFlux();
+        return new FlowSolution(_grid,
+            (double[])_components[0].Values.Clone(),
+            (double[])_components[1].Values.Clone(),
+            (double[])_components[2].Values.Clone(),
+            pressure, steps, residual, MaxDivergence(), inflow, outflow, _notes.ToList(),
+            _thermal is null ? null : (double[])_t.Clone());
+    }
+
     // ================================================================ one projection step
 
-    private double Step(CancellationToken ct)
+    private double Step(CancellationToken ct, bool marchEnergy = true)
     {
         // 1. Explicit advection of the current field (pure function of state; parallel
         //    with disjoint writes — bitwise at any DOP).
@@ -399,7 +599,7 @@ public sealed class IncompressibleFlowSolver
 
         // 5. Advance the fluid temperature with the corrected (divergence-free) field —
         //    conservative upwind advection + implicit diffusion.
-        if (_thermal is not null)
+        if (_thermal is not null && marchEnergy)
             AdvanceTemperature(ct);
 
         // March residual: largest velocity change this step relative to the field scale,
@@ -416,7 +616,7 @@ public sealed class IncompressibleFlowSolver
             }
         }
         double residual = maxDelta / scale;
-        if (_thermal is not null)
+        if (_thermal is not null && marchEnergy)
         {
             double maxDeltaT = 0;
             for (int n = 0; n < _tN; n++)
@@ -526,9 +726,19 @@ public sealed class IncompressibleFlowSolver
     /// (that is the incoming stream's temperature).</summary>
     private double? BoundaryTemperature(int d, bool high, int i, int j, int k)
     {
+        var (kind, _, openingT) = BoundaryAt(d, high, _grid.CellCenter(i, j, k));
+        if (openingT is { } streamT) return streamT;
         if (_thermal!.FaceTemperature(d, high) is { } explicitT) return explicitT;
-        var (kind, _) = BoundaryAt(d, high, _grid.CellCenter(i, j, k));
         return kind == FlowFaceKind.InletVelocity ? _thermal.AmbientTemperature : null;
+    }
+
+    /// <summary>The temperature a stream ARRIVING through a domain-boundary face carries:
+    /// an opening's own temperature, else the face's explicit temperature, else the
+    /// ambient. Same precedence and same lookup as <see cref="BoundaryTemperature"/>.</summary>
+    private double InflowTemperature(int d, bool high, int i, int j, int k)
+    {
+        var (_, _, openingT) = BoundaryAt(d, high, _grid.CellCenter(i, j, k));
+        return openingT ?? _thermal!.FaceTemperature(d, high) ?? _thermal.AmbientTemperature;
     }
 
     private void AdvanceTemperature(CancellationToken ct)
@@ -587,7 +797,7 @@ public sealed class IncompressibleFlowSolver
         else if (nd >= 0 && nd < AxisCells(d))
             tUp = _t[cell + s * CellStride(d)];    // interior (fluid) neighbour upstream
         else
-            tUp = _thermal!.FaceTemperature(d, s > 0) ?? _thermal.AmbientTemperature;
+            tUp = InflowTemperature(d, s > 0, i, j, k);
         return faceVelocity * tUp;
     }
 
@@ -627,7 +837,7 @@ public sealed class IncompressibleFlowSolver
                         }
                         if (!_grid.IsFluid(ci, cj, ck))
                             continue; // solid pressed against the boundary: face stays 0
-                        var (kind, velocity) = BoundaryAt(axis, high, FaceCenter(comp, i, j, k));
+                        var (kind, velocity, _) = BoundaryAt(axis, high, FaceCenter(comp, i, j, k));
                         switch (kind)
                         {
                             case FlowFaceKind.InletVelocity:
@@ -699,7 +909,7 @@ public sealed class IncompressibleFlowSolver
                         // Half-cell ghost across the domain plane transverse to this
                         // component: Dirichlet boundaries reflect (2V − u); Neumann
                         // boundaries (symmetry, outlet) mirror — no term.
-                        var (kind, velocity) = BoundaryAt(d, s > 0, FaceCenter(comp, i, j, k));
+                        var (kind, velocity, _) = BoundaryAt(d, s > 0, FaceCenter(comp, i, j, k));
                         if (kind is FlowFaceKind.Wall or FlowFaceKind.InletVelocity)
                         {
                             diag += 2 * _nu * invH2;
@@ -756,7 +966,7 @@ public sealed class IncompressibleFlowSolver
             return comp.Values[comp.Flat(i + (d == 0 ? s : 0), j + (d == 1 ? s : 0),
                 k + (d == 2 ? s : 0))];
         if (d == comp.Axis) return self; // outlet normal direction: zero gradient
-        var (kind, velocity) = BoundaryAt(d, s > 0, FaceCenter(comp, i, j, k));
+        var (kind, velocity, _) = BoundaryAt(d, s > 0, FaceCenter(comp, i, j, k));
         if (kind is FlowFaceKind.Wall or FlowFaceKind.InletVelocity)
         {
             double vt = kind == FlowFaceKind.InletVelocity ? Axis(velocity, comp.Axis) : 0;
@@ -827,7 +1037,7 @@ public sealed class IncompressibleFlowSolver
                     }
                     else
                     {
-                        var (kind, _) = BoundaryAt(d, s > 0, _grid.CellCenter(i, j, k));
+                        var (kind, _, _) = BoundaryAt(d, s > 0, _grid.CellCenter(i, j, k));
                         if (kind == FlowFaceKind.OutletPressure)
                             diag += 2 * invH2;               // Dirichlet 0 at the half-cell ghost
                         // inlet/wall/symmetry: Neumann, no term
@@ -1007,8 +1217,29 @@ public sealed class IncompressibleFlowSolver
         return s;
     }
 
+    /// <summary>
+    /// D_h = 4·V_fluid/A_wetted, measured on the grid the solve actually runs on:
+    /// 4·(N_fluid·h³)/(N_wall·h²) = 4·h·N_fluid/N_wall. For a duct of any cross-section
+    /// that is exactly 4A/P, the textbook hydraulic diameter. The staircase wall area
+    /// EXCEEDS the smooth one (a circle's voxel perimeter is 4/π of its true one), so this
+    /// reads slightly BELOW the true D_h — conservative for a laminar guard, and said.
+    /// </summary>
+    private double HydraulicDiameter()
+    {
+        int wetted = _domain.WallFaces.Count;
+        if (wetted == 0 || _domain.FluidCellCount == 0)
+            throw new InvalidOperationException(
+                "An internal-flow domain needs fluid cells bounded by solid walls; this grid " +
+                "has none. Refine the cell size below the passage width, or use the external " +
+                "flow regime.");
+        return 4.0 * _h * _domain.FluidCellCount / wetted;
+    }
+
     private double CharacteristicLength()
     {
+        // Internal flow: the passage, not the block it is bored through.
+        if (_settings.Regime == FlowRegime.Internal) return HydraulicDiameter();
+
         // Bodies present: the largest solid extent (the obstacle scale); otherwise the
         // largest domain extent (cavity/channel scale).
         int minI = int.MaxValue, minJ = int.MaxValue, minK = int.MaxValue;
@@ -1032,7 +1263,16 @@ public sealed class IncompressibleFlowSolver
         return Math.Max(_grid.Nx, Math.Max(_grid.Ny, _grid.Nz)) * _h;
     }
 
-    private (FlowFaceKind Kind, Vector3D Velocity) BoundaryAt(int axis, bool high, Vector3D pos)
+    /// <summary>
+    /// What the domain boundary does at one point of one box face: the face's kind and
+    /// inlet velocity, plus the stream temperature when an OPENING states one. The
+    /// temperature rides along because both the diffusive Dirichlet term and the
+    /// advective inflow term must read the same boundary state — they used to reach it
+    /// through two different lookups, and the advective one (the dominant term at an
+    /// inlet) could not see an opening at all.
+    /// </summary>
+    private (FlowFaceKind Kind, Vector3D Velocity, double? Temperature) BoundaryAt(
+        int axis, bool high, Vector3D pos)
     {
         var face = axis switch
         {
@@ -1051,9 +1291,9 @@ public sealed class IncompressibleFlowSolver
             if (opening.Face != face) continue;
             if (uCoord >= opening.UMin && uCoord <= opening.UMax
                 && vCoord >= opening.VMin && vCoord <= opening.VMax)
-                return (opening.Kind, opening.Velocity);
+                return (opening.Kind, opening.Velocity, opening.Temperature);
         }
-        return (_settings.FaceKind(face), _settings.InletVelocity);
+        return (_settings.FaceKind(face), _settings.InletVelocity, null);
     }
 
     private bool HasAnyOutletFace()

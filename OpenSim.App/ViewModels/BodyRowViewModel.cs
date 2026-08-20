@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSim.Core.Model;
 
 namespace OpenSim.App.ViewModels;
@@ -12,11 +12,16 @@ public partial class BodyRowViewModel : ObservableObject
 {
     private readonly Action _onVisibilityChanged;
 
-    public BodyRowViewModel(Body model, int index, Action onVisibilityChanged)
+    private readonly Action? _onRoleChanged;
+
+    public BodyRowViewModel(Body model, int index, Action onVisibilityChanged,
+        Action? onRoleChanged = null)
     {
         Model = model;
         Index = index;
         _onVisibilityChanged = onVisibilityChanged;
+        _onRoleChanged = onRoleChanged;
+        _isFluidRegion = model.Role == BodyRole.FluidRegion;
     }
 
     public Body Model { get; }
@@ -33,8 +38,26 @@ public partial class BodyRowViewModel : ObservableObject
         ? "not meshed"
         : $"{Model.Mesh.ElementCount:N0} elements";
 
-    /// <summary>Secondary line: material and mesh state at a glance.</summary>
-    public string Detail => $"{MaterialName} · {MeshStatus}";
+    /// <summary>
+    /// Marks this body as a FLUID VOLUME rather than material: a CAD assembly of an
+    /// internal-flow part carries the passage as its own solid, and treating it as metal
+    /// would fill the channel and leave nothing to flow. A fluid body is skipped by
+    /// meshing, by the FE assembly and by the voxelizer solid set; its geometry defines
+    /// the flow domain and its end caps are the openings.
+    /// </summary>
+    [ObservableProperty] private bool _isFluidRegion;
+
+    partial void OnIsFluidRegionChanged(bool value)
+    {
+        Model.Role = value ? BodyRole.FluidRegion : BodyRole.Solid;
+        OnPropertyChanged(nameof(Detail));
+        _onRoleChanged?.Invoke();
+    }
+
+    /// <summary>Secondary line: role, material and mesh state at a glance.</summary>
+    public string Detail => Model.Role == BodyRole.FluidRegion
+        ? "fluid volume · defines the flow domain"
+        : $"{MaterialName} · {MeshStatus}";
 
     /// <summary>Internal dissipation [W]; empty text clears it.</summary>
     public string HeatSourceText
@@ -64,5 +87,6 @@ public partial class BodyRowViewModel : ObservableObject
         OnPropertyChanged(nameof(MeshStatus));
         OnPropertyChanged(nameof(Detail));
         OnPropertyChanged(nameof(HeatSourceText));
+        OnPropertyChanged(nameof(IsFluidRegion));
     }
 }

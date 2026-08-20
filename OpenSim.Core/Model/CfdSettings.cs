@@ -1,4 +1,4 @@
-using OpenSim.Core.Numerics;
+﻿using OpenSim.Core.Numerics;
 
 namespace OpenSim.Core.Model;
 
@@ -51,6 +51,34 @@ public sealed record FlowOpening
 
     /// <summary>Uniform inlet velocity [m/s]; ignored for pressure outlets.</summary>
     public Vector3D Velocity { get; init; } = new(0, 0, 0);
+
+    /// <summary>
+    /// Temperature of the stream entering through this opening [K]; null = the ambient
+    /// (the reference temperature the energy equation is initialized at). An inlet that
+    /// is HOTTER than the surroundings is the whole point of a heat exchanger, so the
+    /// two cannot be the same number — before this existed the ambient was simultaneously
+    /// the inlet stream, the Boussinesq reference and the radiative surroundings.
+    /// Ignored on a pressure outlet, where the fluid leaves at whatever it has become
+    /// (backflow through an outlet still arrives at the ambient).
+    /// </summary>
+    public double? Temperature { get; init; }
+}
+
+/// <summary>
+/// Which length scale the Reynolds guard is honest about.
+/// </summary>
+public enum FlowRegime
+{
+    /// <summary>Flow AROUND a body inside a larger fluid box: the obstacle's largest
+    /// extent is the scale, which is what an external-flow Reynolds number means.</summary>
+    External = 0,
+
+    /// <summary>Flow THROUGH a passage inside a solid: the scale is the hydraulic
+    /// diameter D_h = 4·V_fluid/A_wetted, which for a duct of any cross-section is
+    /// exactly 4A/P. Using the solid's extent there would report the Reynolds number of
+    /// a body that is not in the flow at all - on a 300 mm block with a 20 mm bore it
+    /// reads 15× high and refuses a perfectly laminar case.</summary>
+    Internal = 1
 }
 
 /// <summary>
@@ -95,6 +123,44 @@ public sealed record CfdSettings
 
     /// <summary>Enclosure inlets/outlets — rectangular patches on box faces.</summary>
     public IReadOnlyList<FlowOpening> Openings { get; init; } = Array.Empty<FlowOpening>();
+
+    /// <summary>
+    /// The fluid the CFD resolves, by <see cref="FluidLibrary"/> name. Null - every
+    /// external-flow case - means "the surroundings", i.e. the environment's own fluid,
+    /// and then the CFD IS the environment: correlations have nothing left to add on a
+    /// wetted face and only radiation joins the film. A NAMED fluid marks an internal
+    /// circuit (water through a copper block) whose surroundings are still unresolved,
+    /// so the Stage 1 correlations keep carrying the outer surface.
+    /// </summary>
+    public string? FluidName { get; init; }
+
+    /// <summary>
+    /// A fluid given explicitly rather than by library name — the same escape hatch
+    /// <see cref="EnvironmentSettings.CustomFluid"/> is, and the one a benchmark with
+    /// exactly-known constant properties needs. It wins over <see cref="FluidName"/> and,
+    /// like a name, it marks the CFD as resolving a circuit rather than the surroundings.
+    /// </summary>
+    public FluidProperties? CustomFluid { get; init; }
+
+    /// <summary>The CFD working fluid, or null when the CFD resolves the surroundings and
+    /// the environment supplies it. Throws when a NAME is given that no library fluid
+    /// carries — a silent fallback to air inside a water circuit is unthinkable.</summary>
+    public FluidProperties? ResolveFluid()
+    {
+        if (CustomFluid is not null) return CustomFluid;
+        if (FluidName is null) return null;
+        return FluidLibrary.Find(FluidName) ?? throw new InvalidOperationException(
+            $"No fluid named {FluidName} is in the library " +
+            $"(have: {string.Join(", ", FluidLibrary.All.Select(f => f.Name))}).");
+    }
+
+    /// <summary>Which characteristic length the Reynolds guard uses. External (the
+    /// default) keeps every existing case byte-identical.</summary>
+    public FlowRegime Regime { get; init; } = FlowRegime.External;
+
+    /// <summary>True when the CFD resolves the surroundings themselves rather than a
+    /// separate internal circuit - see <see cref="FluidName"/>.</summary>
+    public bool ResolvesSurroundings => FluidName is null && CustomFluid is null;
 
     /// <summary>Steady-state convergence: relative change of the velocity field per
     /// pseudo-time step below which the flow is converged.</summary>
@@ -159,11 +225,25 @@ public sealed record CfdSettings
         Aabb domain;
         if (DomainBox is { } userBox)
         {
-            if (!userBox.Contains(solidBounds.Min) || !userBox.Contains(solidBounds.Max))
+            // The domain must INTERSECT the solids, not contain them. An internal-flow
+            // domain is deliberately a SUBSET of the solid — the channel and nothing
+            // else — and forcing it to swallow the whole block would drag every
+            // external pocket into the flow as a sealed cavity and multiply the cell
+            // budget by the volume ratio. Solid outside the domain is invisible to the
+            // flow and keeps its ordinary FE boundary conditions; how much of it there is
+            // gets SAID, because that is exactly what a reader needs to judge the model.
+            double overlap = OverlapVolume(userBox, solidBounds);
+            if (overlap <= 0)
                 throw new InvalidOperationException(
-                    "The CFD domain box does not contain the solid bodies " +
+                    "The CFD domain box does not overlap the solid bodies at all " +
                     $"(bodies span {Fmt(solidBounds)}, domain is {Fmt(userBox)}). " +
-                    "Grow the domain box or clear it to use the automatic domain.");
+                    "Move or grow the domain box, or clear it to use the automatic domain.");
+            var solidSize = solidBounds.Size;
+            double solidVolume = solidSize.X * solidSize.Y * solidSize.Z;
+            if (solidVolume > 0 && overlap < solidVolume * (1 - 1e-9))
+                notes.Add($"CFD domain {Fmt(userBox)} covers {100 * overlap / solidVolume:F1}% of " +
+                          "the solid bounding box; solid outside the domain is not seen by the " +
+                          "flow and keeps its FE boundary conditions (the internal-flow case).");
             domain = userBox;
         }
         else
@@ -245,6 +325,48 @@ public sealed record CfdSettings
             ZMinFace = z.Low, ZMaxFace = z.High,
             InletVelocity = velocity
         };
+    }
+
+    /// <summary>
+    /// Internal-flow boundary policy: every box face is a WALL, and the openings carry
+    /// the whole inlet/outlet story. This is the natural shape for a passage bored
+    /// through a solid — the domain box is a subset of the block, its faces are inside
+    /// metal almost everywhere, and only the bore mouths are open.
+    /// </summary>
+    /// <param name="domain">The gridded box — typically the fluid body's bounds.</param>
+    /// <param name="openings">Inlet and outlet patches on the box faces.</param>
+    /// <param name="fluidName">The working fluid's library name; it is what marks this
+    /// as a circuit distinct from the surroundings (see <see cref="FluidName"/>).</param>
+    /// <param name="baseline">Cell size / budget / tolerances to keep.</param>
+    public static CfdSettings ForInternalFlow(Aabb domain, IReadOnlyList<FlowOpening> openings,
+        string fluidName, CfdSettings? baseline = null)
+    {
+        if (openings.Count == 0)
+            throw new InvalidOperationException(
+                "An internal-flow domain needs at least one opening — a sealed passage " +
+                "has no flow, and every face of the box is a wall.");
+        var s = baseline ?? new CfdSettings();
+        return s with
+        {
+            DomainBox = domain,
+            XMinFace = FlowFaceKind.Wall, XMaxFace = FlowFaceKind.Wall,
+            YMinFace = FlowFaceKind.Wall, YMaxFace = FlowFaceKind.Wall,
+            ZMinFace = FlowFaceKind.Wall, ZMaxFace = FlowFaceKind.Wall,
+            InletVelocity = new Vector3D(0, 0, 0),
+            Openings = openings.ToArray(),
+            Regime = FlowRegime.Internal,
+            FluidName = fluidName
+        };
+    }
+
+    /// <summary>Volume of the intersection of two boxes (0 when they miss).</summary>
+    private static double OverlapVolume(Aabb a, Aabb b)
+    {
+        double dx = Math.Min(a.Max.X, b.Max.X) - Math.Max(a.Min.X, b.Min.X);
+        double dy = Math.Min(a.Max.Y, b.Max.Y) - Math.Max(a.Min.Y, b.Min.Y);
+        double dz = Math.Min(a.Max.Z, b.Max.Z) - Math.Max(a.Min.Z, b.Min.Z);
+        if (dx <= 0 || dy <= 0 || dz <= 0) return 0;
+        return dx * dy * dz;
     }
 
     private Aabb AutoDomain(Aabb solid, Vector3D flow, List<string> notes)

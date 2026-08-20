@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
 using OpenSim.Core.Interfaces;
@@ -17,11 +17,13 @@ public partial class SolveViewModel : ObservableObject
     private readonly MaterialsViewModel _materials;
     private readonly ElectrodesViewModel _electrodes;
     private readonly EnvironmentViewModel _environment;
+    private readonly CfdSetupViewModel _cfd;
 
     public SolveViewModel(ProjectSession session, ILogService log, IEnumerable<ISolver> solvers,
         OpenSim.Solvers.JouleHeatingStudy jouleStudy, MaterialsViewModel materials,
-        ElectrodesViewModel electrodes, EnvironmentViewModel environment)
+        ElectrodesViewModel electrodes, EnvironmentViewModel environment, CfdSetupViewModel cfd)
     {
+        _cfd = cfd;
         _session = session;
         _log = log;
         _solvers = solvers.ToList();
@@ -161,10 +163,10 @@ public partial class SolveViewModel : ObservableObject
     /// </summary>
     private async Task SolveEnvironmentAsync()
     {
-        var bodies = _session.Bodies.ToList();
+        var bodies = _session.Bodies.Where(b => b.Role == BodyRole.Solid).ToList();
         if (bodies.Count == 0)
         {
-            _log.Append("The project has no bodies to solve.");
+            _log.Append("The project has no solid bodies to solve.");
             return;
         }
 
@@ -265,12 +267,21 @@ public partial class SolveViewModel : ObservableObject
     /// </summary>
     private async Task SolveConjugateAsync()
     {
-        var bodies = _session.Bodies.ToList();
+        // A body marked as a fluid volume is NOT material: it never reaches the FE
+        // assembly or the voxelizer solid set. Filling the passage with metal would
+        // leave no flow path at all, so this filter is load-bearing, not cosmetic.
+        var bodies = _session.Bodies.Where(b => b.Role == BodyRole.Solid).ToList();
+        int fluidBodies = _session.Bodies.Count - bodies.Count;
         if (bodies.Count == 0)
         {
-            _log.Append("The project has no bodies to solve.");
+            _log.Append(fluidBodies > 0
+                ? "Every body is marked as a fluid volume — there is no solid to conduct heat."
+                : "The project has no bodies to solve.");
             return;
         }
+        if (fluidBodies > 0)
+            _log.Append($"{fluidBodies} body(ies) marked as fluid volumes are excluded from the " +
+                        "FE assembly; they define the flow domain instead.");
 
         var environment = _environment.Build();
         _session.Project.Environment = environment;
@@ -281,7 +292,12 @@ public partial class SolveViewModel : ObservableObject
             _session.StatusText = "Validation failed";
             return;
         }
-        if (environment.Medium == MediumKind.StillFluid && environment.Gravity.Length <= 0)
+        // An INTERNAL circuit is driven by its own inlet, so the surroundings being still
+        // says nothing about whether flow exists; the refusal below is about an EXTERNAL
+        // domain, where a still fluid without gravity genuinely has no steady state.
+        bool internalFlow = _cfd.DomainMode == 1;
+        if (!internalFlow && environment.Medium == MediumKind.StillFluid
+            && environment.Gravity.Length <= 0)
         {
             _log.Append("Validation: still fluid with zero gravity has no way to carry heat " +
                         "away (no stream, no buoyant plume) — no steady flow state exists. " +
@@ -292,8 +308,15 @@ public partial class SolveViewModel : ObservableObject
 
         var detection = (_session.Project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
         bool transient = !EnvironmentSteadyState;
-        var cfd = OpenSim.Core.Model.CfdSettings.ForExternalFlow(environment.FlowVelocity)
-            with { CellSize = CfdCellSize };
+        var cfd = _cfd.Build(CfdCellSize, environment.FlowVelocity);
+        if (cfd is null)
+        {
+            _session.StatusText = "Validation failed";
+            return;
+        }
+        // Persisted with the project: a CFD case that cannot be saved cannot be re-run,
+        // and a number nobody can re-run is not reproducible.
+        _session.Project.Cfd = cfd;
 
         _session.IsBusy = true;
         _session.StatusText = "Assembling…";

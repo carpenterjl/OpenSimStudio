@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
@@ -122,7 +122,8 @@ public partial class BodiesViewModel : ObservableObject
             Bodies.Clear();
             var bodies = _session.Bodies;
             for (int i = 0; i < bodies.Count; i++)
-                Bodies.Add(new BodyRowViewModel(bodies[i], i, RaiseVisibilityChanged));
+                Bodies.Add(new BodyRowViewModel(bodies[i], i, RaiseVisibilityChanged,
+                    _session.RaiseBodiesChanged));
             SelectedBody = Bodies.FirstOrDefault(b => ReferenceEquals(b.Model, _session.Body))
                            ?? Bodies.FirstOrDefault();
         }

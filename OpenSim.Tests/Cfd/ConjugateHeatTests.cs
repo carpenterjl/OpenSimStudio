@@ -189,12 +189,14 @@ public class ConjugateHeatTests
     }
 
     [Fact]
-    public void FrozenFlowTransient_ApproachesTheSteadyConjugateAnswer()
+    public void TransientRunToSteady_LandsOnTheSteadyConjugateAnswer()
     {
-        // The frozen-film transient held for many time constants must land near the
-        // steady conjugate loop. Not an identity: the steady loop updates the fluid
-        // reference temperatures as the block warms, the frozen film keeps the initial
-        // ones — the band states that difference honestly.
+        // Held for many time constants, the transient must land ON the steady conjugate
+        // loop. It is a much sharper statement than the frozen-film version this replaces:
+        // that one could only assert a SIGNED BIAS (the film kept cold-fluid reference
+        // temperatures, so it under-predicted the rise by ~30%), because the fluid
+        // temperature never moved. Now the fluid energy equation marches with the solid,
+        // so the two formulations converge to the same fixed point and the gate says so.
         const double power = 5.0;
         var environment = Channel(0.01);
 
@@ -208,7 +210,11 @@ public class ConjugateHeatTests
             {
                 InitialTemperature = 293.15,
                 Duration = 2e5,          // ≫ the block's lumped time constant
-                TimeStep = 1e3
+                // Few, long steps: backward Euler is unconditionally stable and only the
+                // ENDPOINT is under test. With a time-accurate fluid the step length also
+                // stops mattering to the fluid cost — each step marches at most four
+                // transits, so fewer steps is strictly less work for the same answer.
+                TimeStep = 1e4
             });
         var transient = ConjugateHeatStudy.Run(transientInput, nodeBases2, environment,
             ChannelGrid(0.01));
@@ -217,15 +223,11 @@ public class ConjugateHeatTests
 
         double steadyRise = steadyT.Average() - 293.15;
         double finalRise = finalT.Average() - 293.15;
-        // The frozen film keeps COLD-fluid reference temperatures (the flow was solved at
-        // the initial wall state), so its bias has a DETERMINISTIC SIGN: it must
-        // UNDER-predict the rise, and at this creeping Péclet the wake preheating the
-        // steady loop resolves is large (measured ~30%). The sign plus a coarse band is
-        // what frozen-flow mode honestly owes — the SHARP fixed-film transient≡steady
-        // identity is gated separately in PrescribedFilmTests.
-        Assert.True(finalRise < steadyRise,
-            $"the frozen (cold-reference) film must under-predict: {finalRise:F2} vs {steadyRise:F2} K");
-        Assert.InRange(finalRise / steadyRise, 0.5, 1.0);
+        // Two independent formulations of the same fixed point: the steady loop exchanges
+        // under-relaxed wall temperatures until they stop moving; the transient integrates
+        // there. They are not the same arithmetic, so the residual is the coupling's own
+        // convergence, not round-off — but it is a BAND AROUND ONE, no longer a bias.
+        Assert.InRange(finalRise / steadyRise, 0.9, 1.1);
     }
 
     [Fact]

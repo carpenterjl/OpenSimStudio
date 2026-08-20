@@ -1,4 +1,4 @@
-using OpenSim.Core.Interfaces;
+﻿using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 using OpenSim.Core.Results;
@@ -139,6 +139,10 @@ public sealed class HeatConductionSolver : ISolver
     /// mesh, and it replaces — never stacks with — an environment.</summary>
     internal static void ValidatePrescribedFilm(SolveInput input)
     {
+        if (input.PrescribedFilmSchedule is not null && input.Environment is not null)
+            throw new InvalidOperationException(
+                "A prescribed film schedule and an environment cannot both be set: each is a " +
+                "complete surface-exchange model, and applying both would double-count the film.");
         if (input.PrescribedFilm is not { } film) return;
         if (input.Environment is not null)
             throw new InvalidOperationException(

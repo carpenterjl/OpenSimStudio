@@ -29,6 +29,12 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
+            <CheckBox x:Name="BodyIsFluidCheck" Margin="0,6,0,0"
+                      Content="Selected body is a fluid volume (not material)"
+                      IsChecked="{Binding Bodies.SelectedBody.IsFluidRegion}"
+                      Foreground="{DynamicResource TextMutedBrush}"
+                      ToolTip="A CAD assembly of an internal-flow part carries the passage as its own solid. A fluid body is not meshed, not assembled and not treated as metal — it defines the CFD domain and its end caps are the openings."/>
+
             <UniformGrid Columns="2" Margin="0,6,0,0">
                 <Label Content="Heat source [W]"/>
                 <TextBox x:Name="BodyHeatSourceBox"

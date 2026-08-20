@@ -1,4 +1,4 @@
-using System.Windows.Media;
+﻿using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -50,6 +50,22 @@ public partial class FlowVisualizationViewModel : ObservableObject
         }
     }
 
+    /// <summary>What the slice paints. Speed is the flow-field view; TEMPERATURE is the
+    /// heat-exchanger view — the fluid contour a conjugate study is actually about, and
+    /// the one every reference report of this kind publishes.</summary>
+    [ObservableProperty] private int _sliceQuantity;
+
+    /// <summary>Fixed colour range for the slice. Off = the slice auto-scales to what it
+    /// contains; on, the two bounds below are used verbatim, which is what makes two
+    /// runs (or a run and a published figure) comparable at a glance.</summary>
+    [ObservableProperty] private bool _sliceFixedRange;
+
+    [ObservableProperty] private double _sliceMin;
+    [ObservableProperty] private double _sliceMax = 1;
+
+    /// <summary>The range and unit the slice is currently painting — the legend text.</summary>
+    [ObservableProperty] private string _sliceLegend = "";
+
     [ObservableProperty] private bool _showArrows = true;
     [ObservableProperty] private bool _showStreamlines = true;
     [ObservableProperty] private bool _showSlice;
@@ -64,6 +80,10 @@ public partial class FlowVisualizationViewModel : ObservableObject
     /// <summary>The composed flow overlay for the viewport; null when hidden/no result.</summary>
     [ObservableProperty] private Model3DGroup? _overlayModel;
 
+    partial void OnSliceQuantityChanged(int value) => Rebuild();
+    partial void OnSliceFixedRangeChanged(bool value) => Rebuild();
+    partial void OnSliceMinChanged(double value) { if (SliceFixedRange) Rebuild(); }
+    partial void OnSliceMaxChanged(double value) { if (SliceFixedRange) Rebuild(); }
     partial void OnShowArrowsChanged(bool value) => Rebuild();
     partial void OnShowStreamlinesChanged(bool value) => Rebuild();
     partial void OnShowSliceChanged(bool value) => Rebuild();
@@ -110,8 +130,8 @@ public partial class FlowVisualizationViewModel : ObservableObject
         if (ShowStreamlines)
             group.Children.Add(BuildStreamlines(flow, domain));
 
-        if (ShowSlice)
-            group.Children.Add(BuildSlice(flow));
+        if (ShowSlice && BuildSlice(flow) is { } sliceModel)
+            group.Children.Add(sliceModel);
 
         OverlayModel = group.Children.Count > 0 ? group : null;
     }
@@ -152,12 +172,27 @@ public partial class FlowVisualizationViewModel : ObservableObject
             Color.FromRgb(230, 240, 255));
     }
 
-    private GeometryModel3D BuildSlice(FlowSolution flow)
+    /// <summary>Quantity names and units, indexed by <see cref="SliceQuantity"/>.</summary>
+    private static readonly (string Name, string Unit)[] SliceQuantities =
+    {
+        ("Speed", "m/s"), ("Temperature", "K"), ("Pressure", "Pa")
+    };
+
+    private GeometryModel3D? BuildSlice(FlowSolution flow)
     {
         var grid = flow.Grid;
         int axis = Math.Clamp(SliceAxis, 0, 2);
         int nAxis = axis == 0 ? grid.Nx : axis == 1 ? grid.Ny : grid.Nz;
         int slice = Math.Clamp((int)(SliceFraction * nAxis), 0, nAxis - 1);
+
+        int quantity = Math.Clamp(SliceQuantity, 0, SliceQuantities.Length - 1);
+        if (quantity == 1 && flow.Temperature is null)
+        {
+            _log.Append("The flow carries no temperature field (the solve ran without an " +
+                        "energy equation), so there is no temperature slice to draw.");
+            SliceLegend = "";
+            return null;
+        }
 
         var points = new List<Vector3D>();
         var speeds = new List<double>();
@@ -184,15 +219,41 @@ public partial class FlowVisualizationViewModel : ObservableObject
                     AddSample(i, j, slice);
         }
 
-        double max = speeds.Count > 0 ? speeds.Max() : 1;
+        double lo, hi;
+        if (SliceFixedRange && SliceMax > SliceMin)
+        {
+            lo = SliceMin; hi = SliceMax;
+        }
+        else
+        {
+            // Speed always starts at zero (that is a physical floor and keeps the still
+            // fluid black); the others take the data range they actually span.
+            lo = quantity == 0 ? 0 : speeds.Count > 0 ? speeds.Min() : 0;
+            hi = speeds.Count > 0 ? speeds.Max() : 1;
+            if (hi - lo < 1e-30) hi = lo + 1e-30;
+        }
+        var (name, unit) = SliceQuantities[quantity];
+        SliceLegend = $"{name}: {lo:G5} – {hi:G5} {unit}" +
+                      (quantity == 1
+                          ? "  (solid cells carry the ambient reference — the metal’s own " +
+                            "field is the FE result)"
+                          : "");
         return SceneBuilder.BuildFlowSliceModel(points, speeds, n1, n2,
-            ColormapKind.Rainbow, 0, Math.Max(max, 1e-30), opacity: 0.55);
+            ColormapKind.Rainbow, lo, hi, opacity: quantity == 1 ? 0.95 : 0.55);
 
         void AddSample(int i, int j, int k)
         {
             points.Add(grid.CellCenter(i, j, k));
-            // Solid cells show zero speed — they read as the dark silhouette of the body.
-            speeds.Add(grid.IsFluid(i, j, k) ? flow.CellVelocity(i, j, k).Length : 0);
+            bool fluid = grid.IsFluid(i, j, k);
+            speeds.Add(quantity switch
+            {
+                // Solid cells show zero speed — they read as the dark silhouette of the body.
+                0 => fluid ? flow.CellVelocity(i, j, k).Length : 0,
+                // The temperature array already carries the ambient in solid cells; that
+                // is stated on FlowSolution and repeated in the legend rather than faked.
+                1 => flow.Temperature![grid.CellIndex(i, j, k)],
+                _ => fluid ? flow.Pressure[grid.CellIndex(i, j, k)] : 0
+            });
         }
     }
 }

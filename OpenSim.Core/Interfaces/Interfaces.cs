@@ -1,4 +1,4 @@
-using OpenSim.Core.Model;
+﻿using OpenSim.Core.Model;
 using OpenSim.Core.Results;
 
 namespace OpenSim.Core.Interfaces;
@@ -81,6 +81,26 @@ public sealed record SolveInput
     /// the surface exchange.
     /// </summary>
     public SurfaceFilmModel? PrescribedFilm { get; init; }
+
+    /// <summary>
+    /// A film that CHANGES with time: (step index, time [s], the solid nodal temperature
+    /// at the START of that step) -> the film for that step,
+    /// used by the transient solver in place of the fixed <see cref="PrescribedFilm"/>.
+    /// This is what makes a conjugate transient time-accurate on the fluid side: a
+    /// thermal front travelling down a channel moves the local reference temperature
+    /// by tens of kelvin while the metal barely stirs, and a film frozen at t = 0 would
+    /// hold the whole wall at the inlet-time state.
+    /// <para>
+    /// A delegate on a data record follows the RLGC frequency-provider precedent: the
+    /// schedule is a pure function the solver PULLS from, so the solver stays a solver
+    /// and the coupling stays in the study that owns it. Null leaves the fixed-film path
+    /// bitwise unchanged, and the fixed film is still the t = 0 state when both are set.
+    /// </para>
+    /// </summary>
+    /// <remarks>Step 0 is the INITIAL state and must not advance anything: the transient
+    /// solver pulls it once to label the t = 0 frame.</remarks>
+    public Func<int, double, IReadOnlyList<double>, SurfaceFilmModel>? PrescribedFilmSchedule
+    { get; init; }
 
     /// <summary>Settings for a modal analysis. Null (the default mode count applies)
     /// or ignored outside the modal solver.</summary>

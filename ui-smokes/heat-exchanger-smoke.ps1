@@ -1,25 +1,26 @@
-# UI test — conjugate heat flow with computed airflow (Phase 6 Stage 2, CFD).
+# UI test - the copper heat exchanger (internal-flow conjugate CFD).
 #
-# Imports the three-part STEP assembly, meshes it, sets a MOVING-fluid environment, and
-# runs the "Heat flow with computed airflow (CFD)" analysis: voxelize → laminar flow +
-# fluid energy solve → wall film → frozen-flow solid transient. Then exercises the flow
-# panel (summary line, arrows/streamlines/slice toggles) and proves the timeline still
-# appears (the solid leg is a normal multi-frame transient) and that Mechanical carries
-# no CFD control.
+# Reproduces, through the shipping UI, the setup of a 2023 Ansys Fluent coursework study:
+# a 300 x 200 x 50 mm copper block with a serpentine water channel, water in at 363.15 K,
+# environment 300 K, transient. The workflow it proves:
+#   import the STEP ASSEMBLY (Copper Body + Water)
+#     -> mark "Water" as a FLUID VOLUME (it must never be meshed as metal)
+#     -> material + mesh the copper
+#     -> still-air environment at 300 K
+#     -> CFD domain "Internal", working fluid Water, DETECT OPENINGS from the fluid body
+#     -> the bore mouths come back as two ports; inlet speed + inlet temperature
+#     -> solve -> outlet mixing-cup temperature in the log, temperature slice in the view.
 #
-# Inherits every UIA trap of thermal-flow-smoke.ps1 (no click-by-text, Border has no
-# peer, LogService "[HH:mm:ss] " prefix, LostFocus boxes need a focus nudge, hwnd-driven
-# file dialog). CFD-specific choices:
-#  - The cell-size box lives on the CFD setup panel (Environment step), not the flow
-#    visualization panel; the rail is navigated by AutomationId before each group.
-#  - The fixture's parts are 1 mm cubes spanning 21 mm, so the CELL SIZE IS SET
-#    EXPLICITLY (1 mm): the automatic size (smallest extent / 24) would build a
-#    near-budget grid of the 2L/5L auto domain and the smoke would run for ages.
-#  - Moving fluid at 0.2 m/s: a still fluid solves the buoyant plume, which converges
-#    far slower than a through-flow at smoke-sized grids.
+# Inherits every UIA trap of the earlier smokes (no click-by-text, Border has no peer,
+# LogService "[HH:mm:ss] " prefix defeats ^-anchored patterns, LostFocus boxes need a
+# focus nudge, hwnd-driven file dialog, the log ListBox VIRTUALIZES).
+#
+# The cell size is set EXPLICITLY and coarse (5 mm) and the march is short: this is a
+# WORKFLOW smoke, not the reproduction. The published numbers come from the Release
+# benchmark, the way the 128-squared cavity does.
 param(
     [string]$Exe  = "C:\Users\Carpe\Desktop\Claude App Tests\OpenSimStudio\OpenSim.App\bin\Debug\net8.0-windows\OpenSim.App.exe",
-    [string]$Step = "C:\Users\Carpe\Desktop\Claude App Tests\OpenSimStudio\ui-smokes\assembly-three-parts.step"
+    [string]$Step = "C:\Users\Carpe\Desktop\ENG Project 2 Heat Exchanger\Heat Exchanger v1.step"
 )
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
@@ -182,7 +183,6 @@ function Drive-FileDialog($path, $tries = 20) {
     }
     return "file dialog never appeared"
 }
-
 $p = Start-Process -FilePath $Exe -PassThru
 Start-Sleep -Seconds 7
 try {
@@ -196,98 +196,130 @@ try {
     Start-Sleep -Seconds 2
     "IMPORT:   $(Invoke-ById $win 'ImportAssemblyButton')"
     "DIALOG:   $(Drive-FileDialog $Step)"
-    $imported = Wait-Log $win "Assembly imported: \d+ bod" 90
+    $imported = Wait-Log $win "Assembly imported: \d+ bod" 120
     "IMPORTED: $imported"
-    Check ($null -ne $imported) "the STEP file imported as an assembly"
-    $bodyCount = if ($imported -match "Assembly imported: (\d+) bod") { [int]$Matches[1] } else { 0 }
+    Check ($imported -match "Assembly imported: 2 bod") "the STEP assembly imported as two bodies"
 
-    # ---------- 2. Material, mesh, moving-fluid environment, CFD analysis ----------
-    "MATERIAL: $(Invoke-ById $win 'ApplyMaterialToAllButton')"
-    "MESH:     $(Invoke-ById $win 'MeshAllBodiesButton')"
-    $meshed = $null
-    foreach ($i in 1..120) {
-        Start-Sleep -Seconds 1
-        $meshed = Get-TextMatching $win "^\d+ bod(y|ies) \(\d+ meshed\)$"
-        if ($meshed -match "\((\d+) meshed\)" -and [int]$Matches[1] -eq $bodyCount) { break }
+    # ---------- 2. The Water body is a FLUID VOLUME, not metal ----------
+    # The rail auto-advances to Mesh on import, and BodiesPanel rides on both steps.
+    $list = Wait-ById $win 'BodyList' 30
+    Check ($null -ne $list) "the body list is there"
+    $waterRow = $null
+    foreach ($it in $list.FindAll($TS::Descendants, (TypeCond ($CT::ListItem)))) {
+        foreach ($t in $it.FindAll($TS::Descendants, (TypeCond ($CT::Text)))) {
+            if ($t.Current.Name -like "Water*") { $waterRow = $it; break }
+        }
+        if ($null -ne $waterRow) { break }
     }
-    "MESHED:   $meshed"
-    Check ($bodyCount -gt 0 -and $meshed -match "\((\d+) meshed\)" -and [int]$Matches[1] -eq $bodyCount) `
-        "every body meshed"
+    Check ($null -ne $waterRow) "the Water body is listed"
+    if ($null -ne $waterRow) {
+        $waterRow.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+        Start-Sleep -Milliseconds 400
+        "FLUIDROLE: $(Set-Check (Find-ById $win 'BodyIsFluidCheck') $true)"
+    }
 
-    # The shell is step-gated: the environment and CFD controls live on the Environment
-    # step, the transient boxes on Setup, the Solve button on Solve, the flow overlays on
-    # Results. Every one of those is a rail click by AutomationId.
+    # ---------- 3. Copper on the solid, mesh it ----------
+    "MATERIAL: $(Select-ComboItem $win 'MaterialCombo' 'Copper')"
+    "APPLY:    $(Invoke-ById $win 'ApplyMaterialToAllButton')"
+    "MESH:     $(Invoke-ById $win 'MeshAllBodiesButton')"
+    $skipped = Wait-Log $win "is a fluid volume, not material" 180
+    "SKIPPED:  $skipped"
+    Check ($null -ne $skipped) "the fluid volume was NOT meshed, and said so"
+    $meshedLog = Wait-Log $win "nodes, [\d,]+ elements" 600
+    "MESHED:   $meshedLog"
+    Check ($null -ne $meshedLog) "the copper body meshed"
+
+    # ---------- 4. Still air at 300 K around the block ----------
     "STEP:     $(Invoke-ById $win 'StudyStepEnvironment')"
     Start-Sleep -Seconds 1
-    "MEDIUM:   $(Select-ComboItem $win 'MediumCombo' 'Moving fluid')"
-    "SPEED:    $(Set-Value (Find-ById $win 'FlowSpeedBox') '0.2')"
+    "MEDIUM:   $(Select-ComboItem $win 'MediumCombo' 'Still fluid')"
+    "FLUID:    $(Select-ComboItem $win 'FluidCombo' 'Air')"
+    $ambient = Find-ById $win 'AmbientBox'
+    "AMBIENT:  $(Set-Value $ambient '300')"
     $radiation = Find-ById $win 'RadiationCheck'
-    $radiation.SetFocus()          # commits the speed box (LostFocus binding)
-    Start-Sleep -Milliseconds 250
+    $radiation.SetFocus(); Start-Sleep -Milliseconds 250     # commits the LostFocus box
     "RADIATE:  $(Set-Check $radiation $true)"
 
+    # ---------- 5. The CFD case: internal domain, water, detected openings ----------
     "ANALYSIS: $(Select-ComboItem $win 'AnalysisCombo' 'computed airflow')"
-    Check ((Get-ComboSelection $win 'AnalysisCombo') -like "*airflow*") "the CFD analysis is selected"
+    $domainCombo = Wait-ById $win 'CfdDomainModeCombo' 20
+    Check ($null -ne $domainCombo) "the CFD setup panel appeared for the conjugate analysis"
+    "DOMAIN:   $(Select-ComboItem $win 'CfdDomainModeCombo' 'Internal')"
+    Start-Sleep -Milliseconds 500
+    "CFDFLUID: $(Select-ComboItem $win 'CfdFluidCombo' 'Water')"
+    "CELL:     $(Set-Value (Find-ById $win 'CfdCellSizeBox') '0.005')"
+    (Find-ById $win 'CfdWallMarginBox').SetFocus(); Start-Sleep -Milliseconds 250
 
-    # The Airflow panel appears only for the CFD analysis; its cell-size box also binds
-    # LostFocus, so the write is committed by moving focus to the transient boxes.
-    $cellBox = Wait-ById $win 'CfdCellSizeBox' 15
-    Check ($null -ne $cellBox) "the Airflow (CFD) panel appeared for the CFD analysis"
-    "CELL:     $(Set-Value $cellBox '0.001')"
+    "DETECT:   $(Invoke-ById $win 'CfdDetectOpeningsButton')"
+    Start-Sleep -Seconds 2
+    $status = Get-Name (Find-ById $win 'CfdOpeningsStatus')
+    "OPENINGS: $status"
+    Check ($status -match "2 openings found") "both bore mouths were detected from the fluid body"
+    Check ($status -match "XMin" -and $status -match "XMax") "the mouths are on the two end faces"
+
+    # Port 1 is the inlet (seeded); give it the reference stream.
+    "SPEED:    $(Set-Value (Find-ById $win 'OpeningSpeed1') '0.1')"
+    $tempBox = Find-ById $win 'OpeningTemp1'
+    Check ($null -ne $tempBox) "the inlet carries its own stream temperature, separate from the ambient"
+    if ($null -ne $tempBox) {
+        $tempBox.SetFocus(); Start-Sleep -Milliseconds 200
+        "INLET T:  $(Set-Value $tempBox '363.15')"
+    }
+
+    # ---------- 6. Transient settings + solve ----------
     "STEP:     $(Invoke-ById $win 'StudyStepSetup')"
     Start-Sleep -Seconds 1
-    $t0Box = Find-ById $win 'InitialTemperatureBox'
-    $t0Box.SetFocus(); Start-Sleep -Milliseconds 250
-    $t0 = Set-Value $t0Box '350'
-    $dur = Set-Value (Find-ById $win 'TransientDurationBox') '2'
-    $dt = Set-Value (Find-ById $win 'TransientTimeStepBox') '0.2'
-    "SETUP:    cell=0.001 m, T0=$t0 K, duration=$dur s, step=$dt s"
+    $t0 = Find-ById $win 'InitialTemperatureBox'
+    $t0.SetFocus(); Start-Sleep -Milliseconds 250
+    "T0:       $(Set-Value $t0 '300')"
+    "DURATION: $(Set-Value (Find-ById $win 'TransientDurationBox') '2')"
+    "STEPSIZE: $(Set-Value (Find-ById $win 'TransientTimeStepBox') '1')"
 
-    # ---------- 3. Solve (voxelize → flow march → frozen-flow solid transient) ----------
     "STEP:     $(Invoke-ById $win 'StudyStepSolve')"
     Start-Sleep -Seconds 1
     "SOLVE:    $(Invoke-ById $win 'SolveButton')"
-    $merged = Wait-Log $win "Merged \d+ bodies" 120
-    "MERGE:    $merged"
-    Check ($null -ne $merged) "merge + contact detection ran"
-    $done = Wait-Log $win "Conjugate solve complete" 900
+    $done = Wait-Log $win "Conjugate solve complete" 2400
     "DONE:     $done"
     Check ($null -ne $done) "the conjugate solve finished"
     if ($null -eq $done) { "ABORT: solve did not finish"; exit 1 }
 
-    $voxLine = Find-LogAnywhere $win "Voxelized \d+"
-    "VOXEL:    $voxLine"
-    Check ($null -ne $voxLine) "the voxelization is stated in the log (cells, wall faces)"
+    # ---------- 7. What the reference report quotes ----------
     $reLine = Find-LogAnywhere $win "Re = "
     "REYNOLDS: $reLine"
-    Check ($null -ne $reLine) "the Reynolds number is stated in the log"
-    $frozenLine = Find-LogAnywhere $win "Frozen-flow transient"
-    "FROZEN:   $frozenLine"
-    Check ($null -ne $frozenLine) "the frozen-flow assumption is stated with its validity"
+    Check ($reLine -match "L = 0\.0[0-9]") "the Reynolds number measures the PASSAGE, not the block"
+    $portIn = Find-LogAnywhere $win "Opening 1 \(XMin\): in "
+    "INLET:    $portIn"
+    Check ($portIn -match "mixing-cup T = 363") "the inlet stream arrives at its own temperature"
+    $portOut = Find-LogAnywhere $win "Opening 2 \(XMax\): out "
+    "OUTLET:   $portOut"
+    Check ($null -ne $portOut) "the outlet reports a mixing-cup temperature"
+    $trace = Find-LogAnywhere $win "Outlet temperature history"
+    Check ($null -ne $trace) "the outlet temperature is reported as a time series"
+    $surroundings = Find-LogAnywhere $win "Surroundings: still Air"
+    "SURROUND: $surroundings"
+    Check ($null -ne $surroundings) "the unwetted skin is carried by the air correlations"
 
-    # ---------- 4. The flow panel: summary + toggles ----------
+    # ---------- 8. The temperature contour ----------
     "STEP:     $(Invoke-ById $win 'StudyStepResults')"
     Start-Sleep -Seconds 1
-    $summaryText = Get-Name (Find-ById $win 'FlowSummaryText')
-    "FLOW:     $summaryText"
-    Check ($summaryText -match "peak .* m/s") "the flow summary reports the resolved field"
-    "ARROWS:   $(Set-Check (Find-ById $win 'FlowArrowsCheck') $true)"
-    "STREAMS:  $(Set-Check (Find-ById $win 'FlowStreamlinesCheck') $true)"
     "SLICE:    $(Set-Check (Find-ById $win 'FlowSliceCheck') $true)"
-    Start-Sleep -Milliseconds 800
-    Check (-not $p.HasExited) "the viewport survived the flow overlays"
+    Start-Sleep -Milliseconds 600
+    "QUANTITY: $(Select-ComboItem $win 'SliceQuantityCombo' 'Temperature')"
+    Start-Sleep -Seconds 1
+    $legend = Get-Name (Find-ById $win 'SliceLegendText')
+    "LEGEND:   $legend"
+    Check ($legend -match "Temperature: .* K") "the slice paints temperature in kelvin"
+    "FIXED:    $(Set-Check (Find-ById $win 'SliceFixedRangeCheck') $true)"
+    (Find-ById $win 'SliceMinBox').SetFocus(); Start-Sleep -Milliseconds 200
+    "MIN:      $(Set-Value (Find-ById $win 'SliceMinBox') '300')"
+    (Find-ById $win 'SliceMaxBox').SetFocus(); Start-Sleep -Milliseconds 200
+    "MAX:      $(Set-Value (Find-ById $win 'SliceMaxBox') '363.15')"
+    (Find-ById $win 'SliceMinBox').SetFocus(); Start-Sleep -Milliseconds 400
+    $legend2 = Get-Name (Find-ById $win 'SliceLegendText')
+    "PINNED:   $legend2"
+    Check ($legend2 -match "300 . 363") "the colour range can be pinned to the reference figure"
 
-    # ---------- 5. The solid leg is a normal transient: the timeline is there ----------
-    $slider = Wait-ById $win 'TimelineSlider' 60
-    Check ($null -ne $slider) "the timeline appeared for the frozen-flow transient"
-
-    # ---------- 6. Mechanical carries no CFD control ----------
-    "NAV:      $(Invoke-ById $win 'WorkspaceStructuralButton')"
-    Start-Sleep -Seconds 2
-    $cfd2 = Find-ById $win 'CfdCellSizeBox'
-    Check ($null -eq $cfd2 -or $cfd2.Current.IsOffscreen) "no CFD controls in the Mechanical workspace"
-
-    Check (-not $p.HasExited) "the app is still alive"
+    Check (-not $p.HasExited) "the app survived the whole workflow"
 }
 catch {
     $failures.Add("the smoke script itself failed: $_")
@@ -298,7 +330,7 @@ finally {
 }
 
 if ($failures.Count -gt 0) {
-    "";"SMOKE FAILED — $($failures.Count) check(s):"
+    "";"SMOKE FAILED - $($failures.Count) check(s):"
     $failures | ForEach-Object { "  - $_" }
     exit 1
 }

@@ -79,17 +79,38 @@ public class CfdSettingsTests
     }
 
     [Fact]
-    public void UserDomainBox_NotContainingTheSolids_IsATypedFailure()
+    public void UserDomainBox_MayCoverPartOfTheSolids_ButMustSayHowMuch()
+    {
+        // The rule is INTERSECTION, not containment: an internal-flow domain is
+        // deliberately a subset of the solid — the passage and nothing else — and
+        // forcing the box to swallow the whole part would drag every external pocket in
+        // as a sealed cavity. What the user is owed is the COVERAGE, said out loud,
+        // because solid outside the domain is invisible to the flow.
+        var solid = new Aabb(new Vector3D(0, 0, 0), new Vector3D(1, 1, 1));
+        var settings = new CfdSettings
+        {
+            DomainBox = new Aabb(new Vector3D(0, 0, 0), new Vector3D(0.5, 1, 1)),
+            CellSize = 0.1
+        };
+
+        var grid = settings.ResolveGrid(solid, new Vector3D(0, 0, 0));
+        Assert.Equal(0.5, grid.Domain.Max.X, 12);
+        Assert.Contains(grid.Notes, n => n.Contains("50.0% of"));
+    }
+
+    [Fact]
+    public void UserDomainBox_MissingTheSolidsEntirely_IsATypedFailure()
     {
         var solid = new Aabb(new Vector3D(0, 0, 0), new Vector3D(1, 1, 1));
         var settings = new CfdSettings
         {
-            DomainBox = new Aabb(new Vector3D(0, 0, 0), new Vector3D(0.5, 1, 1))
+            DomainBox = new Aabb(new Vector3D(5, 5, 5), new Vector3D(6, 6, 6)),
+            CellSize = 0.1
         };
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => settings.ResolveGrid(solid, new Vector3D(0, 0, 0)));
-        Assert.Contains("domain box", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("does not overlap", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

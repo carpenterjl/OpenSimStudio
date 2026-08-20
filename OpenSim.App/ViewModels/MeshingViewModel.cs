@@ -1,4 +1,4 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+﻿using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
 using OpenSim.Core.Interfaces;
@@ -110,6 +110,12 @@ public partial class MeshingViewModel : ObservableObject
             for (int i = 0; i < bodies.Count; i++)
             {
                 var body = bodies[i];
+                if (body.Role == BodyRole.FluidRegion)
+                {
+                    _log.Append($"Body '{body.Name}' is a fluid volume, not material — not meshed " +
+                                "(it defines the flow domain instead).");
+                    continue;
+                }
                 if (body.Geometry is not { } geometry)
                 {
                     _log.Append($"Body '{body.Name}' has no geometry — skipped.");

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using OpenSim.App.Services;
 using OpenSim.App.ViewModels;
@@ -59,6 +59,7 @@ public partial class App : Application
         services.AddSingleton<BodiesViewModel>();
         services.AddSingleton<EnvironmentViewModel>();
         services.AddSingleton<FlowVisualizationViewModel>();
+        services.AddSingleton<CfdSetupViewModel>();
         services.AddSingleton<ColormapViewModel>();
         services.AddSingleton<StudyRailViewModel>();
         services.AddSingleton<SceneViewModel>();

@@ -659,6 +659,7 @@
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Environment}">
                                                 <panels:EnvironmentPanel/>
+                                                <panels:CfdSetupPanel/>
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
                                                 <panels:MaterialPanel/>

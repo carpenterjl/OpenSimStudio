@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -37,7 +37,8 @@ public partial class MainViewModel : ObservableObject
         AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, SolveViewModel solve,
         ResultsViewModel results, SceneViewModel scene, BodiesViewModel bodies,
         EnvironmentViewModel environment, ColormapViewModel colormap,
-        FlowVisualizationViewModel flow, StudyRailViewModel studyRail,
+        FlowVisualizationViewModel flow, CfdSetupViewModel cfdSetup,
+        StudyRailViewModel studyRail,
         ProjectSerializer serializer, RecentProjectsService recentProjects,
         ThemeService theme)
     {
@@ -60,6 +61,7 @@ public partial class MainViewModel : ObservableObject
         Environment = environment;
         Colormap = colormap;
         Flow = flow;
+        CfdSetup = cfdSetup;
         StudyRail = studyRail;
         Theme = theme;
         _serializer = serializer;
@@ -99,6 +101,9 @@ public partial class MainViewModel : ObservableObject
     public EnvironmentViewModel Environment { get; }
     public ColormapViewModel Colormap { get; }
     public FlowVisualizationViewModel Flow { get; }
+
+    /// <summary>The CFD case: domain, fluid, grid and the detected openings.</summary>
+    public CfdSetupViewModel CfdSetup { get; }
 
     /// <summary>The gated study-steps rail; its selected step drives the properties pane.</summary>
     public StudyRailViewModel StudyRail { get; }
