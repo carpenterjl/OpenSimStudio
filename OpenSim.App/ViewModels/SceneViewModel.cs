@@ -554,9 +554,19 @@ public partial class SceneViewModel : ObservableObject
 
     private void RefreshSelectedEdges()
     {
-        SelectedEdgeLines = _session.Body.Mesh is null || _session.SelectedEdges.Count == 0
-            ? new Point3DCollection()
-            : SceneBuilder.BuildEdgeHighlight(_session.Body.Mesh, _session.SelectedEdges);
+        if (_session.SelectedEdges.Count == 0)
+        {
+            SelectedEdgeLines = new Point3DCollection();
+            return;
+        }
+        // The ids are in whichever space the session says, so the highlight is drawn from
+        // the same source the panel listed them from - reading the mesh here while the
+        // panel listed geometry ids would highlight arbitrary other edges.
+        SelectedEdgeLines = _session.ScopeIsGeometric
+            ? SceneBuilder.BuildEdgeHighlight(_session.Body.Geometry!, _session.SelectedEdges)
+            : _session.Body.Mesh is { } mesh
+                ? SceneBuilder.BuildEdgeHighlight(mesh, _session.SelectedEdges)
+                : new Point3DCollection();
     }
 
     /// <summary>

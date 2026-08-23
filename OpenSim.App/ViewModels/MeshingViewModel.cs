@@ -21,7 +21,16 @@ public partial class MeshingViewModel : ObservableObject
         _log = log;
         _meshGenerator = meshGenerator;
         session.MeshChanged += (_, _) => RefreshMeshInfo();
+        session.GeometryReplaced += (_, _) => PrefillDivisions();
+        session.ActiveBodyChanged += (_, _) => PrefillDivisions();
     }
+
+    /// <summary>The meshers offered by the picker, with the labels the user reads.</summary>
+    public IReadOnlyList<MeshMethodOption> MeshMethods { get; } = new[]
+    {
+        new MeshMethodOption(MeshMethod.Delaunay, "Delaunay (any geometry)"),
+        new MeshMethodOption(MeshMethod.StructuredLattice, "Structured lattice (box)")
+    };
 
     [ObservableProperty] private double _targetEdgeLength; // 0 = auto
     [ObservableProperty] private bool _autoEdgeLength = true;
@@ -30,6 +39,55 @@ public partial class MeshingViewModel : ObservableObject
     /// <summary>Generate TET10 (quadratic) elements — fixes TET4's bending stiffness.
     /// Structural solves only; the electrical/thermal solvers require linear meshes.</summary>
     [ObservableProperty] private bool _quadraticElements;
+
+    /// <summary>The mesher to run. Delaunay is the default, so nothing about an existing
+    /// project changes until the user asks for something else.</summary>
+    [ObservableProperty] private MeshMethod _meshMethod = MeshMethod.Delaunay;
+
+    [ObservableProperty] private int _latticeNx = 10;
+    [ObservableProperty] private int _latticeNy = 10;
+    [ObservableProperty] private int _latticeNz = 10;
+
+    /// <summary>Whether the lattice division boxes apply — they are meaningless to Delaunay.</summary>
+    public bool IsStructured => MeshMethod == MeshMethod.StructuredLattice;
+
+    partial void OnMeshMethodChanged(MeshMethod value)
+    {
+        OnPropertyChanged(nameof(IsStructured));
+        if (value == MeshMethod.StructuredLattice) PrefillDivisions();
+    }
+
+    /// <summary>
+    /// Fills the division boxes with what the current element size implies for this body, so
+    /// switching to the lattice starts somewhere sensible rather than at a leftover number.
+    /// It is also the only usable path on a large part: the Detail slider stops at 2 mm, far
+    /// finer than a part measured in tens of centimetres can afford.
+    /// </summary>
+    private void PrefillDivisions()
+    {
+        if (_session.Body.Geometry is not { } geometry) return;
+        var bounds = geometry.Bounds;
+        double h = TargetEdgeLength > 0 ? TargetEdgeLength : bounds.Diagonal / 15.0;
+        var size = bounds.Size;
+        LatticeNx = StructuredLatticeMeshGenerator.DivisionsFor(size.X, h);
+        LatticeNy = StructuredLatticeMeshGenerator.DivisionsFor(size.Y, h);
+        LatticeNz = StructuredLatticeMeshGenerator.DivisionsFor(size.Z, h);
+    }
+
+    /// <summary>
+    /// The settings a mesh run uses. <see cref="MeshSettings.Method"/> stays NULL for
+    /// Delaunay rather than being set explicitly: null is what every project written before
+    /// methods existed carries, so the default path and its saved form are the same thing.
+    /// </summary>
+    private MeshSettings BuildSettings(bool perBodyDivisions) => new()
+    {
+        TargetEdgeLength = TargetEdgeLength,
+        ElementOrder = QuadraticElements ? ElementOrder.Quadratic : ElementOrder.Linear,
+        Method = MeshMethod == MeshMethod.Delaunay ? null : MeshMethod,
+        Divisions = MeshMethod == MeshMethod.StructuredLattice && !perBodyDivisions
+            ? new LatticeDivisions(LatticeNx, LatticeNy, LatticeNz)
+            : null
+    };
 
     /// <summary>Slider value [m]; setting it turns Auto off. Defaults to 0.3 mm when auto.</summary>
     public double EdgeLengthSlider
@@ -69,11 +127,7 @@ public partial class MeshingViewModel : ObservableObject
         _session.StatusText = "Meshing…";
         try
         {
-            var settings = new MeshSettings
-            {
-                TargetEdgeLength = TargetEdgeLength,
-                ElementOrder = QuadraticElements ? ElementOrder.Quadratic : ElementOrder.Linear
-            };
+            var settings = BuildSettings(perBodyDivisions: false);
             body.MeshSettings = settings;
             var geometry = body.Geometry;
             var mesh = await Task.Run(() => _meshGenerator.Generate(geometry, settings));
@@ -99,11 +153,10 @@ public partial class MeshingViewModel : ObservableObject
         var bodies = _session.Bodies.ToList();
         if (bodies.Count == 0) return;
 
-        var settings = new MeshSettings
-        {
-            TargetEdgeLength = TargetEdgeLength,
-            ElementOrder = QuadraticElements ? ElementOrder.Quadratic : ElementOrder.Linear
-        };
+        // Divisions are derived per body here: one division triple cannot fit parts of
+        // different sizes, and silently applying a 100-cell count to a 2 mm part would be
+        // worse than deriving it from that part's own extent.
+        var settings = BuildSettings(perBodyDivisions: true);
         _session.IsBusy = true;
         try
         {

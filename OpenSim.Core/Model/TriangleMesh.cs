@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using OpenSim.Core.Numerics;
 
 namespace OpenSim.Core.Model;
@@ -25,7 +26,23 @@ public sealed class TriangleMesh
         Vertices = vertices;
         Triangles = triangles;
         TriangleFaceIds = triangleFaceIds;
+        _featureEdges = new Lazy<BoundaryEdgeSet>(() => BoundaryEdgeSet.Extract(this));
     }
+
+    private readonly Lazy<BoundaryEdgeSet> _featureEdges;
+
+    /// <summary>
+    /// The geometric edges and vertices of this GEOMETRY — where two faces meet — derived
+    /// on first use and cached. Derived rather than stored, like <see cref="FeMesh.Edges"/>:
+    /// a second copy could only ever disagree with the face ids it comes from.
+    /// <para>
+    /// These are the ids a boundary condition should be scoped to, because they outlive
+    /// remeshing: the mesh-derived set is renumbered by every change of element size,
+    /// this one changes only when the geometry itself does.
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public BoundaryEdgeSet FeatureEdges => _featureEdges.Value;
 
     public int FaceCount => TriangleFaceIds.Count == 0 ? 0 : TriangleFaceIds.Max() + 1;
 

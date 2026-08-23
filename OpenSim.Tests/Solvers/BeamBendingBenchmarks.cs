@@ -239,10 +239,12 @@ public class BeamBendingBenchmarks
         // Euler-Bernoulli for a simply supported beam under this UDL gives 7.234e-4 m and
         // the reference reads 7.6947e-4, i.e. +6.4% of shear deformation at L/h = 3.33 —
         // so the true answer is bracketed and our mesh must land in that neighbourhood.
-        // MEASURED at h = 11 mm: 91.2% of the Ansys value (0.000702 m against 7.6947e-4).
-        // We come out slightly STIFFER than Ansys, which is the expected direction: their
-        // structured hex mesh pins the support line exactly, while the tet mesher jitters
-        // its surface points, so our support nodes sit near the line rather than on it.
+        // MEASURED at h = 11 mm: 87.9% of the Ansys value, from below and converging
+        // monotonically with refinement (out of suite, TET10: 91.5% at 8 mm, 94.5% at 6 mm,
+        // 96.1% at 5 mm / 44k nodes). What remains at these sizes is DISCRETIZATION, not
+        // the support model: since edge hugging landed, the fixed nodes lie exactly on the
+        // support line rather than within a jitter amplitude of it. Matching the reference
+        // at its own mesh density is what StructuredBeamBenchmark measures, at 102.4%.
         Assert.InRange(finest / ansys, 0.80, 1.10);
     }
 

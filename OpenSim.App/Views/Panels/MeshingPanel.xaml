@@ -19,6 +19,24 @@
 
             <!-- Generic geometry context -->
             <StackPanel Visibility="{Binding Session.IsPcbMode, Converter={StaticResource InverseBoolToVis}}">
+                <DockPanel Margin="0,4,0,2">
+                    <Label Content="Method" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="MeshMethodCombo" ItemsSource="{Binding Meshing.MeshMethods}"
+                              DisplayMemberPath="Label" SelectedValuePath="Method"
+                              SelectedValue="{Binding Meshing.MeshMethod}" Margin="4,0,0,0"
+                              ToolTip="Structured lattice puts nodes exactly on the geometric faces and edges, but only fits axis-aligned box bodies."/>
+                </DockPanel>
+
+                <!-- Structured lattice: explicit edge divisions, the way a mapped mesh is specified. -->
+                <StackPanel Visibility="{Binding Meshing.IsStructured, Converter={StaticResource BoolToVis}}">
+                    <TextBlock Text="Edge divisions" Margin="2,2,0,2" Foreground="{DynamicResource TextMutedBrush}"/>
+                    <UniformGrid Columns="3">
+                        <TextBox x:Name="LatticeNxBox" Text="{Binding Meshing.LatticeNx}" Margin="2" ToolTip="Cells along X"/>
+                        <TextBox x:Name="LatticeNyBox" Text="{Binding Meshing.LatticeNy}" Margin="2" ToolTip="Cells along Y"/>
+                        <TextBox x:Name="LatticeNzBox" Text="{Binding Meshing.LatticeNz}" Margin="2" ToolTip="Cells along Z"/>
+                    </UniformGrid>
+                </StackPanel>
+
                 <CheckBox x:Name="QuadraticElementsCheck" Content="Quadratic elements (TET10)" IsChecked="{Binding Meshing.QuadraticElements}"
                           Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"
                           ToolTip="10-node tets fix TET4's bending stiffness. Structural solves only — electrical/thermal need linear meshes."/>

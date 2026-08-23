@@ -36,6 +36,14 @@ public static class BoundaryScope
                 "quantity over its scope, so it cannot be applied to an edge or a vertex — their area " +
                 "is zero and the distribution is undefined. Scope it to a face instead.");
 
+        // A geometry-space scope means nothing to a mesh: it has to be resolved first.
+        // Reaching a solver unresolved would silently drop the scope and under-constrain,
+        // so it is a typed failure rather than a quiet no-op for any caller that forgets.
+        if (condition.HasGeometryScope)
+            throw new InvalidOperationException(
+                $"Boundary condition '{condition.Name}' is scoped to geometry edges or vertices " +
+                "that were not resolved against the body's geometry before solving.");
+
         // A named id the mesh does not carry would otherwise be silently dropped, and the
         // solve would quietly under-constrain.
         if (condition.EdgeIds is { } edgeIds)

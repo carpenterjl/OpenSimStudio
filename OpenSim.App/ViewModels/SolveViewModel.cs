@@ -89,11 +89,26 @@ public partial class SolveViewModel : ObservableObject
         var kind = _session.SelectedAnalysis.Kind;
         bool transientRequested = kind == AnalysisType.TransientThermal
             || (kind == AnalysisType.JouleCoupled && JouleTransient);
+        // Resolving a geometry-scoped condition can fail with an actionable message (a stale
+        // id, a curve the mesh no longer carries), so it is reported the way a validation
+        // failure is rather than escaping the command.
+        IReadOnlyList<BoundaryCondition> conditions;
+        try
+        {
+            conditions = BuildBoundaryConditions(kind, body);
+        }
+        catch (Exception ex)
+        {
+            _log.Append($"Validation: {ex.Message}");
+            _session.StatusText = "Validation failed";
+            return;
+        }
+
         var input = new SolveInput
         {
             Mesh = body.Mesh,
             Material = _session.SelectedMaterial,
-            BoundaryConditions = BuildBoundaryConditions(kind, body),
+            BoundaryConditions = conditions,
             RegionMaterials = _materials.ResolveRegionMaterials(body),
             TransientThermal = transientRequested
                 ? new TransientThermalSettings
@@ -405,7 +420,10 @@ public partial class SolveViewModel : ObservableObject
     /// </summary>
     private IReadOnlyList<BoundaryCondition> BuildBoundaryConditions(AnalysisType kind, Body body)
     {
-        var conditions = body.BoundaryConditions.ToList();
+        // Geometry-scoped edges and vertices become mesh ids here, on transient copies: the
+        // project stores the geometry ids because they survive remeshing, and the solvers
+        // only ever speak mesh ids. An unresolvable scope throws, and the caller logs it.
+        var conditions = GeometryScopeResolver.ResolveForBody(body).ToList();
         if (kind is not (AnalysisType.AcElectrical or AnalysisType.JouleCoupled))
             return conditions;
 

@@ -148,6 +148,19 @@ public partial class ProjectSession : ObservableObject
     /// <summary>Geometric vertices ticked in the scope panel.</summary>
     public ObservableCollection<int> SelectedVertices { get; } = new();
 
+    /// <summary>
+    /// Whether <see cref="SelectedEdges"/> and <see cref="SelectedVertices"/> hold ids in
+    /// the GEOMETRY's numbering rather than the mesh's.
+    /// <para>
+    /// Geometry ids are preferred wherever geometry exists, because they survive remeshing
+    /// and can be picked before a mesh exists at all; a body that has only a mesh — a PCB
+    /// net, for instance — still uses mesh ids. Every reader of the selection asks this one
+    /// property rather than deciding for itself, so the panel, the highlight and the
+    /// condition it creates can never disagree about which numbering they are in.
+    /// </para>
+    /// </summary>
+    public bool ScopeIsGeometric => Body.Geometry is not null;
+
     /// <summary>Drops every scope selection — face, edge and vertex.</summary>
     public void ClearScopeSelection()
     {

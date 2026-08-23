@@ -30,6 +30,31 @@ public enum BodyRole
     FluidRegion = 1
 }
 
+/// <summary>Which algorithm builds the mesh.</summary>
+public enum MeshMethod
+{
+    /// <summary>Bowyer-Watson Delaunay tetrahedralization — works on any watertight
+    /// geometry. The default, and what every project written before methods existed
+    /// loads as.</summary>
+    Delaunay = 0,
+
+    /// <summary>
+    /// A regular grid of cells, each split into six tetrahedra: the mapped mesh a
+    /// commercial code lays on a block. Restricted to axis-aligned box bodies, where its
+    /// nodes sit EXACTLY on the geometric faces, edges and corners — which is what makes
+    /// a support scoped to an edge a genuinely fixed line rather than a line of nodes
+    /// lying near one.
+    /// </summary>
+    StructuredLattice = 1
+}
+
+/// <summary>
+/// Cell counts along each axis for <see cref="MeshMethod.StructuredLattice"/> — the
+/// "edge divisions" a mapped mesh is specified by. Null on <see cref="MeshSettings"/>
+/// means "derive them from the target edge length".
+/// </summary>
+public sealed record LatticeDivisions(int Nx, int Ny, int Nz);
+
 /// <summary>Meshing parameters for a body.</summary>
 public sealed record MeshSettings
 {
@@ -49,6 +74,21 @@ public sealed record MeshSettings
 
     /// <summary>Element order; Linear (TET4) is the default and what old files load as.</summary>
     public ElementOrder ElementOrder { get; init; } = ElementOrder.Linear;
+
+    /// <summary>
+    /// Which mesher to run. Null — never written by old project files — means
+    /// <see cref="MeshMethod.Delaunay"/>, so every existing project and every existing
+    /// caller meshes exactly as it always did.
+    /// </summary>
+    public MeshMethod? Method { get; init; }
+
+    /// <summary>
+    /// Explicit per-axis cell counts for the structured lattice. Null derives them from
+    /// <see cref="TargetEdgeLength"/> (or the automatic size when that is 0), which is
+    /// what "mesh every body" must use — one division triple cannot fit parts of
+    /// different sizes.
+    /// </summary>
+    public LatticeDivisions? Divisions { get; init; }
 }
 
 /// <summary>

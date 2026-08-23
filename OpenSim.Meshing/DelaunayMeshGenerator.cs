@@ -14,6 +14,20 @@ namespace OpenSim.Meshing;
 /// A deterministic sub-element jitter is applied to all points to break the
 /// cospherical degeneracies that regular grids and flat faces would otherwise
 /// feed the floating-point Delaunay predicates.
+/// <para>
+/// The mesh HUGS the geometry's feature edges: they are sampled at the target spacing
+/// before anything else, face samples are kept clear of them, and after triangulation
+/// every such node is snapped back onto the exact geometry. The snap comes AFTER the
+/// predicates have run, on purpose - pinning those points beforehand would hand the
+/// predicates exactly the degeneracies the jitter exists to prevent (the eight corners of
+/// a box are exactly cospherical, and they are the first points inserted). It moves a node
+/// by at most the jitter amplitude, two orders below the sliver-cull threshold, so the
+/// clip, cull and pinch decisions already made stay sound.
+/// </para>
+/// <para>
+/// Geometry with no feature edges - a single-face STL, a PCB net - seeds exactly the
+/// candidate list, in exactly the order, that it always did.
+/// </para>
 /// </summary>
 public sealed class DelaunayMeshGenerator : IMeshGenerator
 {
@@ -37,9 +51,10 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
         // 1. Surface sample points from the refined surface, thinned to a roughly
         // uniform spacing so anisotropic triangulations (long thin cap fans, dense
         // facet rings) cannot flood the Delaunay stage with badly spaced points.
-        // Original geometry vertices go first so feature corners always survive.
+        // Feature corners and edges are seeded first so they always survive the thinning.
         var refined = SurfaceRefiner.Refine(geometry, h);
-        var points = ThinPoints(geometry.Vertices.Concat(refined.Vertices), 0.45 * h);
+        var points = ThinPoints(BuildSurfaceSeeds(geometry, refined, h), 0.45 * h,
+            out var exactFeaturePositions);
         int surfacePointCount = points.Count;
 
         // 2. Interior grid points, kept at least 0.45·h away from surface samples.
@@ -155,6 +170,15 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
         foreach (var (a, b, c, d) in kept)
             elements.Add(new Tet4(Map(a), Map(b), Map(c), Map(d)));
 
+        // Snap feature nodes back onto the exact geometry. The predicates have already run
+        // on the fully jittered point set, so this restores the exactness a boundary
+        // condition scoped to an edge needs without ever showing the triangulation a
+        // degenerate configuration. Refinement points are appended after the seeds, so
+        // they carry indices past the seed range and are never snapped.
+        foreach (var (original, compacted) in nodeMap)
+            if (exactFeaturePositions.TryGetValue(original, out var exact))
+                nodes[compacted] = exact;
+
         // 6. Smooth interior nodes (boundary skin stays fixed), then extract the skin.
         var boundaryNodes = new HashSet<int>();
         var faceUseForFixing = CountFaceUse(elements);
@@ -167,7 +191,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
         }
         MeshSmoother.Smooth(nodes, elements, boundaryNodes);
 
-        var boundary = ExtractBoundary(nodes, elements, refined);
+        var boundary = ExtractBoundary(nodes, elements, distanceField);
         var mesh = new FeMesh(nodes, elements, boundary);
 
         // The quadratic upgrade is the last step so mid-edge nodes are generated on
@@ -179,10 +203,12 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
 
     /// <summary>
     /// Faces used by exactly one element form the boundary skin. Each is wound outward
-    /// and tagged with the face id of the nearest refined-surface triangle.
+    /// and tagged with the face id of the nearest refined-surface triangle - nearest by
+    /// true surface distance, which is what keeps a crease-hugging triangle on the face it
+    /// actually lies on (see <see cref="SurfaceDistanceField.NearestFaceId"/>).
     /// </summary>
     private static List<BoundaryTriangle> ExtractBoundary(
-        IReadOnlyList<Vector3D> nodes, IReadOnlyList<Tet4> elements, TriangleMesh refinedSurface)
+        IReadOnlyList<Vector3D> nodes, IReadOnlyList<Tet4> elements, SurfaceDistanceField surface)
     {
         var faceUse = new Dictionary<(int, int, int), (int Count, int A, int B, int C, int Opp)>();
         void Touch(int a, int b, int c, int opp)
@@ -201,12 +227,6 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
             Touch(e.N0, e.N1, e.N2, e.N3);
         }
 
-        // Face-id lookup: nearest refined-surface triangle centroid.
-        var centroids = new List<Vector3D>(refinedSurface.Triangles.Count);
-        foreach (var t in refinedSurface.Triangles)
-            centroids.Add((refinedSurface.Vertices[t.A] + refinedSurface.Vertices[t.B] + refinedSurface.Vertices[t.C]) / 3.0);
-        var centroidTree = new KdTree(centroids);
-
         var boundary = new List<BoundaryTriangle>();
         foreach (var entry in faceUse.Values)
         {
@@ -216,9 +236,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
             if (GeometricPredicates.Orient3D(nodes[a], nodes[b], nodes[c], nodes[entry.Opp]) > 0)
                 (b, c) = (c, b);
             var centroid = (nodes[a] + nodes[b] + nodes[c]) / 3.0;
-            int nearest = centroidTree.NearestNeighbor(centroid);
-            int faceId = nearest >= 0 ? refinedSurface.TriangleFaceIds[nearest] : 0;
-            boundary.Add(new BoundaryTriangle(a, b, c, faceId));
+            boundary.Add(new BoundaryTriangle(a, b, c, surface.NearestFaceId(centroid)));
         }
         return boundary;
     }
@@ -241,18 +259,84 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
         return faceUse;
     }
 
+    /// <summary>A surface sample, and whether it sits on a feature edge or corner - the
+    /// points the finished mesh must carry EXACTLY.</summary>
+    private readonly record struct SurfaceSeed(Vector3D Position, bool OnFeature);
+
+    /// <summary>
+    /// The surface candidates, in priority order: feature corners, then feature edges at
+    /// the target spacing, then the face samples. The thinning keeps whatever it sees
+    /// first, so this ordering is what makes a crease out of exact points.
+    /// <para>
+    /// A face sample that ALREADY lies on a feature edge is marked as one rather than
+    /// dropped. The surface refiner subdivides each input triangle, so the samples along a
+    /// triangle edge sit exactly on the crease the geometry folds along; left unmarked they
+    /// would be jittered a fraction of an element off the very line the mesh is supposed to
+    /// hug, and they land between the seeded edge samples where the thinning cannot see
+    /// them. Classifying is right where deleting is not: the points are wanted, it is only
+    /// their treatment under the jitter that differs.
+    /// </para>
+    /// <para>
+    /// Clearing face samples out of a band around each crease was tried instead, and
+    /// measured worse: an empty band lets the triangulation bridge straight across the
+    /// crease, and a triangle genuinely spanning both faces has to be tagged with one of
+    /// them, so the skin splits along a line the geometry does not fold at - inventing a
+    /// feature edge in the middle of a flat face. No face-tagging rule can rescue that;
+    /// the answer is not to leave the gap for it to bridge.
+    /// </para>
+    /// </summary>
+    private static List<SurfaceSeed> BuildSurfaceSeeds(TriangleMesh geometry, TriangleMesh refined, double h)
+    {
+        var features = geometry.FeatureEdges;
+        var seeds = new List<SurfaceSeed>();
+
+        foreach (var vertex in features.Vertices)
+            seeds.Add(new SurfaceSeed(geometry.Vertices[vertex.NodeId], true));
+
+        // Grid cell at the thinning radius: coarse enough that a metre-long edge registers
+        // in a handful of cells, and every query radius below is far smaller.
+        var onFeature = new FeatureEdgeProximity(0.45 * h);
+        foreach (var edge in features.Edges)
+            foreach (var segment in edge.Segments)
+            {
+                var a = geometry.Vertices[segment.A];
+                var b = geometry.Vertices[segment.B];
+                onFeature.Add(a, b);
+
+                seeds.Add(new SurfaceSeed(a, true));
+                seeds.Add(new SurfaceSeed(b, true));
+                int steps = Math.Max(1, (int)Math.Ceiling((b - a).Length / h));
+                for (int k = 1; k < steps; k++)
+                    seeds.Add(new SurfaceSeed(a + (b - a) * ((double)k / steps), true));
+            }
+
+        // "Already on the edge" is a geometric identity, not a proximity judgement: these
+        // samples are computed by interpolating the endpoints of an input triangle edge, so
+        // they are on the line to rounding. The tolerance says exactly that.
+        double onEdgeTolerance = 1e-9 * geometry.Bounds.Diagonal;
+        foreach (var p in geometry.Vertices.Concat(refined.Vertices))
+            seeds.Add(new SurfaceSeed(p, onFeature.IsWithin(p, onEdgeTolerance)));
+
+        return seeds;
+    }
+
     /// <summary>
     /// Greedy Poisson-disk-style thinning: accepts points in order, rejecting any
-    /// closer than <paramref name="minSpacing"/> to an already accepted point.
+    /// closer than <paramref name="minSpacing"/> to an already accepted point. Reports the
+    /// exact geometric position of every accepted feature sample, keyed by its index, so
+    /// the snap pass can restore it after triangulation.
     /// </summary>
-    private static List<Vector3D> ThinPoints(IEnumerable<Vector3D> candidates, double minSpacing)
+    private static List<Vector3D> ThinPoints(IEnumerable<SurfaceSeed> candidates, double minSpacing,
+        out Dictionary<int, Vector3D> exactFeaturePositions)
     {
+        exactFeaturePositions = new Dictionary<int, Vector3D>();
         var accepted = new List<Vector3D>();
         var grid = new Dictionary<(long, long, long), List<int>>();
         double cell = minSpacing;
 
-        foreach (var p in candidates)
+        foreach (var seed in candidates)
         {
+            var p = seed.Position;
             long cx = (long)Math.Floor(p.X / cell);
             long cy = (long)Math.Floor(p.Y / cell);
             long cz = (long)Math.Floor(p.Z / cell);
@@ -275,6 +359,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
 
             int index = accepted.Count;
             accepted.Add(p);
+            if (seed.OnFeature) exactFeaturePositions[index] = p;
             if (!grid.TryGetValue((cx, cy, cz), out var own))
                 grid[(cx, cy, cz)] = own = new List<int>();
             own.Add(index);

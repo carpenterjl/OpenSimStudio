@@ -37,14 +37,42 @@ public abstract record BoundaryCondition
     /// </summary>
     public IReadOnlyList<int>? VertexIds { get; init; }
 
-    /// <summary>Whether this condition names any edge or vertex — a zero-AREA scope.</summary>
+    /// <summary>
+    /// Geometric edge ids in the GEOMETRY's own numbering (see
+    /// <see cref="TriangleMesh.FeatureEdges"/>) rather than the mesh's.
+    /// <para>
+    /// This is the scope worth storing. Mesh edge ids are derived from the skin, so they are
+    /// renumbered by every remesh and a saved project can only name them until the element
+    /// size changes; geometry ids change only when the geometry does. They are resolved to
+    /// mesh ids at solve time by <see cref="GeometryScopeResolver"/> — never written back,
+    /// because a stored copy of a derived id could only ever go stale again.
+    /// </para>
+    /// Null, never an empty list, so every project written before geometry scoping existed
+    /// deserializes unchanged.
+    /// </summary>
+    public IReadOnlyList<int>? GeometryEdgeIds { get; init; }
+
+    /// <summary>Geometric vertex ids in the geometry's own numbering, for the same reason
+    /// as <see cref="GeometryEdgeIds"/>.</summary>
+    public IReadOnlyList<int>? GeometryVertexIds { get; init; }
+
+    /// <summary>Whether this condition still carries an unresolved geometry-space scope.</summary>
     [JsonIgnore]
-    public bool HasZeroAreaScope => EdgeIds is { Count: > 0 } || VertexIds is { Count: > 0 };
+    public bool HasGeometryScope =>
+        GeometryEdgeIds is { Count: > 0 } || GeometryVertexIds is { Count: > 0 };
+
+    /// <summary>Whether this condition names any edge or vertex — a zero-AREA scope.
+    /// Counts the geometry-space ids too, so the refusal fires when the condition is
+    /// CREATED rather than only after it has been resolved.</summary>
+    [JsonIgnore]
+    public bool HasZeroAreaScope =>
+        EdgeIds is { Count: > 0 } || VertexIds is { Count: > 0 } || HasGeometryScope;
 
     /// <summary>Whether this condition names nothing at all.</summary>
     [JsonIgnore]
     public bool IsEmptyScope =>
-        FaceIds.Count == 0 && EdgeIds is not { Count: > 0 } && VertexIds is not { Count: > 0 };
+        FaceIds.Count == 0 && EdgeIds is not { Count: > 0 } && VertexIds is not { Count: > 0 }
+        && !HasGeometryScope;
 
     /// <summary>
     /// A human-readable summary of the scope, for solver logs and the conditions list.
@@ -57,8 +85,10 @@ public abstract record BoundaryCondition
         {
             var parts = new List<string>(3);
             if (FaceIds.Count > 0) parts.Add($"{FaceIds.Count} face(s)");
-            if (EdgeIds is { Count: > 0 } e) parts.Add($"{e.Count} edge(s)");
-            if (VertexIds is { Count: > 0 } v) parts.Add($"{v.Count} vertex/vertices");
+            int edges = (EdgeIds?.Count ?? 0) + (GeometryEdgeIds?.Count ?? 0);
+            int vertices = (VertexIds?.Count ?? 0) + (GeometryVertexIds?.Count ?? 0);
+            if (edges > 0) parts.Add($"{edges} edge(s)");
+            if (vertices > 0) parts.Add($"{vertices} vertex/vertices");
             return parts.Count == 0 ? "nothing" : string.Join(" + ", parts);
         }
     }

@@ -189,16 +189,28 @@ public static class SceneBuilder
     /// scope. Drawn rather than picked: the edges carry no model of their own, so this is
     /// display only and never hit-tested.
     /// </summary>
-    public static Point3DCollection BuildEdgeHighlight(FeMesh mesh, IEnumerable<int> edgeIds)
+    public static Point3DCollection BuildEdgeHighlight(FeMesh mesh, IEnumerable<int> edgeIds) =>
+        BuildEdgeHighlight(mesh.Edges, mesh.Nodes, edgeIds);
+
+    /// <summary>
+    /// The same highlight for edges named on the GEOMETRY, so a scope can be seen before the
+    /// body is meshed. One implementation for both: an edge is segments between points
+    /// either way.
+    /// </summary>
+    public static Point3DCollection BuildEdgeHighlight(TriangleMesh geometry, IEnumerable<int> edgeIds) =>
+        BuildEdgeHighlight(geometry.FeatureEdges, geometry.Vertices, edgeIds);
+
+    private static Point3DCollection BuildEdgeHighlight(BoundaryEdgeSet edges,
+        IReadOnlyList<OpenSim.Core.Numerics.Vector3D> positions, IEnumerable<int> edgeIds)
     {
         var points = new Point3DCollection();
         foreach (int id in edgeIds)
         {
-            if (mesh.Edges.EdgeById(id) is not { } edge) continue;
+            if (edges.EdgeById(id) is not { } edge) continue;
             foreach (var s in edge.Segments)
             {
-                var pa = mesh.Nodes[s.A];
-                var pb = mesh.Nodes[s.B];
+                var pa = positions[s.A];
+                var pb = positions[s.B];
                 points.Add(new Point3D(pa.X, pa.Y, pa.Z));
                 points.Add(new Point3D(pb.X, pb.Y, pb.Z));
             }

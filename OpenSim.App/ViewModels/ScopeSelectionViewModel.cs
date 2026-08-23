@@ -16,10 +16,11 @@ namespace OpenSim.App.ViewModels;
 /// user selects a handful of times per model. The list is also the only place the ids the
 /// project file stores are ever visible.
 ///
-/// Edges and vertices exist only once a body is MESHED: they are derived from the boundary
-/// skin and its face tags, so remeshing can renumber them. That is why the panel refreshes
-/// on every mesh change and why a stale id is a typed failure at solve time rather than a
-/// silent drop.
+/// Where the body has geometry, the list is the GEOMETRY's edges: they exist before any
+/// mesh does, and their ids are a function of the tessellation, so a scope picked here
+/// survives every remesh. A body carrying only a mesh — a PCB net — still lists the
+/// mesh-derived edges, which are renumbered by remeshing; a stale id is then a typed failure
+/// at solve time rather than a silent drop.
 /// </summary>
 public partial class ScopeSelectionViewModel : ObservableObject
 {
@@ -44,10 +45,26 @@ public partial class ScopeSelectionViewModel : ObservableObject
     public ObservableCollection<ScopeItem> Edges { get; } = new();
     public ObservableCollection<ScopeItem> Vertices { get; } = new();
 
-    /// <summary>True once the active body carries a mesh, so edges and vertices exist.</summary>
+    /// <summary>True once the active body offers any edge or vertex to select.</summary>
     [ObservableProperty] private bool _hasScopeItems;
 
-    [ObservableProperty] private string _scopeSummary = "Mesh the body to select edges or vertices.";
+    [ObservableProperty] private string _scopeSummary =
+        "Create or import geometry to select edges or vertices.";
+
+    /// <summary>
+    /// The standing note under the lists. It has to change with the id space: a geometry
+    /// scope survives remeshing and a mesh-derived one does not, and telling the user the
+    /// wrong one of those is worse than telling them nothing.
+    /// </summary>
+    [ObservableProperty] private string _scopeFooter = GeometryFooter;
+
+    private const string GeometryFooter =
+        "Edges and vertices come from the geometry, so they keep their meaning when you remesh. " +
+        "Only fixed supports, fixed temperatures and voltages can use them - a distributed load needs a face.";
+
+    private const string MeshFooter =
+        "This body has no geometry, so edges and vertices are derived from its mesh and remeshing renumbers them. " +
+        "Only fixed supports, fixed temperatures and voltages can use them - a distributed load needs a face.";
 
     /// <summary>Rebuilds the rows from the active body's mesh, dropping any stale selection.</summary>
     public void Refresh()
@@ -60,16 +77,17 @@ public partial class ScopeSelectionViewModel : ObservableObject
         _session.SelectedEdges.Clear();
         _session.SelectedVertices.Clear();
 
-        var mesh = _session.Body.Mesh;
-        if (mesh is null)
+        // Geometry first: those ids outlive remeshing, and they exist before meshing.
+        var set = _session.ScopeIsGeometric
+            ? _session.Body.Geometry!.FeatureEdges
+            : _session.Body.Mesh?.Edges;
+        if (set is null)
         {
             HasScopeItems = false;
-            ScopeSummary = "Mesh the body to select edges or vertices.";
+            ScopeSummary = "Create or import geometry to select edges or vertices.";
             _suppressSync = false;
             return;
         }
-
-        var set = mesh.Edges;
         foreach (var edge in set.Edges)
             Edges.Add(Track(new ScopeItem(edge.Id,
                 $"Edge {edge.Id} — faces {edge.FaceA} and {edge.FaceB}, {FormatLength(edge.Length)}")));
@@ -77,6 +95,7 @@ public partial class ScopeSelectionViewModel : ObservableObject
             Vertices.Add(Track(new ScopeItem(vertex.Id,
                 $"Vertex {vertex.Id} — faces {string.Join(", ", vertex.FaceIds)}")));
 
+        ScopeFooter = _session.ScopeIsGeometric ? GeometryFooter : MeshFooter;
         HasScopeItems = Edges.Count > 0 || Vertices.Count > 0;
         ScopeSummary = $"{Edges.Count} edge(s), {Vertices.Count} vertex/vertices.";
         if (set.NonManifoldEdgeCount > 0)
@@ -93,10 +112,12 @@ public partial class ScopeSelectionViewModel : ObservableObject
     [RelayCommand]
     private void SelectSharedEdges()
     {
-        var mesh = _session.Body.Mesh;
-        if (mesh is null)
+        var set = _session.ScopeIsGeometric
+            ? _session.Body.Geometry!.FeatureEdges
+            : _session.Body.Mesh?.Edges;
+        if (set is null)
         {
-            _log.Append("Mesh the body before selecting edges.");
+            _log.Append("Create geometry or mesh the body before selecting edges.");
             return;
         }
         if (_session.SelectedFaces.Count < 2)
@@ -105,7 +126,7 @@ public partial class ScopeSelectionViewModel : ObservableObject
             return;
         }
 
-        var shared = mesh.Edges.EdgesBetween(_session.SelectedFaces).ToHashSet();
+        var shared = set.EdgesBetween(_session.SelectedFaces).ToHashSet();
         if (shared.Count == 0)
         {
             _log.Append("The selected faces do not meet along any edge.");

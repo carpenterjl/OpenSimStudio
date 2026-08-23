@@ -54,6 +54,36 @@ public sealed class SurfaceDistanceField
         return best;
     }
 
+    /// <summary>
+    /// The face id of the surface triangle nearest <paramref name="p"/>, by exact
+    /// point-triangle distance.
+    /// <para>
+    /// Distance to the triangle, not to its centroid: the two disagree exactly where it
+    /// matters, along a crease. A skin triangle lying flat on one face but reaching towards
+    /// the neighbouring one has a centroid roughly equidistant from the centroids on both
+    /// sides, so a centroid lookup effectively tosses a coin - and a triangle tagged with
+    /// the wrong face invents a feature edge running through the middle of a flat face.
+    /// Its true distance to the face it lies on is zero, which settles it.
+    /// </para>
+    /// </summary>
+    public int NearestFaceId(Vector3D p)
+    {
+        var candidates = _centroids.RadiusSearch(p, _searchRadius);
+        int best = -1;
+        double bestDistance = double.MaxValue;
+        foreach (int i in candidates)
+        {
+            var t = _mesh.Triangles[i];
+            double d = PointTriangleDistance(p,
+                _mesh.Vertices[t.A], _mesh.Vertices[t.B], _mesh.Vertices[t.C]);
+            if (d < bestDistance) (best, bestDistance) = (i, d);
+        }
+        // Nothing within a triangle or so: fall back to the nearest centroid, which is the
+        // only information left that far from the surface.
+        if (best < 0) best = _centroids.NearestNeighbor(p);
+        return best >= 0 ? _mesh.TriangleFaceIds[best] : 0;
+    }
+
     /// <summary>Exact distance from a point to a triangle (interior, edge or vertex region).</summary>
     public static double PointTriangleDistance(Vector3D p, Vector3D a, Vector3D b, Vector3D c)
     {

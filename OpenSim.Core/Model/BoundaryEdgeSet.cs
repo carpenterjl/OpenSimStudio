@@ -1,3 +1,5 @@
+using OpenSim.Core.Numerics;
+
 namespace OpenSim.Core.Model;
 
 /// <summary>One mesh edge of a geometric feature edge: an unordered corner-node pair.</summary>
@@ -79,16 +81,41 @@ public sealed class BoundaryEdgeSet
         return ids;
     }
 
-    public static BoundaryEdgeSet Extract(FeMesh mesh)
-    {
-        if (mesh.BoundaryTriangles.Count == 0) return Empty;
+    /// <summary>
+    /// The geometric edges and vertices of a meshed body, from its boundary skin.
+    /// </summary>
+    public static BoundaryEdgeSet Extract(FeMesh mesh) =>
+        Extract(mesh.Nodes, mesh.BoundaryTriangles.Select(t => (t.A, t.B, t.C, t.FaceId)));
 
+    /// <summary>
+    /// The geometric edges and vertices of UNMESHED geometry, from the face ids its
+    /// triangles already carry. The identical algorithm to the meshed overload — a face id
+    /// per triangle is all either one ever needed — so the two can never disagree.
+    /// <para>
+    /// These ids are a pure function of the tessellation, so unlike the mesh-derived ones
+    /// they are STABLE ACROSS REMESHING: a boundary condition scoped to a geometric edge
+    /// survives every change of element size, which is the whole reason this overload
+    /// exists.
+    /// </para>
+    /// </summary>
+    public static BoundaryEdgeSet Extract(TriangleMesh geometry) =>
+        Extract(geometry.Vertices,
+            geometry.Triangles.Select((t, i) => (t.A, t.B, t.C, geometry.TriangleFaceIds[i])));
+
+    /// <summary>
+    /// The one implementation: a mesh edge whose adjacent triangles carry different face
+    /// ids lies on a feature edge, and a node touching three or more faces is a vertex.
+    /// Vertex positions are needed only to measure edge length.
+    /// </summary>
+    private static BoundaryEdgeSet Extract(IReadOnlyList<Vector3D> vertices,
+        IEnumerable<(int A, int B, int C, int FaceId)> triangles)
+    {
         // Pass 1: per mesh edge, the two lowest distinct face ids and how many there were.
         var edgeFaces = new Dictionary<BoundaryEdgeSegment, (int F0, int F1, int Distinct)>();
         // Per node, the distinct faces meeting there — the vertex test.
         var nodeFaces = new Dictionary<int, SortedSet<int>>();
 
-        foreach (var t in mesh.BoundaryTriangles)
+        foreach (var t in triangles)
         {
             Accumulate(edgeFaces, BoundaryEdgeSegment.Sorted(t.A, t.B), t.FaceId);
             Accumulate(edgeFaces, BoundaryEdgeSegment.Sorted(t.B, t.C), t.FaceId);
@@ -127,24 +154,26 @@ public sealed class BoundaryEdgeSet
                 {
                     nodes.Add(s.A);
                     nodes.Add(s.B);
-                    length += (mesh.Nodes[s.B] - mesh.Nodes[s.A]).Length;
+                    length += (vertices[s.B] - vertices[s.A]).Length;
                 }
                 edges.Add(new BoundaryEdge(0, key.Item1, key.Item2, component, nodes.ToArray(), length));
             }
         }
+
+        if (edges.Count == 0 && nodeFaces.Count == 0) return Empty;
 
         var ordered = edges
             .OrderBy(e => e.FaceA).ThenBy(e => e.FaceB).ThenBy(e => e.NodeIds[0])
             .Select((e, i) => e with { Id = i })
             .ToArray();
 
-        var vertices = nodeFaces
+        var featureVertices = nodeFaces
             .Where(kv => kv.Value.Count >= 3)
             .OrderBy(kv => kv.Key)
             .Select((kv, i) => new BoundaryVertex(i, kv.Key, kv.Value.ToArray()))
             .ToArray();
 
-        return new BoundaryEdgeSet(ordered, vertices, nonManifold);
+        return new BoundaryEdgeSet(ordered, featureVertices, nonManifold);
     }
 
     private static void Accumulate(Dictionary<BoundaryEdgeSegment, (int F0, int F1, int Distinct)> map,

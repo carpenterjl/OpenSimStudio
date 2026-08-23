@@ -70,7 +70,9 @@ public partial class BoundaryConditionsViewModel : ObservableObject
             Name = $"Fixed support {BoundaryConditions.Count + 1}",
             FaceIds = _session.SelectedFaces.ToList(),
             EdgeIds = SelectedEdgesOrNull(),
-            VertexIds = SelectedVerticesOrNull()
+            VertexIds = SelectedVerticesOrNull(),
+            GeometryEdgeIds = SelectedGeometryEdgesOrNull(),
+            GeometryVertexIds = SelectedGeometryVerticesOrNull()
         });
     }
 
@@ -108,6 +110,8 @@ public partial class BoundaryConditionsViewModel : ObservableObject
             FaceIds = _session.SelectedFaces.ToList(),
             EdgeIds = SelectedEdgesOrNull(),
             VertexIds = SelectedVerticesOrNull(),
+            GeometryEdgeIds = SelectedGeometryEdgesOrNull(),
+            GeometryVertexIds = SelectedGeometryVerticesOrNull(),
             Volts = VoltageValue
         });
     }
@@ -134,6 +138,8 @@ public partial class BoundaryConditionsViewModel : ObservableObject
             FaceIds = _session.SelectedFaces.ToList(),
             EdgeIds = SelectedEdgesOrNull(),
             VertexIds = SelectedVerticesOrNull(),
+            GeometryEdgeIds = SelectedGeometryEdgesOrNull(),
+            GeometryVertexIds = SelectedGeometryVerticesOrNull(),
             Kelvin = TemperatureValue
         });
     }
@@ -200,11 +206,24 @@ public partial class BoundaryConditionsViewModel : ObservableObject
         return true;
     }
 
+    // The selection is in geometry ids wherever the body has geometry, so it is stored in
+    // the matching property: geometry ids survive remeshing and are resolved to mesh ids at
+    // solve time, while mesh ids go stale the moment the element size changes.
     private IReadOnlyList<int>? SelectedEdgesOrNull() =>
-        _session.SelectedEdges.Count > 0 ? _session.SelectedEdges.ToList() : null;
+        !_session.ScopeIsGeometric && _session.SelectedEdges.Count > 0
+            ? _session.SelectedEdges.ToList() : null;
 
     private IReadOnlyList<int>? SelectedVerticesOrNull() =>
-        _session.SelectedVertices.Count > 0 ? _session.SelectedVertices.ToList() : null;
+        !_session.ScopeIsGeometric && _session.SelectedVertices.Count > 0
+            ? _session.SelectedVertices.ToList() : null;
+
+    private IReadOnlyList<int>? SelectedGeometryEdgesOrNull() =>
+        _session.ScopeIsGeometric && _session.SelectedEdges.Count > 0
+            ? _session.SelectedEdges.ToList() : null;
+
+    private IReadOnlyList<int>? SelectedGeometryVerticesOrNull() =>
+        _session.ScopeIsGeometric && _session.SelectedVertices.Count > 0
+            ? _session.SelectedVertices.ToList() : null;
 
     private void AddCondition(BoundaryCondition condition)
     {

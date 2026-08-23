@@ -257,6 +257,50 @@ public class Phase2PersistenceTests
         Assert.Equal(0, oldMesh.RegionOf(0));
         Assert.Equal(1, oldMesh.ElementCount);
     }
+
+    /// <summary>
+    /// The mesh METHOD and its divisions round-trip, and — the back-compatibility pin —
+    /// settings written before either existed load with both null, which is what makes
+    /// every pre-existing project mesh exactly as it always did.
+    /// </summary>
+    [Fact]
+    public void MeshMethodAndDivisions_RoundTrip_AndOldSettingsLoadAsDelaunay()
+    {
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        };
+
+        var settings = new MeshSettings
+        {
+            TargetEdgeLength = 0.004,
+            ElementOrder = ElementOrder.Quadratic,
+            Method = MeshMethod.StructuredLattice,
+            Divisions = new LatticeDivisions(50, 13, 5)
+        };
+
+        string json = System.Text.Json.JsonSerializer.Serialize(settings, options);
+        var loaded = System.Text.Json.JsonSerializer.Deserialize<MeshSettings>(json, options)!;
+
+        Assert.Equal(MeshMethod.StructuredLattice, loaded.Method);
+        Assert.Equal(new LatticeDivisions(50, 13, 5), loaded.Divisions);
+        Assert.Equal(ElementOrder.Quadratic, loaded.ElementOrder);
+
+        // A pre-batch settings payload names neither property.
+        const string oldJson = """
+        { "targetEdgeLength": 0.006, "targetMinQuality": 0.08, "elementOrder": 1 }
+        """;
+        var old = System.Text.Json.JsonSerializer.Deserialize<MeshSettings>(oldJson, options)!;
+        Assert.Null(old.Method);
+        Assert.Null(old.Divisions);
+        Assert.Equal(0.006, old.TargetEdgeLength);
+
+        // And a default-method settings writes neither name, so old readers see old files.
+        string defaultJson = System.Text.Json.JsonSerializer.Serialize(new MeshSettings(), options);
+        Assert.DoesNotContain("method", defaultJson);
+        Assert.DoesNotContain("divisions", defaultJson);
+    }
 }
 
 // Material library semantics are covered in MaterialLibraryTests.cs (temp-dir seam —

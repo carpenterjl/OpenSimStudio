@@ -36,7 +36,8 @@
             </ListBox>
 
             <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" Opacity="0.7"
-                       Text="Edges and vertices are derived from the mesh, so remeshing renumbers them. Only fixed supports, fixed temperatures and voltages can use them — a distributed load needs a face."/>
+                       AutomationProperties.AutomationId="ScopeFooterText"
+                       Text="{Binding ScopeSelection.ScopeFooter}"/>
         </StackPanel>
     </GroupBox>
 </UserControl>

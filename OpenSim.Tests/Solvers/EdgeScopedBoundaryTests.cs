@@ -308,4 +308,55 @@ public class EdgeScopedBoundaryTests
         Assert.Null(merged.EdgeIds);
         Assert.Null(merged.VertexIds);
     }
+
+    /// <summary>
+    /// An assembly whose second body is scoped in GEOMETRY space: the resolver runs
+    /// per body, on that body own geometry and mesh, and only then are the ids rebased into
+    /// the merged space. Resolving after the merge would mean matching a curve against a
+    /// skin carrying every other body as well.
+    /// </summary>
+    [Fact]
+    public void GeometryScopedConditions_AreResolvedPerBody_ThenRebasedLikeAnyOther()
+    {
+        var material = StructuredBoxMesh.Conductor("c", 100);
+        var geometry = OpenSim.Geometry.PrimitiveFactory.CreateBox(0.02, 0.02, 0.02);
+        var mesher = new OpenSim.Meshing.StructuredLatticeMeshGenerator();
+        var settings = new MeshSettings
+        {
+            Method = MeshMethod.StructuredLattice, Divisions = new LatticeDivisions(2, 2, 2)
+        };
+
+        var a = StructuredBoxMesh.Box("A", 0, 1, 0, 1, 0, 1, 2, 2, 2, material);
+        var b = new Body
+        {
+            Name = "B", Geometry = geometry, Mesh = mesher.Generate(geometry, settings), Material = material
+        };
+        // The edge where the box bottom (face 2) meets its x-min end (face 0), named on the
+        // GEOMETRY - the id a project file would store.
+        int geometryEdge = geometry.FeatureEdges.EdgesBetween(new[] { 2, 0 })[0];
+        b.BoundaryConditions.Add(new FixedTemperature
+        {
+            Name = "T", FaceIds = Array.Empty<int>(),
+            GeometryEdgeIds = new[] { geometryEdge }, Kelvin = 300
+        });
+
+        var assembled = FeMeshAssembler.Assemble(new[] { a, b });
+        var merged = assembled.BoundaryConditions.Single(c => c.Name.StartsWith("B: "));
+
+        // Resolved, then rebased: no geometry ids survive, and the mesh id carries body B base.
+        Assert.Null(merged.GeometryEdgeIds);
+        int localEdge = GeometryScopeResolver
+            .Resolve(b.BoundaryConditions[0], geometry, b.Mesh!).EdgeIds!.Single();
+        Assert.Equal(new[] { localEdge + assembled.EdgeIdBases[1] }, merged.EdgeIds);
+
+        // And it lands on body B nodes, along the line the geometry named.
+        var nodes = assembled.Mesh.GetScopeNodes(merged);
+        Assert.NotEmpty(nodes);
+        Assert.All(nodes, n => Assert.Equal(1, assembled.BodyOfNode(n)));
+        Assert.All(nodes, n =>
+        {
+            Assert.Equal(0.0, assembled.Mesh.Nodes[n].X);
+            Assert.Equal(0.0, assembled.Mesh.Nodes[n].Y);
+        });
+    }
 }

@@ -168,8 +168,12 @@ public static class FeMeshAssembler
             foreach (var t in mesh.BoundaryTriangles)
                 triangles.Add(new BoundaryTriangle(t.A + nb, t.B + nb, t.C + nb, t.FaceId + fb));
 
+            // Geometry-scoped conditions are resolved against THIS body's own geometry and
+            // mesh before anything is rebased: the resolver speaks body-local ids, and the
+            // offsets below turn those into merged ones. Resolving after the merge would
+            // mean matching against a skin that carries five other bodies.
             int gb = edgeIdBases[b], vb = vertexIdBases[b];
-            foreach (var bc in body.BoundaryConditions)
+            foreach (var bc in GeometryScopeResolver.ResolveForBody(body))
                 conditions.Add(bc with
                 {
                     Name = $"{body.Name}: {bc.Name}",

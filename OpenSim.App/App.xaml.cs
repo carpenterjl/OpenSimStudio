@@ -28,7 +28,11 @@ public partial class App : Application
         services.AddSingleton<OpenSim.Geometry.Step.StepImporter>();
         services.AddSingleton<IGeometryImporter>(sp =>
             sp.GetRequiredService<OpenSim.Geometry.Step.StepImporter>());
-        services.AddSingleton<IMeshGenerator, DelaunayMeshGenerator>();
+        // Both meshers are registered, and the selector is what everything resolves: the
+        // method lives in each body's persisted settings, not in the caller.
+        services.AddSingleton<DelaunayMeshGenerator>();
+        services.AddSingleton<StructuredLatticeMeshGenerator>();
+        services.AddSingleton<IMeshGenerator, MeshGeneratorSelector>();
         services.AddSingleton<ISolver, LinearStaticSolver>();
         services.AddSingleton<ISolver, ElectricalConductionSolver>();
         services.AddSingleton<ISolver, HeatConductionSolver>();
