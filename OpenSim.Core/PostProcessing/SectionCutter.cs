@@ -12,9 +12,48 @@ public sealed record CutTriangle(
 /// interior — this is why it operates on <see cref="FeMesh"/> in Core rather than on
 /// the rendered skin). Produces scalar-interpolated triangles of the cut cross-section
 /// and the visibility filter for the clipped boundary skin.
+/// <para>
+/// A HEXAHEDRAL mesh is cut by decomposing each element into six tetrahedra on its corners,
+/// for the cut ONLY. That is a display approximation — it interpolates the scalar linearly
+/// over each sub-tetrahedron rather than quadratically over the hexahedron — of exactly the
+/// same kind marching tetrahedra already make on TET10, where the mid-side nodes take no part
+/// in the cut either. Nothing solved passes through here.
+/// </para>
 /// </summary>
 public static class SectionCutter
 {
+    /// <summary>The Freudenthal split of a cell into six tetrahedra, in the local corner
+    /// ordering where bit 0 is x, bit 1 is y and bit 2 is z.</summary>
+    private static readonly int[][] CellTets =
+    {
+        new[] { 0, 1, 3, 7 }, new[] { 0, 1, 7, 5 }, new[] { 0, 5, 7, 4 },
+        new[] { 0, 3, 2, 7 }, new[] { 0, 6, 4, 7 }, new[] { 0, 2, 6, 7 }
+    };
+
+    /// <summary>Canonical hexahedral node order to the bit ordering the split above uses.
+    /// Self-inverse, so it reads either way.</summary>
+    private static readonly int[] BitToCanonical = { 0, 1, 3, 2, 4, 5, 7, 6 };
+
+    /// <summary>
+    /// The mesh as tetrahedra to march over: the elements themselves, or six per hexahedron.
+    /// </summary>
+    private static IEnumerable<(int A, int B, int C, int D)> MarchingTets(FeMesh mesh)
+    {
+        if (mesh.HexElements is null)
+        {
+            foreach (var e in mesh.Elements) yield return (e.N0, e.N1, e.N2, e.N3);
+            yield break;
+        }
+
+        var byBit = new int[8];
+        foreach (var h in mesh.HexElements)
+        {
+            var canonical = new[] { h.N0, h.N1, h.N2, h.N3, h.N4, h.N5, h.N6, h.N7 };
+            for (int b = 0; b < 8; b++) byBit[b] = canonical[BitToCanonical[b]];
+            foreach (var t in CellTets)
+                yield return (byBit[t[0]], byBit[t[1]], byBit[t[2]], byBit[t[3]]);
+        }
+    }
     /// <summary>
     /// Cuts every element crossing the plane. Corner signed distances exactly on the
     /// plane are ε-nudged to the positive side so only two case families exist:
@@ -47,10 +86,9 @@ public static class SectionCutter
         var below = new int[4];
         var above = new int[4];
 
-        for (int e = 0; e < mesh.ElementCount; e++)
+        foreach (var (ta, tb, tc, td) in MarchingTets(mesh))
         {
-            var el = mesh.Elements[e];
-            corners[0] = el.N0; corners[1] = el.N1; corners[2] = el.N2; corners[3] = el.N3;
+            corners[0] = ta; corners[1] = tb; corners[2] = tc; corners[3] = td;
 
             int belowCount = 0, aboveCount = 0;
             for (int i = 0; i < 4; i++)

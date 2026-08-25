@@ -27,6 +27,8 @@ public sealed class TriangleMesh
         Triangles = triangles;
         TriangleFaceIds = triangleFaceIds;
         _featureEdges = new Lazy<BoundaryEdgeSet>(() => BoundaryEdgeSet.Extract(this));
+        _faceCount = new Lazy<int>(() => TriangleFaceIds.Count == 0 ? 0 : TriangleFaceIds.Max() + 1);
+        _bounds = new Lazy<Aabb>(() => Aabb.FromPoints(Vertices));
     }
 
     private readonly Lazy<BoundaryEdgeSet> _featureEdges;
@@ -44,9 +46,14 @@ public sealed class TriangleMesh
     [JsonIgnore]
     public BoundaryEdgeSet FeatureEdges => _featureEdges.Value;
 
-    public int FaceCount => TriangleFaceIds.Count == 0 ? 0 : TriangleFaceIds.Max() + 1;
+    // Both are full scans of an immutable mesh, and both sit on hot paths (the mesher
+    // reads Bounds per seeding pass) — derived once on first use, like FeatureEdges.
+    private readonly Lazy<int> _faceCount;
+    private readonly Lazy<Aabb> _bounds;
 
-    public Aabb Bounds => Aabb.FromPoints(Vertices);
+    public int FaceCount => _faceCount.Value;
+
+    public Aabb Bounds => _bounds.Value;
 
     /// <summary>Outward normal of a triangle assuming counter-clockwise winding.</summary>
     public Vector3D TriangleNormal(int triangleIndex)

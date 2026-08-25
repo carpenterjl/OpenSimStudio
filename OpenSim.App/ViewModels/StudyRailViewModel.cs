@@ -227,8 +227,11 @@ public partial class StudyRailViewModel : ObservableObject
     private string MeshDetail(bool hasMesh)
     {
         if (!hasMesh) return _session.IsPcbMode ? "Mesh the selected net" : "Mesh the part";
-        var elements = _session.Bodies.Where(b => b.Mesh is not null).Sum(b => b.Mesh!.Elements.Count);
-        var quadratic = _session.Bodies.Any(b => b.Mesh?.MidEdgeNodes is not null);
+        var meshed = _session.Bodies.Where(b => b.Mesh is not null).Select(b => b.Mesh!).ToList();
+        var elements = meshed.Sum(m => m.ElementCount);
+        if (meshed.Any(m => m.IsHex))
+            return $"{elements:N0} hexes · HEX20";
+        var quadratic = meshed.Any(m => m.MidEdgeNodes is not null);
         return $"{elements:N0} tets{(quadratic ? " · TET10" : "")}";
     }
 

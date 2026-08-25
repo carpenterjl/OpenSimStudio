@@ -20,7 +20,7 @@ public static class ConstrainedSystemSolver
     public sealed class ReducedSystem
     {
         private readonly int[] _freeIndex;          // full DOF → free index, -1 when prescribed
-        private readonly double[] _rhsCorrection;   // (K_fc·u_c) per free DOF
+        private readonly double[] _rhsCorrection;   // (K_fc·u_c) per free DOF, rewritable in place
         private readonly IReadOnlyDictionary<int, double> _prescribed;
 
         internal ReducedSystem(CsrMatrix reduced, int[] freeIndex, double[] rhsCorrection,
@@ -68,6 +68,19 @@ public static class ConstrainedSystemSolver
                 full[i] = _freeIndex[i] >= 0 ? freeSolution[_freeIndex[i]] : _prescribed[i];
             return full;
         }
+
+        /// <summary>The free-DOF index of a full DOF, or -1 when it is prescribed.</summary>
+        internal int FreeIndexOf(int dof) => _freeIndex[dof];
+
+        /// <summary>
+        /// Zeroes the K_fc*u_c correction so a caller that rewrites part of the system in place
+        /// can sum it again from scratch (see <c>FilmUpdatableSystem</c>) — rebuilt rather than
+        /// patched, because the summation ORDER is what keeps it identical to a full reduction.
+        /// </summary>
+        internal void ClearCorrection() => Array.Clear(_rhsCorrection);
+
+        /// <summary>Adds to one entry of the correction.</summary>
+        internal void AddCorrection(int freeDof, double value) => _rhsCorrection[freeDof] += value;
     }
 
     /// <param name="allowUnconstrained">

@@ -53,9 +53,23 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
         new[] { 0, 2, 6, 7 }
     };
 
+    /// <summary>
+    /// The lattice's own corner ordering (bit 0 = x, 1 = y, 2 = z) permuted into the standard
+    /// hexahedral node order, where the base and top rings each run counter-clockwise:
+    /// bit order visits (x,y) as 00, 10, 01, 11 while the ring wants 00, 10, 11, 01.
+    /// </summary>
+    private static readonly int[] BitToCanonical = { 0, 1, 3, 2, 4, 5, 7, 6 };
+
     public FeMesh Generate(TriangleMesh geometry, MeshSettings settings,
         CancellationToken cancellationToken = default)
     {
+        var shape = settings.Shape ?? ElementShape.Tetrahedral;
+        if (shape == ElementShape.Hexahedral && settings.ElementOrder != ElementOrder.Quadratic)
+            throw new InvalidOperationException(
+                "Hexahedral meshing produces HEX20 elements and therefore requires quadratic " +
+                "element order. Linear hexahedra shear-lock in bending without incompatible-mode " +
+                "machinery this solver does not carry, so they are not offered.");
+
         var box = BoxFit.Detect(geometry);
         var bounds = box.Bounds;
         var size = bounds.Size;
@@ -86,6 +100,9 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
             }
         }
 
+        if (shape == ElementShape.Hexahedral)
+            return GenerateHex(nodes, Index, nx, ny, nz, box, cancellationToken);
+
         var elements = new List<Tet4>(6 * nx * ny * nz);
         var corner = new int[8];
         for (int k = 0; k < nz; k++)
@@ -112,6 +129,105 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
         return settings.ElementOrder == ElementOrder.Quadratic
             ? QuadraticMeshBuilder.Upgrade(mesh)
             : mesh;
+    }
+
+    /// <summary>
+    /// One hexahedron per cell, straight off the corner lattice, upgraded to HEX20.
+    /// <para>
+    /// The skin is emitted BOTH ways: as quads, which is what consistent surface loads and
+    /// support pinning are defined on, and as two triangles per quad, which is what
+    /// rendering, contact detection, section cutting and the feature-edge extraction consume.
+    /// Deriving the triangles from the quads rather than from the elements keeps the two
+    /// descriptions of one surface incapable of disagreeing.
+    /// </para>
+    /// </summary>
+    private static FeMesh GenerateHex(List<Vector3D> nodes, Func<int, int, int, int> index,
+        int nx, int ny, int nz, BoxFit box, CancellationToken cancellationToken)
+    {
+        var hexes = new List<Hex8>(nx * ny * nz);
+        var corner = new int[8];
+        for (int k = 0; k < nz; k++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            for (int j = 0; j < ny; j++)
+                for (int i = 0; i < nx; i++)
+                {
+                    for (int c = 0; c < 8; c++)
+                    {
+                        int bit = BitToCanonical[c];
+                        corner[c] = index(i + (bit & 1), j + ((bit >> 1) & 1), k + ((bit >> 2) & 1));
+                    }
+                    hexes.Add(new Hex8(corner[0], corner[1], corner[2], corner[3],
+                                       corner[4], corner[5], corner[6], corner[7]));
+                }
+        }
+
+        var quads = HexSkin(nodes, hexes, box);
+        var triangles = new List<BoundaryTriangle>(quads.Count * 2);
+        foreach (var q in quads)
+        {
+            triangles.Add(new BoundaryTriangle(q.A, q.B, q.C, q.FaceId));
+            triangles.Add(new BoundaryTriangle(q.A, q.C, q.D, q.FaceId));
+        }
+
+        return QuadraticMeshBuilder.UpgradeHex(nodes, hexes, triangles, quads);
+    }
+
+    /// <summary>The six faces of a hexahedron as local corner indices, each wound
+    /// counter-clockwise seen from OUTSIDE the element.</summary>
+    private static readonly int[][] HexFaces =
+    {
+        new[] { 0, 3, 2, 1 },   // base   (z-min)
+        new[] { 4, 5, 6, 7 },   // top    (z-max)
+        new[] { 0, 1, 5, 4 },   // front  (y-min)
+        new[] { 1, 2, 6, 5 },   // right  (x-max)
+        new[] { 2, 3, 7, 6 },   // back   (y-max)
+        new[] { 3, 0, 4, 7 }    // left   (x-min)
+    };
+
+    /// <summary>
+    /// The quad skin: cell faces used by exactly one element, wound outward and tagged with
+    /// the geometry's OWN face id for the plane they lie on — the same rule, and the same
+    /// deterministic ordering, the tetrahedral skin uses.
+    /// </summary>
+    private static List<BoundaryQuad> HexSkin(List<Vector3D> nodes, List<Hex8> hexes, BoxFit box)
+    {
+        var counts = new Dictionary<(int, int, int, int), (int Count, int A, int B, int C, int D)>();
+        var corner = new int[8];
+        foreach (var h in hexes)
+        {
+            corner[0] = h.N0; corner[1] = h.N1; corner[2] = h.N2; corner[3] = h.N3;
+            corner[4] = h.N4; corner[5] = h.N5; corner[6] = h.N6; corner[7] = h.N7;
+            foreach (var face in HexFaces)
+            {
+                int a = corner[face[0]], b = corner[face[1]], c = corner[face[2]], d = corner[face[3]];
+                var key = SortedQuad(a, b, c, d);
+                counts[key] = counts.TryGetValue(key, out var prior)
+                    ? (prior.Count + 1, prior.A, prior.B, prior.C, prior.D)
+                    : (1, a, b, c, d);
+            }
+        }
+
+        var skin = new List<BoundaryQuad>();
+        foreach (var (_, face) in counts.OrderBy(kv => kv.Key))
+        {
+            if (face.Count != 1) continue;
+            var n = Vector3D.Cross(nodes[face.B] - nodes[face.A], nodes[face.C] - nodes[face.A]);
+            int plane = Math.Abs(n.X) > Math.Abs(n.Y) && Math.Abs(n.X) > Math.Abs(n.Z)
+                ? (n.X < 0 ? BoxFit.PlaneXMin : BoxFit.PlaneXMax)
+                : Math.Abs(n.Y) > Math.Abs(n.Z)
+                    ? (n.Y < 0 ? BoxFit.PlaneYMin : BoxFit.PlaneYMax)
+                    : (n.Z < 0 ? BoxFit.PlaneZMin : BoxFit.PlaneZMax);
+            skin.Add(new BoundaryQuad(face.A, face.B, face.C, face.D, box.FaceIdOfPlane[plane]));
+        }
+        return skin;
+    }
+
+    private static (int, int, int, int) SortedQuad(int a, int b, int c, int d)
+    {
+        Span<int> v = stackalloc int[] { a, b, c, d };
+        v.Sort();
+        return (v[0], v[1], v[2], v[3]);
     }
 
     /// <summary>

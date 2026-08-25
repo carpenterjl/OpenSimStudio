@@ -180,18 +180,21 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
                 nodes[compacted] = exact;
 
         // 6. Smooth interior nodes (boundary skin stays fixed), then extract the skin.
+        // One face-use map serves both: which nodes the smoother must hold, and which faces
+        // become the skin. Counting them twice walked all four faces of every element a
+        // second time to rediscover exactly the same set.
+        var faceUse = BuildFaceUse(elements);
         var boundaryNodes = new HashSet<int>();
-        var faceUseForFixing = CountFaceUse(elements);
-        foreach (var (face, use) in faceUseForFixing)
+        foreach (var (face, entry) in faceUse)
         {
-            if (use != 1) continue;
+            if (entry.Count != 1) continue;
             boundaryNodes.Add(face.Item1);
             boundaryNodes.Add(face.Item2);
             boundaryNodes.Add(face.Item3);
         }
         MeshSmoother.Smooth(nodes, elements, boundaryNodes);
 
-        var boundary = ExtractBoundary(nodes, elements, distanceField);
+        var boundary = ExtractBoundary(nodes, faceUse, distanceField);
         var mesh = new FeMesh(nodes, elements, boundary);
 
         // The quadratic upgrade is the last step so mid-edge nodes are generated on
@@ -208,7 +211,31 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
     /// actually lies on (see <see cref="SurfaceDistanceField.NearestFaceId"/>).
     /// </summary>
     private static List<BoundaryTriangle> ExtractBoundary(
-        IReadOnlyList<Vector3D> nodes, IReadOnlyList<Tet4> elements, SurfaceDistanceField surface)
+        IReadOnlyList<Vector3D> nodes,
+        Dictionary<(int, int, int), (int Count, int A, int B, int C, int Opp)> faceUse,
+        SurfaceDistanceField surface)
+    {
+        var boundary = new List<BoundaryTriangle>();
+        foreach (var entry in faceUse.Values)
+        {
+            if (entry.Count != 1) continue;
+            int a = entry.A, b = entry.B, c = entry.C;
+            // Outward winding: the opposite vertex must lie on the negative side.
+            if (GeometricPredicates.Orient3D(nodes[a], nodes[b], nodes[c], nodes[entry.Opp]) > 0)
+                (b, c) = (c, b);
+            var centroid = (nodes[a] + nodes[b] + nodes[c]) / 3.0;
+            boundary.Add(new BoundaryTriangle(a, b, c, surface.NearestFaceId(centroid)));
+        }
+        return boundary;
+    }
+
+    /// <summary>
+    /// How many elements use each face, with the first user's winding and opposite vertex.
+    /// Faces are visited in element order, four per element — the enumeration order the skin
+    /// is then built in, so boundary triangles come out in exactly the order they always have.
+    /// </summary>
+    private static Dictionary<(int, int, int), (int Count, int A, int B, int C, int Opp)>
+        BuildFaceUse(IReadOnlyList<Tet4> elements)
     {
         var faceUse = new Dictionary<(int, int, int), (int Count, int A, int B, int C, int Opp)>();
         void Touch(int a, int b, int c, int opp)
@@ -225,36 +252,6 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
             Touch(e.N0, e.N2, e.N3, e.N1);
             Touch(e.N0, e.N1, e.N3, e.N2);
             Touch(e.N0, e.N1, e.N2, e.N3);
-        }
-
-        var boundary = new List<BoundaryTriangle>();
-        foreach (var entry in faceUse.Values)
-        {
-            if (entry.Count != 1) continue;
-            int a = entry.A, b = entry.B, c = entry.C;
-            // Outward winding: the opposite vertex must lie on the negative side.
-            if (GeometricPredicates.Orient3D(nodes[a], nodes[b], nodes[c], nodes[entry.Opp]) > 0)
-                (b, c) = (c, b);
-            var centroid = (nodes[a] + nodes[b] + nodes[c]) / 3.0;
-            boundary.Add(new BoundaryTriangle(a, b, c, surface.NearestFaceId(centroid)));
-        }
-        return boundary;
-    }
-
-    private static Dictionary<(int, int, int), int> CountFaceUse(IReadOnlyList<Tet4> elements)
-    {
-        var faceUse = new Dictionary<(int, int, int), int>();
-        void Touch(int a, int b, int c)
-        {
-            var key = SortedFace(a, b, c);
-            faceUse[key] = faceUse.GetValueOrDefault(key) + 1;
-        }
-        foreach (var e in elements)
-        {
-            Touch(e.N1, e.N2, e.N3);
-            Touch(e.N0, e.N2, e.N3);
-            Touch(e.N0, e.N1, e.N3);
-            Touch(e.N0, e.N1, e.N2);
         }
         return faceUse;
     }

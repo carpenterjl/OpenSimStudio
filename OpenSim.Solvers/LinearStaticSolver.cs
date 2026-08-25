@@ -51,12 +51,10 @@ public sealed class LinearStaticSolver : ISolver
         var mesh = input.Mesh;
 
         progress?.Report(new SolverProgress("Assembling stiffness matrix", 0.05));
-        IElasticityAssembler assembler = mesh.IsQuadratic
-            ? new Tet10Assembler(mesh, input.Material)
-            : new Tet4Assembler(mesh, input.Material);
+        var assembler = StructuralSurfaceLoads.AssemblerFor(mesh, input.Material);
         var stiffness = assembler.AssembleStiffness(cancellationToken);
-        log.Add($"Assembled {stiffness.RowCount} DOF system ({(mesh.IsQuadratic ? "TET10" : "TET4")}), " +
-                $"{stiffness.NonZeroCount} non-zeros.");
+        log.Add($"Assembled {stiffness.RowCount} DOF system " +
+                $"({StructuralSurfaceLoads.ElementName(mesh)}), {stiffness.NonZeroCount} non-zeros.");
 
         // Boundary triangles carry only corner indices; on a quadratic mesh their
         // mid-edge nodes must be addressed too — for pinning AND for loads.
@@ -64,7 +62,8 @@ public sealed class LinearStaticSolver : ISolver
 
         progress?.Report(new SolverProgress("Applying boundary conditions", 0.25));
         var loads = BuildLoadVector(mesh, input.BoundaryConditions, edgeMid, log);
-        var prescribed = BuildPrescribedDofs(mesh, input.BoundaryConditions, edgeMid, log);
+        var prescribed = StructuralSurfaceLoads.BuildPrescribedDofs(
+            mesh, input.BoundaryConditions, edgeMid, log);
 
         progress?.Report(new SolverProgress("Solving linear system", 0.35));
         var result = ConstrainedSystemSolver.Solve(stiffness, loads, prescribed,
@@ -86,10 +85,19 @@ public sealed class LinearStaticSolver : ISolver
     /// ∫N_corner dA = 0 and ∫N_mid dA = A/3, i.e. each MID-EDGE node takes ⅓ of the
     /// triangle's share and the corners take none. Force loads are area-weighted so
     /// the resultant is exact; pressure acts along the inward normal.
+    /// <para>
+    /// A HEXAHEDRAL mesh is loaded through its QUAD skin instead
+    /// (<see cref="StructuralSurfaceLoads.QuadLoadWeights"/>). Its triangular skin exists for
+    /// rendering, contact and edge extraction, but it is not a load surface: the QUAD8 face of
+    /// a HEX20 has its own consistent weights — A/3 per mid-side node and MINUS A/12 per
+    /// corner — and the triangulation's diagonal is not an element edge at all.
+    /// </para>
     /// </summary>
     private static double[] BuildLoadVector(FeMesh mesh, IReadOnlyList<BoundaryCondition> conditions,
         Dictionary<(int, int), int>? edgeMid, List<string> log)
     {
+        if (mesh.IsHex) return BuildQuadLoadVector(mesh, conditions, edgeMid!, log);
+
         var loads = new double[mesh.NodeCount * 3];
 
         void AddTriangleShare(BoundaryTriangle t, Vector3D share)
@@ -115,11 +123,18 @@ public sealed class LinearStaticSolver : ISolver
                 case ForceLoad force:
                 {
                     var triangles = mesh.GetFaceTriangles(force.FaceIds);
-                    double totalArea = triangles.Sum(t => TriangleArea(mesh, t));
+                    // Areas once: the total and each triangle's share read the same numbers.
+                    var areas = new double[triangles.Count];
+                    double totalArea = 0;
+                    for (int i = 0; i < triangles.Count; i++)
+                    {
+                        areas[i] = TriangleArea(mesh, triangles[i]);
+                        totalArea += areas[i];
+                    }
                     if (totalArea <= 0)
                         throw new InvalidOperationException($"Force '{bc.Name}': selected faces have zero area.");
-                    foreach (var t in triangles)
-                        AddTriangleShare(t, force.TotalForce * (TriangleArea(mesh, t) / totalArea / 3.0));
+                    for (int i = 0; i < triangles.Count; i++)
+                        AddTriangleShare(triangles[i], force.TotalForce * (areas[i] / totalArea / 3.0));
                     log.Add($"Force '{bc.Name}': {force.TotalForce.Length:g4} N over {triangles.Count} face triangles.");
                     break;
                 }
@@ -144,32 +159,6 @@ public sealed class LinearStaticSolver : ISolver
         return loads;
     }
 
-    private static Dictionary<int, double> BuildPrescribedDofs(FeMesh mesh,
-        IReadOnlyList<BoundaryCondition> conditions, Dictionary<(int, int), int>? edgeMid,
-        List<string> log)
-    {
-        var prescribed = new Dictionary<int, double>();
-        foreach (var support in conditions.OfType<FixedSupport>())
-        {
-            var nodes = new HashSet<int>(mesh.GetScopeNodes(support));
-            if (edgeMid is not null)
-            {
-                // Pinning only the corners of a quadratic scope leaves its mid-edge
-                // nodes free — spurious compliance at the support. Pin them too.
-                foreach (var segment in mesh.GetScopeSegments(support))
-                    nodes.Add(edgeMid[Edge(segment.A, segment.B)]);
-            }
-            foreach (int node in nodes)
-            {
-                prescribed[node * 3] = 0;
-                prescribed[node * 3 + 1] = 0;
-                prescribed[node * 3 + 2] = 0;
-            }
-            log.Add($"Fixed support '{support.Name}': {nodes.Count} nodes fully constrained.");
-        }
-        return prescribed;
-    }
-
     private static (int, int) Edge(int a, int b) => a < b ? (a, b) : (b, a);
 
     private static IReadOnlyList<IResultField> BuildResultFields(FeMesh mesh,
@@ -179,12 +168,15 @@ public sealed class LinearStaticSolver : ISolver
         for (int i = 0; i < mesh.NodeCount; i++)
             displacement[i] = new Vector3D(u[i * 3], u[i * 3 + 1], u[i * 3 + 2]);
 
+        // One strain evaluation per element, stress derived from it. ElementStress would
+        // recompute the same strain internally — on a quadratic mesh that is a second
+        // four-Gauss-point pass per element for a tensor already in hand.
         var stress = new SymmetricTensor[mesh.ElementCount];
         var strain = new SymmetricTensor[mesh.ElementCount];
         for (int e = 0; e < mesh.ElementCount; e++)
         {
-            stress[e] = assembler.ElementStress(e, u);
             strain[e] = assembler.ElementStrain(e, u);
+            stress[e] = assembler.StressFromStrain(strain[e]);
         }
 
         // Volume-weighted nodal averages for smooth contours. Equivalent elastic strain is
@@ -251,6 +243,58 @@ public sealed class LinearStaticSolver : ISolver
                 ? MaxReportedSafetyFactor
                 : Math.Min(strength / nodalVonMises[i], MaxReportedSafetyFactor);
         return factors;
+    }
+
+    /// <summary>The hexahedral load path: consistent QUAD8 loads over the quad skin.</summary>
+    private static double[] BuildQuadLoadVector(FeMesh mesh,
+        IReadOnlyList<BoundaryCondition> conditions, Dictionary<(int, int), int> edgeMid,
+        List<string> log)
+    {
+        var loads = new double[mesh.NodeCount * 3];
+
+        foreach (var bc in conditions)
+        {
+            switch (bc)
+            {
+                case ForceLoad force:
+                {
+                    var quads = mesh.GetFaceQuads(force.FaceIds);
+                    var weights = quads
+                        .Select(q => StructuralSurfaceLoads.QuadLoadWeights(mesh, q, edgeMid))
+                        .ToList();
+
+                    // The shape functions sum to one, so the per-node area integrals of a face
+                    // sum to its area — total area comes out of the very numbers the shares
+                    // are built from.
+                    double totalArea = weights.Sum(w => w.Areas.Sum());
+                    if (totalArea <= 0)
+                        throw new InvalidOperationException($"Force '{bc.Name}': selected faces have zero area.");
+
+                    foreach (var (nodes, areas, _) in weights)
+                        for (int k = 0; k < nodes.Length; k++)
+                            AddNodalForce(loads, nodes[k], force.TotalForce * (areas[k] / totalArea));
+
+                    log.Add($"Force '{bc.Name}': {force.TotalForce.Length:g4} N over {quads.Count} face quads.");
+                    break;
+                }
+                case PressureLoad pressure:
+                {
+                    var quads = mesh.GetFaceQuads(pressure.FaceIds);
+                    double totalForce = 0;
+                    foreach (var q in quads)
+                    {
+                        var (nodes, areas, areaVectors) =
+                            StructuralSurfaceLoads.QuadLoadWeights(mesh, q, edgeMid);
+                        for (int k = 0; k < nodes.Length; k++)
+                            AddNodalForce(loads, nodes[k], -areaVectors[k] * pressure.Magnitude);
+                        totalForce += areas.Sum() * pressure.Magnitude;
+                    }
+                    log.Add($"Pressure '{bc.Name}': {pressure.Magnitude:g4} Pa, resultant {totalForce:g4} N.");
+                    break;
+                }
+            }
+        }
+        return loads;
     }
 
     private static double TriangleArea(FeMesh mesh, BoundaryTriangle t) =>

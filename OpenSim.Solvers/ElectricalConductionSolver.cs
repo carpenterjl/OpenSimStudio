@@ -23,8 +23,8 @@ public sealed class ElectricalConductionSolver : ISolver
             throw new InvalidOperationException("The mesh has no elements. Generate a mesh first.");
         if (input.Mesh.IsQuadratic)
             throw new InvalidOperationException(
-                "The electrical solver supports linear (TET4) meshes only; " +
-                "re-generate the mesh with linear elements.");
+                "The electrical solver supports linear tetrahedral (TET4) meshes only; " +
+                "re-generate the mesh with linear tetrahedral elements.");
 
         input.Material.ValidateElectrical();
         if (input.RegionMaterials is not null)

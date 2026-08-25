@@ -82,6 +82,25 @@ public sealed class CsrMatrix
     }
 
     /// <summary>Returns the diagonal entries (0 where the diagonal is not stored).</summary>
+    /// <summary>
+    /// The index into <see cref="Values"/> of one entry, or -1 when the pattern has no such
+    /// entry. For a caller that rewrites the same positions repeatedly and resolves them once
+    /// up front — the sparsity is fixed, so an index stays valid for the matrix's lifetime.
+    /// </summary>
+    public int IndexOf(int row, int column)
+    {
+        int lo = RowPointers[row], hi = RowPointers[row + 1] - 1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >>> 1;
+            int c = ColumnIndices[mid];
+            if (c == column) return mid;
+            if (c < column) lo = mid + 1;
+            else hi = mid - 1;
+        }
+        return -1;
+    }
+
     public double[] GetDiagonal()
     {
         var diag = new double[Math.Min(RowCount, ColumnCount)];

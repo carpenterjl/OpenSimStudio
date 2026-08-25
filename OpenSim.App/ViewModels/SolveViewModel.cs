@@ -214,10 +214,17 @@ public partial class SolveViewModel : ObservableObject
                 (assembled, input, setup) = await Task.Run(() =>
                 {
                     var lines = new List<string>();
-                    var merged = FeMeshAssembler.Assemble(bodies);
+                    // The merge and the contact detection depend only on the MESHES, so a
+                    // second solve after a material or condition edit reuses them; the
+                    // conditions themselves are always resolved fresh.
+                    var cache = _session.Assemblies;
+                    int hitsBefore = cache.MergeHits;
+                    var merged = cache.Assemble(bodies);
                     lines.Add($"Merged {bodies.Count} bodies: {merged.Mesh.NodeCount:N0} nodes, " +
-                              $"{merged.Mesh.ElementCount:N0} elements.");
-                    var contacts = ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, lines.Add);
+                              $"{merged.Mesh.ElementCount:N0} elements" +
+                              (cache.MergeHits > hitsBefore ? " (reused from the last solve)." : "."));
+                    var contacts = cache.Contacts(detection,
+                        () => ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, lines.Add));
                     var source = FeMeshAssembler.BuildElementHeatSource(merged, bodies, lines.Add);
                     lines.Add($"Environment: {environment.Describe()}.");
                     var built = new SolveInput
@@ -352,10 +359,17 @@ public partial class SolveViewModel : ObservableObject
                 (assembled, input, setup) = await Task.Run(() =>
                 {
                     var lines = new List<string>();
-                    var merged = FeMeshAssembler.Assemble(bodies);
+                    // The merge and the contact detection depend only on the MESHES, so a
+                    // second solve after a material or condition edit reuses them; the
+                    // conditions themselves are always resolved fresh.
+                    var cache = _session.Assemblies;
+                    int hitsBefore = cache.MergeHits;
+                    var merged = cache.Assemble(bodies);
                     lines.Add($"Merged {bodies.Count} bodies: {merged.Mesh.NodeCount:N0} nodes, " +
-                              $"{merged.Mesh.ElementCount:N0} elements.");
-                    var contacts = ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, lines.Add);
+                              $"{merged.Mesh.ElementCount:N0} elements" +
+                              (cache.MergeHits > hitsBefore ? " (reused from the last solve)." : "."));
+                    var contacts = cache.Contacts(detection,
+                        () => ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, lines.Add));
                     var source = FeMeshAssembler.BuildElementHeatSource(merged, bodies, lines.Add);
                     lines.Add($"Environment (resolved by CFD): {environment.Describe()}.");
                     var built = new SolveInput

@@ -32,6 +32,13 @@ public partial class MeshingViewModel : ObservableObject
         new MeshMethodOption(MeshMethod.StructuredLattice, "Structured lattice (box)")
     };
 
+    /// <summary>The element families a structured lattice can build.</summary>
+    public IReadOnlyList<ElementShapeOption> ElementShapes { get; } = new[]
+    {
+        new ElementShapeOption(ElementShape.Hexahedral, "Hexahedra (HEX20)"),
+        new ElementShapeOption(ElementShape.Tetrahedral, "Tetrahedra (TET4 / TET10)")
+    };
+
     [ObservableProperty] private double _targetEdgeLength; // 0 = auto
     [ObservableProperty] private bool _autoEdgeLength = true;
     [ObservableProperty] private string _meshInfo = "No mesh";
@@ -44,6 +51,14 @@ public partial class MeshingViewModel : ObservableObject
     /// project changes until the user asks for something else.</summary>
     [ObservableProperty] private MeshMethod _meshMethod = MeshMethod.Delaunay;
 
+    /// <summary>
+    /// The element family a structured lattice builds. Hexahedra are the default HERE — the
+    /// mapped mesher exists to reproduce what a commercial code lays on a block, and that is
+    /// a 20-node hexahedron. It applies only to the lattice; Delaunay always builds
+    /// tetrahedra, and a project saved with no shape at all still loads as tetrahedral.
+    /// </summary>
+    [ObservableProperty] private ElementShape _elementShape = ElementShape.Hexahedral;
+
     [ObservableProperty] private int _latticeNx = 10;
     [ObservableProperty] private int _latticeNy = 10;
     [ObservableProperty] private int _latticeNz = 10;
@@ -54,8 +69,28 @@ public partial class MeshingViewModel : ObservableObject
     partial void OnMeshMethodChanged(MeshMethod value)
     {
         OnPropertyChanged(nameof(IsStructured));
+        OnPropertyChanged(nameof(QuadraticLabel));
+        OnPropertyChanged(nameof(QuadraticOrderIsAChoice));
         if (value == MeshMethod.StructuredLattice) PrefillDivisions();
     }
+
+    partial void OnElementShapeChanged(ElementShape value)
+    {
+        // HEX20 is the only hexahedron on offer, so choosing hexahedra chooses quadratic
+        // order with it rather than leaving a combination the mesher would have to refuse.
+        if (value == ElementShape.Hexahedral) QuadraticElements = true;
+        OnPropertyChanged(nameof(QuadraticLabel));
+        OnPropertyChanged(nameof(QuadraticOrderIsAChoice));
+    }
+
+    /// <summary>Names the element the current choices actually produce.</summary>
+    public string QuadraticLabel => IsStructured && ElementShape == ElementShape.Hexahedral
+        ? "Quadratic elements (HEX20)"
+        : "Quadratic elements (TET10)";
+
+    /// <summary>Hexahedra are HEX20 only, so the order checkbox is not the user's to clear
+    /// there — it is shown ticked and disabled rather than silently overridden.</summary>
+    public bool QuadraticOrderIsAChoice => !(IsStructured && ElementShape == ElementShape.Hexahedral);
 
     /// <summary>
     /// Fills the division boxes with what the current element size implies for this body, so
@@ -86,6 +121,11 @@ public partial class MeshingViewModel : ObservableObject
         Method = MeshMethod == MeshMethod.Delaunay ? null : MeshMethod,
         Divisions = MeshMethod == MeshMethod.StructuredLattice && !perBodyDivisions
             ? new LatticeDivisions(LatticeNx, LatticeNy, LatticeNz)
+            : null,
+        // Null for tetrahedra, exactly as Method is null for Delaunay: it is what every
+        // project written before hexahedra existed carries.
+        Shape = MeshMethod == MeshMethod.StructuredLattice && ElementShape == ElementShape.Hexahedral
+            ? ElementShape.Hexahedral
             : null
     };
 

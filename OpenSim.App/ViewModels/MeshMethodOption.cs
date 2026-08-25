@@ -4,3 +4,6 @@ namespace OpenSim.App.ViewModels;
 
 /// <summary>One entry of the meshing-method picker: the method and the label for it.</summary>
 public sealed record MeshMethodOption(MeshMethod Method, string Label);
+
+/// <summary>One entry of the element-shape picker.</summary>
+public sealed record ElementShapeOption(ElementShape Shape, string Label);

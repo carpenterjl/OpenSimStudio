@@ -107,7 +107,7 @@ public static class ResultReportCsv
             sb.Append(CultureInfo.InvariantCulture, $"# frame: {frame}").Append(Eol);
         sb.Append(CultureInfo.InvariantCulture,
             $"# mesh: {mesh.NodeCount} nodes, {mesh.ElementCount} elements, " +
-            $"{(mesh.IsQuadratic ? "TET10 (quadratic)" : "TET4 (linear)")}").Append(Eol);
+            $"{ElementTypeName(mesh)}").Append(Eol);
 
         if (context.Material is { } material)
         {
@@ -132,9 +132,23 @@ public static class ResultReportCsv
     private static Numerics.Vector3D NodePosition(FeMesh mesh, int index) =>
         index < mesh.NodeCount ? mesh.Nodes[index] : new Numerics.Vector3D(0, 0, 0);
 
+    private static string ElementTypeName(FeMesh mesh) =>
+        mesh.IsHex ? "HEX20 (quadratic)"
+        : mesh.IsQuadratic ? "TET10 (quadratic)"
+        : "TET4 (linear)";
+
+    /// <summary>The centroid of an element's CORNERS — four for a tetrahedron, eight for a
+    /// hexahedron. The mid-side nodes are excluded on purpose: on a straight-edged element
+    /// they are the edge midpoints and averaging them in would weight the edges twice.</summary>
     private static Numerics.Vector3D ElementCentroid(FeMesh mesh, int index)
     {
         if (index >= mesh.ElementCount) return new Numerics.Vector3D(0, 0, 0);
+        if (mesh.HexElements is { } hexes)
+        {
+            var h = hexes[index];
+            return (mesh.Nodes[h.N0] + mesh.Nodes[h.N1] + mesh.Nodes[h.N2] + mesh.Nodes[h.N3]
+                  + mesh.Nodes[h.N4] + mesh.Nodes[h.N5] + mesh.Nodes[h.N6] + mesh.Nodes[h.N7]) * 0.125;
+        }
         var e = mesh.Elements[index];
         return (mesh.Nodes[e.N0] + mesh.Nodes[e.N1] + mesh.Nodes[e.N2] + mesh.Nodes[e.N3]) * 0.25;
     }

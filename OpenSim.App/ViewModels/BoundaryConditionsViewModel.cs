@@ -54,6 +54,37 @@ public partial class BoundaryConditionsViewModel : ObservableObject
             : $"Selected faces: {string.Join(", ", _session.SelectedFaces)}";
     }
 
+    /// <summary>
+    /// Toggles a geometric edge in the selection (viewport left-click on an edge). The ids
+    /// live in whichever space <see cref="ProjectSession.ScopeIsGeometric"/> names, exactly
+    /// as the scope list uses — and because the list rows follow the session collection, a
+    /// viewport pick ticks the matching row with no extra plumbing.
+    /// </summary>
+    public void ToggleEdgeSelection(int edgeId)
+    {
+        if (_session.SelectedEdges.Contains(edgeId))
+            _session.SelectedEdges.Remove(edgeId);
+        else
+            _session.SelectedEdges.Add(edgeId);
+        _session.RaiseHighlightsInvalidated();
+        _session.StatusText = _session.SelectedEdges.Count == 0
+            ? "Ready"
+            : $"Selected edges: {string.Join(", ", _session.SelectedEdges)}";
+    }
+
+    /// <summary>Toggles a geometric vertex in the selection (viewport left-click on a corner).</summary>
+    public void ToggleVertexSelection(int vertexId)
+    {
+        if (_session.SelectedVertices.Contains(vertexId))
+            _session.SelectedVertices.Remove(vertexId);
+        else
+            _session.SelectedVertices.Add(vertexId);
+        _session.RaiseHighlightsInvalidated();
+        _session.StatusText = _session.SelectedVertices.Count == 0
+            ? "Ready"
+            : $"Selected vertices: {string.Join(", ", _session.SelectedVertices)}";
+    }
+
     [RelayCommand]
     private void ClearSelection()
     {

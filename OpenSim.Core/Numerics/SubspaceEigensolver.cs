@@ -71,8 +71,14 @@ public sealed class SubspaceEigensolver
             MaxIterations = Math.Max(4 * n, 1000)
         };
 
+        // K never changes across the iteration, so its Jacobi preconditioner is built once
+        // here rather than inside every inner solve — that is one full walk of K instead of
+        // (iterations × q) of them, and the same numbers either way.
+        double[] invDiagK = ConjugateGradientSolver.BuildJacobiPreconditioner(k);
+
         var values = new double[q];
         double[]? previous = null;
+        double[]? lastResiduals = null;
         bool converged = false;
         int iteration = 0;
 
@@ -85,7 +91,7 @@ public sealed class SubspaceEigensolver
             {
                 m.Multiply(x[j], y[j]);
                 // Warm start: the previous x̄_j is an excellent guess once shapes settle.
-                var inner = cg.Solve(k, y[j], xbar[j], cancellationToken);
+                var inner = cg.Solve(k, y[j], xbar[j], invDiagK, cancellationToken);
                 if (!inner.Converged)
                     throw new InvalidOperationException(
                         $"Inner CG solve of subspace iteration {iteration} did not converge " +
@@ -166,9 +172,18 @@ public sealed class SubspaceEigensolver
                         break;
                     }
                 }
-                // Only pay the residual matvecs once the values have settled.
-                converged = valuesSettled
-                            && ComputeResiduals(k, m, x, values, p).Max() <= ResidualTolerance;
+                // Only pay the residual matvecs once the values have settled — and keep the
+                // result, so the converged iterate is not measured a second time on the way out.
+                if (valuesSettled)
+                {
+                    lastResiduals = ComputeResiduals(k, m, x, values, p);
+                    converged = lastResiduals.Max() <= ResidualTolerance;
+                }
+                else
+                {
+                    lastResiduals = null;
+                    converged = false;
+                }
             }
             previous ??= new double[q];
             Array.Copy(values, previous, q);
@@ -182,7 +197,9 @@ public sealed class SubspaceEigensolver
             eigenvalues[i] = values[i];
             eigenvectors[i] = x[i];
         }
-        var residuals = ComputeResiduals(k, m, x, values, p);
+        // Reuse the residuals the loop just measured when they belong to this iterate;
+        // recompute only when the loop exited without measuring (iteration cap reached).
+        var residuals = lastResiduals ?? ComputeResiduals(k, m, x, values, p);
         return new EigenResult(eigenvalues, eigenvectors, converged, iteration, residuals);
     }
 

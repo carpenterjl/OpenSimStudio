@@ -35,10 +35,36 @@ public sealed class Tet4Assembler : IElasticityAssembler
 
     public int DofCount => _mesh.NodeCount * 3;
 
+    /// <summary>
+    /// The non-zero positions of both matrices, derived once. A modal solve assembles the
+    /// stiffness AND the mass over the same connectivity, so discovering the pattern twice is
+    /// discovering the same answer twice — and on a large mesh that is a hash map and a sort
+    /// per row, paid for again.
+    /// </summary>
+    private SparsityPattern Pattern => _pattern ??= BuildPattern();
+
+    private SparsityPattern? _pattern;
+
+    private SparsityPattern BuildPattern()
+    {
+        var blocks = new List<int[]>(_mesh.ElementCount);
+        for (int el = 0; el < _mesh.ElementCount; el++)
+        {
+            var nodes = _mesh.GetElementNodes(el);
+            var dofs = new int[nodes.Length * 3];
+            for (int i = 0; i < nodes.Length; i++)
+                for (int a = 0; a < 3; a++)
+                    dofs[i * 3 + a] = nodes[i] * 3 + a;
+            blocks.Add(dofs);
+        }
+        return SparsityPattern.FromBlocks(DofCount, DofCount, blocks);
+    }
+
     /// <summary>Assembles the global stiffness matrix.</summary>
     public CsrMatrix AssembleStiffness(CancellationToken cancellationToken = default)
     {
-        var builder = new SparseMatrixBuilder(DofCount, DofCount);
+        var pattern = Pattern;
+        var values = pattern.CreateValues();
         Span<int> nodes = stackalloc int[4];
         for (int el = 0; el < _mesh.ElementCount; el++)
         {
@@ -64,13 +90,13 @@ public sealed class Tet4Assembler : IElasticityAssembler
                         {
                             double value = volume * (_lambda * gi[a] * gj[b] + _mu * gj[a] * gi[b]);
                             if (a == b) value += volume * _mu * dot;
-                            builder.Add(nodes[i] * 3 + a, nodes[j] * 3 + b, value);
+                            pattern.Add(values, nodes[i] * 3 + a, nodes[j] * 3 + b, value);
                         }
                     }
                 }
             }
         }
-        return builder.Build();
+        return pattern.ToMatrix(values);
     }
 
     /// <summary>
@@ -80,7 +106,8 @@ public sealed class Tet4Assembler : IElasticityAssembler
     /// </summary>
     public CsrMatrix AssembleMass(CancellationToken cancellationToken = default)
     {
-        var builder = new SparseMatrixBuilder(DofCount, DofCount);
+        var pattern = Pattern;
+        var values = pattern.CreateValues();
         Span<int> nodes = stackalloc int[4];
         for (int el = 0; el < _mesh.ElementCount; el++)
         {
@@ -96,10 +123,10 @@ public sealed class Tet4Assembler : IElasticityAssembler
                 {
                     double value = i == j ? 2 * rv20 : rv20;
                     for (int a = 0; a < 3; a++)
-                        builder.Add(nodes[i] * 3 + a, nodes[j] * 3 + a, value);
+                        pattern.Add(values, nodes[i] * 3 + a, nodes[j] * 3 + a, value);
                 }
         }
-        return builder.Build();
+        return pattern.ToMatrix(values);
     }
 
     /// <summary>
@@ -129,9 +156,12 @@ public sealed class Tet4Assembler : IElasticityAssembler
     }
 
     /// <summary>Element stress from strain: σ = λ·tr(ε)·I + 2μ·ε.</summary>
-    public SymmetricTensor ElementStress(int element, ReadOnlySpan<double> displacements)
+    public SymmetricTensor ElementStress(int element, ReadOnlySpan<double> displacements) =>
+        StressFromStrain(ElementStrain(element, displacements));
+
+    /// <inheritdoc/>
+    public SymmetricTensor StressFromStrain(SymmetricTensor eps)
     {
-        var eps = ElementStrain(element, displacements);
         double trace = eps.XX + eps.YY + eps.ZZ;
         return new SymmetricTensor(
             _lambda * trace + 2 * _mu * eps.XX,

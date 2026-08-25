@@ -30,8 +30,8 @@ public sealed class HeatConductionSolver : ISolver
             throw new InvalidOperationException("The mesh has no elements. Generate a mesh first.");
         if (input.Mesh.IsQuadratic)
             throw new InvalidOperationException(
-                "The thermal solver supports linear (TET4) meshes only; " +
-                "re-generate the mesh with linear elements.");
+                "The thermal solver supports linear tetrahedral (TET4) meshes only; " +
+                "re-generate the mesh with linear tetrahedral elements.");
 
         input.Material.ValidateThermal();
         if (input.RegionMaterials is not null)
@@ -289,19 +289,35 @@ public sealed class HeatConductionSolver : ISolver
         double change;
         int iteration = 0;
         long totalIterations = 0;
+
+        // Reduced ONCE. Only the surface film moves between iterates, and it writes to the
+        // same entries every time, so the whole-matrix rebuild and re-reduction this loop used
+        // to do per iterate collapse to rewriting those entries.
+        var updatable = FilmUpdatableSystem.Prepare(conduction, mesh, prescribed);
+        var cg = new ConjugateGradientSolver { Tolerance = 1e-10 };
+
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             iteration++;
             film = environment.Evaluate(temperature);
-            var system = EnvironmentThermalTerms.WithFilm(conduction, mesh, film);
-            var rhs = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
-            var result = ConstrainedSystemSolver.Solve(system, rhs, prescribed,
-                cancellationToken: cancellationToken, allowUnconstrained: true);
-            totalIterations += result.Iterations.Iterations;
+            updatable.Apply(film);
 
-            change = EnvironmentThermalTerms.MaxChange(temperature, result.Displacements);
-            temperature = result.Displacements;
+            var rhs = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
+            var system = updatable.System;
+            var free = system.Restrict(temperature);       // warm start from the last iterate
+            var iterations = cg.Solve(system.Reduced, system.ReduceLoads(rhs), free,
+                ConjugateGradientSolver.BuildJacobiPreconditioner(system.Reduced),
+                cancellationToken);
+            if (!iterations.Converged)
+                throw new InvalidOperationException(
+                    $"Environment iterate {iteration} did not converge after " +
+                    $"{iterations.Iterations} CG iterations (residual {iterations.ResidualNorm:g3}).");
+            totalIterations += iterations.Iterations;
+            var next = system.Expand(free);
+
+            change = EnvironmentThermalTerms.MaxChange(temperature, next);
+            temperature = next;
             progress?.Report(new SolverProgress(
                 $"Environment iterate {iteration} (Δ = {change:g3} K)",
                 Math.Min(0.8, 0.35 + 0.4 * iteration / 10.0)));

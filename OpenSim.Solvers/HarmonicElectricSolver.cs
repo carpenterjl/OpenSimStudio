@@ -33,8 +33,8 @@ public sealed class HarmonicElectricSolver : ISolver
             throw new InvalidOperationException("The mesh has no elements. Generate a mesh first.");
         if (input.Mesh.IsQuadratic)
             throw new InvalidOperationException(
-                "The AC electrical solver supports linear (TET4) meshes only; " +
-                "re-generate the mesh with linear elements.");
+                "The AC electrical solver supports linear tetrahedral (TET4) meshes only; " +
+                "re-generate the mesh with linear tetrahedral elements.");
 
         var settings = input.HarmonicElectric ?? throw new InvalidOperationException(
             "AC sweep settings (frequency range and point count) are missing.");
@@ -153,6 +153,12 @@ public sealed class HarmonicElectricSolver : ISolver
 
         var frames = new List<ResultFrame>();
         Complex[]? phi = null;
+
+        // Reduced ONCE for the whole sweep. The free-DOF map and the reduced sparsity are
+        // properties of the mesh and the electrodes, not of the frequency; only one multiply
+        // per entry actually depends on omega.
+        var reduced = ComplexReducedSystem.Reduce(conductance, capacitance, prescribed);
+
         for (int fi = 0; fi < frequencies.Length; fi++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -160,11 +166,27 @@ public sealed class HarmonicElectricSolver : ISolver
             double omega = 2 * Math.PI * f;
             CheckAdmittivitySpread(input, omega);
 
-            var system = ComplexCsrMatrix.Combine(conductance, capacitance, omega);
+            var reducedMatrix = reduced.MatrixAt(omega);
+            var rhs = reduced.LoadsAt(omega, complexLoads);
             // Warm start from the previous frequency — adjacent sweep points are close.
-            var result = ComplexConstrainedSystemSolver.Solve(system, complexLoads, prescribed,
-                warmStart: phi, cancellationToken: cancellationToken);
-            phi = result.Solution;
+            var free = reduced.Restrict(phi);
+
+            var cocg = new CocgSolver
+            {
+                Tolerance = 1e-10,
+                MaxIterations = Math.Max(4 * reduced.FreeCount, 1000)
+            };
+            var iterations = cocg.Solve(reducedMatrix, rhs, free, cancellationToken);
+            if (!iterations.Converged)
+                throw new InvalidOperationException(
+                    $"COCG did not converge after {iterations.Iterations} iterations " +
+                    $"(residual {iterations.ResidualNorm:g3}). Check materials and mesh quality.");
+
+            phi = reduced.Expand(free);
+
+            // The impedance terms read the FULL system, so it is still combined here — one
+            // pass over the assembled entries, not a reduction.
+            var system = ComplexCsrMatrix.Combine(conductance, capacitance, omega);
 
             Dictionary<string, double>? frameSummary = null;
             Complex? z = drive switch
@@ -184,7 +206,7 @@ public sealed class HarmonicElectricSolver : ISolver
                 };
                 log.Add($"f = {FormatFrequency(f)}: |Z| = {impedance.Magnitude:g4} Ω, " +
                         $"phase {impedance.Phase * 180 / Math.PI:g3}° " +
-                        $"(COCG {result.Iterations.Iterations} iterations).");
+                        $"(COCG {iterations.Iterations} iterations).");
             }
             frames.Add(BuildFrame(f, omega, phi, mesh, assembler, input, frameSummary));
             progress?.Report(new SolverProgress($"f = {FormatFrequency(f)}",

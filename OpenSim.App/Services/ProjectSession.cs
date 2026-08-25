@@ -77,6 +77,14 @@ public partial class ProjectSession : ObservableObject
     /// <summary>Publishes the merged mesh a solve just ran on.</summary>
     public void SetAssembledMesh(FeMeshAssembler.AssembledMesh? assembled) => AssembledMesh = assembled;
 
+    /// <summary>
+    /// Holds the parts of an assembly solve that depend only on the meshes, so solving twice
+    /// in a row does not merge and re-detect contacts twice. Cleared by exactly the events
+    /// that already discard <see cref="AssembledMesh"/> — the mesh or the geometry changing —
+    /// because those are the only things it depends on.
+    /// </summary>
+    public AssemblyCache Assemblies { get; } = new();
+
     /// <summary>The resolved flow field of the last conjugate (CFD) solve, kept for the
     /// flow visualizations. Session-transient like every result.</summary>
     public OpenSim.Cfd.FlowSolution? FlowSolution { get; private set; }
@@ -282,12 +290,14 @@ public partial class ProjectSession : ObservableObject
     public void RaiseGeometryReplaced(bool leavingPcbMode)
     {
         AssembledMesh = null;   // the merge described geometry that no longer exists
+        Assemblies.Clear();
         GeometryReplaced?.Invoke(this, new GeometryReplacedEventArgs { LeavingPcbMode = leavingPcbMode });
     }
 
     public void RaiseMeshChanged()
     {
         AssembledMesh = null;   // re-meshing one body invalidates the merge it took part in
+        Assemblies.Clear();     // ...and everything cached from it, BEFORE anyone reacts
         MeshChanged?.Invoke(this, EventArgs.Empty);
     }
 

@@ -27,8 +27,16 @@
                               ToolTip="Structured lattice puts nodes exactly on the geometric faces and edges, but only fits axis-aligned box bodies."/>
                 </DockPanel>
 
-                <!-- Structured lattice: explicit edge divisions, the way a mapped mesh is specified. -->
+                <!-- Structured lattice: element family, then explicit edge divisions -
+                     the way a mapped mesh is specified. -->
                 <StackPanel Visibility="{Binding Meshing.IsStructured, Converter={StaticResource BoolToVis}}">
+                    <DockPanel Margin="0,4,0,2">
+                        <Label Content="Elements" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="ElementShapeCombo" ItemsSource="{Binding Meshing.ElementShapes}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Shape"
+                                  SelectedValue="{Binding Meshing.ElementShape}" Margin="4,0,0,0"
+                                  ToolTip="Hexahedra are the mapped brick mesh a commercial code lays on a block, and the element family the reference beam study used. Structural solves only."/>
+                    </DockPanel>
                     <TextBlock Text="Edge divisions" Margin="2,2,0,2" Foreground="{DynamicResource TextMutedBrush}"/>
                     <UniformGrid Columns="3">
                         <TextBox x:Name="LatticeNxBox" Text="{Binding Meshing.LatticeNx}" Margin="2" ToolTip="Cells along X"/>
@@ -37,9 +45,11 @@
                     </UniformGrid>
                 </StackPanel>
 
-                <CheckBox x:Name="QuadraticElementsCheck" Content="Quadratic elements (TET10)" IsChecked="{Binding Meshing.QuadraticElements}"
+                <CheckBox x:Name="QuadraticElementsCheck" Content="{Binding Meshing.QuadraticLabel}"
+                          IsChecked="{Binding Meshing.QuadraticElements}"
+                          IsEnabled="{Binding Meshing.QuadraticOrderIsAChoice}"
                           Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"
-                          ToolTip="10-node tets fix TET4's bending stiffness. Structural solves only — electrical/thermal need linear meshes."/>
+                          ToolTip="Quadratic elements fix TET4's bending stiffness; hexahedra are HEX20 only, so the choice is not offered there. Structural solves only — electrical/thermal need linear tetrahedral meshes."/>
                 <Button x:Name="GenerateMeshButton" Content="Generate mesh" Command="{Binding Meshing.GenerateMeshCommand}"/>
             </StackPanel>
 

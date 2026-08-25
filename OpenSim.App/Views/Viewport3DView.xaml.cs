@@ -197,7 +197,30 @@ public partial class Viewport3DView : UserControl
             return;
         }
 
-        var hits = Viewport.Viewport.FindHits(e.GetPosition(Viewport));
+        var clickPoint = e.GetPosition(Viewport);
+        var hits = Viewport.Viewport.FindHits(clickPoint);
+
+        // Edges and vertices are resolved BEFORE faces, from the same click ray and the same
+        // hit list — a face covers far more of the screen than the line along its border, so
+        // resolving faces first would leave edges unclickable.
+        var rayForScope = Viewport3DHelper.Point2DtoRay3D(Viewport.Viewport, clickPoint);
+        if (rayForScope is not null)
+        {
+            // The nearest surface the click actually struck. It becomes the depth limit, so an
+            // edge on the far side of the solid is not picked through it; with no hit at all —
+            // a click just off the silhouette — there is no limit, which is what keeps a
+            // silhouette edge clickable.
+            double nearestSurface = double.PositiveInfinity;
+            foreach (var hit in hits)
+                nearestSurface = Math.Min(nearestSurface, (hit.Position - rayForScope.Origin).Length);
+
+            if (TryPickScope(rayForScope, nearestSurface))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
         foreach (var hit in hits)
         {
             if (hit.Model is GeometryModel3D model)
@@ -219,6 +242,51 @@ public partial class Viewport3DView : UserControl
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Offers the click to the scope picker as a ray plus a world-space tolerance.
+    /// <para>
+    /// The tolerance is a few PIXELS converted to world units, because that is what "close
+    /// enough to the line I clicked" means to the person clicking. Under the orthographic
+    /// camera this viewport uses, the conversion is one division and carries no depth
+    /// dependence; a perspective camera would need the distance to the hit point, so that case
+    /// simply declines rather than guessing a scale.
+    /// </para>
+    /// <para>
+    /// The nearest surface hit becomes the depth limit, so an edge on the far side of the
+    /// solid is not picked through it. With no surface hit at all — a click just off the
+    /// silhouette — the limit is lifted, which is what keeps a silhouette edge clickable.
+    /// </para>
+    /// </summary>
+    private bool TryPickScope(Ray3D ray, double nearestSurfaceDistance)
+    {
+        if (_viewModel is null) return false;
+        if (WorldUnitsPerPixel() is not { } scale) return false;
+
+        double tolerance = scale * PickRadiusPixels;
+        double maxRayT = double.IsPositiveInfinity(nearestSurfaceDistance)
+            ? double.PositiveInfinity
+            : nearestSurfaceDistance + tolerance;
+
+        return _viewModel.TryPickScope(
+            new OpenSim.Core.Numerics.Vector3D(ray.Origin.X, ray.Origin.Y, ray.Origin.Z),
+            new OpenSim.Core.Numerics.Vector3D(ray.Direction.X, ray.Direction.Y, ray.Direction.Z),
+            tolerance, maxRayT);
+    }
+
+    /// <summary>How wide the pick is, in screen pixels — the same order as the drag threshold
+    /// the context menu already uses to tell a click from a rotate.</summary>
+    private static readonly double PickRadiusPixels =
+        Math.Max(SystemParameters.MinimumHorizontalDragDistance, 4.0);
+
+    /// <summary>World units per screen pixel, or null when the camera is not one this can be
+    /// read off (a perspective camera has no single answer — it depends on depth).</summary>
+    private double? WorldUnitsPerPixel()
+    {
+        if (Viewport.Camera is not OrthographicCamera orthographic) return null;
+        double width = Viewport.ActualWidth;
+        return width > 0 ? orthographic.Width / width : null;
     }
 
     /// <summary>Hands the click ray to the view model, which intersects it with every

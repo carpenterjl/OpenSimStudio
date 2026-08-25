@@ -16,26 +16,51 @@ public sealed class ConjugateGradientSolver
     public int MaxIterations { get; init; }
 
     /// <summary>
-    /// Solves A·x = b for SPD matrix A. The initial content of <paramref name="x"/> is used
-    /// as the starting guess (pass zeros for a cold start).
+    /// The Jacobi preconditioner M⁻¹ = diag(A)⁻¹ for one matrix, as
+    /// <see cref="Solve(CsrMatrix, ReadOnlySpan{double}, Span{double}, double[], CancellationToken)"/>
+    /// consumes it. Building it walks every stored entry of A, so a caller that solves the
+    /// SAME matrix repeatedly — subspace iteration, a time march holding its step matrix —
+    /// should build it once and pass it in rather than pay that walk per solve.
     /// </summary>
-    public IterativeSolveResult Solve(CsrMatrix a, ReadOnlySpan<double> b, Span<double> x,
-        CancellationToken cancellationToken = default)
+    /// <exception cref="InvalidOperationException">A zero diagonal entry: the system is
+    /// singular or unconstrained, named by row.</exception>
+    public static double[] BuildJacobiPreconditioner(CsrMatrix a)
     {
-        int n = a.RowCount;
-        if (a.ColumnCount != n) throw new ArgumentException("Matrix must be square.", nameof(a));
-        if (b.Length != n || x.Length != n) throw new ArgumentException("Vector length mismatch.");
-
-        int maxIter = MaxIterations > 0 ? MaxIterations : 2 * n;
-
-        // Jacobi preconditioner M⁻¹ = diag(A)⁻¹
         double[] invDiag = a.GetDiagonal();
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < invDiag.Length; i++)
         {
             if (invDiag[i] == 0)
                 throw new InvalidOperationException($"Zero diagonal at row {i}; system is singular or unconstrained.");
             invDiag[i] = 1.0 / invDiag[i];
         }
+        return invDiag;
+    }
+
+    /// <summary>
+    /// Solves A·x = b for SPD matrix A. The initial content of <paramref name="x"/> is used
+    /// as the starting guess (pass zeros for a cold start).
+    /// </summary>
+    public IterativeSolveResult Solve(CsrMatrix a, ReadOnlySpan<double> b, Span<double> x,
+        CancellationToken cancellationToken = default) =>
+        Solve(a, b, x, BuildJacobiPreconditioner(a), cancellationToken);
+
+    /// <summary>
+    /// Solves A·x = b with a preconditioner the caller already holds (see
+    /// <see cref="BuildJacobiPreconditioner"/>). Identical arithmetic to the overload that
+    /// builds its own — the same divisions in the same order — so results are bitwise equal;
+    /// only the per-call rebuild of an unchanged diagonal is avoided.
+    /// </summary>
+    public IterativeSolveResult Solve(CsrMatrix a, ReadOnlySpan<double> b, Span<double> x,
+        double[] invDiag, CancellationToken cancellationToken = default)
+    {
+        int n = a.RowCount;
+        if (a.ColumnCount != n) throw new ArgumentException("Matrix must be square.", nameof(a));
+        if (b.Length != n || x.Length != n) throw new ArgumentException("Vector length mismatch.");
+        if (invDiag.Length != n)
+            throw new ArgumentException(
+                $"Preconditioner has {invDiag.Length} entries but the matrix has {n} rows.", nameof(invDiag));
+
+        int maxIter = MaxIterations > 0 ? MaxIterations : 2 * n;
 
         double bNorm = Norm(b);
         if (bNorm == 0)

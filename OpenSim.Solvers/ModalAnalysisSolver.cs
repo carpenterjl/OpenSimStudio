@@ -19,7 +19,16 @@ public sealed class ModalAnalysisSolver : ISolver
 
     public string Name => "Modal (natural frequencies)";
 
-    public void Validate(SolveInput input)
+    public void Validate(SolveInput input) =>
+        ValidateFreeDofs(input, ValidateModel(input), BuildPrescribedDofs(input, log: null).Count);
+
+    /// <summary>
+    /// Everything that can be checked without deriving the constrained DOF set, returning the
+    /// requested mode count. Split from the free-DOF check so <see cref="Solve"/> can build the
+    /// prescribed set ONCE — for the check and the reduction both — while keeping the order in
+    /// which the two kinds of error surface exactly as the public <see cref="Validate"/> has it.
+    /// </summary>
+    private static int ValidateModel(SolveInput input)
     {
         if (input.Mesh.ElementCount == 0)
             throw new InvalidOperationException("The mesh has no elements. Generate a mesh first.");
@@ -47,8 +56,12 @@ public sealed class ModalAnalysisSolver : ISolver
         int modeCount = (input.Modal ?? new ModalSettings()).ModeCount;
         if (modeCount < 1 || modeCount > MaxModeCount)
             throw new InvalidOperationException($"The mode count must lie in [1, {MaxModeCount}].");
+        return modeCount;
+    }
 
-        int freeDofs = CountFreeDofs(input);
+    private static void ValidateFreeDofs(SolveInput input, int modeCount, int prescribedCount)
+    {
+        int freeDofs = input.Mesh.NodeCount * 3 - prescribedCount;
         int blockSize = Math.Min(2 * modeCount, modeCount + 8);
         if (freeDofs <= blockSize)
             throw new InvalidOperationException(
@@ -59,24 +72,27 @@ public sealed class ModalAnalysisSolver : ISolver
     public SolveOutput Solve(SolveInput input, IProgress<SolverProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        Validate(input);
         var log = new List<string>();
         var mesh = input.Mesh;
-        int modeCount = (input.Modal ?? new ModalSettings()).ModeCount;
+
+        // Built once and used for BOTH the free-DOF check and the reduction below: deriving it
+        // walks every support scope and, on a quadratic mesh, the whole element list to map
+        // mid-edge nodes.
+        int modeCount = ValidateModel(input);
+        var prescribed = BuildPrescribedDofs(input, log);
+        ValidateFreeDofs(input, modeCount, prescribed.Count);
 
         if (input.BoundaryConditions.Any(bc => bc is ForceLoad or PressureLoad))
             log.Add("Loads are ignored in a modal analysis (natural frequencies are load-independent).");
 
         progress?.Report(new SolverProgress("Assembling stiffness and mass", 0.05));
-        IElasticityAssembler assembler = mesh.IsQuadratic
-            ? new Tet10Assembler(mesh, input.Material)
-            : new Tet4Assembler(mesh, input.Material);
+        var assembler = StructuralSurfaceLoads.AssemblerFor(mesh, input.Material);
         var stiffness = assembler.AssembleStiffness(cancellationToken);
         var mass = assembler.AssembleMass(cancellationToken);
-        log.Add($"Assembled {stiffness.RowCount} DOF system ({(mesh.IsQuadratic ? "TET10" : "TET4")}), " +
-                $"{stiffness.NonZeroCount} stiffness non-zeros.");
+        log.Add($"Assembled {stiffness.RowCount} DOF system " +
+                $"({StructuralSurfaceLoads.ElementName(mesh)}), " +
+                $"{stiffness.NonZeroCount} stiffness non-zeros."); 
 
-        var prescribed = BuildPrescribedDofs(input, log);
         var reducedK = ConstrainedSystemSolver.Reduce(stiffness, prescribed);
         var reducedM = ConstrainedSystemSolver.Reduce(mass, prescribed);
 
@@ -141,32 +157,8 @@ public sealed class ModalAnalysisSolver : ISolver
     {
         var mesh = input.Mesh;
         var edgeMid = mesh.IsQuadratic ? QuadraticMeshBuilder.BuildEdgeMidMap(mesh) : null;
-        var prescribed = new Dictionary<int, double>();
-        foreach (var support in input.BoundaryConditions.OfType<FixedSupport>())
-        {
-            var nodes = new HashSet<int>(mesh.GetScopeNodes(support));
-            if (edgeMid is not null)
-            {
-                // Pinning only the corners of a quadratic scope leaves its mid-edge
-                // nodes free — spurious compliance at the support. Pin them too.
-                foreach (var segment in mesh.GetScopeSegments(support))
-                    nodes.Add(edgeMid[Edge(segment.A, segment.B)]);
-            }
-            foreach (int node in nodes)
-            {
-                prescribed[node * 3] = 0;
-                prescribed[node * 3 + 1] = 0;
-                prescribed[node * 3 + 2] = 0;
-            }
-            log?.Add($"Fixed support '{support.Name}': {nodes.Count} nodes fully constrained.");
-        }
-        return prescribed;
+        return StructuralSurfaceLoads.BuildPrescribedDofs(mesh, input.BoundaryConditions, edgeMid, log);
     }
-
-    private int CountFreeDofs(SolveInput input) =>
-        input.Mesh.NodeCount * 3 - BuildPrescribedDofs(input, log: null).Count;
-
-    private static (int, int) Edge(int a, int b) => a < b ? (a, b) : (b, a);
 
     private static string FormatFrequency(double hz) => hz switch
     {

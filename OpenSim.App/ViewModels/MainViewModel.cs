@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 using OpenSim.App.Services;
+using OpenSim.Core.Model;
+using OpenSim.Core.Numerics;
 using OpenSim.Core.Persistence;
 
 namespace OpenSim.App.ViewModels;
@@ -173,6 +175,51 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Viewport left-click on a solved assembly part (the result scene has one
     /// model per body, no face models): selects that part.</summary>
     public void OnBodyClicked(int bodyIndex) => Bodies.SelectByIndex(bodyIndex);
+
+    /// <summary>
+    /// Viewport left-click resolved against the ACTIVE body's feature edges and vertices,
+    /// before the face pick gets a look. Returns whether it consumed the click.
+    /// <para>
+    /// Edges have to be tried first. A face covers vastly more of the screen than the line
+    /// along its border, so resolving faces first would mean an edge could never be clicked at
+    /// all — which is why they were list-only until now. The tolerance is a few pixels wide,
+    /// so the face pick is unaffected a pixel away from a border.
+    /// </para>
+    /// <para>
+    /// The active body only: the scope panel is per-body, so an id from a different one would
+    /// tick a row that is not on screen.
+    /// </para>
+    /// </summary>
+    public bool TryPickScope(Vector3D rayOrigin, Vector3D rayDirection, double tolerance,
+        double maxRayT)
+    {
+        var body = Session.Body;
+        // The id space the scope panel is showing — geometry where the body has some, the
+        // mesh skin otherwise. One fact, read the same way everywhere.
+        var (edges, positions) = Session.ScopeIsGeometric
+            ? (body.Geometry!.FeatureEdges, body.Geometry.Vertices)
+            : body.Mesh is { } mesh
+                ? (mesh.Edges, mesh.Nodes)
+                : (null, null);
+        if (edges is null || positions is null || edges.Edges.Count == 0) return false;
+
+        // Vertices take a wider radius than edges: a corner is a point where several edges
+        // meet, so at equal tolerance an edge would always win and corners would be
+        // unselectable.
+        if (EdgePicker.PickVertex(edges, positions, rayOrigin, rayDirection,
+                tolerance * 1.5, maxRayT) is { } vertex)
+        {
+            Conditions.ToggleVertexSelection(vertex.VertexId);
+            return true;
+        }
+        if (EdgePicker.PickEdge(edges, positions, rayOrigin, rayDirection,
+                tolerance, maxRayT) is { } edge)
+        {
+            Conditions.ToggleEdgeSelection(edge.EdgeId);
+            return true;
+        }
+        return false;
+    }
 
     // ---------------- Home / workspace navigation ----------------
 

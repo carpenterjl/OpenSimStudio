@@ -82,10 +82,40 @@ public static class FeMeshAssembler
     }
 
     /// <summary>
+    /// The purely GEOMETRIC part of a merge: the combined mesh and the offsets that map each
+    /// body's local ids into it.
+    /// <para>
+    /// Separated from the boundary conditions because the two have different lifetimes. This
+    /// depends on nothing but the bodies' meshes, which are immutable and replaced wholesale by
+    /// a remesh — so it can be cached on their identity. The conditions depend on what the user
+    /// edited a moment ago and must never be.
+    /// </para>
+    /// </summary>
+    public sealed record MergedGeometry(
+        FeMesh Mesh,
+        int[] NodeBases,
+        int[] ElementBases,
+        int[] FaceIdBases,
+        int[] EdgeIdBases,
+        int[] VertexIdBases);
+
+    /// <summary>
     /// Merges the bodies in the given order. Every body must carry a linear (TET4) mesh
     /// and a material; anything else is a typed failure naming the body.
     /// </summary>
     public static AssembledMesh Assemble(IReadOnlyList<Body> bodies)
+    {
+        var geometry = MergeMeshes(bodies);
+        var (conditions, materials) = ResolveConditions(bodies, geometry);
+        return new AssembledMesh(geometry.Mesh, geometry.NodeBases, geometry.ElementBases,
+            geometry.FaceIdBases, conditions, materials,
+            geometry.EdgeIdBases, geometry.VertexIdBases);
+    }
+
+    /// <summary>
+    /// The geometric merge alone — see <see cref="MergedGeometry"/> for why it is separable.
+    /// </summary>
+    public static MergedGeometry MergeMeshes(IReadOnlyList<Body> bodies)
     {
         if (bodies is null || bodies.Count == 0)
             throw new InvalidOperationException("The assembly has no bodies to merge.");
@@ -98,8 +128,8 @@ public static class FeMeshAssembler
                 throw new InvalidOperationException($"Body '{body.Name}' has an empty mesh (no elements).");
             if (mesh.IsQuadratic)
                 throw new InvalidOperationException(
-                    $"Body '{body.Name}' carries a quadratic (TET10) mesh; assembly solves are " +
-                    "linear (TET4) only. Re-generate that body's mesh with linear elements.");
+                    $"Body '{body.Name}' carries a quadratic (TET10 or HEX20) mesh; assembly solves are " +
+                    "linear tetrahedral (TET4) only. Re-generate that mesh with linear tetrahedral elements.");
             if (mesh.ElementRegionIds is not null)
                 throw new InvalidOperationException(
                     $"Body '{body.Name}' already carries per-element regions (a multi-material PCB " +
@@ -146,8 +176,6 @@ public static class FeMeshAssembler
         var elements = new Tet4[elementTotal];
         var regions = new int[elementTotal];
         var triangles = new List<BoundaryTriangle>();
-        var conditions = new List<BoundaryCondition>();
-        var materials = new Dictionary<int, Material>();
 
         for (int b = 0; b < bodies.Count; b++)
         {
@@ -167,12 +195,33 @@ public static class FeMeshAssembler
 
             foreach (var t in mesh.BoundaryTriangles)
                 triangles.Add(new BoundaryTriangle(t.A + nb, t.B + nb, t.C + nb, t.FaceId + fb));
+        }
 
+        var merged = new FeMesh(nodes, elements, triangles, regions);
+        return new MergedGeometry(merged, nodeBases, elementBases, faceIdBases,
+            edgeIdBases, vertexIdBases);
+    }
+
+    /// <summary>
+    /// The boundary conditions and materials of a merge, rebased onto an already-merged
+    /// geometry. Always recomputed rather than cached alongside it: a condition edit, a
+    /// material swap or a change of geometry scope moves these and moves nothing else.
+    /// </summary>
+    public static (List<BoundaryCondition> Conditions, Dictionary<int, Material> Materials)
+        ResolveConditions(IReadOnlyList<Body> bodies, MergedGeometry geometry)
+    {
+        var conditions = new List<BoundaryCondition>();
+        var materials = new Dictionary<int, Material>();
+
+        for (int b = 0; b < bodies.Count; b++)
+        {
+            var body = bodies[b];
             // Geometry-scoped conditions are resolved against THIS body's own geometry and
             // mesh before anything is rebased: the resolver speaks body-local ids, and the
-            // offsets below turn those into merged ones. Resolving after the merge would
+            // offsets here turn those into merged ones. Resolving after the merge would
             // mean matching against a skin that carries five other bodies.
-            int gb = edgeIdBases[b], vb = vertexIdBases[b];
+            int fb = geometry.FaceIdBases[b];
+            int gb = geometry.EdgeIdBases[b], vb = geometry.VertexIdBases[b];
             foreach (var bc in GeometryScopeResolver.ResolveForBody(body))
                 conditions.Add(bc with
                 {
@@ -185,9 +234,7 @@ public static class FeMeshAssembler
             materials[b] = body.Material!;
         }
 
-        var merged = new FeMesh(nodes, elements, triangles, regions);
-        return new AssembledMesh(merged, nodeBases, elementBases, faceIdBases, conditions, materials,
-            edgeIdBases, vertexIdBases);
+        return (conditions, materials);
     }
 
     /// <summary>

@@ -30,8 +30,8 @@ public sealed class TransientThermalSolver : ISolver
             throw new InvalidOperationException("The mesh has no elements. Generate a mesh first.");
         if (input.Mesh.IsQuadratic)
             throw new InvalidOperationException(
-                "The transient thermal solver supports linear (TET4) meshes only; " +
-                "re-generate the mesh with linear elements.");
+                "The transient thermal solver supports linear tetrahedral (TET4) meshes only; " +
+                "re-generate the mesh with linear tetrahedral elements.");
 
         var settings = input.TransientThermal ?? throw new InvalidOperationException(
             "Transient thermal settings (initial temperature, duration, time step) are missing.");
@@ -167,6 +167,17 @@ public sealed class TransientThermalSolver : ISolver
             Tolerance = 1e-10,
             MaxIterations = Math.Max(4 * reduced.FreeCount, 1000)
         };
+        // On the linear path every step solves the SAME reduced matrix, so its Jacobi
+        // preconditioner is built once here instead of per step. A film or environment
+        // refolds the matrix each pass and gets a fresh one; the numbers are identical
+        // either way, only the rebuild of an unchanged diagonal is avoided.
+        double[] reducedInvDiag = ConjugateGradientSolver.BuildJacobiPreconditioner(reduced.Reduced);
+
+        // The film paths reduce ONCE too, and rewrite only the entries the film touches. Built
+        // lazily: a run with neither a schedule nor an environment must not pay for it.
+        FilmUpdatableSystem? updatable = filmSchedule is not null || environment is not null
+            ? FilmUpdatableSystem.Prepare(system, mesh, prescribed)
+            : null;
         var massTimesT = new double[mesh.NodeCount];
         var fullRhs = new double[mesh.NodeCount];
         long totalIterations = 0;
@@ -190,14 +201,12 @@ public sealed class TransientThermalSolver : ISolver
                 ConstrainedSystemSolver.ReducedSystem stepSystem;
                 if (filmSchedule is not null)
                 {
-                    // Linear step, like the fixed film — only the film's own numbers move,
-                    // so there is nothing to iterate on: pull this step's film, fold it,
-                    // solve once. The reduce is O(nnz) and there are as many steps as the
-                    // user asked for, which is what makes this affordable.
+                    // Linear step, like the fixed film — only the film's own numbers move, so
+                    // there is nothing to iterate on: pull this step's film, rewrite the
+                    // surface entries, solve once.
                     film = filmSchedule(n, n * dt, iterate);
-                    stepSystem = ConstrainedSystemSolver.Reduce(
-                        EnvironmentThermalTerms.WithFilm(system, mesh, film), prescribed,
-                        allowUnconstrained: true);
+                    updatable!.Apply(film);
+                    stepSystem = updatable.System;
                     var scheduledLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, film);
                     for (int i = 0; i < fullRhs.Length; i++)
                         fullRhs[i] = massTimesT[i] / dt + scheduledLoads[i];
@@ -211,9 +220,8 @@ public sealed class TransientThermalSolver : ISolver
                 else
                 {
                     film = environment.Evaluate(iterate);
-                    stepSystem = ConstrainedSystemSolver.Reduce(
-                        EnvironmentThermalTerms.WithFilm(system, mesh, film), prescribed,
-                        allowUnconstrained: true);
+                    updatable!.Apply(film);
+                    stepSystem = updatable.System;
                     var stepLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, film);
                     for (int i = 0; i < fullRhs.Length; i++)
                         fullRhs[i] = massTimesT[i] / dt + stepLoads[i];
@@ -221,7 +229,10 @@ public sealed class TransientThermalSolver : ISolver
 
                 var rhs = stepSystem.ReduceLoads(fullRhs);
                 var free = stepSystem.Restrict(iterate);   // warm start from the previous step
-                var iterations = cg.Solve(stepSystem.Reduced, rhs, free, cancellationToken);
+                double[] invDiag = ReferenceEquals(stepSystem, reduced)
+                    ? reducedInvDiag
+                    : ConjugateGradientSolver.BuildJacobiPreconditioner(stepSystem.Reduced);
+                var iterations = cg.Solve(stepSystem.Reduced, rhs, free, invDiag, cancellationToken);
                 if (!iterations.Converged)
                     throw new InvalidOperationException(
                         $"Time step {n} did not converge after {iterations.Iterations} CG iterations " +

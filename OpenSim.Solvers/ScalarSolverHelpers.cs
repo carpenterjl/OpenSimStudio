@@ -63,12 +63,20 @@ internal static class ScalarSolverHelpers
         double[] loads, string bcName)
     {
         var triangles = mesh.GetFaceTriangles(faceIds);
-        double totalArea = triangles.Sum(t => TriangleArea(mesh, t));
+        // Areas once: the total and each triangle's share are the same numbers.
+        var areas = new double[triangles.Count];
+        double totalArea = 0;
+        for (int i = 0; i < triangles.Count; i++)
+        {
+            areas[i] = TriangleArea(mesh, triangles[i]);
+            totalArea += areas[i];
+        }
         if (totalArea <= 0)
             throw new InvalidOperationException($"'{bcName}': selected faces have zero area.");
-        foreach (var t in triangles)
+        for (int i = 0; i < triangles.Count; i++)
         {
-            double share = total * (TriangleArea(mesh, t) / totalArea / 3.0);
+            var t = triangles[i];
+            double share = total * (areas[i] / totalArea / 3.0);
             loads[t.A] += share;
             loads[t.B] += share;
             loads[t.C] += share;

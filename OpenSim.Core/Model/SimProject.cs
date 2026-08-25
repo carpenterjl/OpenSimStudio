@@ -30,6 +30,27 @@ public enum BodyRole
     FluidRegion = 1
 }
 
+/// <summary>
+/// Which element family the mesh is built from. Null on <see cref="MeshSettings"/> means
+/// <see cref="Tetrahedral"/> — what every project written before hexes existed carries, so
+/// the default path and its saved form remain the same thing.
+/// </summary>
+public enum ElementShape
+{
+    /// <summary>Tetrahedra: TET4, or TET10 at quadratic order. Any geometry.</summary>
+    Tetrahedral = 0,
+
+    /// <summary>
+    /// Hexahedra — the mapped brick mesh a commercial code lays on a block, and the element
+    /// family the reference beam study was run with. Requires
+    /// <see cref="MeshMethod.StructuredLattice"/>, and quadratic order: a LINEAR hex
+    /// shear-locks in bending without incompatible-mode machinery this code does not carry,
+    /// which would make it a worse element than the tetrahedra already on offer, so it is
+    /// refused rather than quietly produced.
+    /// </summary>
+    Hexahedral = 1
+}
+
 /// <summary>Which algorithm builds the mesh.</summary>
 public enum MeshMethod
 {
@@ -89,6 +110,14 @@ public sealed record MeshSettings
     /// different sizes.
     /// </summary>
     public LatticeDivisions? Divisions { get; init; }
+
+    /// <summary>
+    /// Which element family to build. Null — never written by old project files — means
+    /// <see cref="ElementShape.Tetrahedral"/>. <see cref="ElementShape.Hexahedral"/> is
+    /// valid only with <see cref="MeshMethod.StructuredLattice"/> at
+    /// <see cref="ElementOrder.Quadratic"/>; anything else is refused by name.
+    /// </summary>
+    public ElementShape? Shape { get; init; }
 }
 
 /// <summary>

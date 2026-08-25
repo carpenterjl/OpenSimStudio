@@ -177,9 +177,9 @@ public class Tet10SolverTests
         };
 
         var e1 = Assert.Throws<InvalidOperationException>(() => new ElectricalConductionSolver().Validate(input));
-        Assert.Contains("linear (TET4)", e1.Message);
+        Assert.Contains("linear tetrahedral (TET4)", e1.Message);
         var e2 = Assert.Throws<InvalidOperationException>(() => new HeatConductionSolver().Validate(input));
-        Assert.Contains("linear (TET4)", e2.Message);
+        Assert.Contains("linear tetrahedral (TET4)", e2.Message);
     }
 
     private static (int, int) Key(int a, int b) => a < b ? (a, b) : (b, a);

@@ -80,6 +80,10 @@ public sealed class Tet10Assembler : IElasticityAssembler
 
     public Tet10Assembler(FeMesh mesh, Material material)
     {
+        if (mesh.IsHex)
+            throw new InvalidOperationException(
+                "Tet10Assembler was given a hexahedral mesh; HEX20 elements are assembled by " +
+                "Hex20Assembler.");
         if (!mesh.IsQuadratic)
             throw new InvalidOperationException("Tet10Assembler requires a quadratic (TET10) mesh.");
         material.ValidateMechanical();
@@ -126,9 +130,35 @@ public sealed class Tet10Assembler : IElasticityAssembler
 
     /// <summary>Consistent mass via the degree-5 rule (see the constants above): the
     /// NᵢNⱼ integrand is degree 4 on a straight-edged tet, so the element mass is exact.</summary>
+    /// <summary>
+    /// The non-zero positions of both matrices, derived once. A modal solve assembles the
+    /// stiffness AND the mass over the same connectivity, so discovering the pattern twice is
+    /// discovering the same answer twice — and on a large mesh that is a hash map and a sort
+    /// per row, paid for again.
+    /// </summary>
+    private SparsityPattern Pattern => _pattern ??= BuildPattern();
+
+    private SparsityPattern? _pattern;
+
+    private SparsityPattern BuildPattern()
+    {
+        var blocks = new List<int[]>(_mesh.ElementCount);
+        for (int el = 0; el < _mesh.ElementCount; el++)
+        {
+            var nodes = _mesh.GetElementNodes(el);
+            var dofs = new int[nodes.Length * 3];
+            for (int i = 0; i < nodes.Length; i++)
+                for (int a = 0; a < 3; a++)
+                    dofs[i * 3 + a] = nodes[i] * 3 + a;
+            blocks.Add(dofs);
+        }
+        return SparsityPattern.FromBlocks(DofCount, DofCount, blocks);
+    }
+
     public CsrMatrix AssembleMass(CancellationToken cancellationToken = default)
     {
-        var builder = new SparseMatrixBuilder(DofCount, DofCount);
+        var pattern = Pattern;
+        var values = pattern.CreateValues();
         var shape = new double[10];
         for (int el = 0; el < _mesh.ElementCount; el++)
         {
@@ -147,16 +177,17 @@ public sealed class Tet10Assembler : IElasticityAssembler
                     {
                         double value = w * shape[i] * shape[j];
                         for (int a = 0; a < 3; a++)
-                            builder.Add(nodes[i] * 3 + a, nodes[j] * 3 + a, value);
+                            pattern.Add(values, nodes[i] * 3 + a, nodes[j] * 3 + a, value);
                     }
             }
         }
-        return builder.Build();
+        return pattern.ToMatrix(values);
     }
 
     public CsrMatrix AssembleStiffness(CancellationToken cancellationToken = default)
     {
-        var builder = new SparseMatrixBuilder(DofCount, DofCount);
+        var pattern = Pattern;
+        var values = pattern.CreateValues();
         var g = new Vector3D[10];
         for (int el = 0; el < _mesh.ElementCount; el++)
         {
@@ -186,14 +217,14 @@ public sealed class Tet10Assembler : IElasticityAssembler
                             {
                                 double value = weight * (_lambda * gi[a] * gj[b] + _mu * gj[a] * gi[b]);
                                 if (a == b) value += weight * _mu * dot;
-                                builder.Add(nodes[i] * 3 + a, nodes[j] * 3 + b, value);
+                                pattern.Add(values, nodes[i] * 3 + a, nodes[j] * 3 + b, value);
                             }
                         }
                     }
                 }
             }
         }
-        return builder.Build();
+        return pattern.ToMatrix(values);
     }
 
     /// <summary>
@@ -230,9 +261,12 @@ public sealed class Tet10Assembler : IElasticityAssembler
     }
 
     /// <summary>Element stress from strain: σ = λ·tr(ε)·I + 2μ·ε.</summary>
-    public SymmetricTensor ElementStress(int element, ReadOnlySpan<double> displacements)
+    public SymmetricTensor ElementStress(int element, ReadOnlySpan<double> displacements) =>
+        StressFromStrain(ElementStrain(element, displacements));
+
+    /// <inheritdoc/>
+    public SymmetricTensor StressFromStrain(SymmetricTensor eps)
     {
-        var eps = ElementStrain(element, displacements);
         double trace = eps.XX + eps.YY + eps.ZZ;
         return new SymmetricTensor(
             _lambda * trace + 2 * _mu * eps.XX,
