@@ -151,8 +151,17 @@ internal static partial class TransmissionLineGreens
         // against µ₀ε₀ exactly, which is why the single-slab closed forms show no ω either.
         Complex scale = 1 / (k0 * k0 * epsAt);
         Complex gAxz = scale * (dzAzCl + d2GTe + dzDzPrimeAz);
-        // ∂₁∂₂g_TE by separability; within a constant-ε layer ∂zz of a line solution is −k_z².
-        Complex mixed = gTe == Complex.Zero ? Complex.Zero : d1GTe * d2GTe / gTe;
+        // ∂₁∂₂g_TE by separability, grouped as ∂₁g × (∂₂g/g) rather than ∂₁g·∂₂g/g. The two agree
+        // to a rounding, but the grouping is the load-bearing part: ∂₂g/g is a LOGARITHMIC
+        // DERIVATIVE — v′/v above the source, u′/u below — so it is REGULAR where g is not. That
+        // buys two things. It stays finite at a node of u or v, where g and ∂₂g vanish together
+        // and the naive quotient is 0/0; and it leaves the whole assembly LINEAR in the quantities
+        // that carry surface-wave poles, so a pole residue is a sum of residues with this factor
+        // as a regular coefficient, rather than the residue of a quotient.
+        Complex logDerivative = gTe == Complex.Zero ? Complex.Zero : d2GTe / gTe;
+        Complex mixed = d1GTe * logDerivative;
+        // Within a constant-ε layer ∂zz of a line solution is −k_z², which is what turns the two
+        // second derivatives below into their own values.
         Complex dzGAxz = scale * (-kzAt * kzAt * azCl + mixed - kzAt * kzAt * dzPrimeAz);
         return (azCl + dzGAxz, gAxz, kPhi);
     }

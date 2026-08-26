@@ -352,4 +352,37 @@ public class MultiLayerVerticalKernelTests
         Assert.True(Rel(ezOracle, ezFromKernels) < 2e-5,
             $"E_z at {at}: oracle {ezOracle}, kernels {ezFromKernels} (rel {Rel(ezOracle, ezFromKernels):g3})");
     }
+
+    [Theory]
+    [InlineData(0.2)]
+    [InlineData(0.5)]
+    [InlineData(0.8)]
+    public void AtANodeOfTheStandingWave_TheKernelsStayFinite(double kRhoOverK0)
+    {
+        // The reason the mixed partial is grouped as d1g x (d2g/g) rather than d1g*d2g/g. On a
+        // thick enough slab the ground-pinned solution u(z) ~ sin(k_z1 z) has an interior NODE,
+        // and there g and d2g vanish together: the naive quotient is 0/0 and loses every digit,
+        // while the logarithmic derivative it is really made of stays finite. The Balanis slab is
+        // far too thin to have one (k_z1 d ~ 0.5 rad), so this fixture is deliberately thick
+        // enough that a node lands inside it, and the single-slab closed form is the reference.
+        var thick = new SubstrateStackup(2.2, 0.0009, 15e-3);
+        double k0 = K0;
+        var kRho = new Complex(kRhoOverK0 * k0, 0);
+        var kz0 = Kz(k0 * k0, kRho);
+        var kz1 = Complex.Sqrt(2.2 * k0 * k0 - kRho * kRho);
+        double node = (Math.PI / kz1).Real;                    // sin(k_z1 z) = 0 here
+        Assert.InRange(node, 1e-3, thick.ThicknessMeters - 1e-3);
+
+        double zPrime = thick.ThicknessMeters * 0.9;
+        var expected = VerticalSpectralKernels.Evaluate(thick, k0, kRho, kz0, node, zPrime);
+        var got = TransmissionLineGreens.EvaluateVertical(
+            LayeredStackup.FromSubstrate(thick), k0, kRho, kz0, node, zPrime);
+
+        Assert.False(double.IsNaN(got.GAzz.Real) || double.IsInfinity(got.GAzz.Real),
+            $"G_A^zz went non-finite at the node: {got.GAzz}");
+        Assert.True(Rel(expected.KPhi, got.KPhi) < 1e-11,
+            $"K_Phi at the node (k_rho/k0 = {kRhoOverK0}): expected {expected.KPhi}, got {got.KPhi}");
+        Assert.True(Rel(expected.GAzz, got.GAzz) < 1e-9,
+            $"G_A^zz at the node (k_rho/k0 = {kRhoOverK0}): expected {expected.GAzz}, got {got.GAzz}");
+    }
 }
