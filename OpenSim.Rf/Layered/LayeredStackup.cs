@@ -74,6 +74,49 @@ public sealed record LayeredStackup
         return heights;
     }
 
+    /// <summary>Split the stack at height <paramref name="z"/> so that height becomes an
+    /// INTERFACE of the returned stackup, and report which interface index it is. Both halves
+    /// carry the SAME material as the layer they came from, so the result describes the identical
+    /// physical structure.
+    ///
+    /// <para>This is how a source goes to an arbitrary height. The transmission-line machinery
+    /// only ever places sources AT interfaces — that is what its jump conditions are written
+    /// against — so rather than deriving a second, interior-to-a-layer source formulation, the
+    /// stack is split and the existing interface source is used. The house already gates that
+    /// this changes nothing: split-slab invariance is an F1 gate, and it is exactly the statement
+    /// that a layer cut in half is the same stack.</para>
+    ///
+    /// <para>A z already ON an interface returns that interface and THIS stackup unchanged, never
+    /// a zero-thickness layer — whose reduced phase would be exactly 1, leaving its two amplitudes
+    /// degenerate and the per-k_ρ system singular. "Already on" is judged at 1e-12 of the total
+    /// stack height: below that the two descriptions differ by less than the reduced-basis
+    /// arithmetic can resolve, so snapping is a rounding decision rather than a physical one, and
+    /// it is stated here rather than hidden in a caller.</para></summary>
+    public (LayeredStackup Stackup, int Interface) SplitAt(double z)
+    {
+        double total = TotalThicknessMeters;
+        if (double.IsNaN(z) || z <= 0 || z > total)
+            throw new ArgumentOutOfRangeException(nameof(z),
+                $"A split height must lie in (0, {total}] m — got {z} m. z = 0 is the PEC ground, "
+                + "which bounds the stack rather than dividing it.");
+
+        var heights = InterfaceHeights();
+        double tolerance = 1e-12 * total;
+        for (int i = 0; i < heights.Length; i++)
+            if (Math.Abs(z - heights[i]) <= tolerance) return (this, i);
+
+        int host = 0;
+        while (host < Layers.Count - 1 && z > heights[host]) host++;
+        double below = host == 0 ? 0 : heights[host - 1];
+        var material = Layers[host];
+        var split = new List<Layer>(Layers.Count + 1);
+        for (int i = 0; i < host; i++) split.Add(Layers[i]);
+        split.Add(new Layer(material.RelativePermittivity, material.LossTangent, z - below));
+        split.Add(new Layer(material.RelativePermittivity, material.LossTangent, heights[host] - z));
+        for (int i = host + 1; i < Layers.Count; i++) split.Add(Layers[i]);
+        return (new LayeredStackup(split), host);
+    }
+
     /// <summary>The single-slab stackup as a one-layer list — the bridge that keeps the
     /// Stage C/D/E scope a special case of Stage F (and lets the F1 gates compare).</summary>
     public static LayeredStackup FromSubstrate(SubstrateStackup substrate) =>
@@ -87,16 +130,35 @@ public sealed record LayeredStackup
     public const int CoveredPatchMetalInterface = 0;
 
     /// <summary>A covered patch: metal buried between a substrate slab and a dielectric COVER
-    /// of the SAME εr/tanδ (a homogeneous slab split at the metal). This restriction keeps
-    /// ∂_z ã_z single-valued at the metal — the interior-source read-out (F2b) needs it — while
-    /// still loading the patch (a cover pulls the resonance DOWN, growing with cover thickness).
-    /// The genuinely different-εr superstrate is a named follow-up. The metal sits at interface
-    /// <see cref="CoveredPatchMetalInterface"/> = 0.</summary>
+    /// of the SAME εr/tanδ (a homogeneous slab split at the metal). A cover pulls the resonance
+    /// DOWN, growing with cover thickness. The metal sits at interface
+    /// <see cref="CoveredPatchMetalInterface"/> = 0. Equivalent to the two-material overload
+    /// with the cover material equal to the substrate's.</summary>
     public static LayeredStackup CoveredPatch(double epsR, double tanD, double hSub, double hCover) =>
+        CoveredPatch(epsR, tanD, hSub, epsR, tanD, hCover);
+
+    /// <summary>A covered patch whose SUPERSTRATE is a different material from the substrate
+    /// (εr₂ ≠ εr₁ co-located with the current sheet) — the general form. This was once
+    /// restricted to a matched cover on the suspicion that a jump in ε made the interior-source
+    /// read-out two-valued at the metal. It does not: the TM contrast source at the sheet
+    /// cancels the 1/ε difference identically, so K̃_Φ is single-valued (the derivation is on
+    /// <see cref="TransmissionLineGreens.EvaluateInterior"/>, measured by
+    /// InteriorSourceKernelTests.ReadOutIsSingleValuedAcrossAnEpsilonJump). Nothing downstream
+    /// needed changing — the TLGF, the interior images, the pole residues and the far-field
+    /// amplitudes were already εr-general.</summary>
+    /// <param name="epsRSubstrate">Substrate relative permittivity (the layer on the ground).</param>
+    /// <param name="tanDSubstrate">Substrate loss tangent.</param>
+    /// <param name="hSub">Substrate thickness, metres (ground to metal).</param>
+    /// <param name="epsRCover">Superstrate relative permittivity (1 = an uncovered patch).</param>
+    /// <param name="tanDCover">Superstrate loss tangent.</param>
+    /// <param name="hCover">Superstrate thickness, metres (metal to open air).</param>
+    public static LayeredStackup CoveredPatch(
+        double epsRSubstrate, double tanDSubstrate, double hSub,
+        double epsRCover, double tanDCover, double hCover) =>
         new(new[]
         {
-            new Layer(epsR, tanD, hSub),
-            new Layer(epsR, tanD, hCover)
+            new Layer(epsRSubstrate, tanDSubstrate, hSub),
+            new Layer(epsRCover, tanDCover, hCover)
         });
 
     /// <summary>True when this stackup is a single slab — the fast path that dispatches to

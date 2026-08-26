@@ -101,11 +101,11 @@ public class FieldEvaluationTests
         // correction is O((l/r)²) ≈ 0.2% for l = 0.02λ — so 2% is a real gate on the
         // A/∇Φ evaluation, not slack.
         var (wire, solution) = Dipole(0.02, 16, Lambda / 20000);
-        var nodeCurrents = FarFieldEvaluator.NodeCurrents(wire, solution);
+        var endCurrents = FarFieldEvaluator.ElementEndCurrents(wire, solution);
         Complex moment = Complex.Zero;                            // z-directed by construction
         for (int e = 0; e < wire.ElementCount; e++)
             moment += wire.ElementLength(e) * wire.ElementDirection(e).Z
-                      * 0.5 * (nodeCurrents[e] + nodeCurrents[(e + 1) % wire.Nodes.Count]);
+                      * 0.5 * (endCurrents[e].A + endCurrents[e].B);
 
         double k = 2 * Math.PI / Lambda;
         foreach (double theta in new[] { Math.PI / 2, Math.PI / 4 })
@@ -188,11 +188,11 @@ public class FieldEvaluationTests
         // φ̂ = ŷ, so the whole field lands on Hy; Hx/Hz must vanish. 2% is a real gate on
         // the curl evaluation (the O((l/r)²) finite-size correction is ~0.2%).
         var (wire, solution) = Dipole(0.02, 16, Lambda / 20000);
-        var nodeCurrents = FarFieldEvaluator.NodeCurrents(wire, solution);
+        var endCurrents = FarFieldEvaluator.ElementEndCurrents(wire, solution);
         Complex moment = Complex.Zero;
         for (int e = 0; e < wire.ElementCount; e++)
             moment += wire.ElementLength(e) * wire.ElementDirection(e).Z
-                      * 0.5 * (nodeCurrents[e] + nodeCurrents[(e + 1) % wire.Nodes.Count]);
+                      * 0.5 * (endCurrents[e].A + endCurrents[e].B);
 
         double k = 2 * Math.PI / Lambda;
         foreach (double theta in new[] { Math.PI / 2, Math.PI / 4 })

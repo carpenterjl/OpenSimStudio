@@ -73,19 +73,17 @@ public sealed class ThinWireMomSolver
         Complex vectorFactor = Complex.ImaginaryOne * omega * RfConstants.Mu0 / (4 * Math.PI);
         Complex chargeFactor = -Complex.ImaginaryOne / (4 * Math.PI * RfConstants.Eps0 * omega);
 
-        // Element → the (≤2) bases it supports, with the rising/falling role. A grounded
-        // end's basis has only ONE real supporting element (RisingElement/FallingElement
-        // return −1 for the half that lives on the image current).
-        var supports = new List<(int Basis, bool Rising)>[elementCount];
-        for (int e = 0; e < elementCount; e++) supports[e] = new List<(int, bool)>(2);
+        // Element → the bases it supports, with each leg's role AND its coefficient. A
+        // grounded or attached end's basis has only ONE leg (its other half lives on the image
+        // current, or is carried across an attachment disc); a junction basis has two legs whose
+        // ±1 coefficients are what make Kirchhoff's law an identity at that node rather than a
+        // constraint bolted on. Every pre-junction basis carries +1 on both legs, so the pair of
+        // signs multiplied in below is exactly 1.0 there and the matrix is unchanged bit for bit.
+        var supports = new List<(int Basis, bool Rising, double Sign)>[elementCount];
+        for (int e = 0; e < elementCount; e++) supports[e] = new List<(int, bool, double)>(2);
         for (int b = 0; b < n; b++)
-        {
-            int rising = wire.RisingElement(b);
-            if (rising >= 0) supports[rising].Add((b, true));
-            int falling = wire.FallingElement(b);
-            if (falling >= 0) supports[falling].Add((b, false));
-        }
-
+            foreach (var leg in wire.BasisHalves(b))
+                supports[leg.Element].Add((b, leg.Rising, leg.Sign));
         for (int p = 0; p < elementCount; p++)
         {
             if (supports[p].Count == 0) continue;
@@ -98,14 +96,14 @@ public sealed class ThinWireMomSolver
                 double dot = Vector3D.Dot(directionP, wire.ElementDirection(q));
                 double lengthQ = wire.ElementLength(q);
 
-                foreach (var (basisP, risingP) in supports[p])
-                    foreach (var (basisQ, risingQ) in supports[q])
+                foreach (var (basisP, risingP, signP) in supports[p])
+                    foreach (var (basisQ, risingQ, signQ) in supports[q])
                     {
                         Complex vector = vectorFactor * dot * Combine(moments, risingP, risingQ);
                         double slopeP = (risingP ? 1.0 : -1.0) / lengthP;
                         double slopeQ = (risingQ ? 1.0 : -1.0) / lengthQ;
                         Complex charge = chargeFactor * slopeP * slopeQ * moments.M00;
-                        Complex contribution = vector + charge;
+                        Complex contribution = (vector + charge) * (signP * signQ);
 
                         z[basisP, basisQ] += contribution;
                         // ∬ f_m f_n g is symmetric in (m, n): the transposed entry gets
@@ -144,7 +142,7 @@ public sealed class ThinWireMomSolver
     /// like adjacent real elements.
     /// </summary>
     private static void AddImagePass(ComplexDenseMatrix z, WireStructure wire,
-        List<(int Basis, bool Rising)>[] supports, double surfaceZ, double k,
+        List<(int Basis, bool Rising, double Sign)>[] supports, double surfaceZ, double k,
         Complex vectorFactor, Complex chargeFactor)
     {
         int elementCount = wire.ElementCount;
@@ -176,10 +174,10 @@ public sealed class ThinWireMomSolver
 
                 if (p != q)
                 {
-                    foreach (var (basisP, risingP) in supports[p])
-                        foreach (var (basisQ, risingQ) in supports[q])
+                    foreach (var (basisP, risingP, signP) in supports[p])
+                        foreach (var (basisQ, risingQ, signQ) in supports[q])
                         {
-                            Complex contribution = Contribution(risingP, risingQ);
+                            Complex contribution = Contribution(risingP, risingQ) * (signP * signQ);
                             z[basisP, basisQ] += contribution;
                             z[basisQ, basisP] += contribution;
                         }
@@ -192,7 +190,8 @@ public sealed class ThinWireMomSolver
                     for (int i = 0; i < list.Count; i++)
                         for (int j = i; j < list.Count; j++)
                         {
-                            Complex contribution = Contribution(list[i].Rising, list[j].Rising);
+                            Complex contribution = Contribution(list[i].Rising, list[j].Rising)
+                                * (list[i].Sign * list[j].Sign);
                             z[list[i].Basis, list[j].Basis] += contribution;
                             if (list[i].Basis != list[j].Basis)
                                 z[list[j].Basis, list[i].Basis] += contribution;
@@ -232,8 +231,8 @@ public sealed class ThinWireMomSolver
         double lengthP = (p1 - p0).Length;
         double lengthQ = (q1 - q0).Length;
 
-        int nodeCount = wire.Nodes.Count;
-        int pStart = p, pEnd = (p + 1) % nodeCount, qStart = q, qEnd = (q + 1) % nodeCount;
+        var (pStart, pEnd) = wire.Elements[p];
+        var (qStart, qEnd) = wire.Elements[q];
         bool shareNode = pStart == qStart || pStart == qEnd || pEnd == qStart || pEnd == qEnd;
 
         double minEndpointDistance = Math.Min(

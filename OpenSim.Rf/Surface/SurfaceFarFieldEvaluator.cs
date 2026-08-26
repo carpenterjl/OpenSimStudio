@@ -23,7 +23,7 @@ public static class SurfaceFarFieldEvaluator
             thetaCount, phiCount, direction => RadiationVector(surface, solution, k, direction));
     }
 
-    private static (Complex X, Complex Y, Complex Z) RadiationVector(SurfaceStructure surface,
+    internal static (Complex X, Complex Y, Complex Z) RadiationVector(SurfaceStructure surface,
         SurfaceMomSolution solution, double k, Vector3D direction)
     {
         var (l1, l2, l3, w) = TriangleQuadrature.Rule(5);

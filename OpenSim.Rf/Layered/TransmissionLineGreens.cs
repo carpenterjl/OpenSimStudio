@@ -193,9 +193,20 @@ internal static partial class TransmissionLineGreens
     /// evaluated from the region just ABOVE the source (matching the m = n−1 top read-out
     /// C − jk_z0 S, where ∂_z ã_z = −jk_z0 S in region 0). The TM system is UNCHANGED — the
     /// x-directed HED never sources ã_z directly; ã_z is launched only by the ε-contrasts (× A_x)
-    /// the existing <see cref="TmSystem"/> already carries. When ε is continuous across the metal
-    /// (patch buried in a homogeneous slab, or air cover) ∂_z ã_z is continuous at z_m and this
-    /// read-out is unambiguous.</summary>
+    /// the existing <see cref="TmSystem"/> already carries.
+    ///
+    /// <para>The read-out is SINGLE-VALUED even where ε jumps at the metal (a superstrate of a
+    /// different εr), which is why no continuity restriction appears here. Both ∂_z ã_z and the
+    /// dividing ε differ across the sheet, but by exactly cancelling amounts: the TM interface
+    /// condition this system assembles is (1/ε₊)∂_z ã_z|₊ − (1/ε₋)∂_z ã_z|₋ = (1/ε₋ − 1/ε₊)·A_x
+    /// — the co-located ε-contrast shunt source × A_x — and A_x itself is continuous, so
+    /// [A_x/ε₊ + (1/ε₊)∂_z ã_z|₊] − [A_x/ε₋ + (1/ε₋)∂_z ã_z|₋] = A_x(1/ε₊ − 1/ε₋) +
+    /// (1/ε₋ − 1/ε₊)A_x ≡ 0. The contrast source IS the continuity of the divergence read-out,
+    /// so E_t = −jωA − ∇Φ is single-valued and the RWG charge term multiplies one well-defined
+    /// K̃_Φ. Reading from ABOVE is therefore a free choice of side, not an assumption; it is kept
+    /// because it matches the m = n−1 top read-out C − jk_z0 S (∂_z ã_z = −jk_z0 S in region 0).
+    /// Gated by InteriorSourceKernelTests.ReadOutIsSingleValuedAcrossAnEpsilonJump, which
+    /// measures the cancellation through two independent read-outs of the same BVP.</para></summary>
     public static (Complex GA, Complex KPhi) EvaluateInterior(
         LayeredStackup stackup, double k0, Complex kRho, Complex kz0, int m)
     {

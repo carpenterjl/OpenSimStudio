@@ -361,8 +361,12 @@ public class ThinWireMomTests
     // ------------------------------------------------------------------
 
     [Fact]
-    public void GridBuilder_RejectsBranchesAndDisconnectedPieces_Typed()
+    public void GridBuilder_BuildsABranch_AndStillRejectsDisconnectedPieces()
     {
+        // Stage D2 lifted the multi-wire refusal: a T builds, and its junction node carries
+        // (degree - 1) unknowns. Disconnected pieces stay a typed failure, because they are not
+        // one structure and picking which piece the feed belongs to would be a wrong answer
+        // rather than a missing feature.
         double r = 1e-3;
         var branch = WireGridBuilder.Build(new[]
         {
@@ -370,8 +374,19 @@ public class ThinWireMomTests
             new WireSegment(new Vector3D(1, 0, 0), new Vector3D(2, 0, 0), r),
             new WireSegment(new Vector3D(1, 0, 0), new Vector3D(1, 1, 0), r)
         }, 0.2);
-        Assert.Null(branch.Structure);
-        Assert.Contains("junction", branch.FailureReason);
+        Assert.True(branch.Structure is not null, branch.FailureReason);
+        Assert.True(branch.Structure!.IsBranched);
+        int junction = -1;
+        for (int v = 0; v < branch.Structure.Nodes.Count; v++)
+            if ((branch.Structure.Nodes[v] - new Vector3D(1, 0, 0)).Length < 1e-12) junction = v;
+        Assert.True(junction >= 0);
+        int incident = 0, bases = 0;
+        foreach (var (a, b) in branch.Structure.Elements)
+            if (a == junction || b == junction) incident++;
+        for (int b = 0; b < branch.Structure.BasisCount; b++)
+            if (branch.Structure.BasisNode(b) == junction) bases++;
+        Assert.Equal(3, incident);
+        Assert.Equal(2, bases);
 
         var pieces = WireGridBuilder.Build(new[]
         {

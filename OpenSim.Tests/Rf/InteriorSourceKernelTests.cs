@@ -16,11 +16,13 @@ namespace OpenSim.Tests.Rf;
 /// (validates the read-out where ε is continuous across the metal); and (c) m = n−1 must
 /// reproduce the top-source <see cref="TransmissionLineGreens.Evaluate"/> path.
 ///
-/// Scope note: these gates cover the case where ε is CONTINUOUS across the metal plane
-/// (patch buried in a homogeneous slab, or air cover) — where the x-directed HED launches
-/// no co-located ã_z contrast source, so ∂_z ã_z is single-valued at z_m. The
-/// genuinely-different-εr co-located interface (a superstrate εr₂ ≠ substrate εr₁ AT the
-/// current sheet) is a distinct read-out subtlety, named as the remaining follow-up.
+/// Scope: ε CONTINUOUS across the metal (patch buried in a homogeneous slab, or air cover)
+/// AND ε JUMPING there (a superstrate εr₂ ≠ substrate εr₁ co-located with the current sheet).
+/// The jump case was once a named follow-up on the suspicion that ∂_z ã_z being two-valued at
+/// z_m made the read-out ambiguous. It does not:
+/// <see cref="ReadOutIsSingleValuedAcrossAnEpsilonJump"/> measures the two read-outs of the
+/// same solve agreeing to 1e-12 because the TM contrast source cancels the 1/ε difference
+/// identically (the derivation is on <see cref="TransmissionLineGreens.EvaluateInterior"/>).
 /// </summary>
 public class InteriorSourceKernelTests
 {
@@ -41,7 +43,7 @@ public class InteriorSourceKernelTests
     // interface is plain radiation continuity. Valid at moderate k_ρ / thin stacks (the
     // growing exponential is bounded there) — algebraically unlike the production path.
     private static (Complex GA, Complex KPhi) SolveInteriorBvp(
-        LayeredStackup stackup, double k0, Complex kRho, int m)
+        LayeredStackup stackup, double k0, Complex kRho, int m, bool fromBelow = false)
     {
         int n = stackup.Layers.Count;
         double k0Sq = k0 * k0;
@@ -121,25 +123,36 @@ public class InteriorSourceKernelTests
 
         var sol = ComplexLu.Factor(mat).Solve(rhs);
 
-        // Read out at z_m from ABOVE: A_x(z_m) and ∂_z ã_z(z_m^+).
+        // Read out at z_m from ABOVE (the default) or from BELOW. A_x is continuous at the
+        // metal, so only ∂_z ã_z and the dividing ε differ between the two sides — and by the
+        // TM interface condition assembled above they differ by EXACTLY the amount that
+        // cancels (see ReadOutIsSingleValuedAcrossAnEpsilonJump). The from-below branch exists
+        // so that cancellation is measured against an independent solve rather than asserted.
         double zm = h[m];
         Complex ax = sol[2 * m] * Ep(m, zm) + sol[2 * m + 1] * Em(m, zm);
         Complex dAz;
-        Complex epsAbove;
-        if (m == n - 1)
+        Complex epsRead;
+        if (fromBelow)
+        {
+            int p = pBase + 2 * m;
+            dAz = sol[p] * (-j * kz[m]) * Ep(m, zm)
+                + sol[p + 1] * (j * kz[m]) * Em(m, zm);
+            epsRead = eps[m];
+        }
+        else if (m == n - 1)
         {
             dAz = -j * kz0 * sol[sIdx];
-            epsAbove = Complex.One;
+            epsRead = Complex.One;
         }
         else
         {
             int p = pBase + 2 * (m + 1);
             dAz = sol[p] * (-j * kz[m + 1]) * Ep(m + 1, zm)
                 + sol[p + 1] * (j * kz[m + 1]) * Em(m + 1, zm);
-            epsAbove = eps[m + 1];
+            epsRead = eps[m + 1];
         }
         // Φ = −∇·A/(jωµ0ε0·εr_local); divide by the permittivity of the read-out region.
-        return (ax, (ax + dAz) / (Mu0 * Eps0 * epsAbove));
+        return (ax, (ax + dAz) / (Mu0 * Eps0 * epsRead));
     }
 
     // A genuinely layered covered stack: FR4 substrate / patch buried / FR4 cover / air.
@@ -152,6 +165,80 @@ public class InteriorSourceKernelTests
         });
 
     public static TheoryData<double> ModerateKRho => new() { 0.3, 0.7, 0.95, 1.2, 3.0, 8.0 };
+
+    // ---- A1.1: the read-out is single-valued ACROSS AN ε JUMP (the superstrate theorem) ----
+
+    /// <summary>Stacks whose ε genuinely JUMPS at the metal plane: (substrate εr/tanδ,
+    /// cover εr/tanδ), both contrast orders, lossless and lossy.</summary>
+    public static TheoryData<double, double, double, double, double> JumpAtMetal => new()
+    {
+        // substrate εr, substrate tanδ, cover εr, cover tanδ, k_ρ/k0
+        { 4.4, 0.0,  2.2, 0.0,   0.7 },    // dense substrate, light cover
+        { 4.4, 0.0,  2.2, 0.0,   3.0 },
+        { 2.2, 0.0,  9.8, 0.0,   0.95 },   // the REVERSED contrast (cover denser)
+        { 2.2, 0.0,  9.8, 0.0,   8.0 },
+        { 4.4, 0.02, 3.0, 0.008, 1.2 },    // both lossy
+        { 6.0, 0.001, 1.0, 0.0,  0.3 },    // air cover over a dense substrate
+        { 10.2, 0.0023, 2.2, 0.0009, 2.0 },// a strong practical contrast (RO3010 / RT-duroid)
+    };
+
+    [Theory]
+    [MemberData(nameof(JumpAtMetal))]
+    public void ReadOutIsSingleValuedAcrossAnEpsilonJump(
+        double epsSub, double tanSub, double epsCov, double tanCov, double kRhoOverK0)
+    {
+        // THE Stage-A1 theorem. K̃_Φ is read as (A_x + ∂_z ã_z)/(µ₀ε₀·ε_local). Both ∂_z ã_z
+        // and ε_local differ across the metal, so a priori the read-out could be two-valued at
+        // an ε jump — which is exactly why the covered patch shipped restricted to a cover of
+        // the SAME εr. It is not two-valued. The TM interface condition is
+        //     (1/ε₊)∂_z ã_z|₊ − (1/ε₋)∂_z ã_z|₋ = (1/ε₋ − 1/ε₊)·A_x,
+        // (the co-located ε-contrast shunt source × A_x), and A_x itself is continuous, so
+        //     [A_x/ε₊ + (1/ε₊)∂_z ã_z|₊] − [A_x/ε₋ + (1/ε₋)∂_z ã_z|₋]
+        //   =  A_x(1/ε₊ − 1/ε₋) + (1/ε₋ − 1/ε₊)A_x  ≡  0.
+        // The contrast source IS the continuity of the divergence read-out. This gate measures
+        // that identity through TWO independent read-outs of the same BVP solve, so it fails
+        // loudly if the interface condition is ever rewritten. If it ever fails, the fix is a
+        // re-derivation — never a choice of side.
+        var stackup = new LayeredStackup(new[]
+        {
+            new LayeredStackup.Layer(epsSub, tanSub, 0.8e-3),
+            new LayeredStackup.Layer(epsCov, tanCov, 0.5e-3),
+        });
+        double k0 = K0;
+        var kRho = new Complex(kRhoOverK0 * k0, 0);
+
+        var (gaAbove, kPhiAbove) = SolveInteriorBvp(stackup, k0, kRho, m: 0);
+        var (gaBelow, kPhiBelow) = SolveInteriorBvp(stackup, k0, kRho, m: 0, fromBelow: true);
+
+        Assert.True((gaAbove - gaBelow).Magnitude < 1e-12 * gaAbove.Magnitude,
+            $"A_x is continuous at the metal: above {gaAbove} vs below {gaBelow}");
+        Assert.True((kPhiAbove - kPhiBelow).Magnitude < 1e-12 * kPhiAbove.Magnitude,
+            $"K_Φ must be single-valued across the ε jump: above {kPhiAbove} vs below {kPhiBelow} "
+            + $"(εr {epsSub} → {epsCov}, k_ρ/k0 {kRhoOverK0})");
+    }
+
+    [Theory]
+    [MemberData(nameof(JumpAtMetal))]
+    public void InteriorSource_MatchesIndependentBvp_AcrossAnEpsilonJump(
+        double epsSub, double tanSub, double epsCov, double tanCov, double kRhoOverK0)
+    {
+        // The production read-out against the independent BVP, on the stacks the shipped
+        // scope guard excluded. Same 1e-12 as every other interior gate — the jump changes
+        // nothing about the accuracy claim, only about which stacks are admissible.
+        var stackup = new LayeredStackup(new[]
+        {
+            new LayeredStackup.Layer(epsSub, tanSub, 0.8e-3),
+            new LayeredStackup.Layer(epsCov, tanCov, 0.5e-3),
+        });
+        double k0 = K0;
+        var kRho = new Complex(kRhoOverK0 * k0, 0);
+        var kz0 = Kz(k0 * k0, kRho);
+
+        var (gA, kPhi) = TransmissionLineGreens.EvaluateInterior(stackup, k0, kRho, kz0, m: 0);
+        var (gARef, kPhiRef) = SolveInteriorBvp(stackup, k0, kRho, m: 0);
+        Assert.True((gA - gARef).Magnitude < 1e-12 * gARef.Magnitude, $"G_A {gA} vs BVP {gARef}");
+        Assert.True((kPhi - kPhiRef).Magnitude < 1e-12 * kPhiRef.Magnitude, $"K_Φ {kPhi} vs BVP {kPhiRef}");
+    }
 
     [Theory]
     [MemberData(nameof(ModerateKRho))]

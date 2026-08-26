@@ -39,10 +39,17 @@ public partial class AntennaViewModel : ObservableObject
     public const string ProbeFedPatchMode = "Probe-fed patch (wizard, RWG + coax)";
     public const string CoveredPatchMode = "Covered patch (wizard, RWG + cover)";
     public const string IslandMode = "Copper island (PCB, RWG)";
+    public const string WireFedPlateMode = "Wire-fed plate (wizard, RWG + attached wire)";
 
     private readonly ILogService _log;
     private readonly ElectrodesViewModel _electrodes;
     private PcbBoard? _board;
+
+    /// <summary>The resolved board stackup's stated assumptions (which layer is the ground,
+    /// each gap's material, whether the net is buried) — set when a board net resolves through
+    /// <see cref="OpenSim.Rf.Layered.BoardAntennaStackup"/>, null otherwise. Surfaced with the
+    /// solver's own assumptions so a buried net never reports a bare-substrate model.</summary>
+    private IReadOnlyList<string>? _boardStackupNotes;
     private Func<NetMeshOptions>? _options;
 
     public AntennaViewModel(ProjectSession session, ILogService log, ElectrodesViewModel electrodes)
@@ -56,18 +63,29 @@ public partial class AntennaViewModel : ObservableObject
 
     public ObservableCollection<string> SourceModes { get; } =
         new() { NetMode, DipoleMode, LoopMode, MonopoleMode, PlateMode, PatchMode,
-            ProbeFedPatchMode, CoveredPatchMode, IslandMode };
+            ProbeFedPatchMode, CoveredPatchMode, IslandMode, WireFedPlateMode };
 
-    /// <summary>Surface (RWG) modes solve sheets; the others solve thin wires. Mixing
-    /// the two in one structure is not supported in v1 — the modes are disjoint by
-    /// construction, so no combined request can even be expressed.</summary>
+    /// <summary>Surface (RWG) modes solve sheets; the others solve thin wires. The two were once
+    /// disjoint by construction, so no combined request could even be expressed; <see
+    /// cref="WireFedPlateMode"/> is the exception (Stage D1) and routes to its own solver rather
+    /// than the port-fed surface path, which is why every dispatch below tests it FIRST.</summary>
     private bool IsSurfaceMode =>
-        SourceMode is PlateMode or PatchMode or ProbeFedPatchMode or CoveredPatchMode or IslandMode;
+        SourceMode is PlateMode or PatchMode or ProbeFedPatchMode or CoveredPatchMode or IslandMode
+            or WireFedPlateMode;
 
-    /// <summary>The covered patch (Stage F): a patch buried under a dielectric cover of the
-    /// SAME εr as its substrate (a homogeneous slab split at the metal), solved through the
-    /// multi-layer transmission-line Green's function with the source at the buried interface.
-    /// The cover loads the patch — its resonance drops below the bare patch's.</summary>
+    /// <summary>The wire-fed plate (Stage D1) is the one mode where a wire and a sheet appear in
+    /// ONE structure. It is a surface mode for plumbing purposes but never reaches the port-fed
+    /// surface path: its feed is a delta gap on the wire, its unknowns are RWG + wire + one
+    /// junction, and its far field sums three currents the solve deliberately keeps apart.
+    /// Everything that has no hybrid implementation yet says so by name rather than quietly
+    /// solving the sheet alone.</summary>
+    private bool IsWireFedPlateMode => SourceMode == WireFedPlateMode;
+
+    /// <summary>The covered patch (Stage F): a patch buried under a dielectric cover, solved
+    /// through the multi-layer transmission-line Green's function with the source at the buried
+    /// interface. The cover may be any material (its own εr/tanδ, defaulting to the
+    /// substrate's); it loads the patch, so the resonance drops below the bare patch's — and
+    /// drops further with a denser or thicker cover.</summary>
     private bool IsCoveredPatchMode => SourceMode == CoveredPatchMode;
 
     /// <summary>The probe-fed patch drives the substrate patch with a real coaxial
@@ -82,10 +100,31 @@ public partial class AntennaViewModel : ObservableObject
     [ObservableProperty] private double _probeRadiusMm = 0.2;
     [ObservableProperty] private int _probeSegments = 3;
 
-    // Dielectric cover over a covered patch [mm]: its thickness. The cover shares the
-    // substrate's εr/tanδ (SubstrateEpsR / SubstrateTanD) — the homogeneous-slab-split
-    // model that keeps the buried-source read-out unambiguous (Stage F2b).
+    // The attached wire (Stage D1, wire-fed plate): its length, the angle it meets the sheet at
+    // (90° = normal, the classical finite-ground monopole), and where it lands, measured from
+    // the plate centre. The landing point is forced in as a MESH VERTEX when the plate is built,
+    // because the attachment fan needs an anchor and a guessed contact is a wrong placement.
+    [ObservableProperty] private double _attachedWireLengthMm = 60;
+    [ObservableProperty] private double _attachedWireDegrees = 90;
+    [ObservableProperty] private double _attachXMm;
+    [ObservableProperty] private double _attachYMm;
+
+    // Dielectric cover (superstrate) over a covered patch [mm]: thickness, and its OWN
+    // material. A cover εr differing from the substrate's is supported — the interior-source
+    // read-out is single-valued across the ε jump (the TM contrast source at the sheet cancels
+    // the 1/ε difference identically; see TransmissionLineGreens.EvaluateInterior). Zero or
+    // negative εr means "track the substrate", which is what every project written before the
+    // superstrate shipped carries — so those load and solve byte-identically.
     [ObservableProperty] private double _coverThicknessMm = 0.8;
+    [ObservableProperty] private double _coverEpsR;
+    [ObservableProperty] private double _coverTanD = -1;
+
+    /// <summary>The superstrate permittivity actually used: the explicit cover value when set,
+    /// else the substrate's (the matched-cover default).</summary>
+    private double EffectiveCoverEpsR => CoverEpsR >= 1.0 ? CoverEpsR : SubstrateEpsR;
+
+    /// <summary>The superstrate loss tangent actually used; negative means track the substrate.</summary>
+    private double EffectiveCoverTanD => CoverTanD >= 0 ? CoverTanD : Math.Max(SubstrateTanD, 0);
 
     /// <summary>Nullable so the ComboBox's transient null push lands harmlessly.</summary>
     [ObservableProperty]
@@ -141,9 +180,11 @@ public partial class AntennaViewModel : ObservableObject
 
     // ------------------------------------------------------------------
     // Board field overlay (SIwave-style): a translucent |field| heatmap plane over
-    // the PCB/structure. E everywhere; H = ∇×A/µ₀ for free-space/PEC (Stage S7) AND over a
-    // single-slab substrate (Stage S9a, the layered ∂zG̃_A / boundary-trick curl). Only
-    // MULTI-LAYER / covered near-field maps (E and H) stay the S9b typed follow-up.
+    // the PCB/structure. E and H = ∇×A/µ₀ alike, through every evaluator: free-space/PEC
+    // (Stage S7), a single-slab substrate (S9a), and multi-layer / covered stackups (S9b,
+    // the TLGF per-z kernels) — including the per-copper-layer board overlay over a
+    // multi-layer stack. An evaluator that supplies no H refuses by name; it never paints
+    // |E| under an |H| legend.
     // ------------------------------------------------------------------
     public const string EFieldOverlay = "E (electric)";
     public const string HFieldOverlay = "H (magnetic)";
@@ -179,7 +220,8 @@ public partial class AntennaViewModel : ObservableObject
 
     /// <summary>True when a board is loaded and the selected source is a board net — the
     /// board-outline overlay is available (the wizard shapes have no board to paint over).</summary>
-    public bool HasBoardOverlay => _board is not null && SourceMode == NetMode;
+    public bool HasBoardOverlay =>
+        _board is not null && SourceMode is NetMode or IslandMode;
 
     // The overlay's own legend (same visual style as the FE legend, separate pipeline —
     // the FE legend's title/visibility are driven by the Results VM's selected field).
@@ -283,6 +325,11 @@ public partial class AntennaViewModel : ObservableObject
             return;
         }
 
+        if (IsWireFedPlateMode)
+        {
+            await SolveWireFedPlateAsync();
+            return;
+        }
         if (IsSurfaceMode)
         {
             // Surface fills are O(N²·quadrature) and can take tens of seconds — run
@@ -326,6 +373,15 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ComputeNearField()
     {
         FieldResult = "";
+        if (IsWireFedPlateMode)
+        {
+            FieldResult = "Not computable: the wire↔sheet hybrid near field is a named "
+                + "follow-up — the junction's disc and half-RWG continuations need their own "
+                + "near-field transforms, and summing only the sheet's would silently drop the "
+                + "current that crosses the contact. The far field IS available, and its power "
+                + "ledger is the gate that would catch exactly that omission.";
+            return;
+        }
         if (IsSurfaceMode)
         {
             await ComputeSurfaceNearFieldAsync();
@@ -381,6 +437,11 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ShowFarField()
     {
         FieldResult = "";
+        if (IsWireFedPlateMode)
+        {
+            await ShowWireFedPlateFarFieldAsync();
+            return;
+        }
         if (IsSurfaceMode)
         {
             await ShowSurfaceFarFieldAsync();
@@ -428,9 +489,17 @@ public partial class AntennaViewModel : ObservableObject
         var mode = OverlayScaleMode == LinearScale ? FieldScaleMode.Linear : FieldScaleMode.Logarithmic;
         bool magnetic = OverlayFieldType == HFieldOverlay;
 
-        if (OverlayOverBoard && _board is not null && SourceMode == NetMode)
+        if (OverlayOverBoard && _board is not null && SourceMode is NetMode or IslandMode)
         {
             await ShowBoardOverlayAsync(n, mode, opacity, magnetic);
+            return;
+        }
+        if (IsWireFedPlateMode)
+        {
+            FieldResult = "Not computable: the wire↔sheet hybrid field overlay is a named "
+                + "follow-up, for the same reason as the near field — the junction current has no "
+                + "near-field transform yet, and painting the sheet's alone would look right and "
+                + "be wrong.";
             return;
         }
         if (IsSurfaceMode)
@@ -560,18 +629,22 @@ public partial class AntennaViewModel : ObservableObject
                 FieldResult = $"Not computable: {failure}";
                 return;
             }
-            if (layered is not null)
-            {
-                // Multi-layer / covered near-field MAPS ship (Stage S9b), but the per-copper-layer
-                // BOARD overlay paints AT each copper plane (the source plane), which the field
-                // maps do not resolve; board per-gap multi-layer overlays stay a named follow-up.
-                FieldResult = "Not computable: the per-layer board overlay over a multi-layer / "
-                    + "covered stackup is a named follow-up (it paints at the metal plane itself). "
-                    + "The wizard covered-patch near-field map and free-space board overlays work.";
-                return;
-            }
             var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
-            if (substrate is null)
+            if (layered is { } spec)
+            {
+                // Multi-layer / covered stackups paint through the S9b per-z field kernels. The
+                // overlay samples each copper plane's MID-height, so a buried source plane is
+                // approached from one side rather than sat on exactly; either side is now
+                // well-defined (observation below a buried source was the A2 item).
+                var mlTable = BuildMultiLayerTable(surface, spec, frequency);
+                var mlSol = solver.Solve(surface, mlTable, port);
+                evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
+                    surface, mlTable, mlSol, pts);
+                kernelNote = $"{spec.Stackup.Layers.Count}-layer TLGF kernels"
+                    + (spec.SourceInterface is { } si
+                        && si < spec.Stackup.Layers.Count - 1 ? " (buried metal)" : "");
+            }
+            else if (substrate is null)
             {
                 var sol = solver.Solve(surface, frequency, port);
                 evaluate = pts => OpenSim.Rf.Surface.SurfaceFieldProbe.Evaluate(surface, sol, pts);
@@ -611,7 +684,11 @@ public partial class AntennaViewModel : ObservableObject
                 {
                     var points = OverlayGrid.RectPoints(minX, minY, maxX, maxY, z, n, n);
                     var map = evaluate(points);
-                    var vals = (magnetic ? map.HMagnitude ?? map.Magnitude : map.Magnitude).ToArray();
+                    if (magnetic && map.HMagnitude is null)
+                        throw new InvalidOperationException(
+                            "This evaluator does not supply H (the magnetic near field is not "
+                            + "available for this structure); switch the overlay back to E.");
+                    var vals = (magnetic ? map.HMagnitude! : map.Magnitude).ToArray();
                     var inside = OverlayGrid.InteriorMask(points, outlineIndex);
                     for (int i = 0; i < vals.Length; i++) if (inside[i]) pool.Add(vals[i]);
                     result.Add((map, vals, inside));
@@ -658,8 +735,17 @@ public partial class AntennaViewModel : ObservableObject
         double opacity, double zMeters, string kernelNote)
     {
         // Stage S7: the map carries |E| and |H|; the toggle picks which to color, with the
-        // matching unit. H is present only on free-space/PEC maps (HMagnitude non-null).
-        IReadOnlyList<double> values = magnetic ? map.HMagnitude ?? map.Magnitude : map.Magnitude;
+        // matching unit. Where an evaluator supplies no H the request is REFUSED by name — the
+        // earlier silent fall-back painted |E| values under an |H| legend in A/m, which reads as
+        // a field three orders of magnitude wrong rather than as a missing feature.
+        if (magnetic && map.HMagnitude is null)
+        {
+            FieldResult = "Not computable: this evaluator does not supply H "
+                + "(the magnetic near field is not available for this structure); "
+                + "switch the overlay back to E.";
+            return;
+        }
+        IReadOnlyList<double> values = magnetic ? map.HMagnitude! : map.Magnitude;
         string symbol = magnetic ? "|H|" : "|E|";
         string unit = magnetic ? "A/m" : "V/m";
 
@@ -1059,7 +1145,8 @@ public partial class AntennaViewModel : ObservableObject
                     SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSub);
                 layered = new LayeredSpec(
                     OpenSim.Rf.Layered.LayeredStackup.CoveredPatch(
-                        SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSub, CoverThicknessMm * 1e-3),
+                        SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSub,
+                        EffectiveCoverEpsR, EffectiveCoverTanD, CoverThicknessMm * 1e-3),
                     OpenSim.Rf.Layered.LayeredStackup.CoveredPatchMetalInterface);
                 break;
             }
@@ -1091,8 +1178,36 @@ public partial class AntennaViewModel : ObservableObject
                 grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildFromPolygon(
                     shape, element, z, hint, ground);
                 if (UseSubstrate)
+                {
                     substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                         SubstrateEpsR, Math.Max(SubstrateTanD, 0), HeightAboveGroundMm * 1e-3);
+                    // A net on an INNER copper layer has dielectric above it as well as below —
+                    // physically a covered patch, which the multi-layer TLGF has solved since
+                    // Stage F2b. The board's own per-gap εr/tanδ/h already rides on
+                    // PcbBoard.Stackup; before this it was simply never carried across, and every
+                    // net was solved over one homogeneous slab from the two panel scalars.
+                    // A top-layer net still resolves to a single slab and keeps the pre-existing
+                    // SubstrateStackup path, so those solves are unchanged.
+                    _boardStackupNotes = null;
+                    if (_board is { } boardForStackup)
+                    {
+                        if (OpenSim.Rf.Layered.BoardAntennaStackup.TryResolve(
+                                boardForStackup, choice.Island.LayerOrder,
+                                SubstrateEpsR, Math.Max(SubstrateTanD, 0),
+                                HeightAboveGroundMm * 1e-3, out var resolved, out var stackFailure))
+                        {
+                            if (!resolved!.IsSingleSlabTop)
+                                layered = new LayeredSpec(resolved.Stackup, resolved.SourceInterface);
+                            _boardStackupNotes = resolved.Assumptions;
+                        }
+                        else
+                        {
+                            // Not a silent fall-back to one slab: say which board fact refused.
+                            _log.Append($"Antenna: board stackup — {stackFailure} Solving over "
+                                + "the single substrate slab from the panel values instead.");
+                        }
+                    }
+                }
                 break;
             }
             default:
@@ -1310,6 +1425,180 @@ public partial class AntennaViewModel : ObservableObject
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
     }
 
+    /// <summary>The Stage D1 hybrid, reachable from the wizard: a bare rectangular plate in FREE
+    /// SPACE with a thin wire ENDING on one of its interior mesh vertices — the finite-ground
+    /// monopole, and the first mode in which a wire and a sheet appear in one structure.
+    ///
+    /// <para>Free space is the whole scope, and the refusal below says so rather than degrading:
+    /// the junction's 1/ρ disc reads a free-space radial kernel, so a PEC ground would need the
+    /// disc's own image pass and a substrate its layered radial kernel — both named follow-ups.
+    /// The wire's attaching end is forced to be a mesh vertex by building the plate with that
+    /// point snapped in, because the attachment fan needs an anchor and a guessed contact is a
+    /// wrong placement, not an approximation.</para></summary>
+    private async Task SolveWireFedPlateAsync()
+    {
+        if (!TryBuildWireFedPlate(out var surface, out var wire, out string? failure))
+        {
+            AntennaResult = $"Not solvable: {failure}";
+            return;
+        }
+        AntennaResult = $"Solving ({surface.BasisCount} RWG + {wire.BasisCount} wire unknowns)…";
+        try
+        {
+            double frequency = FrequencyMHz * 1e6;
+            double fMin = SweepFMinMHz * 1e6, fMax = SweepFMaxMHz * 1e6;
+            int points = SweepPoints;
+            var (sweep, display) = await Task.Run(() =>
+            {
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                // The feed is the delta gap at the CONTACT — the attachment basis is a legal feed
+                // and is what a monopole standing on a finite ground plane means.
+                int feed = OpenSim.Rf.Surface.SurfaceMomSolver.AttachmentFeedBasis(surface, wire);
+                double FrequencyAt(int k) => points == 1
+                    ? fMin
+                    : fMin * Math.Pow(fMax / fMin, (double)k / (points - 1));
+                var results = new OpenSim.Rf.Surface.WireAttachedSolution[points];
+                try
+                {
+                    Parallel.For(0, points, k =>
+                        results[k] = solver.SolveWireAttached(surface, wire, FrequencyAt(k), feed));
+                }
+                catch (AggregateException e) { throw e.InnerExceptions[0]; }
+                var list = new List<AntennaZinPoint>(points);
+                for (int k = 0; k < points; k++)
+                    list.Add(new AntennaZinPoint(FrequencyAt(k),
+                        results[k].InputImpedance.Real, results[k].InputImpedance.Imaginary));
+                return (list, solver.SolveWireAttached(surface, wire, frequency, feed));
+            });
+
+            foreach (var point in sweep) ZinSweep.Add(point);
+            // The FOLDED edge currents are the generic-consumer view (the junction's transported
+            // current spread onto the fan's outer edges), which is exactly what a current display
+            // wants; the far field uses the raw ones plus the junction's own exact transform.
+            SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface,
+                new OpenSim.Rf.Surface.SurfaceMomSolution(display.FrequencyHz,
+                    display.InputImpedance, display.EdgeCurrents), ColormapKind.Viridis);
+            GroundPlaneModel = null;
+            AntennaResult = $"Zin = {display.InputImpedance.Real:g4} " +
+                            $"{(display.InputImpedance.Imaginary >= 0 ? "+" : "−")} " +
+                            $"j{Math.Abs(display.InputImpedance.Imaginary):g4} Ω at {FrequencyMHz:g4} MHz " +
+                            $"({surface.BasisCount} RWG + {wire.BasisCount} wire unknowns, " +
+                            $"{display.IncidenceDegrees:g3}° incidence)";
+            AntennaAssumptions = "Assumptions: " + string.Join(" ",
+                OpenSim.Rf.Surface.SurfaceMomSolver.WireAttachedAssumptions);
+            _log.Append($"Antenna: {AntennaResult}");
+        }
+        catch (Exception ex) { AntennaResult = $"Not solvable: {ex.Message}"; }
+    }
+
+    private async Task ShowWireFedPlateFarFieldAsync()
+    {
+        if (!TryBuildWireFedPlate(out var surface, out var wire, out string? failure))
+        {
+            FieldResult = $"Not computable: {failure}";
+            return;
+        }
+        FieldResult = $"Computing ({surface.BasisCount} RWG + {wire.BasisCount} wire unknowns)…";
+        try
+        {
+            double frequency = FrequencyMHz * 1e6;
+            var (pattern, solution, inputPower) = await Task.Run(() =>
+            {
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                int feed = OpenSim.Rf.Surface.SurfaceMomSolver.AttachmentFeedBasis(surface, wire);
+                var solved = solver.SolveWireAttached(surface, wire, frequency, feed);
+                double pin = 0.5 * (System.Numerics.Complex.One / solved.InputImpedance).Real;
+                return (OpenSim.Rf.Surface.WireAttachedFarField.Compute(surface, wire, solved),
+                    solved, pin);
+            });
+
+            var (center, diagonal) = SurfaceBounds(surface);
+            FarFieldLobeModel = SceneBuilder.BuildFarFieldLobe(
+                pattern, center, scale: 1.25 * diagonal, ColormapKind.Viridis);
+            SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface,
+                new OpenSim.Rf.Surface.SurfaceMomSolution(solution.FrequencyHz,
+                    solution.InputImpedance, solution.EdgeCurrents), ColormapKind.Viridis);
+            GroundPlaneModel = null;
+
+            double dbi = 10 * Math.Log10(pattern.MaxDirectivity);
+            FieldResult = $"Far field at {FrequencyMHz:g4} MHz: P_rad = " +
+                          $"{pattern.TotalRadiatedPowerWatts:g4} W (1 V feed), " +
+                          $"D_max = {pattern.MaxDirectivity:g4} ({dbi:g3} dBi); " +
+                          "lobe radius ∝ radiation intensity";
+            // Free space has no surface wave, so the ledger is the whole story here and is worth
+            // showing: it is the identity that caught the junction's disc sign at −5.9.
+            if (inputPower > 0)
+                FieldResult += $"; P_rad = {pattern.TotalRadiatedPowerWatts / inputPower:P1} of "
+                    + "the power the feed delivers";
+            _log.Append($"Antenna: {FieldResult}");
+        }
+        catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
+    }
+
+    /// <summary>The solver's own grazing-incidence floor, restated here so the wizard refuses
+    /// before it builds rather than throwing out of the fill. The solver remains the authority:
+    /// it re-checks the angle it actually measures from the built geometry.</summary>
+    private const double MinimumAttachmentDegrees = 10.0;
+
+    /// <summary>The wire-fed plate's geometry: a bare centred plate with the attachment point
+    /// snapped in as a mesh vertex, and a straight wire leaving that point at the requested
+    /// incidence. Every refusal names what to change.</summary>
+    private bool TryBuildWireFedPlate(out OpenSim.Rf.Surface.SurfaceStructure surface,
+        out WireStructure wire, out string? failure)
+    {
+        surface = null!;
+        wire = null!;
+        failure = null;
+        if (PlateWidthMm <= 0 || PlateLengthMm <= 0)
+        { failure = "the plate needs a positive width and length"; return false; }
+        if (AttachedWireLengthMm <= 0)
+        { failure = "the attached wire needs a positive length"; return false; }
+        if (WireRadiusMm <= 0)
+        { failure = "the wire radius must be positive"; return false; }
+        if (AttachedWireDegrees < MinimumAttachmentDegrees || AttachedWireDegrees > 90)
+        {
+            failure = $"the wire must meet the sheet between {MinimumAttachmentDegrees:g3}° and 90° "
+                + "— at grazing incidence the reduced-kernel tube overlaps the metal it attaches to";
+            return false;
+        }
+        if (UseSubstrate || UseGroundPlane)
+        {
+            failure = "a wire-fed plate is solved in FREE SPACE — clear the ground plane and the "
+                + "substrate. The junction's disc reads a free-space radial kernel; the imaged and "
+                + "layered versions are named follow-ups, not silent approximations";
+            return false;
+        }
+
+        double maxFrequency = Math.Max(FrequencyMHz, Math.Max(SweepFMinMHz, SweepFMaxMHz)) * 1e6;
+        if (maxFrequency <= 0) { failure = "the frequency must be positive"; return false; }
+        double lambdaMin = 299_792_458.0 / maxFrequency;
+        double w = PlateWidthMm * 1e-3, l = PlateLengthMm * 1e-3;
+        double ax = AttachXMm * 1e-3, ay = AttachYMm * 1e-3;
+        if (Math.Abs(ax) >= w / 2 || Math.Abs(ay) >= l / 2)
+        {
+            failure = "the attachment point must lie strictly inside the plate (it is measured "
+                + "from the plate centre, and the fan needs a full ring of triangles around it)";
+            return false;
+        }
+
+        var grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
+            w, l, lambdaMin / 10, z: 0, portFraction: 0, ground: null, snapVertex: (ax, ay));
+        if (grid.Structure is null) { failure = grid.FailureReason; return false; }
+        surface = grid.Structure;
+
+        double radians = AttachedWireDegrees * Math.PI / 180;
+        double length = AttachedWireLengthMm * 1e-3;
+        var contact = new Vector3D(ax, ay, 0);
+        // The wire leans in +x as it rises; at 90° it is the plain normal monopole.
+        var tip = contact + new Vector3D(Math.Cos(radians) * length, 0, Math.Sin(radians) * length);
+        var built = WireGridBuilder.Build(
+            new[] { new WireSegment(contact, tip, WireRadiusMm * 1e-3) },
+            lambdaMin / 10, ground: null, attachmentPoint: contact);
+        if (built.Structure is null) { failure = built.FailureReason; return false; }
+        wire = built.Structure;
+        return true;
+    }
+
     private async Task ShowSurfaceFarFieldAsync()
     {
         if (!TryDiscretizeSurface(out var surface, out var port, out _, out string? failure,
@@ -1398,6 +1687,10 @@ public partial class AntennaViewModel : ObservableObject
         if (substrate is not null)
         {
             var lines = OpenSim.Rf.Surface.SurfaceMomSolver.LayeredAssumptions.ToList();
+            // A board net's resolved stackup states which layer became the ground and what each
+            // gap is made of — facts the generic layered assumptions cannot know.
+            if (_boardStackupNotes is { Count: > 0 } boardNotes)
+                lines.InsertRange(1, boardNotes);
             lines.Insert(1,
                 $"Substrate: εr = {substrate.RelativePermittivity:g3}, tanδ = {substrate.LossTangent:g3}, " +
                 $"thickness {substrate.ThicknessMeters * 1e3:g4} mm; the reported power ledger counts " +
@@ -1406,11 +1699,15 @@ public partial class AntennaViewModel : ObservableObject
             if (layered is { SourceInterface: not null } spec && spec.Stackup.Layers.Count > 1)
             {
                 var cover = spec.Stackup.Layers[^1];
+                bool matched = cover.RelativePermittivity == substrate.RelativePermittivity;
                 lines.Insert(2,
-                    $"Dielectric cover: εr = {cover.RelativePermittivity:g3}, thickness "
-                    + $"{cover.ThicknessMeters * 1e3:g4} mm above the buried metal (a covered patch, "
-                    + "Stage F multi-layer TLGF) — the cover loads the patch, so its resonance sits "
-                    + "below the bare patch's.");
+                    $"Dielectric cover: εr = {cover.RelativePermittivity:g3}, tanδ = "
+                    + $"{cover.LossTangent:g3}, thickness {cover.ThicknessMeters * 1e3:g4} mm above "
+                    + "the buried metal (a covered patch, Stage F multi-layer TLGF) — the cover "
+                    + "loads the patch, so its resonance sits below the bare patch's."
+                    + (matched ? "" : " The cover permittivity differs from the substrate's; the "
+                        + "buried-source read-out is single-valued across that jump (the TM "
+                        + "contrast source at the sheet cancels the 1/ε difference exactly)."));
             }
             return lines;
         }

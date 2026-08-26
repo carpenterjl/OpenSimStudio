@@ -185,19 +185,66 @@ public static class BoardCoupledExtractor
         catch (ArgumentException ex) { return BoardCoupledResult.Failure(ex.Message); }
 
         var rlgc = RlgcExtractor.Extract(section);
-        var network = new MtlNetwork(new[] { new MtlSection(rlgc, coupledLength) });
+        var coupled = new MtlSection(rlgc, coupledLength);
 
         var leads = new double[runs.Length];
         for (int i = 0; i < runs.Length; i++)
             leads[i] = Math.Max(0, runs[i].PathLength - coupledLength);
 
+        // The tails on each side of the overlap: the stretch where one trace has ended and the
+        // others run on alone. They carry series R + L (and their own C to the plane), so
+        // dropping them under-reports delay and loss. They have DIFFERENT lengths per line,
+        // which is exactly what an MtlLeadSection exists to express — a uniform section carries
+        // one length for every conductor. Each lead is priced by the SAME RlgcExtractor over a
+        // single-trace cross-section on the same substrate.
+        var lowLead = new double[runs.Length];
+        var highLead = new double[runs.Length];
+        for (int i = 0; i < runs.Length; i++)
+        {
+            lowLead[i] = Math.Max(0, coupledLo - loS[i]);
+            highLead[i] = Math.Max(0, hiS[i] - coupledHi);
+        }
+        bool anyLead = lowLead.Concat(highLead).Any(l => l > 0);
+
+        MtlNetwork network;
+        string leadNote;
+        if (!anyLead)
+        {
+            // No tails: the pre-existing single-section construction, verbatim, so a board that
+            // has none is on exactly the arithmetic it always was.
+            network = new MtlNetwork(new[] { coupled });
+            leadNote = $"Coupled section = the {coupledLength * 1e3:g4} mm longitudinal overlap "
+                + "of the nets' parallel runs, which spans their whole length (no lead tails).";
+        }
+        else
+        {
+            var perLine = new (RlgcResult Rlgc, double LengthMeters)[runs.Length];
+            var leadRlgc = new RlgcResult[runs.Length];
+            for (int i = 0; i < runs.Length; i++)
+            {
+                var single = new CoupledLineCrossSection(substrate, 0, new[] { traces[i] with { CenterMeters = 0 } });
+                leadRlgc[i] = RlgcExtractor.Extract(single);
+            }
+            var sections = new List<MtlSectionBase>();
+            if (lowLead.Any(l => l > 0))
+                sections.Add(new MtlLeadSection(
+                    Enumerable.Range(0, runs.Length).Select(i => (leadRlgc[i], lowLead[i])).ToArray()));
+            sections.Add(coupled);
+            if (highLead.Any(l => l > 0))
+                sections.Add(new MtlLeadSection(
+                    Enumerable.Range(0, runs.Length).Select(i => (leadRlgc[i], highLead[i])).ToArray()));
+            network = new MtlNetwork(sections);
+            leadNote = $"Coupled section = the {coupledLength * 1e3:g4} mm longitudinal overlap of "
+                + "the nets' parallel runs; the non-overlapping tails ("
+                + string.Join(", ", leads.Select(l => $"{l * 1e3:g3} mm")) + ") are CASCADED as "
+                + "uncoupled single-trace lead sections (their own R, L and C to the plane; the "
+                + "bends within a lead are still treated as straight run).";
+        }
+
         var assumptions = new List<string>(rlgc.Assumptions)
         {
             dielectricNote,
-            $"Coupled section = the {coupledLength * 1e3:g4} mm longitudinal overlap of the nets' "
-                + "parallel runs; the non-overlapping tails ("
-                + string.Join(", ", leads.Select(l => $"{l * 1e3:g3} mm")) + ") are reported as "
-                + "leads but not cascaded — their series R+L and the bends are a named refinement.",
+            leadNote,
         };
 
         return new BoardCoupledResult(section, rlgc, network, coupledLength, leads,

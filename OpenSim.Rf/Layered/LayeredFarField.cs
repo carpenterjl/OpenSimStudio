@@ -243,21 +243,170 @@ public static class LayeredFarField
         LayeredKernelTable kernel, SurfaceMomSolution solution, int alphaCount = 64)
         => SurfaceWavePowerWatts(surface, kernel, solution.EdgeCurrents, null, alphaCount);
 
-    /// <summary>Probe-fed surface-wave power from the COMPLETE horizontal current (raw
-    /// RWG + junction disc/half-RWGs). The vertical tube's own TM0 launch is a validated
-    /// capability (<see cref="VerticalSurfaceWavePowerWatts"/>, gated against the
-    /// probe-only oracle to 5e-4), but mixing it into the patch ledger needs the
-    /// junction charge-continuity partition (the tube's top-node ∂_zJ_z and the junction
-    /// half-RWG divergence are the SAME charge) — a documented open item. At εr = 1 there
-    /// is no surface wave and the full far field is exact, so this residual is isolated.</summary>
+    /// <summary>
+    /// Probe-fed surface-wave power from the COMPLETE current - the horizontal patch current
+    /// (raw RWG + junction disc/half-RWGs) AND the vertical tube current, launched COHERENTLY.
+    ///
+    /// <para><b>Why they cannot simply be added.</b> Both currents launch the same TM mode, so
+    /// their launches INTERFERE: the power goes as |a_h + a_v|^2, not |a_h|^2 + |a_v|^2. Summing
+    /// two independently-computed powers drops the cross term entirely, which is why the ledger
+    /// read about 1.05 at resonance with the vertical leg omitted.</para>
+    ///
+    /// <para><b>The unified form.</b> Both shipped formulas are already the same expression -
+    /// per pole, P = (omega k_p/16pi) * closed-integral Re[Q_A - Q_Phi] dalpha, where Q_A is the
+    /// current-current quadratic form and Q_Phi the charge-charge one with q = (j/omega) div J.
+    /// (The horizontal formula's -k_p^3/(16 pi omega) Res_Phi |J_rho|^2 is exactly
+    /// -(omega k_p/16pi) Res_Phi |q_h|^2 once q_h = (k_p/omega) J_rho is substituted; the
+    /// vertical formula's explicit 2pi is the azimuthal integral of an axially-symmetric
+    /// current.) Written that way, the mixed problem simply adds the off-diagonal blocks:</para>
+    /// <code>
+    ///   Q_A   = Res_A |J|^2 + sum_ij w_i w_j conj(J_z_i) Res_zz(z_i,z_j) J_z_j
+    ///                       + 2Re[ sum_j w_j conj(J_rho) (-j k_p) Res_xz(d, z_j) J_z_j ]
+    ///   Q_Phi = Res_Phi |q_h|^2 + sum_ij w_i w_j conj(q_v_i) Res_Phi(z_i,z_j) q_v_j
+    ///                       + 2Re[ sum_j w_j conj(q_h) Res_Phi(d, z_j) q_v_j ]
+    /// </code>
+    /// <para>The (-j k_p) on the cross term is DERIVED, not fitted:
+    /// <see cref="VerticalSpectralKernels"/> defines G_A^xz "per -jk_x*J_z", so the radial vector
+    /// potential a tube current produces is G_A^xz * (-j k_rho) * J_z. Only TM poles carry the
+    /// vertical and cross blocks - a z-directed current has no TE coupling - which is also what
+    /// keeps the vertical-only limit identical to
+    /// <see cref="VerticalSurfaceWavePowerWatts"/>.</para>
+    ///
+    /// <para><b>The charge partition.</b> The junction disc's div D = delta^2(v) and the tube's
+    /// endpoint delta at z = d are the SAME charge with opposite signs - the disc is what carries
+    /// the arriving tube current away radially. The horizontal transform INCLUDES the disc, so its
+    /// divergence carries (j/omega) I_top e^{jk.v}; the tube's distributed q_v does NOT carry the
+    /// cancelling endpoint delta. Counting one without the other would leave a spurious point
+    /// charge at the junction, so it is subtracted explicitly below.</para>
+    /// </summary>
     public static double SurfaceWavePowerWatts(SurfaceStructure surface,
         LayeredKernelTable kernel, ProbeFedSolution probeSolution, ProbeFeed probe,
         int alphaCount = 64)
     {
-        var junction = new JunctionLeg(
-            ProbeVertexFan(surface, probe), probeSolution.TubeCurrents[^1]);
-        return SurfaceWavePowerWatts(surface, kernel, probeSolution.RawEdgeCurrents,
-            junction, alphaCount);
+        var fan = ProbeVertexFan(surface, probe);
+        var junction = new JunctionLeg(fan, probeSolution.TubeCurrents[^1]);
+        double[] tubeNodes = ProbeAssembly.TubeNodes(kernel.Substrate, probe);
+        return MixedSurfaceWavePowerWatts(surface, kernel, probeSolution.RawEdgeCurrents,
+            junction, tubeNodes, probeSolution.TubeCurrents, alphaCount);
+    }
+
+    /// <summary>The coherent horizontal + vertical surface-wave power; see the overload above
+    /// for the derivation and the charge-partition argument.</summary>
+    private static double MixedSurfaceWavePowerWatts(SurfaceStructure surface,
+        LayeredKernelTable kernel, IReadOnlyList<Complex> edgeCurrents, JunctionLeg junction,
+        double[] tubeNodes, Complex[] tubeCurrents, int alphaCount)
+    {
+        var substrate = kernel.Substrate;
+        double omega = 2 * Math.PI * kernel.FrequencyHz;
+        double k0 = omega / RfConstants.SpeedOfLight;
+        double d = substrate.ThicknessMeters;
+        var j = Complex.ImaginaryOne;
+
+        // The tube current and its distributed line charge on the SAME Gauss grid
+        // VerticalSurfaceWavePowerWatts uses, so the vertical-only block reproduces that
+        // already-oracle-gated formula rather than approximating it.
+        var (gn, gw) = GaussLegendre.Rule(4, 0, 1);
+        int n = (tubeNodes.Length - 1) * gn.Length;
+        var z = new double[n];
+        var jz = new Complex[n];
+        var qv = new Complex[n];
+        var w = new double[n];
+        int idx = 0;
+        for (int e = 0; e + 1 < tubeNodes.Length; e++)
+        {
+            double h = tubeNodes[e + 1] - tubeNodes[e];
+            Complex slope = (tubeCurrents[e + 1] - tubeCurrents[e]) / h;
+            for (int q = 0; q < gn.Length; q++)
+            {
+                z[idx] = tubeNodes[e] + h * gn[q];
+                jz[idx] = tubeCurrents[e] * (1 - gn[q]) + tubeCurrents[e + 1] * gn[q];
+                qv[idx] = j / omega * slope;
+                w[idx] = gw[q] * h;
+                idx++;
+            }
+        }
+        Complex iTop = tubeCurrents[^1];
+        var vertexPos = junction.Fan.VertexPosition;
+
+        double power = 0;
+        foreach (var pole in kernel.Poles)
+        {
+            double kp = pole.KRho.Real;
+            var pk = new Complex(kp, 0);
+            bool vertical = pole.IsTm;      // a z-current launches only the TM mode
+
+            // Residues independent of the azimuth: computed once per pole, not per alpha.
+            Complex[,] resZz = null!, resPhiVv = null!;
+            Complex[] resXzTop = null!, resPhiTop = null!;
+            if (vertical)
+            {
+                resZz = new Complex[n, n];
+                resPhiVv = new Complex[n, n];
+                for (int a = 0; a < n; a++)
+                    for (int b = 0; b < n; b++)
+                    {
+                        var r = VerticalSpatialKernels.PoleResidues(substrate, k0, pk, z[a], z[b]);
+                        resZz[a, b] = r.GAzz;
+                        resPhiVv[a, b] = r.KPhi;
+                    }
+                resXzTop = new Complex[n];
+                resPhiTop = new Complex[n];
+                for (int b = 0; b < n; b++)
+                {
+                    var r = VerticalSpatialKernels.PoleResidues(substrate, k0, pk, d, z[b]);
+                    resXzTop[b] = r.GAxz;
+                    resPhiTop[b] = r.KPhi;
+                }
+            }
+
+            double dAlpha = 2 * Math.PI / alphaCount;
+            double accum = 0;                 // the azimuthal integral of Re[Q_A - Q_Phi]
+            for (int i = 0; i < alphaCount; i++)
+            {
+                double alpha = 2 * Math.PI * i / alphaCount;
+                var (sin, cos) = Math.SinCos(alpha);
+                double kx = kp * cos, ky = kp * sin;
+
+                var (jx, jy) = SpectralCurrent(surface, edgeCurrents, kx, ky);
+                var (djx, djy) = junction.Fan.CurrentTransform(surface, kx, ky);
+                jx += junction.Coeff * djx;
+                jy += junction.Coeff * djy;
+                var jRho = cos * jx + sin * jy;
+
+                // Horizontal charge, MINUS the junction disc's point charge: the tube's endpoint
+                // delta that cancels it is not carried in q_v, so counting one alone would leave
+                // a spurious point charge sitting at the junction.
+                var discPhase = Complex.Exp(j * (kx * vertexPos.X + ky * vertexPos.Y));
+                var qh = kp / omega * jRho - j / omega * iTop * discPhase;
+
+                double qA = pole.ResidueA.Real
+                            * (jx.Magnitude * jx.Magnitude + jy.Magnitude * jy.Magnitude);
+                double qPhi = pole.ResiduePhi.Real * (qh.Magnitude * qh.Magnitude);
+
+                if (vertical)
+                {
+                    Complex vv = Complex.Zero, vvPhi = Complex.Zero;
+                    for (int a = 0; a < n; a++)
+                        for (int b = 0; b < n; b++)
+                        {
+                            double ww = w[a] * w[b];
+                            vv += ww * Complex.Conjugate(jz[a]) * resZz[a, b] * jz[b];
+                            vvPhi += ww * Complex.Conjugate(qv[a]) * resPhiVv[a, b] * qv[b];
+                        }
+                    Complex cross = Complex.Zero, crossPhi = Complex.Zero;
+                    for (int b = 0; b < n; b++)
+                    {
+                        cross += w[b] * Complex.Conjugate(jRho) * (-j * pk) * resXzTop[b] * jz[b];
+                        crossPhi += w[b] * Complex.Conjugate(qh) * resPhiTop[b] * qv[b];
+                    }
+                    qA += vv.Real + 2 * cross.Real;
+                    qPhi += vvPhi.Real + 2 * crossPhi.Real;
+                }
+                accum += (qA - qPhi) * dAlpha;
+            }
+            power += omega * kp / (16 * Math.PI) * accum;
+        }
+        return power;
     }
 
     /// <summary>The surface-wave power a PURE vertical tube current launches (no patch):

@@ -84,9 +84,9 @@ public static class LayeredFieldEvaluator
     /// stack), through the TLGF per-z field kernels (<see cref="MultiLayerFieldKernelTable"/>).
     /// The MoM assembly (<see cref="FieldAt"/>) is IDENTICAL to the single-slab path — only the
     /// radial kernel table changes — so the E and H legs, the boundary-trick curl, and every
-    /// quadrature rule are shared. Observation must stand at or above the source metal
-    /// (z ≥ z_source); points at or below it stay zero (the map region is above the metal, like
-    /// the ground-plane skip in the single-slab path).</summary>
+    /// quadrature rule are shared. Observation may stand on EITHER side of the source metal —
+    /// above a buried patch, or in the substrate beneath it; only points at or below the ground
+    /// plane stay zero, where the fields genuinely vanish (the single-slab path's own skip).</summary>
     public static FieldMap Evaluate(SurfaceStructure surface, MultiLayerKernelTable kernel,
         SurfaceMomSolution solution, IReadOnlyList<Vector3D> points,
         int? maxDegreeOfParallelism = null)
@@ -94,7 +94,6 @@ public static class LayeredFieldEvaluator
         double omega = 2 * Math.PI * solution.FrequencyHz;
         var stackup = kernel.Stackup;
         int sourceInterface = kernel.SourceInterface ?? stackup.Layers.Count - 1;
-        double sourceHeight = stackup.InterfaceHeights()[sourceInterface];
 
         double rhoMax = 1e-9;
         foreach (var p in points)
@@ -117,9 +116,10 @@ public static class LayeredFieldEvaluator
         var hFields = new (Complex X, Complex Y, Complex Z)[points.Count];
         foreach (var (z, indices) in groups.OrderBy(g => g.Key))
         {
-            // The map lives above the source metal; at/below it the field is not tabulated
-            // (the below-source image ladder is a named follow-up), so leave those slots zero.
-            if (z <= sourceHeight)
+            // Only the ground plane itself is excluded: E = H = 0 inside/at the PEC. Points
+            // BELOW a buried source (in the substrate under a covered patch) are mapped — the
+            // TLGF profiles at any z, and the image set follows the observation side.
+            if (z <= 0)
                 continue;
             var table = new MultiLayerFieldKernelTable(stackup, kernel.K0, kernel.Poles,
                 sourceInterface, z, rhoMax, maxDegreeOfParallelism);
@@ -441,12 +441,14 @@ public static class LayeredFieldEvaluator
     /// <summary>Stage S9b — one observation height's MULTI-LAYER / covered radial field kernels:
     /// closed-form images (G̃_A pair + K̃_Φ primary + ground image) at eval + one spline over
     /// [multi-layer Sommerfeld remainder + per-z pole terms], knots evaluated in parallel
-    /// (bitwise-deterministic slot recipe). The multi-layer twin of <see cref="FieldKernelTable"/>;
-    /// observation stands above the source metal so both image heights rise with z (dh/dz = +1).</summary>
+    /// (bitwise-deterministic slot recipe). The multi-layer twin of <see cref="FieldKernelTable"/>.
+    /// Observation may stand on either side of the source metal; the primary image's height falls
+    /// with z below it, so the per-image dh/dz comes from the image builder.</summary>
     private sealed class MultiLayerFieldKernelTable : IRadialFieldKernel
     {
         private readonly double _k0, _rhoMin, _rhoMax, _epsilon;
         private readonly MultiLayerImages.Image[] _gaImages, _phiImages;
+        private readonly double[] _dhdz;
         private readonly NaturalCubicSpline[] _smooth; // A/W/Phi/DzPhi/DzA/DzW × re/im
 
         public MultiLayerFieldKernelTable(LayeredStackup stackup, double k0,
@@ -460,7 +462,7 @@ public static class LayeredFieldEvaluator
             double lambdaD = 2 * Math.PI / (_k0 * Math.Sqrt(epsMax));
             _rhoMin = Math.Min(Math.Min(1e-4 * lambdaD, 0.01 * d), 0.1 * rhoMax);
             _epsilon = d / 50;
-            (_gaImages, _phiImages) = MultiLayerFieldKernels.FieldImages(stackup, sourceInterface, z);
+            (_gaImages, _phiImages, _dhdz) = MultiLayerFieldKernels.FieldImages(stackup, sourceInterface, z);
 
             var grid = new List<double> { _rhoMin };
             double logFactor = Math.Log(10) / 96;
@@ -541,28 +543,32 @@ public static class LayeredFieldEvaluator
             var dza = new Complex(_smooth[8].Evaluate(x), _smooth[9].Evaluate(x));
             var dzw = new Complex(_smooth[10].Evaluate(x), _smooth[11].Evaluate(x));
 
-            // Closed-form images: dh/dz = +1 (observation above the source metal).
+            // Closed-form images. ∂z of g(√(ρ² + h²)) is g′·(h/r)·(dh/dz), and dh/dz is +1 for
+            // the ground image but signed for the primary below the source — the same signs the
+            // spectral subtraction uses, which is what makes the two cancel exactly.
             Complex imgA = Complex.Zero, imgDzA = Complex.Zero;
-            foreach (var img in _gaImages)
+            for (int i = 0; i < _gaImages.Length; i++)
             {
+                var img = _gaImages[i];
                 double r = Math.Sqrt(rho * rho + img.Depth * img.Depth + _epsilon * _epsilon);
                 var (sin, cos) = Math.SinCos(_k0 * r);
                 var g = new Complex(cos, -sin) / (4 * Math.PI * r);
                 var gPrime = -new Complex(cos, -sin)
                              * (1 + Complex.ImaginaryOne * _k0 * r) / (4 * Math.PI * r * r);
                 imgA += img.Coeff * g;
-                imgDzA += img.Coeff * (img.Depth / r) * gPrime;
+                imgDzA += img.Coeff * (img.Depth / r) * _dhdz[i] * gPrime;
             }
             Complex imgPhi = Complex.Zero, imgDz = Complex.Zero;
-            foreach (var img in _phiImages)
+            for (int i = 0; i < _phiImages.Length; i++)
             {
+                var img = _phiImages[i];
                 double r = Math.Sqrt(rho * rho + img.Depth * img.Depth + _epsilon * _epsilon);
                 var (sin, cos) = Math.SinCos(_k0 * r);
                 var g = new Complex(cos, -sin) / (4 * Math.PI * r);
                 var gPrime = -new Complex(cos, -sin)
                              * (1 + Complex.ImaginaryOne * _k0 * r) / (4 * Math.PI * r * r);
                 imgPhi += img.Coeff * g;
-                imgDz += img.Coeff * (img.Depth / r) * gPrime;
+                imgDz += img.Coeff * (img.Depth / r) * _dhdz[i] * gPrime;
             }
             return (RfConstants.Mu0 * imgA + a, wv,
                     imgPhi / RfConstants.Eps0 + phi,

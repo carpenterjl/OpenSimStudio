@@ -96,6 +96,17 @@ internal sealed class AttachmentFan
         }
         if (wedges.Count == 0)
             throw new InvalidOperationException("No triangles are incident at the probe vertex.");
+        // The fan must CLOSE. Its wedges carry the junction current away in shares
+        // γ = θ/(2πl), so Σθ = 2π is exactly the statement that all of it leaves; at a rim
+        // vertex the incident angles sum to less and the missing share is silently lost.
+        // Checking the outer edges alone does not catch this: at a CORNER every wedge's
+        // opposite edge is interior, so the fan builds happily with a quarter turn of angle.
+        if (Math.Abs(total - 2 * Math.PI) > 1e-9 * 2 * Math.PI)
+            throw new InvalidOperationException(
+                $"The attachment vertex is on the sheet's rim: its incident angles sum to "
+                + $"{total:g6} rad, not 2π, so the fan cannot carry the whole junction current "
+                + "away (the γ = θ/2π shares would sum to "
+                + $"{total / (2 * Math.PI):g4}). Move the attachment inside the sheet.");
         Wedges = wedges;
         TotalAngle = total;
     }
@@ -158,10 +169,78 @@ internal sealed class AttachmentFan
         return (jx, jy);
     }
 
+    /// <summary>The junction surface current's FULL 3-D radiation vector per unit junction
+    /// coefficient, N(r̂) = ∫ (D + Σᵢγᵢ Hᵢ) e^{+jk r̂·r′} dS — the free-space analogue of
+    /// <see cref="CurrentTransform"/>, which carries only the in-plane phase because a layered
+    /// stackup fixes z at the metal plane. Here the sheet may sit at any height and in any
+    /// orientation, so the phase takes the true 3-D dot product and all three current components
+    /// are returned. Same quadrature, same ray form; the two are algebraically identical for a
+    /// horizontal sheet at z = 0.</summary>
+    public (Complex Jx, Complex Jy, Complex Jz) CurrentTransform3D(SurfaceStructure surface,
+        double k, Vector3D direction)
+    {
+        Complex jx = Complex.Zero, jy = Complex.Zero, jz = Complex.Zero;
+        var (nodes, weights) = GaussLegendre.Rule(6, 0, 1);
+        foreach (var wedge in Wedges)
+        {
+            var (a, b, c) = surface.Triangles[wedge.Triangle];
+            var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
+            var eu = surface.Vertices[u] - VertexPosition;
+            var ew = surface.Vertices[w] - VertexPosition;
+            double cross = Vector3D.Cross(eu, ew - eu).Length;
+            for (int si = 0; si < nodes.Length; si++)
+            {
+                var e = eu * (1 - nodes[si]) + ew * nodes[si];
+                double scale = cross / (2 * Math.PI * e.LengthSquared);
+                for (int ti = 0; ti < nodes.Length; ti++)
+                {
+                    var rPrime = VertexPosition + e * nodes[ti];
+                    var (sinP, cosP) = Math.SinCos(k * Vector3D.Dot(direction, rPrime));
+                    var phase = new Complex(cosP, sinP);
+                    double weight = weights[si] * weights[ti] * scale;
+                    jx += weight * e.X * phase;
+                    jy += weight * e.Y * phase;
+                    jz += weight * e.Z * phase;
+                }
+            }
+        }
+        var (t1, t2, t3, wq) = TriangleQuadrature.Rule(5);
+        foreach (var wedge in Wedges)
+        {
+            int t = wedge.NeighborTriangle;
+            var (ia, ib, ic) = surface.Triangles[t];
+            var va = surface.Vertices[ia];
+            var vb = surface.Vertices[ib];
+            var vc = surface.Vertices[ic];
+            double area = surface.TriangleAreas[t];
+            var pOpp = surface.Vertices[wedge.NeighborOpposite];
+            double coeff = wedge.Gamma * surface.Edges[wedge.EdgeBasis].Length / (2 * area);
+            for (int i = 0; i < wq.Length; i++)
+            {
+                var r = va * t1[i] + vb * t2[i] + vc * t3[i];
+                var fDir = pOpp - r;
+                var (sinP, cosP) = Math.SinCos(k * Vector3D.Dot(direction, r));
+                var phase = new Complex(cosP, sinP);
+                double weight = wq[i] * area * coeff;
+                jx += weight * fDir.X * phase;
+                jy += weight * fDir.Y * phase;
+                jz += weight * fDir.Z * phase;
+            }
+        }
+        return (jx, jy, jz);
+    }
+
     /// <summary>The disc current's vector potential at one test point, per unit
     /// junction current: A(r) = ∫ D(r′) G_A(ρ_eff) dS′ over the fan (in-plane
     /// components; G_A is the boundary table's FULL layered kernel).</summary>
     public (Complex Ax, Complex Ay) DiscPotential(LayeredKernelTable kernel,
+        SurfaceStructure surface, Vector3D r) =>
+        DiscPotential(new LayeredRadialGaKernel(kernel), surface, r);
+
+    /// <summary>As above, against any radial G_A source (<see cref="IRadialGaKernel"/>) — the
+    /// only kernel fact the disc integral uses. The single-slab overload delegates here, so the
+    /// shipped probe path runs this exact code.</summary>
+    public (Complex Ax, Complex Ay) DiscPotential(IRadialGaKernel kernel,
         SurfaceStructure surface, Vector3D r)
     {
         Complex ax = Complex.Zero, ay = Complex.Zero;
@@ -186,7 +265,7 @@ internal sealed class AttachmentFan
                     var rPrime = VertexPosition + e * nodes[ti];
                     double dx = r.X - rPrime.X, dy = r.Y - rPrime.Y;
                     double rhoEff = Math.Sqrt(dx * dx + dy * dy + _radiusFloor * _radiusFloor);
-                    var (gA, _) = kernel.EvaluateKernels(rhoEff);
+                    var gA = kernel.EvaluateGa(rhoEff);
                     var weight = weights[si] * weights[ti] * gA;
                     ax += wx * weight;
                     ay += wy * weight;
@@ -200,7 +279,11 @@ internal sealed class AttachmentFan
     /// panelled by refinement of the radial direction being unnecessary: the measure
     /// cancellation makes the integrand bounded except G_A's own peak, softened by
     /// the ρ_eff floor).</summary>
-    public Complex DiscSelf(LayeredKernelTable kernel, SurfaceStructure surface)
+    public Complex DiscSelf(LayeredKernelTable kernel, SurfaceStructure surface) =>
+        DiscSelf(new LayeredRadialGaKernel(kernel), surface);
+
+    /// <summary>As above, against any radial G_A source.</summary>
+    public Complex DiscSelf(IRadialGaKernel kernel, SurfaceStructure surface)
     {
         Complex sum = Complex.Zero;
         var (nodes, weights) = GaussLegendre.Rule(6, 0, 1);

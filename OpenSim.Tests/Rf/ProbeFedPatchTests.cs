@@ -115,23 +115,97 @@ public class ProbeFedPatchTests
     [Fact]
     public void PowerLedger_OnSubstrate_HoldsToTheOpenVerticalSurfaceWaveLeg()
     {
-        // The COMPLETE mixed-current far field: raw RWG + junction disc/half-RWGs +
-        // the vertical E_θ leg (space wave), and the horizontal-current surface-wave
-        // power. Measured (mesh 1.4 mm, a = 0.2 mm) ~1.05 at resonance. The residual is
-        // ISOLATED and NAMED: at εr = 1 the same far field conserves power EXACTLY
-        // (CompleteProbeFarField_ConservesPowerExactly_WithNoSubstrate = 1.0000), so the
-        // space wave is not the gap — the open item is the vertical tube current's own
-        // TM0 surface-wave launch (a mixed A/Φ residue leg), which interferes with the
-        // horizontal radial current and pulls this the last few %. Gated as a band with
-        // the trend, NOT weakened silently: the physics of the solve (Zin, resonance,
-        // R/cos²) are correct and separately gated.
+        // The COMPLETE mixed-current ledger: the space wave (raw RWG + junction disc/half-RWGs
+        // + the vertical E_theta leg) plus the surface-wave power of the horizontal AND vertical
+        // currents launched COHERENTLY (Stage A5 - both launch the same TM mode, so the power
+        // goes as |a_h + a_v|^2 and the cross term is real physics, not a correction).
+        //
+        // MEASURED: 1.0415 at resonance, down from 1.0546 when the vertical leg was omitted.
+        // That is a genuine improvement in the derived direction, and both limits of the new
+        // form are pinned at 1e-9 (vertical-only reproduces the oracle-gated
+        // VerticalSurfaceWavePowerWatts; horizontal-only reproduces the shipped formula), so the
+        // change is attributable to the cross term alone.
+        //
+        // IT DOES NOT CLOSE THE LEDGER, and the earlier attribution was wrong: the vertical
+        // surface-wave leg accounts for only about a quarter of the excess, not all of it. The
+        // remaining ~4% is elsewhere, and the evidence narrows it - at epsr = 1 this same far
+        // field conserves power EXACTLY (1.0000), so it is not the space-wave assembly; the
+        // excess appears only WITH a substrate, and P_rad carries 90% of the budget, so a
+        // percent-level over-count in the layered far-field quadrature would produce exactly
+        // this. Naming it as an open item rather than widening the band to hide it.
         var (solution, surface, table) = Solve(9.4e9, -0.375 * PatchL);
         double pIn = 0.5 * Complex.Conjugate(1.0 / solution.Surface.InputImpedance).Real;
         var far = LayeredFarField.Compute(surface, table, solution, probe: new ProbeFeed(
             0.0, -0.375 * PatchL, ProbeRadius, Segments));
         double pSw = LayeredFarField.SurfaceWavePowerWatts(surface, table, solution,
             new ProbeFeed(0.0, -0.375 * PatchL, ProbeRadius, Segments));
-        Assert.InRange((far.TotalRadiatedPowerWatts + pSw) / pIn, 0.97, 1.10);
+        // Measured 1.0415 at resonance (mesh 1.4 mm, a = 0.2 mm), down from 1.0546 with the
+        // vertical leg omitted. Banded around the measurement; the residual is named in the
+        // summary above rather than absorbed into a loose bound.
+        Assert.InRange((far.TotalRadiatedPowerWatts + pSw) / pIn, 0.97, 1.07);
+    }
+
+    // ---- A5: the coherent mixed-current surface-wave power ----
+
+    [Fact]
+    public void MixedSurfaceWavePower_ReducesToTheVerticalOracle_WithNoPatchCurrent()
+    {
+        // THE sign-decisive gate for the vertical block. A power ledger is quadratic in the
+        // coupling, so it cannot see the cross term's sign; this gate can, because it isolates
+        // the vertical block and compares it against VerticalSurfaceWavePowerWatts - the formula
+        // already gated to 5e-4 against a probe-only oracle.
+        //
+        // The isolation has to be done honestly. Zeroing only the horizontal current is NOT
+        // enough: the junction charge partition means a non-zero tube TOP current still deposits
+        // a point charge at the junction (the disc's delta), which the vertical-only formula has
+        // no term for - it was validated on a probe-only structure whose tube top is free and
+        // therefore carries no current. Comparing the two in that state compares two different
+        // physical situations. Driving the tube top to zero removes the junction charge from
+        // both sides and leaves exactly the vertical blocks.
+        var (solution, surface, table) = Solve(9.4e9, -0.375 * PatchL);
+        var probe = new ProbeFeed(0.0, -0.375 * PatchL, ProbeRadius, Segments);
+
+        var freeEndTube = (Complex[])solution.TubeCurrents.Clone();
+        freeEndTube[^1] = Complex.Zero;                 // a free tube top: no junction charge
+
+        var quiet = new ProbeFedSolution(
+            solution.Surface with { EdgeCurrents = new Complex[solution.Surface.EdgeCurrents.Count()] },
+            freeEndTube,
+            new Complex[solution.RawEdgeCurrents.Length]);
+
+        double mixed = LayeredFarField.SurfaceWavePowerWatts(surface, table, quiet, probe);
+        double verticalOnly = LayeredFarField.VerticalSurfaceWavePowerWatts(
+            table.Substrate, table.FrequencyHz,
+            OpenSim.Rf.Surface.ProbeAssembly.TubeNodes(table.Substrate, probe),
+            freeEndTube);
+
+        Assert.True(Math.Abs(mixed - verticalOnly) < 1e-9 * Math.Abs(verticalOnly),
+            $"vertical-only limit {mixed:e6} vs the oracle-gated formula {verticalOnly:e6}");
+    }
+
+    [Fact]
+    public void MixedSurfaceWavePower_ReducesToTheHorizontalFormula_WithNoTubeCurrent()
+    {
+        // The complement: with the tube carrying nothing, the mixed form must collapse onto the
+        // shipped horizontal-only expression. Together with the gate above this pins both
+        // diagonal blocks, so any discrepancy in the full ledger is attributable to the CROSS
+        // term alone rather than to a rewritten formula.
+        var (solution, surface, table) = Solve(9.4e9, -0.375 * PatchL);
+        var probe = new ProbeFeed(0.0, -0.375 * PatchL, ProbeRadius, Segments);
+
+        var noTube = new ProbeFedSolution(
+            solution.Surface, new Complex[solution.TubeCurrents.Length],
+            solution.RawEdgeCurrents);
+
+        double mixed = LayeredFarField.SurfaceWavePowerWatts(surface, table, noTube, probe);
+        // The horizontal formula, reached through the plain surface overload with the same
+        // (raw + junction) current the probe path uses. The junction coefficient is the tube's
+        // top current, which is zero here, so the raw RWG current is the whole story.
+        double horizontal = LayeredFarField.SurfaceWavePowerWatts(
+            surface, table, solution.Surface with { EdgeCurrents = noTube.RawEdgeCurrents });
+
+        Assert.True(Math.Abs(mixed - horizontal) < 1e-9 * Math.Abs(horizontal),
+            $"horizontal-only limit {mixed:e6} vs the shipped formula {horizontal:e6}");
     }
 
     [Fact]

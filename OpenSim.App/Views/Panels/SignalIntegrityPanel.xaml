@@ -118,7 +118,12 @@
                     </UniformGrid>
                     <CheckBox x:Name="SiUseIbisCheck" Content="Use IBIS driver (nonlinear)"
                               IsChecked="{Binding SignalIntegrity.UseIbisDriver}"
-                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"/>
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"
+                              ToolTip="Drive with the buffer's V-I tables and measured switching waveforms. Coupled lines are solved together, so crosstalk is computed in the same nonlinear solve."/>
+                    <CheckBox x:Name="SiReceiverClampsCheck" Content="Receiver clamps (nonlinear)"
+                              IsChecked="{Binding SignalIntegrity.UseReceiverClamps}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"
+                              ToolTip="Model the receiver with the buffer's own GND/POWER protection diodes instead of a plain R∥C load. They only act where the waveform leaves the rails, so a well-terminated link is unaffected."/>
                     <TextBlock Text="{Binding SignalIntegrity.IbisStatus}" TextWrapping="Wrap"
                                FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,1,0,0"/>
                 </StackPanel>

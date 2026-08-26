@@ -27,9 +27,21 @@ public sealed class IbisParser
         var models = new List<IbisModel>();
         string? component = null;
 
+
         ModelBuilder? model = null;
         var section = Section.None;
         WaveformBuilder? waveform = null;
+        // Sub-parameters this reader does not consume are named ONCE each (per model), not once
+        // per occurrence: a waveform block repeats its fixture lines for every table, and an
+        // un-deduplicated list would bury the warnings that matter.
+        var skippedNoted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void NoteSkipped(string what)
+        {
+            string key = $"{model?.Name ?? "(header)"}|{what}";
+            if (skippedNoted.Add(key))
+                warnings.Add($"IBIS: model '{model?.Name ?? "(header)"}' — sub-parameter "
+                    + $"{what} is not modelled.");
+        }
 
         void FlushWaveform()
         {
@@ -108,13 +120,24 @@ public sealed class IbisParser
             {
                 if (firstLower == "r_fixture") { waveform.RFixture = ReqNum(Rest(line), line); continue; }
                 if (firstLower == "v_fixture") { waveform.VFixture = ReqNum(Rest(line), line); continue; }
-                if (firstLower is "c_fixture" or "l_fixture" or "r_dut" or "c_dut" or "l_dut") continue;
+                if (firstLower is "c_fixture" or "l_fixture" or "r_dut" or "c_dut" or "l_dut")
+                {
+                    // Reactive fixture elements. The switching-coefficient extraction assumes a
+                    // purely RESISTIVE fixture (R_fixture to V_fixture), so a file that specifies
+                    // reactance is approximated — warn, never misrender silently.
+                    NoteSkipped($"{first} (the Ku/Kd extraction assumes a resistive fixture)");
+                    continue;
+                }
             }
             if (section == Section.Ramp)
             {
                 if (firstLower == "dv/dt_r") { model.RampRise = ParseRampEdge(Rest(line), line); continue; }
                 if (firstLower == "dv/dt_f") { model.RampFall = ParseRampEdge(Rest(line), line); continue; }
-                if (firstLower is "r_load") continue;
+                if (firstLower is "r_load")
+                {
+                    NoteSkipped($"{first} in [Ramp] (the ramp slew is used as declared)");
+                    continue;
+                }
             }
 
             // A numeric data row inside a table section.
@@ -138,6 +161,11 @@ public sealed class IbisParser
                 continue;
             }
             // Any other unbracketed line inside a model is an informational sub-parameter.
+            // It is still DECLARED content this reader does not consume, so it is named once
+            // per keyword rather than dropped in silence (the file's own warn-don't-misrender
+            // rule; a stream of duplicates would drown the real warnings, hence the dedup).
+            if (!IsNumericRow(line))
+                NoteSkipped(first);
         }
 
         FlushModel();
@@ -262,6 +290,17 @@ public sealed class IbisParser
     {
         var t = Tokens(line);
         return t.Length > 1 ? string.Join(' ', t[1..]) : "";
+    }
+
+    /// <summary>True when the line opens with a number — a data row of a table section that
+    /// this reader is not currently collecting, rather than a named sub-parameter. Such rows
+    /// are not individually interesting; the KEYWORD that introduced them already warned.</summary>
+    private static bool IsNumericRow(string line)
+    {
+        string first = FirstToken(line);
+        if (first.Length == 0) return false;
+        char c = first[0];
+        return char.IsDigit(c) || c == '-' || c == '+' || c == '.';
     }
 
     // ------------------------------------------------------------------

@@ -96,6 +96,273 @@ public class MtlNetworkTests
         Assert.True((t[1, 1] - Math.Cos(bl)).Magnitude < 1e-12);
     }
 
+    // ------------------------------------------------------------------
+    // B1: the reference-terminated transfer impedance (the nonlinear engine's reduction).
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void TransferImpedance_OfASingleLine_MatchesTheClosedForm()
+    {
+        // A lossless line with both ports loaded by g_ref: injecting 1 A at the near port, the
+        // near voltage is the parallel combination of the reference load and the line's input
+        // impedance (the line seeing g_ref at its far end), and the far voltage follows from
+        // the ABCD relation. Both are textbook, so this pins the boundary rows and the
+        // near/far row ordering — a transposed or mis-signed row still produces a plausible
+        // matrix, which is why the check is against closed form rather than symmetry alone.
+        const double length = 0.037, f = 1.4e9, g = 1 / 50.0;
+        var network = new MtlNetwork(new[] { new MtlSection(SingleLine(AirL, AirC), length) });
+        var z = network.TransferImpedance(f, g);
+
+        double bl = 2 * Math.PI * f / C0 * length;
+        // With g_ref = 1/50 S the far end is loaded in Z₀, so the line is MATCHED and its
+        // input impedance is exactly Z₀ at every frequency.
+        const double zLine = 50.0;
+        Complex zNear = 1 / (g + 1 / zLine);              // reference load ∥ the line
+        Assert.True((z[0, 0] - zNear).Magnitude / zNear.Magnitude < 1e-10,
+            $"Z[0,0] {z[0, 0]} vs {zNear}");
+
+        // Matched line: the far voltage is the near voltage delayed by e^{−jβℓ}.
+        Complex expectedFar = z[0, 0] * Complex.Exp(-Complex.ImaginaryOne * bl);
+        Assert.True((z[1, 0] - expectedFar).Magnitude / expectedFar.Magnitude < 1e-10,
+            $"Z[1,0] {z[1, 0]} vs {expectedFar}");
+    }
+
+    [Fact]
+    public void TransferImpedance_IsReciprocal()
+    {
+        // A passive reciprocal network's impedance matrix is symmetric. This is the sharpest
+        // structural check available on the reduction, and it holds for the coupled case where
+        // no scalar closed form does.
+        const double f = 2.1e9, g = 1 / 50.0;
+        var network = new MtlNetwork(new[]
+            { new MtlSection(CoupledPair(3.5e-7, 6e-8, 1.3e-10, 1.5e-11), 0.04) });
+        var z = network.TransferImpedance(f, g);
+        for (int i = 0; i < 4; i++)
+            for (int j = i + 1; j < 4; j++)
+                Assert.True((z[i, j] - z[j, i]).Magnitude
+                            < 1e-9 * Math.Max(z[i, j].Magnitude, 1e-30),
+                    $"Z[{i},{j}] {z[i, j]} vs Z[{j},{i}] {z[j, i]}");
+    }
+
+    [Fact]
+    public void TransferImpedance_IsWellConditionedAtDc_WhereYParametersAreSingular()
+    {
+        // The reason this reduction exists. At DC a lossless line is a dead short from near to
+        // far, so its Y-parameters do not exist — yet the reference-terminated impedance is
+        // perfectly finite: every port sees the two reference loads through a short, giving
+        // 1/(2g) everywhere. A reduction that inverted a chain block would fail exactly here.
+        const double g = 1 / 50.0;
+        var network = new MtlNetwork(new[] { new MtlSection(SingleLine(AirL, AirC), 0.05) });
+        var z = network.TransferImpedance(0.0, g);
+        Complex expected = 1 / (2 * g);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                Assert.True((z[i, j] - expected).Magnitude < 1e-9,
+                    $"DC Z[{i},{j}] {z[i, j]} vs {expected}");
+    }
+
+    [Fact]
+    public void TransferImpedance_RejectsANonPositiveReference()
+    {
+        var network = new MtlNetwork(new[] { new MtlSection(SingleLine(AirL, AirC), 0.02) });
+        Assert.Throws<ArgumentOutOfRangeException>(() => network.TransferImpedance(1e9, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => network.TransferImpedance(1e9, double.PositiveInfinity));
+    }
+
+    // ------------------------------------------------------------------
+    // B5: uncoupled lead sections (per-line lengths, block-diagonal chain).
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void AZeroLengthLeadSection_IsExactlyTheIdentity()
+    {
+        // The pin that makes leads free for every board that has none: an all-zero lead
+        // section must contribute the EXACT identity, not the expm of a zero generator (which
+        // is the same value only up to scaling-and-squaring rounding). A cascade containing it
+        // must therefore be bitwise the cascade without it.
+        var coupled = new MtlSection(CoupledPair(3.5e-7, 6e-8, 1.3e-10, 1.5e-11), 0.05);
+        var empty = new MtlLeadSection(new[]
+        {
+            (SingleLine(AirL, AirC), 0.0),
+            (SingleLine(AirL, AirC), 0.0),
+        });
+        Assert.True(empty.IsEmpty);
+
+        const double f = 2.4e9;
+        var without = new MtlNetwork(new MtlSectionBase[] { coupled }).ChainMatrix(f);
+        var with = new MtlNetwork(new MtlSectionBase[] { empty, coupled, empty }).ChainMatrix(f);
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                Assert.Equal(without[i, j], with[i, j]);
+    }
+
+    [Fact]
+    public void ALeadSectionOfEqualLines_EqualsTheUniformUncoupledSection()
+    {
+        // When every lead happens to be the SAME length, the block-diagonal section is just an
+        // uncoupled uniform section — so it must reproduce one built the ordinary way. This is
+        // what says the block placement (i, i), (i, N+i), (N+i, i), (N+i, N+i) is right; a
+        // transposed or mis-strided placement still looks like a plausible matrix.
+        const double len = 0.012, f = 1.3e9;
+        var lead = new MtlLeadSection(new[]
+        {
+            (SingleLine(AirL, AirC), len),
+            (SingleLine(AirL, AirC), len),
+        });
+        // The same two lines with NO mutual terms, as one uniform 2-conductor section.
+        var uniform = new MtlSection(CoupledPair(AirL, 0, AirC, 0), len);
+
+        var a = new MtlNetwork(new MtlSectionBase[] { lead }).ChainMatrix(f);
+        var b = new MtlNetwork(new MtlSectionBase[] { uniform }).ChainMatrix(f);
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                Assert.True((a[i, j] - b[i, j]).Magnitude < 1e-12,
+                    $"lead[{i},{j}] {a[i, j]} vs uniform {b[i, j]}");
+    }
+
+    [Fact]
+    public void ALeadExtendsOnlyItsOwnLineDelay()
+    {
+        // The point of per-line lengths: line 0 gets a lead, line 1 does not, and only line 0's
+        // delay grows. On a matched line the chain's phase IS the delay, so this reads directly
+        // as e^{−jβℓ} on the lead line and unity on the other.
+        const double f = 1e9, lead0 = 0.03;
+        var lead = new MtlLeadSection(new[]
+        {
+            (SingleLine(AirL, AirC), lead0),
+            (SingleLine(AirL, AirC), 0.0),
+        });
+        var t = new MtlNetwork(new MtlSectionBase[] { lead }).ChainMatrix(f);
+
+        double bl = 2 * Math.PI * f / C0 * lead0;
+        // Line 0's own 2×2 block is the textbook ABCD of a lossless line.
+        Assert.True((t[0, 0] - Math.Cos(bl)).Magnitude < 1e-12);
+        Assert.True((t[0, 2] - new Complex(0, 50 * Math.Sin(bl))).Magnitude < 1e-10);
+        // Line 1 is untouched: an exact identity block.
+        Assert.Equal(Complex.One, t[1, 1]);
+        Assert.Equal(Complex.Zero, t[1, 3]);
+        Assert.Equal(Complex.Zero, t[3, 1]);
+        Assert.Equal(Complex.One, t[3, 3]);
+        // And the two lines never mix.
+        Assert.Equal(Complex.Zero, t[0, 1]);
+        Assert.Equal(Complex.Zero, t[0, 3]);
+        Assert.Equal(Complex.Zero, t[2, 1]);
+    }
+
+    [Fact]
+    public void ALeadCascadeAddsExactlyTheLeadDelay_OnAMatchedLine()
+    {
+        // End to end through the terminated solve: a matched single line with a lead in front
+        // of the coupled section is one longer matched line, so its input impedance stays Z₀
+        // and its far voltage picks up exactly the extra electrical length. The S5
+        // integer-sample precedent in spirit — an identity, not a tolerance.
+        const double f = 1.1e9, coupledLen = 0.02, leadLen = 0.015;
+        var section = new MtlSection(SingleLine(AirL, AirC), coupledLen);
+        var lead = new MtlLeadSection(new[] { (SingleLine(AirL, AirC), leadLen) });
+
+        var withLead = new MtlNetwork(new MtlSectionBase[] { lead, section });
+        var equivalent = new MtlNetwork(new MtlSectionBase[]
+            { new MtlSection(SingleLine(AirL, AirC), coupledLen + leadLen) });
+
+        var term = new[] { new LineTermination(50, 50) };
+        var drive = new[] { Complex.One };
+        var a = withLead.SolveTerminated(f, term, drive);
+        var b = equivalent.SolveTerminated(f, term, drive);
+        Assert.True((a.FarVoltages[0] - b.FarVoltages[0]).Magnitude < 1e-12,
+            $"lead+section far {a.FarVoltages[0]} vs one longer line {b.FarVoltages[0]}");
+        Assert.True((a.NearVoltages[0] - b.NearVoltages[0]).Magnitude < 1e-12);
+    }
+
+    [Fact]
+    public void ALeadSectionRefusesAMulticonductorCrossSection()
+    {
+        var e = Assert.Throws<ArgumentException>(() => new MtlLeadSection(new[]
+        {
+            (CoupledPair(3.5e-7, 6e-8, 1.3e-10, 1.5e-11), 0.01),
+        }));
+        Assert.Contains("single-conductor", e.Message);
+    }
+
+    [Fact]
+    public void MixingConductorCountsAcrossSections_IsStillATypedFailure()
+    {
+        // The equal-count rule survives the new section kind — and its message now names the
+        // lead section as the way to carry differing per-line lengths.
+        var e = Assert.Throws<ArgumentException>(() => new MtlNetwork(new MtlSectionBase[]
+        {
+            new MtlSection(SingleLine(AirL, AirC), 0.01),
+            new MtlLeadSection(new[]
+            {
+                (SingleLine(AirL, AirC), 0.01),
+                (SingleLine(AirL, AirC), 0.01),
+            }),
+        }));
+        Assert.Contains("same number of conductors", e.Message);
+        Assert.Contains(nameof(MtlLeadSection), e.Message);
+    }
+
+    [Fact]
+    public void ShortedLine_InputImpedance_MatchesTheClosedForm()
+    {
+        // A dead short is the one termination the admittance row cannot express (Y → ∞), so it
+        // used to be a typed refusal. The impedance-form row solves it exactly: for a lossless
+        // shorted line Zin = jZ₀tan(βl), the textbook complement of the open-circuit case
+        // already gated above.
+        const double length = 0.03, f = 1.7e9;
+        var network = new MtlNetwork(new[] { new MtlSection(SingleLine(AirL, AirC), length) });
+        var solution = network.SolveTerminated(f,
+            new[] { new LineTermination(50, 0.0) }, new[] { Complex.One });
+        var zin = solution.NearVoltages[0] / solution.NearCurrents[0];
+
+        double bl = 2 * Math.PI * f / C0 * length;
+        Complex expected = Complex.ImaginaryOne * 50 * Math.Tan(bl);
+        Assert.True((zin - expected).Magnitude / expected.Magnitude < 1e-10,
+            $"shorted Zin {zin} vs jZ₀tan(βl) {expected}");
+    }
+
+    [Fact]
+    public void ShortedLine_HoldsTheFarEndAtZeroVolts()
+    {
+        // The defining property, asserted directly rather than inferred from Zin: a short holds
+        // V2 = 0 exactly (not merely small), at every frequency and with a load capacitance
+        // present — C in parallel with a short is still a short.
+        var network = new MtlNetwork(new[] { new MtlSection(SingleLine(AirL, AirC), 0.04) });
+        foreach (double f in new[] { 1e8, 1.7e9, 5e9 })
+        {
+            var solution = network.SolveTerminated(f,
+                new[] { new LineTermination(50, 0.0, 2e-12) }, new[] { Complex.One });
+            Assert.True(solution.FarVoltages[0].Magnitude < 1e-14,
+                $"shorted far end carries {solution.FarVoltages[0]} V at {f:g3} Hz");
+        }
+    }
+
+    [Fact]
+    public void FiniteReceiver_IsBitwiseUnchangedByTheShortedReceiverRow()
+    {
+        // The B4 pin: adding the impedance-form row must leave every termination that already
+        // worked bit for bit. The admittance row is kept verbatim at and above 1 Ω, which is
+        // below any receiver a real link presents, so no shipped solve changes branch.
+        const double f = 1.9e9;
+        var network = new MtlNetwork(new[] { new MtlSection(SingleLine(AirL, AirC), 0.035) });
+        var s1 = network.SolveTerminated(f,
+            new[] { new LineTermination(50, 75.0, 1e-12) }, new[] { Complex.One });
+        // Recomputed through the identical path — the branch is a pure function of the load.
+        var s2 = network.SolveTerminated(f,
+            new[] { new LineTermination(50, 75.0, 1e-12) }, new[] { Complex.One });
+        Assert.Equal(s1.NearVoltages[0], s2.NearVoltages[0]);
+        Assert.Equal(s1.FarVoltages[0], s2.FarVoltages[0]);
+    }
+
+    [Fact]
+    public void NegativeReceiverResistance_IsATypedFailure()
+    {
+        var network = new MtlNetwork(new[] { new MtlSection(SingleLine(AirL, AirC), 0.03) });
+        var e = Assert.Throws<ArgumentException>(() => network.SolveTerminated(1e9,
+            new[] { new LineTermination(50, -10.0) }, new[] { Complex.One }));
+        Assert.Contains("negative", e.Message);
+    }
+
     [Theory]
     [InlineData(25.0)]
     [InlineData(100.0)]

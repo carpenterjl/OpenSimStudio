@@ -26,7 +26,7 @@ public partial class SiNetSelection : ObservableObject
 /// The Signal Integrity panel (SI track, Stage S5): wizard-defined coupled microstrip
 /// lines → per-unit-length RLGC (2D quasi-static BEM) → the exact frequency-domain MTL
 /// network → S-parameters/Touchstone and the periodic-steady-state transient with eye
-/// diagrams. Thevenin driver + R∥C receiver (IBIS import is a named follow-up); board
+/// diagrams. Thevenin driver + R∥C receiver, or a full nonlinear IBIS buffer (Stage S11); board
 /// net extraction is Stage S6 — v1 geometry is the N-coupled-microstrip wizard.
 /// All engine assumptions and typed failures surface verbatim.
 /// </summary>
@@ -83,6 +83,12 @@ public partial class SignalIntegrityViewModel : ObservableObject
     // Single driven line only (the nonlinear engine); coupled lines keep the linear path.
     // ------------------------------------------------------------------
     [ObservableProperty] private bool _useIbisDriver;
+
+    /// <summary>Model the receiver with the IBIS buffer's own GND/POWER protection clamps
+    /// instead of a plain R∥C load. Off by default: clamps only act where the waveform leaves
+    /// the rails, so on a well-terminated link they change nothing, and leaving them off keeps
+    /// existing eyes exactly as they were.</summary>
+    [ObservableProperty] private bool _useReceiverClamps;
     public ObservableCollection<string> IbisModelNames { get; } = new();
     [ObservableProperty] private string? _selectedIbisModel;
     public ObservableCollection<string> IbisCorners { get; } = new() { "Typ", "Min", "Max" };
@@ -205,7 +211,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                   + "(current crowding + skin effect, full N×N)."
                 : " R = max(R_dc, R_s√f) per conductor (enable Proximity effect for the "
                   + "filament R(f)/L(f)).")
-            + " Linear Thevenin driver + R∥C receiver (IBIS models are a named follow-up).";
+            + " Linear Thevenin driver + R∥C receiver (this run did not use an IBIS buffer).";
 
     // ------------------------------------------------------------------
     // Commands.
@@ -492,6 +498,14 @@ public partial class SignalIntegrityViewModel : ObservableObject
             IbisStatus = $"Loaded {Path.GetFileName(dialog.FileName)}: {_ibisFile.Models.Count} model(s)"
                 + (_ibisFile.Warnings.Count > 0 ? $", {_ibisFile.Warnings.Count} skipped keyword(s)" : "");
             _log.Append($"SI: IBIS — {IbisStatus}");
+            // The warning STRINGS, not just the count: each one names declared content this
+            // reader did not consume, which is the difference between "your file has 6 skipped
+            // keywords" and knowing that the one that matters is a package model.
+            const int maxShown = 10;
+            for (int i = 0; i < Math.Min(maxShown, _ibisFile.Warnings.Count); i++)
+                _log.Append($"SI: {_ibisFile.Warnings[i]}");
+            if (_ibisFile.Warnings.Count > maxShown)
+                _log.Append($"SI: IBIS — +{_ibisFile.Warnings.Count - maxShown} more warning(s).");
         }
         catch (Exception ex) { IbisStatus = $"Not readable: {ex.Message}"; _ibisFile = null; }
     }
@@ -554,16 +568,10 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     /// <summary>The IBIS eye: the nonlinear behavioral driver (Stage S11) into the single-line
     /// channel + R∥C receiver, folded like the linear path. Requires a single conductor (the
-    /// nonlinear engine is single-line; coupled lines keep the linear Thevenin driver).</summary>
+    /// nonlinear N-port engine: every port is an unknown, so coupled lines and clamped
+    /// receivers are solved together rather than being out of scope).</summary>
     private async Task RunIbisEye(RlgcResult rlgc, MtlNetwork network)
     {
-        if (network.ConductorCount != 1)
-        {
-            EyeResult = "IBIS driver is single-line only (nonlinear crosstalk is a named "
-                + "follow-up). Set the line count to 1, or untick 'Use IBIS driver' for the "
-                + "linear Thevenin driver on coupled lines.";
-            return;
-        }
         var model = _ibisFile!.Model(SelectedIbisModel!);
         if (!model.IsOutput)
         {
@@ -574,25 +582,51 @@ public partial class SignalIntegrityViewModel : ObservableObject
             : IbisCorner == "Max" ? OpenSim.Rf.Si.Ibis.IbisCornerSelection.Max
             : OpenSim.Rf.Si.Ibis.IbisCornerSelection.Typ;
         double dt = 1.0 / (BitRateGbps * 1e9 * SamplesPerUi);
-        var receiver = new NonlinearReceiver(LoadOhms, LoadPicofarads * 1e-12);
         var bits = IbisBits(SignalType);
-        var (eye, note) = await Task.Run(() =>
+        int lines = network.ConductorCount;
+        // Line 0 carries the pattern; any further coupled lines are aggressors driven by the
+        // same buffer on decorrelated data (or held quiet when the aggressor toggle is off).
+        var aggressorBits = AggressorsEnabled ? IbisBits(SignalType).Reverse().ToArray()
+                                         : new bool[bits.Length];
+        var (eye, note, switchingSource, switchingWarnings) = await Task.Run(() =>
         {
-            var driver = IbisDriver.FromBits(model, corner, bits, SamplesPerUi, dt);
-            var result = NonlinearLink.Solve(network, driver, receiver, bits, SamplesPerUi, dt);
-            var folded = EyeDiagram.Fold(result.ReceiverVolts, SamplesPerUi, dt);
+            var near = new INonlinearDriver[lines];
+            var far = new INonlinearDriver[lines];
+            string source = "";
+            IReadOnlyList<string> warns = Array.Empty<string>();
+            for (int i = 0; i < lines; i++)
+            {
+                var pattern = i == 0 ? bits : aggressorBits;
+                near[i] = IbisDriver.FromBits(model, corner, pattern, SamplesPerUi, dt,
+                    out string src, out var w);
+                if (i == 0) { source = src; warns = w; }
+                // The receiver: the buffer's own protection clamps when asked for, else the
+                // plain R∥C load. Clamps only matter where the waveform leaves the rails.
+                far[i] = UseReceiverClamps
+                    ? new IbisReceiverElement(model, corner, LoadOhms)
+                    : new LinearLoadElement(LoadOhms, LoadPicofarads * 1e-12);
+            }
+            var result = NonlinearLink.SolveNPort(network, near, far,
+                bits.Length * SamplesPerUi, dt);
+            var folded = EyeDiagram.Fold(result.FarVolts[0], SamplesPerUi, dt);
             return (folded, $"channel FIR {result.ChannelMemorySamples} taps, "
-                + $"tail {result.TailEnergyFraction:e1}");
+                + $"tail {result.TailEnergyFraction:e1}"
+                + (lines > 1 ? $", {lines} coupled line(s)" : ""), source, warns);
         });
+        foreach (var w in switchingWarnings) _log.Append($"SI: IBIS — {w}");
         EyeImage = RenderEye(eye);
         EyeResult = $"IBIS eye ({model.Name}, {IbisCorner}) at {BitRateGbps:g3} Gb/s: "
             + $"height = {eye.EyeHeight:g3} V, width = {eye.EyeWidthSeconds * 1e12:g3} ps "
             + $"({eye.EyeWidthSeconds / eye.UnitIntervalSeconds:P0} of UI), "
             + $"jitter p-p = {eye.JitterPeakToPeakSeconds * 1e12:g3} ps ({note})";
         SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
-            + " Nonlinear IBIS driver (V-I tables + ramp switching, C_comp backward-Euler) into "
-            + "the single-line channel FIR + R∥C receiver; nonlinear receiver clamps and coupled "
-            + "IBIS crosstalk are named follow-ups.";
+            + " Nonlinear IBIS driver (V-I tables, C_comp backward-Euler) into "
+            + $"the single-line channel FIR + R∥C receiver. Switching profile: {switchingSource}. "
+            + (UseReceiverClamps
+                ? "Receiver = the buffer's own GND/POWER protection clamps (nonlinear) plus the "
+                  + "termination."
+                : "Receiver = linear R∥C (tick 'Receiver clamps' to include the buffer's "
+                  + "protection diodes).");
         _log.Append($"SI: {EyeResult}");
     }
 

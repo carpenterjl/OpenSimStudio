@@ -19,16 +19,17 @@ internal static partial class SommerfeldIntegrator
         IReadOnlyList<SurfaceWavePole> poles, int m, double rho, double z, int refinement = 1)
     {
         if (rho <= 0) throw new ArgumentOutOfRangeException(nameof(rho));
-        double zs = stackup.InterfaceHeights()[m];
-        if (z < zs) throw new ArgumentOutOfRangeException(nameof(z),
-            "Multi-layer field kernels are tabulated for observation at or above the source "
-            + "height z ≥ z_s (the map region above the metal).");
+        // Observation may stand on either side of the source plane; only the PEC ground itself
+        // is excluded, where the fields vanish and the remainder's images would coincide.
+        if (z < 0) throw new ArgumentOutOfRangeException(nameof(z),
+            "Multi-layer field kernels need an observation height above the ground plane "
+            + "(z ≥ 0); the fields vanish at and inside the PEC.");
         if (refinement < 1) throw new ArgumentOutOfRangeException(nameof(refinement));
 
         double d = stackup.TotalThicknessMeters;
         double epsMax = stackup.Layers.Max(l => l.RelativePermittivity);
         double k1Real = k0 * Math.Sqrt(epsMax);
-        var (gaImages, phiImages) = MultiLayerFieldKernels.FieldImages(stackup, m, z);
+        var (gaImages, phiImages, dhdz) = MultiLayerFieldKernels.FieldImages(stackup, m, z);
         var residues = new (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[poles.Count];
         for (int p = 0; p < poles.Count; p++)
             residues[p] = MultiLayerFieldKernels.PoleResidues(stackup, k0, poles[p].KRho, poles[p].IsTm, m, z);
@@ -40,7 +41,7 @@ internal static partial class SommerfeldIntegrator
         void Accumulate(double kRho, Complex kz0, double weight)
         {
             var (fA, fW, fPhi, fDz, fDzA, fDzW) = FieldIntegrandML(stackup, k0, kRho, kz0, m, z,
-                gaImages, phiImages, poles, residues, rho);
+                gaImages, phiImages, dhdz, poles, residues, rho);
             sumA += weight * fA;
             sumW += weight * fW;
             sumPhi += weight * fPhi;
@@ -101,7 +102,7 @@ internal static partial class SommerfeldIntegrator
         for (int doubling = 0; doubling < 60 && b * rho < 3; doubling++)
         {
             var (vA, vW, vPhi, vDz, vDzA, vDzW) = FieldTailPanelML(stackup, k0, b, 2 * b, m, z,
-                gaImages, phiImages, poles, residues, rho, refinement);
+                gaImages, phiImages, dhdz, poles, residues, rho, refinement);
             sumA += vA;
             sumW += vW;
             sumPhi += vPhi;
@@ -127,7 +128,7 @@ internal static partial class SommerfeldIntegrator
             for (int n = 0; n < partitions; n++)
             {
                 var (vA, vW, vPhi, vDz, vDzA, vDzW) = FieldTailPanelML(stackup, k0,
-                    b + n * delta, b + (n + 1) * delta, m, z, gaImages, phiImages, poles, residues, rho, refinement);
+                    b + n * delta, b + (n + 1) * delta, m, z, gaImages, phiImages, dhdz, poles, residues, rho, refinement);
                 accA += vA;
                 accW += vW;
                 accPhi += vPhi;
@@ -158,7 +159,7 @@ internal static partial class SommerfeldIntegrator
 
     private static (Complex A, Complex W, Complex Phi, Complex Dz, Complex DzA, Complex DzW) FieldTailPanelML(
         LayeredStackup stackup, double k0, double lo, double hi, int m, double z,
-        MultiLayerImages.Image[] gaImages, MultiLayerImages.Image[] phiImages,
+        MultiLayerImages.Image[] gaImages, MultiLayerImages.Image[] phiImages, double[] dhdz,
         IReadOnlyList<SurfaceWavePole> poles,
         (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[] residues,
         double rho, int refinement)
@@ -174,7 +175,7 @@ internal static partial class SommerfeldIntegrator
                 double kRho = mid + half * Gauss.Nodes[i];
                 var kz0 = new Complex(0, -Math.Sqrt(kRho * kRho - k0 * k0));
                 var (fA, fW, fPhi, fDz, fDzA, fDzW) = FieldIntegrandML(stackup, k0, kRho, kz0, m, z,
-                    gaImages, phiImages, poles, residues, rho);
+                    gaImages, phiImages, dhdz, poles, residues, rho);
                 double w = Gauss.Weights[i] * half;
                 vA += w * fA;
                 vW += w * fW;
@@ -189,27 +190,30 @@ internal static partial class SommerfeldIntegrator
 
     private static (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW) FieldIntegrandML(
         LayeredStackup stackup, double k0, double kRho, Complex kz0, int m, double z,
-        MultiLayerImages.Image[] gaImages, MultiLayerImages.Image[] phiImages,
+        MultiLayerImages.Image[] gaImages, MultiLayerImages.Image[] phiImages, double[] dhdz,
         IReadOnlyList<SurfaceWavePole> poles,
         (Complex A, Complex W, Complex Phi, Complex DzPhi, Complex DzA, Complex DzW)[] residues, double rho)
     {
         var (fA, fW, fPhi, fDz, fDzA, fDzW) = MultiLayerFieldKernels.EvaluateAll(stackup, k0, kRho, kz0, m, z);
         var jKz0 = Complex.ImaginaryOne * kz0;
 
-        // Quasi-static image subtraction (dh/dz = +1 throughout — observation above the source).
+        // Quasi-static image subtraction. The ∂z kernels' subtraction carries the ∂z of each
+        // exponential, −c·(dh/dz)·e — and dh/dz is +1 for the ground image but SIGNED for the
+        // primary, whose height |z − z_s| falls as z rises below the source. The signs travel
+        // with the image list (MultiLayerFieldKernels.FieldImages) rather than being assumed.
         Complex imgA = Complex.Zero, imgDzA = Complex.Zero;
-        foreach (var img in gaImages)
+        for (int i = 0; i < gaImages.Length; i++)
         {
-            var e = Complex.Exp(-jKz0 * img.Depth);
-            imgA += img.Coeff * e;
-            imgDzA += -img.Coeff * e;       // −c·(dh/dz)·e, dh/dz = +1
+            var e = Complex.Exp(-jKz0 * gaImages[i].Depth);
+            imgA += gaImages[i].Coeff * e;
+            imgDzA += -gaImages[i].Coeff * dhdz[i] * e;
         }
         Complex imgPhi = Complex.Zero, imgDz = Complex.Zero;
-        foreach (var img in phiImages)
+        for (int i = 0; i < phiImages.Length; i++)
         {
-            var e = Complex.Exp(-jKz0 * img.Depth);
-            imgPhi += img.Coeff * e;
-            imgDz += -img.Coeff * e;
+            var e = Complex.Exp(-jKz0 * phiImages[i].Depth);
+            imgPhi += phiImages[i].Coeff * e;
+            imgDz += -phiImages[i].Coeff * dhdz[i] * e;
         }
         fA -= RfConstants.Mu0 * imgA / jKz0;
         fPhi -= imgPhi / (jKz0 * RfConstants.Eps0);

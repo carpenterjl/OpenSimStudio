@@ -200,6 +200,148 @@ public class MultiLayerFieldTests
         AssertRel(want.DzW, got.DzW, 1e-10, $"∂zW̃ z/d={zOverD}");
     }
 
+    // ---- A2: observation BELOW a buried source (in the substrate under a covered patch) ----
+
+    [Theory]
+    [MemberData(nameof(MultiLayerSamples))]
+    public void PerZFieldKernels_BelowBuriedSource_MatchIndependentBvp(
+        double kRhoOverK0, double zOverD)
+    {
+        // The spectral kernels were ALWAYS valid below the source — the TLGF profiles in
+        // whichever layer contains z, and the source jump sits at interface m either way. What
+        // excluded the region was the map plumbing (the image set assumed the observation medium
+        // was above the source, and the evaluator skipped z ≤ z_source outright). This gate
+        // pins that claim about the kernels themselves, so the map work has a fixed reference.
+        var stackup = LayeredStackup.CoveredPatch(2.2, 0.0, 0.8e-3, 6.0, 0.0, 0.6e-3);
+        double k0 = K0;
+        double hSrc = stackup.InterfaceHeights()[0];
+        var kr = new Complex(kRhoOverK0 * k0, 0);
+        var kz0 = Kz(k0 * k0, kr);
+        int m = LayeredStackup.CoveredPatchMetalInterface;
+        // Strictly between the ground and the buried metal.
+        double z = zOverD * hSrc;
+        if (z <= 0) z = 0.05 * hSrc;
+        var got = TransmissionLineGreens.EvaluateField(stackup, k0, kr, kz0, m, z);
+        var want = OracleField(stackup, k0, kr, m, z);
+        AssertRel(want.GA, got.GA, 1e-10, $"G̃_A below-source z/h={z / hSrc:g3}");
+        AssertRel(want.W, got.W, 1e-10, $"W̃ below-source z/h={z / hSrc:g3}");
+        AssertRel(want.Phi, got.Phi, 1e-10, $"K̃_Φ below-source z/h={z / hSrc:g3}");
+        AssertRel(want.DzPhi, got.DzPhi, 1e-10, $"∂zK̃_Φ below-source z/h={z / hSrc:g3}");
+        AssertRel(want.DzA, got.DzA, 1e-10, $"∂zG̃_A below-source z/h={z / hSrc:g3}");
+        AssertRel(want.DzW, got.DzW, 1e-10, $"∂zW̃ below-source z/h={z / hSrc:g3}");
+    }
+
+    [Fact]
+    public void BelowSourceMap_IsPopulatedAndDivergenceFree()
+    {
+        // The map-level gate for A2: points in the SUBSTRATE beneath a buried patch used to come
+        // back identically zero. They must now carry real field — and the assembled H there must
+        // still be a genuine curl, which is what catches a wrong image sign on the observation
+        // side (the primary image's height falls as z rises below the source, so its ∂z term
+        // changes sign; getting that wrong breaks ∇·H at O(|H|/δ) while leaving |H| plausible).
+        var stackup = LayeredStackup.CoveredPatch(2.2, 0.0, 1.0e-3, 0.6e-3);
+        double f = BalanisF;
+        double hMetal = stackup.InterfaceHeights()[LayeredStackup.CoveredPatchMetalInterface];
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+            1.186e-2, 0.906e-2, 1.4e-3, z: hMetal, portFraction: 0);
+        var table = new MultiLayerKernelTable(stackup, f, 0.03,
+            sourceInterface: LayeredStackup.CoveredPatchMetalInterface);
+        var solution = new SurfaceMomSolver().Solve(grid.Structure!, table, grid.Port!);
+
+        double delta = 0.1e-3;
+        var c = new Vector3D(0.35 * 1.186e-2, 0.15e-2, hMetal - 0.4e-3);   // inside the SUBSTRATE
+        Assert.True(c.Z > 0 && c.Z < hMetal, "probe must sit strictly between ground and metal");
+
+        var at = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, solution, new[] { c });
+        Assert.True(at.Magnitude[0] > 0, "below-source |E| is zero — the map region was skipped");
+        Assert.True(at.HMagnitude![0] > 0, "below-source |H| is zero — the map region was skipped");
+
+        Complex Comp(Vector3D p, int axis)
+        {
+            var h = LayeredFieldEvaluator.Evaluate(grid.Structure!, table, solution, new[] { p }).H![0];
+            return axis == 0 ? h.X : axis == 1 ? h.Y : h.Z;
+        }
+        var dx = new Vector3D(delta, 0, 0);
+        var dy = new Vector3D(0, delta, 0);
+        var dz = new Vector3D(0, 0, delta);
+        Complex divH = (Comp(c + dx, 0) - Comp(c - dx, 0)
+                      + Comp(c + dy, 1) - Comp(c - dy, 1)
+                      + Comp(c + dz, 2) - Comp(c - dz, 2)) / (2 * delta);
+        double relative = divH.Magnitude * delta / Math.Max(at.HMagnitude![0], 1e-30);
+        Assert.True(relative < 0.05,
+            $"below-source ∇·H·δ/|H| = {relative:e3} (should be the quadrature floor)");
+    }
+
+    /// <summary>The RETIRED above-source image rule, kept verbatim as the A/B oracle: both
+    /// heights rising with z (dh/dz = +1) and the Coulomb coefficient written in the medium just
+    /// ABOVE the source — air for a coplanar-top source, the cover for a buried patch — whatever
+    /// layer the observation point itself happens to sit in.</summary>
+    private static (MultiLayerImages.Image[] Ga, MultiLayerImages.Image[] Phi, double[] DhDz)
+        RetiredAboveSourceImages(LayeredStackup stackup, int m, double z)
+    {
+        double zs = stackup.InterfaceHeights()[m];
+        double hLow = Math.Abs(z - zs);
+        double hHigh = z + zs;
+        Complex epsAbove = m == stackup.Layers.Count - 1
+            ? Complex.One : stackup.Layers[m + 1].ComplexPermittivity;
+        Complex c0 = 1 / epsAbove;
+        return (
+            new[] { new MultiLayerImages.Image(hLow, Complex.One),
+                    new MultiLayerImages.Image(hHigh, -Complex.One) },
+            new[] { new MultiLayerImages.Image(hLow, c0),
+                    new MultiLayerImages.Image(hHigh, -c0) },
+            new[] { 1.0, 1.0 });
+    }
+
+    [Theory]
+    [InlineData(0.1e-3)]    // just above the buried metal, inside the cover
+    [InlineData(0.5e-3)]    // still in the cover
+    [InlineData(3.0e-3)]    // ABOVE the whole stack, in air — where the two rules could diverge
+    public void AboveSourceImages_AreBitwiseTheRetiredRule(double heightAboveMetal)
+    {
+        // The A2 pin, stated where it is actually decidable: generalizing the image set to both
+        // sides must leave the ABOVE-source images bit for bit, because every map that has ever
+        // shipped is built from them. The third case is the one that matters — an observation
+        // point in the AIR above a covered stack sits in a different medium than the cover just
+        // above the source, so an "observation-local ε" generalization would silently re-choose
+        // the image there and move shipped maps. The image split is a convergence device and
+        // never changes the answer, so re-choosing it above the source would be an unforced
+        // change to shipped numbers; below the source it is a different matter (the shipped
+        // constant is the wrong side of the sheet there, not merely a different choice).
+        var stackup = LayeredStackup.CoveredPatch(2.2, 0.0, 1.0e-3, 6.0, 0.0, 0.6e-3);
+        int m = LayeredStackup.CoveredPatchMetalInterface;
+        double z = stackup.InterfaceHeights()[m] + heightAboveMetal;
+
+        var got = MultiLayerFieldKernels.FieldImages(stackup, m, z);
+        var want = RetiredAboveSourceImages(stackup, m, z);
+
+        Assert.Equal(want.Ga, got.Ga);
+        Assert.Equal(want.Phi, got.Phi);
+        Assert.Equal(want.DhDz, got.DhDz);
+    }
+
+    [Fact]
+    public void BelowSourceImages_FollowTheObservationSide()
+    {
+        // The complement: below the buried metal the primary image is written in the SUBSTRATE's
+        // permittivity (not the cover's), and its height |z − z_s| FALLS as z rises, so its
+        // dh/dz is −1. Both differences are what the retired rule got wrong on that side.
+        var stackup = LayeredStackup.CoveredPatch(2.2, 0.0, 1.0e-3, 6.0, 0.0, 0.6e-3);
+        int m = LayeredStackup.CoveredPatchMetalInterface;
+        double zs = stackup.InterfaceHeights()[m];
+        double z = zs - 0.4e-3;
+
+        var (ga, phi, dhdz) = MultiLayerFieldKernels.FieldImages(stackup, m, z);
+
+        Assert.Equal(-1.0, dhdz[0]);
+        Assert.Equal(1.0, dhdz[1]);
+        Assert.Equal(zs - z, ga[0].Depth, 15);
+        Assert.Equal(z + zs, ga[1].Depth, 15);
+        var expectedC0 = 1 / stackup.Layers[0].ComplexPermittivity;   // the substrate, not the cover
+        Assert.Equal(expectedC0, phi[0].Coeff);
+        Assert.Equal(-expectedC0, phi[1].Coeff);
+    }
+
     // ---- Map-level gates (the full LayeredFieldEvaluator pipeline) ----
 
     [Fact]

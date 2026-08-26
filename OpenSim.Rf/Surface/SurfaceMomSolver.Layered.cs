@@ -36,7 +36,7 @@ public sealed partial class SurfaceMomSolver
     public static IReadOnlyList<string> LayeredAssumptions { get; } = new[]
     {
         "Perfect electric conductor, zero-thickness sheet (no ohmic loss).",
-        "A grounded dielectric stackup (one or more layers, per-layer εr/tanδ) on an infinite PEC ground plane; all metal coplanar at a single interface — the slab top, or buried under a dielectric cover of the same εr (a covered patch).",
+        "A grounded dielectric stackup (one or more layers, per-layer εr/tanδ) on an infinite PEC ground plane; all metal coplanar at a single interface — the slab top, or buried under a dielectric cover of any εr (a covered patch).",
         "Rigorous layered-media Green's function (MPIE, direct Sommerfeld integration) — surface waves included; only TM0/TE modes above cutoff are extracted into the power ledger.",
         "No vias or probe feeds (vertical currents are out of scope in v1); delta-gap voltage feed across an interior mesh edge.",
         "Current normal to the sheet rim is zero by construction (no wire attachments)."
@@ -55,8 +55,10 @@ public sealed partial class SurfaceMomSolver
 
     /// <summary>Solve over a multi-layer stackup (Stage F): identical assembly to the
     /// single-slab path, but the kernel split carries G_A's ε-independent ground image plus
-    /// K_Φ's quasi-static image SERIES. Same coplanar-at-top scope — metal at an interior
-    /// interface (a covered patch) is a separate future item.</summary>
+    /// K_Φ's quasi-static image SERIES. Metal must be coplanar at ONE interface, which may be
+    /// the slab top OR an interior one — a covered patch reaches this same entry by handing it
+    /// a table built with a <c>sourceInterface</c> (the buried patch's absolute z never enters
+    /// assembly, so the radial kernel is all the MoM needs).</summary>
     public SurfaceMomSolution Solve(SurfaceStructure surface, MultiLayerKernelTable kernel,
         SurfacePort port, double gapVolts = 1.0)
     {

@@ -110,10 +110,10 @@ public static class FarFieldEvaluator
                 factor * (n.Z - radial * direction.Z));
     }
 
-    private static (Complex X, Complex Y, Complex Z) RadiationVector(WireStructure wire,
+    internal static (Complex X, Complex Y, Complex Z) RadiationVector(WireStructure wire,
         MomSolution solution, double k, Vector3D direction)
     {
-        var nodeCurrents = NodeCurrents(wire, solution);
+        var endCurrents = ElementEndCurrents(wire, solution);
         Complex nx = Complex.Zero, ny = Complex.Zero, nz = Complex.Zero;
 
         void AddSegment(Vector3D start, Vector3D tangent, double length,
@@ -140,8 +140,8 @@ public static class FarFieldEvaluator
             var end = wire.ElementEnd(e);
             double length = wire.ElementLength(e);
             var tangent = wire.ElementDirection(e);
-            Complex startCurrent = nodeCurrents[e];
-            Complex endCurrent = nodeCurrents[(e + 1) % wire.Nodes.Count];
+            Complex startCurrent = endCurrents[e].A;
+            Complex endCurrent = endCurrents[e].B;
             AddSegment(start, tangent, length, startCurrent, endCurrent);
 
             // Ground plane: the image element (mirrored + endpoint-swapped, so its
@@ -158,15 +158,23 @@ public static class FarFieldEvaluator
         return (nx, ny, nz);
     }
 
-    /// <summary>Current phasor per NODE (basis coefficients at basis nodes, exactly zero
-    /// at open ends — a GROUNDED end carries its basis coefficient, peak current at a
-    /// monopole base) — the rooftop expansion is linear between nodes, so this is the
-    /// whole current distribution. Shared by the far-field and near-field evaluators.</summary>
-    internal static Complex[] NodeCurrents(WireStructure wire, MomSolution solution)
+    /// <summary>The current phasor at each ELEMENT's two ends, summed from the basis legs that
+    /// live on it. This replaces a per-NODE current because a node where three wires meet has no
+    /// single current — each incident element carries its own, and their sum into the node is
+    /// zero. On a chain it is the same number seen from both sides, so every pre-junction
+    /// structure gets bit-for-bit the values the node table used to hold (a basis contributes
+    /// <c>coefficient × 1.0</c>, added to an exact zero).</summary>
+    internal static (Complex A, Complex B)[] ElementEndCurrents(
+        WireStructure wire, MomSolution solution)
     {
-        var currents = new Complex[wire.Nodes.Count];
+        var ends = new (Complex A, Complex B)[wire.ElementCount];
         for (int b = 0; b < wire.BasisCount; b++)
-            currents[wire.BasisNode(b)] = solution.BasisCurrents[b];
-        return currents;
+            foreach (var leg in wire.BasisHalves(b))
+            {
+                Complex current = solution.BasisCurrents[b] * leg.Sign;
+                if (leg.Rising) ends[leg.Element].B += current;
+                else ends[leg.Element].A += current;
+            }
+        return ends;
     }
 }

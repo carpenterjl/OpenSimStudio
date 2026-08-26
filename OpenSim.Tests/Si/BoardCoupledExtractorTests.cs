@@ -1,3 +1,4 @@
+using System.Numerics;
 using OpenSim.Core.Geometry2D;
 using OpenSim.Core.Model;
 using OpenSim.Pcb.Geometry2D;
@@ -134,6 +135,51 @@ public class BoardCoupledExtractorTests
         Assert.Equal(30e-3, result.CoupledLengthMeters, 6);
         Assert.Equal(2, result.LeadLengthsMeters.Count);
         Assert.All(result.LeadLengthsMeters, l => Assert.Equal(10e-3, l, 6));
+    }
+
+    [Fact]
+    public void PartialOverlap_CascadesTheLeadsIntoTheNetwork()
+    {
+        // Stage B5: the tails are no longer reported-and-dropped. NET1 spans 0..40 mm and NET2
+        // 10..50 mm, so each has a 10 mm tail on the opposite side — the low tail belongs to
+        // NET1, the high tail to NET2. Cascading them must LENGTHEN the electrical path, which
+        // shows as extra delay: the through phase at the far end must lag the coupled section
+        // taken alone. (The lead lengths themselves are gated above; this asserts they reach
+        // the network rather than only the report.)
+        var (board, nets) = StripBoard((0, 40e-3, 0), (10e-3, 50e-3, Pitch));
+        var result = BoardCoupledExtractor.Extract(board, nets);
+        Assert.Null(result.FailureReason);
+
+        // A network built from the coupled section alone, for comparison.
+        var coupledOnly = new MtlNetwork(new[]
+            { new MtlSection(result.Rlgc!, result.CoupledLengthMeters) });
+
+        const double f = 3e9;
+        var terms = new[] { new LineTermination(50, 50), new LineTermination(50, 50) };
+        var drive = new[] { Complex.One, Complex.Zero };
+        var withLeads = result.Network!.SolveTerminated(f, terms, drive);
+        var without = coupledOnly.SolveTerminated(f, terms, drive);
+
+        double phaseWith = withLeads.FarVoltages[0].Phase;
+        double phaseWithout = without.FarVoltages[0].Phase;
+        Assert.NotEqual(phaseWithout, phaseWith);
+
+        Assert.Contains(result.Assumptions, a => a.Contains("CASCADED"));
+    }
+
+    [Fact]
+    public void FullOverlap_KeepsTheSingleSectionNetwork()
+    {
+        // The bitwise pin's precondition: with no tails at all the extractor must build the
+        // pre-existing single-section network, so a board without leads is on exactly the
+        // arithmetic it always was. The assumption line says so rather than listing 0 mm tails.
+        var (board, nets) = StripBoard((0, 40e-3, 0), (0, 40e-3, Pitch));
+        var result = BoardCoupledExtractor.Extract(board, nets);
+
+        Assert.Null(result.FailureReason);
+        Assert.All(result.LeadLengthsMeters, l => Assert.Equal(0.0, l, 9));
+        Assert.Contains(result.Assumptions, a => a.Contains("no lead tails"));
+        Assert.DoesNotContain(result.Assumptions, a => a.Contains("CASCADED"));
     }
 
     // ------------------------------------------------------------------

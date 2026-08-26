@@ -10,8 +10,9 @@ namespace OpenSim.Rf;
 /// elliptically polarized field has no single direction; the snapshot is the honest
 /// drawable and is documented as such). The magnetic field triple <see cref="H"/> (A/m)
 /// and its magnitude/snapshot are populated by the free-space evaluators (SI Stage S7,
-/// H = ∇×A/µ₀); they stay null on layered maps where the H spectral kernels are a named
-/// follow-up.
+/// H = ∇×A/µ₀) and by the layered ones (S9a single-slab, S9b multi-layer / covered,
+/// through the ∂zG̃_A and ∂zW̃ kernels). They are null only where an evaluator supplies no
+/// H at all, which consumers must refuse by name rather than silently substituting |E|.
 /// </summary>
 public sealed record FieldMap(
     IReadOnlyList<Vector3D> Points,
@@ -42,7 +43,7 @@ public static class FieldProbe
     {
         double omega = 2 * Math.PI * solution.FrequencyHz;
         double k = omega / RfConstants.SpeedOfLight;
-        var nodeCurrents = FarFieldEvaluator.NodeCurrents(wire, solution);
+        var endCurrents = FarFieldEvaluator.ElementEndCurrents(wire, solution);
 
         var fields = new (Complex X, Complex Y, Complex Z)[points.Count];
         var magnitudes = new double[points.Count];
@@ -128,8 +129,8 @@ public static class FieldProbe
                 double length = wire.ElementLength(e);
                 var tangent = wire.ElementDirection(e);
                 double c = wire.ElementRadii[e];
-                Complex startCurrent = nodeCurrents[e];
-                Complex endCurrent = nodeCurrents[(e + 1) % wire.Nodes.Count];
+                Complex startCurrent = endCurrents[e].A;
+                Complex endCurrent = endCurrents[e].B;
                 AddSegment(start, tangent, length, c, startCurrent, endCurrent);
 
                 // Ground plane: the image element (mirrored + endpoint-swapped, current

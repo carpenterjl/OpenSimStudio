@@ -46,17 +46,26 @@ public sealed class IbisDriver : INonlinearDriver
     private readonly IbisCornerSelection _corner;
     private readonly double _vcc, _dt;
     private readonly double[] _ku, _kd;   // per-sample switching coefficients
-    private readonly Pwl _pu, _pd, _gc, _pc;
+    private readonly PwlTable _pu, _pd, _gc, _pc;
 
     private IbisDriver(IbisModel model, IbisCornerSelection corner, double vcc, double dt,
         double[] ku, double[] kd)
     {
         _model = model; _corner = corner; _vcc = vcc; _dt = dt; _ku = ku; _kd = kd;
-        _pu = Pwl.FromTable(model.Pullup, corner);
-        _pd = Pwl.FromTable(model.Pulldown, corner);
-        _gc = Pwl.FromTable(model.GndClamp, corner);
-        _pc = Pwl.FromTable(model.PowerClamp, corner);
+        _pu = PwlTable.FromTable(model.Pullup, corner);
+        _pd = PwlTable.FromTable(model.Pulldown, corner);
+        _gc = PwlTable.FromTable(model.GndClamp, corner);
+        _pc = PwlTable.FromTable(model.PowerClamp, corner);
+        // Each table is referenced to ITS OWN rail. The defaults (pull-down and GND clamp to
+        // ground, POWER clamp to the pull-up rail) reproduce the previous hardcoded behavior
+        // exactly, so a file without the reference keywords is unchanged; a split-rail part,
+        // where these genuinely differ, is no longer evaluated against the wrong supply.
+        _pdRail = model.PulldownRail;
+        _gcRail = model.GndClampRail;
+        _pcRail = model.PowerClampRailAt(corner);
     }
+
+    private readonly double _pdRail, _gcRail, _pcRail;
 
     public double CompCapacitanceFarads => _model.CComp.At(_corner) ?? 0;
 
@@ -65,39 +74,119 @@ public sealed class IbisDriver : INonlinearDriver
     /// time (falls back to one UI when no ramp). The Ku/Kd schedule spans the whole pattern
     /// (periodic — the last bit wraps to the first, matching the exact-periodic convention).</summary>
     public static IbisDriver FromBits(IbisModel model, IbisCornerSelection corner,
-        IReadOnlyList<bool> bits, int samplesPerUi, double dt)
+        IReadOnlyList<bool> bits, int samplesPerUi, double dt) =>
+        FromBits(model, corner, bits, samplesPerUi, dt, out _, out _);
+
+    /// <summary>As <see cref="FromBits(IbisModel, IbisCornerSelection, IReadOnlyList{bool}, int,
+    /// double)"/>, additionally reporting HOW the switching profile was obtained (measured
+    /// waveform extraction or the [Ramp] fallback) and anything approximated on the way.</summary>
+    public static IbisDriver FromBits(IbisModel model, IbisCornerSelection corner,
+        IReadOnlyList<bool> bits, int samplesPerUi, double dt,
+        out string switchingSource, out IReadOnlyList<string> switchingWarnings)
     {
+        var warnings = new List<string>();
+        switchingWarnings = warnings;
         if (!model.IsOutput)
             throw new ArgumentException($"IBIS model '{model.Name}' is not an output buffer (needs [Pullup] and [Pulldown]).");
-        double vcc = model.PullupRail;
+        if (!model.TypeIsDriverCapable)
+            throw new ArgumentException(
+                $"IBIS model '{model.Name}' declares [Model_type] {model.ModelType}, which cannot "
+                + "drive a line, but carries [Pullup] and [Pulldown] tables. Refusing rather than "
+                + "believing the tables over the file's own declaration — pick a driver model.");
+        double vcc = model.PullupRailAt(corner);
         int n = bits.Count * samplesPerUi;
         // Edge sample count from the ramp slew: t_edge = swing / (Δv/Δt); clamp to [2, 1 UI].
         double swing = vcc;
-        int edge = samplesPerUi;
+        int edgeRise = samplesPerUi, edgeFall = samplesPerUi;
         var ramp = model.Ramp;
         if (ramp is not null)
         {
-            double dv = ramp.Rising.DeltaVolts.At(corner) ?? swing;
-            double dtr = ramp.Rising.DeltaSeconds.At(corner) ?? dt;
-            double slew = dv / dtr;                     // V/s
-            if (slew > 0) edge = Math.Clamp((int)Math.Round(swing / slew / dt), 2, samplesPerUi);
+            // Rising and falling edges have their OWN slews. [Ramp].Falling was parsed and then
+            // never read, so every falling edge ran at the rising slew — invisible on a
+            // symmetric buffer, a real timing error on an asymmetric one.
+            int EdgeOf(IbisRampEdge e)
+            {
+                double dv = e.DeltaVolts.At(corner) ?? swing;
+                double dtr = e.DeltaSeconds.At(corner) ?? dt;
+                double slew = dv / dtr;                 // V/s
+                return slew > 0
+                    ? Math.Clamp((int)Math.Round(swing / slew / dt), 2, samplesPerUi)
+                    : samplesPerUi;
+            }
+            edgeRise = EdgeOf(ramp.Rising);
+            edgeFall = EdgeOf(ramp.Falling);
         }
+        // Per-edge switching profiles. IBIS specifies the switching through the measured
+        // [Rising/Falling Waveform] tables; the [Ramp] trapezoid is what the format itself
+        // calls the fallback for files that carry no waveforms. Each edge is resolved
+        // independently, so a file with only one waveform set still gets the measured profile
+        // where it has one and the ramp where it does not.
+        var (riseKu, riseKd, riseSource) = EdgeProfile(
+            model, corner, model.RisingWaveforms, rising: true, dt, samplesPerUi,
+            edgeRise, from: 0, to: 1, warnings);
+        var (fallKu, fallKd, fallSource) = EdgeProfile(
+            model, corner, model.FallingWaveforms, rising: false, dt, samplesPerUi,
+            edgeFall, from: 1, to: 0, warnings);
+
         var ku = new double[n];
         var kd = new double[n];
         for (int b = 0; b < bits.Count; b++)
         {
             int target = bits[b] ? 1 : 0;
             int prev = bits[(b - 1 + bits.Count) % bits.Count] ? 1 : 0;
+            var (eKu, eKd) = target > prev ? (riseKu, riseKd) : (fallKu, fallKd);
             for (int s = 0; s < samplesPerUi; s++)
             {
-                double frac = target;                    // steady level by default
-                if (prev != target && s < edge)          // ramp across the edge
-                    frac = prev + (target - prev) * (s + 1.0) / edge;
-                ku[b * samplesPerUi + s] = frac;         // fraction pulled up
-                kd[b * samplesPerUi + s] = 1 - frac;     // complementary pull-down
+                // A transition plays its edge profile; a held bit sits at that profile's
+                // SETTLED value, so the steady level always agrees with the edge that
+                // reached it (the two models must not disagree about "fully driven").
+                int idx = b * samplesPerUi + s;
+                if (prev != target) { ku[idx] = eKu[s]; kd[idx] = eKd[s]; }
+                else if (target == 1) { ku[idx] = riseKu[^1]; kd[idx] = riseKd[^1]; }
+                else { ku[idx] = fallKu[^1]; kd[idx] = fallKd[^1]; }
             }
         }
+        switchingSource = riseSource == fallSource
+            ? riseSource
+            : $"rising: {riseSource}; falling: {fallSource}";
         return new IbisDriver(model, corner, vcc, dt, ku, kd);
+    }
+
+    /// <summary>One edge's Ku/Kd over a UI: the measured two-/one-waveform extraction when the
+    /// model carries waveforms for that edge, else the [Ramp] trapezoid — which is the profile
+    /// that has always run, reproduced here verbatim so a ramp-only file is unchanged.</summary>
+    private static (double[] Ku, double[] Kd, string Source) EdgeProfile(
+        IbisModel model, IbisCornerSelection corner, IReadOnlyList<IbisWaveform> waveforms,
+        bool rising, double dt, int samplesPerUi, int edge, int from, int to,
+        List<string> warnings)
+    {
+        if (waveforms.Count is 1 or 2)
+        {
+            try
+            {
+                var sched = KuKdExtractor.Extract(model, corner, waveforms, rising, dt, samplesPerUi);
+                warnings.AddRange(sched.Warnings);
+                return (sched.Ku, sched.Kd, sched.Source);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+            {
+                // The waveforms are present but unusable (identical fixtures, a one-row table).
+                // Say so and fall back to the ramp rather than failing the whole solve — the
+                // ramp is a legitimate model, it is just the coarser one.
+                warnings.Add($"IBIS {(rising ? "rising" : "falling")} waveform extraction failed "
+                    + $"({ex.Message}) — falling back to the [Ramp] slew for this edge.");
+            }
+        }
+
+        var ku = new double[samplesPerUi];
+        var kd = new double[samplesPerUi];
+        for (int s = 0; s < samplesPerUi; s++)
+        {
+            double frac = s < edge ? from + (to - from) * (s + 1.0) / edge : to;
+            ku[s] = frac;
+            kd[s] = 1 - frac;
+        }
+        return (ku, kd, "[Ramp] slew (no usable waveform tables)");
     }
 
     public (double Current, double Conductance) Evaluate(double v, double t)
@@ -105,51 +194,37 @@ public sealed class IbisDriver : INonlinearDriver
         int n = (int)Math.Round(t / _dt);
         n = Math.Clamp(n, 0, _ku.Length - 1);
         double ku = _ku[n], kd = _kd[n];
-        // IBIS into-pad current, then negate for into-line.
+        // IBIS into-pad current, then negate for into-line. Pull-up / POWER-clamp tables are
+        // supply-referenced, pull-down / GND-clamp ground-referenced — each against its own
+        // declared reference rather than a shared assumption.
         var (ipu, gpu) = _pu.Eval(v - _vcc);
-        var (ipd, gpd) = _pd.Eval(v);
-        var (igc, ggc) = _gc.Eval(v);
-        var (ipc, gpc) = _pc.Eval(v - _vcc);
+        var (ipd, gpd) = _pd.Eval(v - _pdRail);
+        var (igc, ggc) = _gc.Eval(v - _gcRail);
+        var (ipc, gpc) = _pc.Eval(v - _pcRail);
         double iPad = ku * ipu + kd * ipd + igc + ipc;
         double gPad = ku * gpu + kd * gpd + ggc + gpc;   // dI/dV (V−Vcc and V share dV)
         return (-iPad, -gPad);
     }
-
-    /// <summary>Monotone piecewise-linear V-I table with a value + slope, linear-extrapolated
-    /// past both ends (so Newton never runs off a flat table).</summary>
-    private sealed class Pwl
-    {
-        private readonly double[] _v, _i;
-        private Pwl(double[] v, double[] i) { _v = v; _i = i; }
-
-        public static Pwl FromTable(IReadOnlyList<IbisIvRow> table, IbisCornerSelection corner)
-        {
-            if (table.Count == 0) return new Pwl(Array.Empty<double>(), Array.Empty<double>());
-            var pts = table.Select(r => (V: r.VoltageVolts, I: r.CurrentAmps.At(corner) ?? 0))
-                           .OrderBy(p => p.V).ToArray();
-            return new Pwl(pts.Select(p => p.V).ToArray(), pts.Select(p => p.I).ToArray());
-        }
-
-        public (double I, double G) Eval(double v)
-        {
-            int n = _v.Length;
-            if (n == 0) return (0, 0);
-            if (n == 1) return (_i[0], 0);
-            int hi = 1;
-            while (hi < n - 1 && _v[hi] < v) hi++;       // segment [hi-1, hi], extrapolate at ends
-            double g = (_i[hi] - _i[hi - 1]) / (_v[hi] - _v[hi - 1]);
-            return (_i[hi - 1] + g * (v - _v[hi - 1]), g);
-        }
-    }
 }
 
-/// <summary>The receiver termination the channel is loaded with (linear R∥C; open = R = ∞).
-/// A nonlinear (clamped) receiver is a named follow-up — the channel is extracted with this
-/// linear load.</summary>
+/// <summary>The receiver termination for the SINGLE-LINE reduction (linear R∥C; open = R = ∞),
+/// which folds this admittance into the channel FIRs. A nonlinear (clamped) receiver cannot be
+/// expressed that way and goes through <see cref="NonlinearLink.SolveNPort"/> instead, where
+/// every port is an unknown.</summary>
 public sealed record NonlinearReceiver(double LoadOhms, double LoadCapacitanceFarads = 0)
 {
     public Complex Admittance(double frequencyHz)
     {
+        // The channel reduction folds this admittance into the driver-node FIRs, so an
+        // infinite admittance has nowhere to go: a shorted far end must be refused here rather
+        // than silently producing Infinity (and, from there, NaN samples the Newton loop would
+        // blame on a non-monotone table). MtlNetwork.SolveTerminated carries the impedance-form
+        // row that CAN express a short; the linear transient path reaches it directly.
+        if (LoadOhms <= 0)
+            throw new ArgumentOutOfRangeException(nameof(LoadOhms),
+                $"Receiver resistance must be positive (got {LoadOhms} Ω). The nonlinear "
+                + "driver engine reduces the channel against a finite load; for a shorted far "
+                + "end use the linear TransientLink path, which solves the short exactly.");
         double omega = 2 * Math.PI * frequencyHz;
         Complex y = double.IsPositiveInfinity(LoadOhms) ? Complex.Zero : 1.0 / LoadOhms;
         return y + new Complex(0, omega * LoadCapacitanceFarads);
@@ -179,7 +254,7 @@ public sealed record NonlinearResult(
 /// it to that engine (gated). Single driven line only; multi-line nonlinear crosstalk is a named
 /// follow-up.</para>
 /// </summary>
-public static class NonlinearLink
+public static partial class NonlinearLink
 {
     /// <summary>The channel FIR is built on this DFT length (a power of two); its Δf = 1/(N·Δt)
     /// resolves the channel memory (round trips ≪ N·Δt for any real board line).</summary>
@@ -192,8 +267,9 @@ public static class NonlinearLink
     {
         if (network.ConductorCount != 1)
             throw new ArgumentException(
-                "The nonlinear driver engine handles a single driven line; multi-line nonlinear "
-                + "crosstalk is a named follow-up (use the linear TransientLink for coupled cases).");
+                "This entry reduces the channel against ONE linear receiver, so it handles a "
+                + "single line. For coupled lines — or for a nonlinear (clamped) receiver — use "
+                + nameof(SolveNPort) + ", which solves every port as an unknown.");
         if (samplesPerUi < 2) throw new ArgumentOutOfRangeException(nameof(samplesPerUi));
         double dt = sampleIntervalSeconds;
 
