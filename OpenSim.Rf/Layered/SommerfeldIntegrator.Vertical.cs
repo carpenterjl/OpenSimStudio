@@ -151,7 +151,7 @@ internal static partial class SommerfeldIntegrator
 
     private static (Complex Zz, Complex Xz, Complex Phi) VerticalTailPanel(
         SubstrateStackup substrate, double k0, double lo, double hi, double z, double zPrime,
-        VerticalSpatialKernels.KernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
+        VerticalKernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
         (Complex GAzz, Complex GAxz, Complex KPhi)[] residues, double rho, int refinement)
     {
         Complex vZz = Complex.Zero, vXz = Complex.Zero, vPhi = Complex.Zero;
@@ -176,7 +176,7 @@ internal static partial class SommerfeldIntegrator
 
     private static (Complex Zz, Complex Xz, Complex Phi) VerticalIntegrand(
         SubstrateStackup substrate, double k0, double kRho, Complex kz0, double z, double zPrime,
-        VerticalSpatialKernels.KernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
+        VerticalKernelImage[] images, IReadOnlyList<SurfaceWavePole> poles,
         (Complex GAzz, Complex GAxz, Complex KPhi)[] residues, double rho)
     {
         // Dielectric-side branch: the extraction (images, pole residues) is in-slab

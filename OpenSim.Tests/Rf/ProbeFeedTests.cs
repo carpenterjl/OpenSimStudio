@@ -61,7 +61,8 @@ public class ProbeFeedTests
         var substrate = new SubstrateStackup(2.2, 0.001, 1.588e-3);
         var set = new VerticalKernelSet(substrate, 10e9);
         var probe = new ProbeFeed(0, 0, 0.25e-3, 3);
-        var z = ProbeAssembly.ProbeSelfBlock(set, probe, 2 * Math.PI * 10e9, includeTopBasis: true);
+        var z = ProbeAssembly.ProbeSelfBlock(set, ProbeAssembly.TubeNodes(substrate, probe),
+            probe, 2 * Math.PI * 10e9, includeTopBasis: true);
         Assert.Equal(4, z.Rows);
         for (int i = 0; i < z.Rows; i++)
             for (int j = i + 1; j < z.Columns; j++)

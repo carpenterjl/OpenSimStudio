@@ -44,15 +44,10 @@ namespace OpenSim.Rf.Layered;
 /// </summary>
 internal static class MultiLayerVerticalImages
 {
-    /// <summary>One quasi-static image: coefficient × g_dynamic(√(ρ² + Height²)). Same shape as
-    /// <see cref="VerticalSpatialKernels.KernelImage"/>, so the two remainder integrands read
-    /// alike.</summary>
-    public readonly record struct KernelImage(double Height, Complex CoefficientGAzz, Complex CoefficientKPhi);
-
     /// <summary>The two-image set for a vertical source at z′ observed at z, both in
     /// [0, total thickness]. At N = 1 this is images 0 and 1 of
     /// <see cref="VerticalSpatialKernels.Images"/> exactly — the identity that gates it.</summary>
-    public static KernelImage[] Images(LayeredStackup stackup, double z, double zPrime)
+    public static VerticalKernelImage[] Images(LayeredStackup stackup, double z, double zPrime)
     {
         // The region rule is the KERNEL'S own (MultiLayerFieldKernels.RegionPermittivity, which
         // mirrors TransmissionLineGreens.Profile): region 0 at or above the stack top, else the
@@ -65,8 +60,8 @@ internal static class MultiLayerVerticalImages
         double dz = Math.Abs(z - zPrime);
         return new[]
         {
-            new KernelImage(dz, Complex.One, c0),
-            new KernelImage(z + zPrime, Complex.One, -c0),
+            new VerticalKernelImage(dz, Complex.One, c0),
+            new VerticalKernelImage(z + zPrime, Complex.One, -c0),
         };
     }
 }

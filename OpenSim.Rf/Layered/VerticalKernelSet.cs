@@ -3,21 +3,18 @@ using System.Numerics;
 namespace OpenSim.Rf.Layered;
 
 /// <summary>
-/// The full SPATIAL vertical-current kernels for one (frequency, stackup) pair:
+/// The single grounded slab's implementation of <see cref="VerticalKernels"/> — the Stage E
+/// closed forms. Its five quasi-static images and its analytic pole residues are exactly the
+/// pieces <see cref="VerticalSpatialKernels"/> derives; this class is the medium-facing half of
+/// the seam, and carries no composition logic of its own (that lives once on the base, so both
+/// media compose identically).
 ///
-///   G_A^zz(ρ; z, z′), G_A^xz(ρ; z, z′), K_Φ(ρ; z, z′)
-///     = Σ images coeff·e^{−jk₀R_h}/(4πR_h) + Σ poles Res·(−j/4)k_p H₀⁽²⁾(k_pρ)
-///       + direct Sommerfeld remainder,
-///
-/// with G_A^xz the scalar radial potential whose ∇_ρ is the horizontal vector
-/// potential of a vertical current (the spectral kernel is normalized per −jk_x, so
-/// its transform is the gradient's scalar). Vertical↔vertical interactions occur only
-/// at tube scale, where a ρ table cannot amortize — this set evaluates DIRECTLY per
-/// (ρ, z, z′) (the plan's coupling-class split; the vertical↔surface tables are built
-/// on top by the probe assembly). Poles are found once per set, shared with the
-/// boundary-kernel machinery.
+/// <para>Vertical↔vertical interactions occur only at tube scale, where a ρ table cannot
+/// amortize — the base evaluates DIRECTLY per (ρ, z, z′), and the vertical↔surface tables are
+/// built on top by the probe assembly. Poles are found once per set and shared with the
+/// boundary-kernel machinery.</para>
 /// </summary>
-internal sealed class VerticalKernelSet
+internal sealed class VerticalKernelSet : VerticalKernels
 {
     private readonly SurfaceWavePole[] _poles;
 
@@ -30,66 +27,40 @@ internal sealed class VerticalKernelSet
     }
 
     public SubstrateStackup Substrate { get; }
-    public double FrequencyHz { get; }
-    public double K0 { get; }
+    public override double FrequencyHz { get; }
+    public override double K0 { get; }
+    public override double TotalThicknessMeters => Substrate.ThicknessMeters;
+    public override double MaxRelativePermittivity => Substrate.RelativePermittivity;
+    public override IReadOnlyList<SurfaceWavePole> Poles => _poles;
 
-    internal IReadOnlyList<SurfaceWavePole> Poles => _poles;
+    public override VerticalKernelImage[] Images(double z, double zPrime) =>
+        VerticalSpatialKernels.Images(Substrate, z, zPrime);
 
-    /// <summary>All three spatial kernels at lateral distance ρ (positive — tube self
-    /// terms pass the reduced ρ_eff = √(ρ² + a²)) and heights z, z′ ∈ [0, d].</summary>
-    public (Complex GAzz, Complex GAxz, Complex KPhi) Evaluate(
-        double rho, double z, double zPrime, int refinement = 1)
+    /// <summary>The five-image set as source-segment transforms: reflect at z = 0 (the z + z′
+    /// image), reflect at z = d (the critical 2d − z − z′ image, nearly singular near the
+    /// junction and regime-dispatched for free), and shift by ∓2d (the 2d ∓ |z − z′| pair —
+    /// which of the two each shift produces depends on the sign of z − z′, and they carry the
+    /// SAME coefficients, so the set is order-independent). The heights are constant across the
+    /// slab, so both arguments are ignored.</summary>
+    public override VerticalMomentTracks MomentTracks(double z, double zPrime)
     {
-        var (rZz, rXz, rPhi) = SommerfeldIntegrator.VerticalRemainder(
-            Substrate, K0, _poles, rho, z, zPrime, refinement);
-
-        Complex gAzz = rZz, gAxz = rXz, kPhi = rPhi;
-        foreach (var image in VerticalSpatialKernels.Images(Substrate, z, zPrime))
+        double d = Substrate.ThicknessMeters;
+        var epsC = SpectralKernels.ComplexPermittivity(Substrate);
+        var eta = (epsC - 1) / (epsC + 1);
+        return new VerticalMomentTracks(1 / epsC, new[]
         {
-            var g = FreeSpaceG(Math.Sqrt(rho * rho + image.Height * image.Height));
-            gAzz += RfConstants.Mu0 * image.CoefficientGAzz * g;
-            kPhi += image.CoefficientKPhi * g / RfConstants.Eps0;
-        }
-        foreach (var pole in _poles)
-        {
-            var factor = new Complex(0, -0.25) * pole.KRho * Bessel.H02(pole.KRho * rho);
-            var (resZz, resXz, resPhi) = VerticalSpatialKernels.PoleResidues(
-                Substrate, K0, pole.KRho, z, zPrime);
-            gAzz += resZz * factor;
-            gAxz += resXz * factor;
-            kPhi += resPhi * factor;
-        }
-        return (gAzz, gAxz, kPhi);
+            new VerticalMomentTrack(zp => -zp, 1, -1 / epsC),
+            new VerticalMomentTrack(zp => 2 * d - zp, -eta, eta / epsC),
+            new VerticalMomentTrack(zp => zp - 2 * d, -eta, -eta / epsC),
+            new VerticalMomentTrack(zp => zp + 2 * d, -eta, -eta / epsC)
+        });
     }
 
-    /// <summary>The SMOOTH parts (pole terms + Sommerfeld remainder) scaled to the raw
-    /// e^{−jkR}/R kernel scale the moment machinery integrates against — ×4π/µ₀ for the
-    /// A-type kernels, ×4πε₀ for K_Φ (the <c>LayeredKernelSplit</c> precedent). The
-    /// closed-form image terms are handled by the geometric moment tracks instead.</summary>
-    public (Complex GzzSmooth, Complex GxzSmooth, Complex PhiSmooth) EvaluateSmoothG(
-        double rho, double z, double zPrime, int refinement = 1)
-    {
-        var (rZz, rXz, rPhi) = SommerfeldIntegrator.VerticalRemainder(
-            Substrate, K0, _poles, rho, z, zPrime, refinement);
-        Complex gzz = rZz, gxz = rXz, kPhi = rPhi;
-        foreach (var pole in _poles)
-        {
-            var factor = new Complex(0, -0.25) * pole.KRho * Bessel.H02(pole.KRho * rho);
-            var (resZz, resXz, resPhi) = VerticalSpatialKernels.PoleResidues(
-                Substrate, K0, pole.KRho, z, zPrime);
-            gzz += resZz * factor;
-            gxz += resXz * factor;
-            kPhi += resPhi * factor;
-        }
-        double scaleA = 4 * Math.PI / RfConstants.Mu0;
-        double scalePhi = 4 * Math.PI * RfConstants.Eps0;
-        return (scaleA * gzz, scaleA * gxz, scalePhi * kPhi);
-    }
+    public override (Complex GAzz, Complex GAxz, Complex KPhi) Remainder(
+        double rho, double z, double zPrime, int refinement) =>
+        SommerfeldIntegrator.VerticalRemainder(Substrate, K0, _poles, rho, z, zPrime, refinement);
 
-    private Complex FreeSpaceG(double r)
-    {
-        var (sin, cos) = Math.SinCos(K0 * r);
-        double scale = 1 / (4 * Math.PI * r);
-        return new Complex(scale * cos, -scale * sin);
-    }
+    public override (Complex GAzz, Complex GAxz, Complex KPhi) PoleResidues(
+        Complex poleKRho, bool isTm, double z, double zPrime) =>
+        VerticalSpatialKernels.PoleResidues(Substrate, K0, poleKRho, z, zPrime);
 }

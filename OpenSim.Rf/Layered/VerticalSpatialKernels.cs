@@ -28,11 +28,8 @@ namespace OpenSim.Rf.Layered;
 /// </summary>
 internal static class VerticalSpatialKernels
 {
-    /// <summary>One quasi-static image: coefficient × g_dynamic(√(ρ² + Height²)).</summary>
-    public readonly record struct KernelImage(double Height, Complex CoefficientGAzz, Complex CoefficientKPhi);
-
     /// <summary>The five-image set for source z′ and observation z, both in [0, d].</summary>
-    public static KernelImage[] Images(SubstrateStackup substrate, double z, double zPrime)
+    public static VerticalKernelImage[] Images(SubstrateStackup substrate, double z, double zPrime)
     {
         double d = substrate.ThicknessMeters;
         var epsC = SpectralKernels.ComplexPermittivity(substrate);
@@ -40,11 +37,11 @@ internal static class VerticalSpatialKernels
         double dz = Math.Abs(z - zPrime);
         return new[]
         {
-            new KernelImage(dz, 1, 1 / epsC),
-            new KernelImage(z + zPrime, 1, -1 / epsC),
-            new KernelImage(2 * d - z - zPrime, -eta, eta / epsC),
-            new KernelImage(2 * d - dz, -eta, -eta / epsC),
-            new KernelImage(2 * d + dz, -eta, -eta / epsC)
+            new VerticalKernelImage(dz, 1, 1 / epsC),
+            new VerticalKernelImage(z + zPrime, 1, -1 / epsC),
+            new VerticalKernelImage(2 * d - z - zPrime, -eta, eta / epsC),
+            new VerticalKernelImage(2 * d - dz, -eta, -eta / epsC),
+            new VerticalKernelImage(2 * d + dz, -eta, -eta / epsC)
         };
     }
 

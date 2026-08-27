@@ -171,7 +171,8 @@ public class ProbeFedPatchTests
         var quiet = new ProbeFedSolution(
             solution.Surface with { EdgeCurrents = new Complex[solution.Surface.EdgeCurrents.Count()] },
             freeEndTube,
-            new Complex[solution.RawEdgeCurrents.Length]);
+            new Complex[solution.RawEdgeCurrents.Length],
+            solution.TubeNodes);
 
         double mixed = LayeredFarField.SurfaceWavePowerWatts(surface, table, quiet, probe);
         double verticalOnly = LayeredFarField.VerticalSurfaceWavePowerWatts(
@@ -195,7 +196,7 @@ public class ProbeFedPatchTests
 
         var noTube = new ProbeFedSolution(
             solution.Surface, new Complex[solution.TubeCurrents.Length],
-            solution.RawEdgeCurrents);
+            solution.RawEdgeCurrents, solution.TubeNodes);
 
         double mixed = LayeredFarField.SurfaceWavePowerWatts(surface, table, noTube, probe);
         // The horizontal formula, reached through the plain surface overload with the same

@@ -36,7 +36,8 @@ public static class LayeredFarField
 {
     public static FarFieldPattern Compute(SurfaceStructure surface, LayeredKernelTable kernel,
         SurfaceMomSolution solution, int thetaCount = 32, int phiCount = 64)
-        => ComputeCore(surface, kernel, solution.EdgeCurrents, null, null, thetaCount, phiCount);
+        => ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
+            solution.EdgeCurrents, null, null, thetaCount, phiCount);
 
     /// <summary>Probe-fed far field: the COMPLETE mixed current, each component once —
     /// the raw horizontal RWG patch currents, the junction's true horizontal current
@@ -47,12 +48,12 @@ public static class LayeredFarField
     public static FarFieldPattern Compute(SurfaceStructure surface, LayeredKernelTable kernel,
         ProbeFedSolution probeSolution, ProbeFeed probe, int thetaCount = 32, int phiCount = 64)
     {
-        double[] tubeNodes = ProbeAssembly.TubeNodes(kernel.Substrate, probe);
+        double[] tubeNodes = probeSolution.TubeNodes;
         var leg = new VerticalLeg(probe.X, probe.Y, tubeNodes, probeSolution.TubeCurrents);
         var junction = new JunctionLeg(
             ProbeVertexFan(surface, probe), probeSolution.TubeCurrents[^1]);
-        return ComputeCore(surface, kernel, probeSolution.RawEdgeCurrents, junction, leg,
-            thetaCount, phiCount);
+        return ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
+            probeSolution.RawEdgeCurrents, junction, leg, thetaCount, phiCount);
     }
 
     /// <summary>Far field of a MULTI-LAYER stackup solve (Stage F): the horizontal RWG patch
@@ -60,57 +61,58 @@ public static class LayeredFarField
     /// W̃ = S/C coupling taken from the transmission-line Green's function
     /// (<see cref="TransmissionLineGreens.RadiationAmplitude"/>) instead of the single-slab
     /// closed form. A covered patch (buried source) just changes C and S — the source depth
-    /// is encoded in the table's <see cref="MultiLayerKernelTable.SourceInterface"/>. No probe /
-    /// vertical leg here (covered patches are pure horizontal metal); at N = 1 the pattern
-    /// equals the single-slab <see cref="Compute(SurfaceStructure, LayeredKernelTable, SurfaceMomSolution, int, int)"/>
+    /// is encoded in the table's <see cref="MultiLayerKernelTable.SourceInterface"/>. This is the
+    /// horizontal-metal-only overload; a probe adds its junction and tube legs through the
+    /// ProbeFedSolution overload below. At N = 1 the pattern equals the single-slab
+    /// <see cref="Compute(SurfaceStructure, LayeredKernelTable, SurfaceMomSolution, int, int)"/>
     /// to the table-accuracy floor — a cross-check gate.</summary>
     public static FarFieldPattern Compute(SurfaceStructure surface, MultiLayerKernelTable kernel,
         SurfaceMomSolution solution, int thetaCount = 32, int phiCount = 64)
+        => ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
+            solution.EdgeCurrents, null, null, thetaCount, phiCount);
+
+    /// <summary>Stage C2 — the probe-fed far field of a MULTI-LAYER stackup: the same complete
+    /// mixed current as the single-slab probe overload (raw RWG + the junction's exact transform +
+    /// the vertical tube), radiated through the TLGF's region-0 amplitudes. A covered patch's tube
+    /// ends on the buried metal, but the wave still leaves from the TOP of the stack, which is
+    /// where the vertical amplitude is read.</summary>
+    public static FarFieldPattern Compute(SurfaceStructure surface, MultiLayerKernelTable kernel,
+        ProbeFedSolution probeSolution, ProbeFeed probe, int thetaCount = 32, int phiCount = 64)
     {
-        double omega = 2 * Math.PI * kernel.FrequencyHz;
-        double k0 = kernel.K0;
-        double eta = Math.Sqrt(RfConstants.Mu0 / RfConstants.Eps0);
-        int m = kernel.SourceInterface ?? kernel.Stackup.Layers.Count - 1;
-        var edgeCurrents = solution.EdgeCurrents;
+        var leg = new VerticalLeg(probe.X, probe.Y, probeSolution.TubeNodes,
+            probeSolution.TubeCurrents);
+        var junction = new JunctionLeg(
+            ProbeVertexFan(surface, probe), probeSolution.TubeCurrents[^1]);
+        return ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
+            probeSolution.RawEdgeCurrents, junction, leg, thetaCount, phiCount);
+    }
 
-        var (uNodes, uWeights) = GaussLegendre.Rule(thetaCount, 0, 1); // hemisphere
-        var theta = uNodes.Select(Math.Acos).ToArray();
-        var phi = Enumerable.Range(0, phiCount).Select(i => 2 * Math.PI * i / phiCount).ToArray();
-        double phiWeight = 2 * Math.PI / phiCount;
+    /// <summary>How a medium turns a source-plane current into a region-0 radiation amplitude:
+    /// (G̃_A, W̃) at one spectral point, and the vertical tube's φ-independent amplitude Ĝ(θ).
+    /// Naming that dependency is what lets ONE <see cref="ComputeCore"/> serve the single slab's
+    /// closed forms and the multi-layer TLGF — and it is why the N = 1 far-field identity is a
+    /// statement about the media rather than about two hand-aligned quadratures.</summary>
+    private readonly record struct RadiationMedium(
+        Func<double, Complex, (Complex GA, Complex W)> Amplitude,
+        Func<double, double[], Complex[], Complex> VerticalAmplitude);
 
-        var intensity = new double[thetaCount, phiCount];
-        double totalPower = 0;
-        for (int ti = 0; ti < thetaCount; ti++)
+    private static RadiationMedium Medium(LayeredKernelTable kernel) => new(
+        (kRho, kz0) =>
         {
-            double cosTheta = uNodes[ti];
-            double sinTheta = Math.Sin(theta[ti]);
-            double kRho = k0 * sinTheta;
-            var kz0 = new Complex(k0 * cosTheta, 0);
-            var (gA, w) = TransmissionLineGreens.RadiationAmplitude(kernel.Stackup, k0, kRho, kz0, m);
-            var thetaFactor = cosTheta + Complex.ImaginaryOne * k0 * sinTheta * sinTheta * w;
+            var (gA, _) = SpectralKernels.Evaluate(kernel.Substrate, kernel.K0, kRho, kz0);
+            return (gA, SpectralKernels.AzRatio(kernel.Substrate, kernel.K0, kRho, kz0));
+        },
+        (theta, nodes, currents) =>
+            VerticalAmplitude(kernel.Substrate, kernel.K0, theta, nodes, currents));
 
-            for (int pi = 0; pi < phiCount; pi++)
-            {
-                var (cosPhi, sinPhi) = (Math.Cos(phi[pi]), Math.Sin(phi[pi]));
-                double kx = kRho * cosPhi, ky = kRho * sinPhi;
-                var (jx, jy) = SpectralCurrent(surface, edgeCurrents, kx, ky);
-                var jPar = cosPhi * jx + sinPhi * jy;
-                var jPerp = -sinPhi * jx + cosPhi * jy;
-
-                double amplitude = omega * k0 * cosTheta / (4 * Math.PI);
-                Complex eTheta = amplitude * gA * thetaFactor * jPar;
-                Complex ePhi = amplitude * gA * jPerp;
-                double u = (eTheta.Magnitude * eTheta.Magnitude
-                            + ePhi.Magnitude * ePhi.Magnitude) / (2 * eta);
-                intensity[ti, pi] = u;
-                totalPower += uWeights[ti] * phiWeight * u;
-            }
-        }
-
-        double maxDirectivity = 0;
-        foreach (double u in intensity)
-            maxDirectivity = Math.Max(maxDirectivity, 4 * Math.PI * u / totalPower);
-        return new FarFieldPattern(theta, phi, intensity, totalPower, maxDirectivity);
+    private static RadiationMedium Medium(MultiLayerKernelTable kernel)
+    {
+        int m = kernel.SourceInterface ?? kernel.Stackup.Layers.Count - 1;
+        return new RadiationMedium(
+            (kRho, kz0) =>
+                TransmissionLineGreens.RadiationAmplitude(kernel.Stackup, kernel.K0, kRho, kz0, m),
+            (theta, nodes, currents) =>
+                VerticalAmplitude(kernel.Stackup, kernel.K0, theta, nodes, currents));
     }
 
     /// <summary>The attachment fan at the probe vertex — rebuilt from the mesh + probe
@@ -136,12 +138,11 @@ public static class LayeredFarField
     /// junction coefficient it scales.</summary>
     private readonly record struct JunctionLeg(AttachmentFan Fan, Complex Coeff);
 
-    private static FarFieldPattern ComputeCore(SurfaceStructure surface, LayeredKernelTable kernel,
-        IReadOnlyList<Complex> edgeCurrents, JunctionLeg? junction, VerticalLeg? vertical,
-        int thetaCount, int phiCount)
+    private static FarFieldPattern ComputeCore(SurfaceStructure surface, double frequencyHz,
+        double k0, in RadiationMedium medium, IReadOnlyList<Complex> edgeCurrents,
+        JunctionLeg? junction, VerticalLeg? vertical, int thetaCount, int phiCount)
     {
-        double omega = 2 * Math.PI * kernel.FrequencyHz;
-        double k0 = kernel.K0;
+        double omega = 2 * Math.PI * frequencyHz;
         double eta = Math.Sqrt(RfConstants.Mu0 / RfConstants.Eps0);
 
         var (uNodes, uWeights) = GaussLegendre.Rule(thetaCount, 0, 1); // hemisphere
@@ -157,14 +158,13 @@ public static class LayeredFarField
             double sinTheta = Math.Sin(theta[ti]);
             double kRho = k0 * sinTheta;
             var kz0 = new Complex(k0 * cosTheta, 0);
-            var (gA, _) = SpectralKernels.Evaluate(kernel.Substrate, k0, kRho, kz0);
-            var w = SpectralKernels.AzRatio(kernel.Substrate, k0, kRho, kz0);
+            var (gA, w) = medium.Amplitude(kRho, kz0);
             var thetaFactor = cosTheta + Complex.ImaginaryOne * k0 * sinTheta * sinTheta * w;
 
             // Ĝ(θ) is φ-independent — the probe is one lateral point, so its transverse
             // phase factors out per φ. Compute the z′-integral once per θ.
             Complex gHat = vertical is { } vl
-                ? VerticalAmplitude(kernel.Substrate, k0, theta[ti], vl.Nodes, vl.Currents)
+                ? medium.VerticalAmplitude(theta[ti], vl.Nodes, vl.Currents)
                 : Complex.Zero;
 
             for (int pi = 0; pi < phiCount; pi++)
@@ -236,6 +236,34 @@ public static class LayeredFarField
         return gHat;
     }
 
+    /// <summary>Stage C2 — the same vertical amplitude over an N-layer stackup, read at the TOP
+    /// of the stack (region 0 propagates from there, exactly as the horizontal leg's amplitudes
+    /// do). For a covered patch the tube ends on the BURIED metal, which changes the integration
+    /// range but not the read-out plane. At N = 1 this reproduces the single-slab form, which is
+    /// how it is gated.</summary>
+    internal static Complex VerticalAmplitude(LayeredStackup stackup, double k0, double theta,
+        double[] nodes, Complex[] currents)
+    {
+        double kRho = k0 * Math.Sin(theta);
+        var kz0 = new Complex(k0 * Math.Cos(theta), 0);
+        double zTop = stackup.TotalThicknessMeters;
+        var (gn, gw) = GaussLegendre.Rule(2, 0, 1);
+        Complex gHat = Complex.Zero;
+        for (int e = 0; e + 1 < nodes.Length; e++)
+        {
+            double h = nodes[e + 1] - nodes[e];
+            for (int q = 0; q < gn.Length; q++)
+            {
+                double zp = nodes[e] + h * gn[q];
+                Complex jz = currents[e] * (1 - gn[q]) + currents[e + 1] * gn[q];
+                var (gzz, gxz, _) = TransmissionLineGreens.EvaluateVertical(
+                    stackup, k0, kRho, kz0, zTop, zp);
+                gHat += gw[q] * h * jz * (gzz + Complex.ImaginaryOne * kz0 * gxz);
+            }
+        }
+        return gHat;
+    }
+
     /// <summary>The lateral power carried off by the extracted surface-wave modes
     /// (lossless: exact; lossy slabs damp the mode, and the number reported is the
     /// launched power at the antenna, stated by the assumptions).</summary>
@@ -285,21 +313,37 @@ public static class LayeredFarField
     {
         var fan = ProbeVertexFan(surface, probe);
         var junction = new JunctionLeg(fan, probeSolution.TubeCurrents[^1]);
-        double[] tubeNodes = ProbeAssembly.TubeNodes(kernel.Substrate, probe);
-        return MixedSurfaceWavePowerWatts(surface, kernel, probeSolution.RawEdgeCurrents,
-            junction, tubeNodes, probeSolution.TubeCurrents, alphaCount);
+        return MixedSurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
+            new VerticalKernelSet(kernel.Substrate, kernel.FrequencyHz),
+            kernel.Substrate.ThicknessMeters, probeSolution.RawEdgeCurrents, junction,
+            probeSolution.TubeNodes, probeSolution.TubeCurrents, alphaCount);
+    }
+
+    /// <summary>Stage C2 — the same coherent horizontal + vertical surface-wave ledger over a
+    /// MULTI-LAYER stackup. Only the medium changes: the pole set and its horizontal residues
+    /// come from the table, the per-(z, z′) vertical residues from the TLGF, and the metal plane
+    /// is wherever the tube ends (the top of the stack, or a buried interface).</summary>
+    public static double SurfaceWavePowerWatts(SurfaceStructure surface,
+        MultiLayerKernelTable kernel, ProbeFedSolution probeSolution, ProbeFeed probe,
+        int alphaCount = 64)
+    {
+        var junction = new JunctionLeg(
+            ProbeVertexFan(surface, probe), probeSolution.TubeCurrents[^1]);
+        return MixedSurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
+            new MultiLayerVerticalKernelSet(kernel.Stackup, kernel.FrequencyHz),
+            probeSolution.TubeNodes[^1], probeSolution.RawEdgeCurrents, junction,
+            probeSolution.TubeNodes, probeSolution.TubeCurrents, alphaCount);
     }
 
     /// <summary>The coherent horizontal + vertical surface-wave power; see the overload above
     /// for the derivation and the charge-partition argument.</summary>
     private static double MixedSurfaceWavePowerWatts(SurfaceStructure surface,
-        LayeredKernelTable kernel, IReadOnlyList<Complex> edgeCurrents, JunctionLeg junction,
+        double frequencyHz, IReadOnlyList<SurfaceWavePole> poles, VerticalKernels set,
+        double metalHeight, IReadOnlyList<Complex> edgeCurrents, JunctionLeg junction,
         double[] tubeNodes, Complex[] tubeCurrents, int alphaCount)
     {
-        var substrate = kernel.Substrate;
-        double omega = 2 * Math.PI * kernel.FrequencyHz;
-        double k0 = omega / RfConstants.SpeedOfLight;
-        double d = substrate.ThicknessMeters;
+        double omega = 2 * Math.PI * frequencyHz;
+        double d = metalHeight;
         var j = Complex.ImaginaryOne;
 
         // The tube current and its distributed line charge on the SAME Gauss grid
@@ -329,7 +373,7 @@ public static class LayeredFarField
         var vertexPos = junction.Fan.VertexPosition;
 
         double power = 0;
-        foreach (var pole in kernel.Poles)
+        foreach (var pole in poles)
         {
             double kp = pole.KRho.Real;
             var pk = new Complex(kp, 0);
@@ -345,7 +389,7 @@ public static class LayeredFarField
                 for (int a = 0; a < n; a++)
                     for (int b = 0; b < n; b++)
                     {
-                        var r = VerticalSpatialKernels.PoleResidues(substrate, k0, pk, z[a], z[b]);
+                        var r = set.PoleResidues(pk, vertical, z[a], z[b]);
                         resZz[a, b] = r.GAzz;
                         resPhiVv[a, b] = r.KPhi;
                     }
@@ -353,7 +397,7 @@ public static class LayeredFarField
                 resPhiTop = new Complex[n];
                 for (int b = 0; b < n; b++)
                 {
-                    var r = VerticalSpatialKernels.PoleResidues(substrate, k0, pk, d, z[b]);
+                    var r = set.PoleResidues(pk, vertical, d, z[b]);
                     resXzTop[b] = r.GAxz;
                     resPhiTop[b] = r.KPhi;
                 }
@@ -415,10 +459,15 @@ public static class LayeredFarField
     /// TM mode). Gated against the probe-only oracle P_in − P_rad (both exact).</summary>
     public static double VerticalSurfaceWavePowerWatts(SubstrateStackup substrate,
         double frequencyHz, double[] tubeNodes, Complex[] tubeCurrents)
+        => VerticalSurfaceWavePowerWatts(
+            new VerticalKernelSet(substrate, frequencyHz), tubeNodes, tubeCurrents);
+
+    /// <summary>The same pure-vertical launch over any medium — the multi-layer sibling shares
+    /// every line, since only the residues differ.</summary>
+    internal static double VerticalSurfaceWavePowerWatts(VerticalKernels set,
+        double[] tubeNodes, Complex[] tubeCurrents)
     {
-        double omega = 2 * Math.PI * frequencyHz;
-        var set = new VerticalKernelSet(substrate, frequencyHz);
-        double k0 = set.K0;
+        double omega = 2 * Math.PI * set.FrequencyHz;
         var (gn, gw) = GaussLegendre.Rule(4, 0, 1);
         int n = (tubeNodes.Length - 1) * gn.Length;
         var z = new double[n]; var jz = new Complex[n]; var qv = new Complex[n]; var w = new double[n];
@@ -446,7 +495,7 @@ public static class LayeredFarField
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++)
                 {
-                    var res = VerticalSpatialKernels.PoleResidues(substrate, k0, pk, z[i], z[j]);
+                    var res = set.PoleResidues(pk, pole.IsTm, z[i], z[j]);
                     Complex ww = w[i] * w[j];
                     vA += ww * Complex.Conjugate(jz[i]) * res.GAzz * jz[j];
                     vPhi += ww * Complex.Conjugate(qv[i]) * res.KPhi * qv[j];

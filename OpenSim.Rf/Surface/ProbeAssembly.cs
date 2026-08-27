@@ -6,74 +6,100 @@ namespace OpenSim.Rf.Surface;
 
 /// <summary>
 /// The probe-feed (vertical current) assembly blocks for the layered solver. The tube
-/// current on [0, d] uses triangular rooftop bases exactly like the thin-wire solver:
+/// current on [0, z_metal] uses triangular rooftop bases exactly like the thin-wire solver:
 /// a half basis at the ground node (current flows INTO the ground — well-posed because
 /// K_Φ(0, ·) = 0, the kernel's built-in PEC), full hats at interior nodes, and a top
 /// half basis that exists only as part of the junction unknown.
 ///
-/// Tube–tube entries split per the spatial-kernel composition: the five quasi-static
-/// image tracks are each a thin-wire PAIR MOMENT against a height-TRANSFORMED source
-/// segment — reflect at z = 0 (the z+z′ image), reflect at z = d (the critical
-/// 2d−z−z′ image, nearly singular near the junction and regime-dispatched for free),
-/// and shift by ∓2d (the 2d±|z−z′| pair) — reusing the wire machinery's oracle-tested
-/// SELF/NEAR/FAR quadrature with the reduced radius bump; currents are NOT
-/// transformed (the kernel argument shifts, the scalar coefficients carry the
-/// physics — the layered-image doctrine). The smooth track (surface-wave poles +
+/// Tube–tube entries split per the spatial-kernel composition: each quasi-static image
+/// track is a thin-wire PAIR MOMENT against a height-TRANSFORMED source segment — reusing
+/// the wire machinery's oracle-tested SELF/NEAR/FAR quadrature with the reduced radius
+/// bump; currents are NOT transformed (the kernel argument shifts, the scalar coefficients
+/// carry the physics — the layered-image doctrine). The smooth track (surface-wave poles +
 /// Sommerfeld remainder) is a plain Gauss product per element pair at the reduced
 /// ρ_eff = a. One contribution is computed per (m, n) and scattered to both entries,
 /// so the block is bitwise complex-symmetric (the shift-pair tracks are symmetric
 /// only as a SUM — analytically exact, numerically reassociated — the wire image-pass
 /// precedent).
+///
+/// <para>Which tracks exist is the MEDIUM's business, not this file's: a single grounded slab
+/// offers the primary plus four (reflect at 0, reflect at d, shift by ∓2d); an N-layer stackup
+/// offers the primary plus its PEC-ground reflection, and lets the Sommerfeld remainder carry
+/// the rest of the ladder. Both arrive through <see cref="VerticalKernels.MomentTracks"/>, so
+/// this assembly is written once and the N = 1 agreement between the two is a statement about
+/// the kernels rather than about two hand-aligned assemblies.</para>
 /// </summary>
 internal static class ProbeAssembly
 {
-    /// <summary>Uniform tube node heights 0 = z₀ &lt; … &lt; z_N = d. The element floor
-    /// h ≥ 2a is the reduced-kernel validity line — a typed failure, never silent.</summary>
-    public static double[] TubeNodes(SubstrateStackup substrate, ProbeFeed probe)
+    /// <summary>Uniform tube node heights 0 = z₀ &lt; … &lt; z_N = d for a single slab. The
+    /// element floor h ≥ 2a is the reduced-kernel validity line — a typed failure, never
+    /// silent.</summary>
+    public static double[] TubeNodes(SubstrateStackup substrate, ProbeFeed probe) =>
+        TubeNodes(LayeredStackup.FromSubstrate(substrate), null, probe);
+
+    /// <summary>Tube node heights 0 = z₀ &lt; … &lt; z_N = z_metal for an N-layer grounded
+    /// stackup, with the probe ending on the metal at <paramref name="metalInterface"/>
+    /// (null ⇒ the top of the stack).
+    ///
+    /// <para><b>Every internal interface below the metal is forced to be a NODE.</b> The kernels
+    /// are only piecewise-smooth in z — a rooftop straddling an ε jump would integrate a kink
+    /// with a smooth rule — and, more sharply, a vertical source exactly ON a discontinuity has
+    /// source strength −2µ₀/ε with two different values, which the multi-layer kernels refuse by
+    /// name. Nodding at every interface makes that case structurally unreachable: quadrature
+    /// points are strictly inside an element, hence strictly inside one material.</para>
+    ///
+    /// <para><paramref name="probe"/>'s segment count is a TARGET for the whole tube, split
+    /// between the layers in proportion to their thickness with a floor of one element each. A
+    /// stack of many thin layers therefore yields MORE elements than asked for; that is stated
+    /// rather than silently rounded away, because the alternative is an element spanning a
+    /// material it has no kernel for.</para></summary>
+    public static double[] TubeNodes(LayeredStackup stackup, int? metalInterface, ProbeFeed probe)
     {
-        double d = substrate.ThicknessMeters;
-        double h = d / probe.Segments;
-        if (h < 2 * probe.RadiusMeters)
-            throw new InvalidOperationException(
-                $"The slab (d = {d:g4} m) is too thin for the probe bore: {probe.Segments} segments of "
-                + $"{h:g4} m against radius {probe.RadiusMeters:g4} m violate the reduced thin-wire kernel's "
-                + "element ≳ 2·radius floor. Use a thinner probe or fewer segments — this is a model "
-                + "validity line, not a tolerance.");
-        var nodes = new double[probe.Segments + 1];
-        for (int i = 0; i <= probe.Segments; i++)
-            nodes[i] = d * i / probe.Segments;
-        nodes[^1] = d;
-        return nodes;
+        int top = metalInterface ?? stackup.Layers.Count - 1;
+        if (top < 0 || top >= stackup.Layers.Count)
+            throw new ArgumentOutOfRangeException(nameof(metalInterface),
+                $"The metal interface must index one of the stackup's {stackup.Layers.Count} layer "
+                + $"tops — got {top}.");
+        var heights = stackup.InterfaceHeights();
+        double zMetal = heights[top];
+
+        var nodes = new List<double>(probe.Segments + top + 1) { 0.0 };
+        for (int i = 0; i <= top; i++)
+        {
+            double thickness = stackup.Layers[i].ThicknessMeters;
+            double below = i == 0 ? 0 : heights[i - 1];
+            int count = Math.Max(1, (int)Math.Round(probe.Segments * thickness / zMetal));
+            double h = thickness / count;
+            if (h < 2 * probe.RadiusMeters)
+                throw new InvalidOperationException(
+                    $"Layer {i} (thickness {thickness:g4} m of the {zMetal:g4} m below the metal) is "
+                    + $"too thin for the probe bore: {count} element(s) of {h:g4} m against radius "
+                    + $"{probe.RadiusMeters:g4} m violate the reduced thin-wire kernel's element ≳ "
+                    + "2·radius floor. Use a thinner probe or fewer segments — this is a model "
+                    + "validity line, not a tolerance.");
+            for (int k = 1; k < count; k++) nodes.Add(below + thickness * k / count);
+            nodes.Add(heights[i]); // the interface itself, exactly
+        }
+        var result = nodes.ToArray();
+        result[^1] = zMetal;
+        return result;
     }
 
-    /// <summary>The tube–tube impedance block. Bases 0..N−1 are the ground half basis
-    /// and interior hats; with <paramref name="includeTopBasis"/> a final basis N is
-    /// the top half hat (the tube leg of the junction unknown). Order matches node
-    /// order; the delta-gap port drives basis 0 (f(0) = 1).</summary>
+    /// <summary>The tube–tube impedance block over the given node heights. Bases 0..N−1 are the
+    /// ground half basis and interior hats; with <paramref name="includeTopBasis"/> a final basis
+    /// N is the top half hat (the tube leg of the junction unknown). Order matches node order;
+    /// the delta-gap port drives basis 0 (f(0) = 1).</summary>
     public static ComplexDenseMatrix ProbeSelfBlock(
-        VerticalKernelSet set, ProbeFeed probe, double omega, bool includeTopBasis)
+        VerticalKernels set, double[] nodes, ProbeFeed probe, double omega, bool includeTopBasis,
+        int? maxDegreeOfParallelism = null)
     {
-        var substrate = set.Substrate;
-        double[] nodes = TubeNodes(substrate, probe);
-        int segments = probe.Segments;
+        int segments = nodes.Length - 1;
         double a = probe.RadiusMeters;
-        double d = substrate.ThicknessMeters;
         double k0 = set.K0;
         int basisCount = includeTopBasis ? segments + 1 : segments;
         var z = new ComplexDenseMatrix(basisCount, basisCount);
         Complex vectorFactor = Complex.ImaginaryOne * omega * RfConstants.Mu0 / (4 * Math.PI);
         Complex chargeFactor = -Complex.ImaginaryOne / (4 * Math.PI * RfConstants.Eps0 * omega);
-
-        var epsC = SpectralKernels.ComplexPermittivity(substrate);
-        var eta = (epsC - 1) / (epsC + 1);
-        // (source-height transform, vector coefficient, charge coefficient) per track.
-        var tracks = new (Func<double, double> Map, Complex CoeffA, Complex CoeffPhi)[]
-        {
-            (zp => -zp, 1, -1 / epsC),
-            (zp => 2 * d - zp, -eta, eta / epsC),
-            (zp => zp - 2 * d, -eta, -eta / epsC),
-            (zp => zp + 2 * d, -eta, -eta / epsC)
-        };
 
         // The wire structure carries the primary track's geometry (SELF/NEAR dispatch
         // by node adjacency); kernels are radial, so the tube lives at the origin.
@@ -93,19 +119,53 @@ internal static class ProbeAssembly
         }
 
         var (gaussNodes, gaussWeights) = GaussLegendre.Rule(4, 0, 1);
+
+        // The smooth track is ONE Sommerfeld evaluation per (element pair, quadrature point)
+        // and they are independent, so they run in parallel into ORDERED SLOTS and the fill
+        // below consumes them in its historical order — the Stage G recipe, bitwise identical
+        // at any thread count. This is the measured bottleneck of a multi-layer probe: the
+        // single-slab kernels are closed forms, but a stackup integrates a contour per call
+        // (~80 µs spectral × the contour), and a 4-element tube asks for 160 of them.
+        var pairs = new List<(int P, int Q)>();
+        for (int p = 0; p < segments; p++)
+            for (int q = p; q < segments; q++) pairs.Add((p, q));
+        int rule = gaussNodes.Length;
+        var smooth = new (Complex Gzz, Complex Phi)[pairs.Count * rule * rule];
+        LayeredKernelTable.ForKnots(pairs.Count, maxDegreeOfParallelism, pair =>
+        {
+            var (p, q) = pairs[pair];
+            double lp = nodes[p + 1] - nodes[p], lq = nodes[q + 1] - nodes[q];
+            for (int i = 0; i < rule; i++)
+                for (int j = 0; j < rule; j++)
+                {
+                    var (gzzS, _, phiS) = set.EvaluateSmoothG(
+                        a, nodes[p] + lp * gaussNodes[i], nodes[q] + lq * gaussNodes[j]);
+                    smooth[(pair * rule + i) * rule + j] = (gzzS, phiS);
+                }
+        });
+        int pairIndex = 0;
         for (int p = 0; p < segments; p++)
         {
             double lengthP = nodes[p + 1] - nodes[p];
+            double midP = 0.5 * (nodes[p] + nodes[p + 1]);
             for (int q = p; q < segments; q++)
             {
                 double lengthQ = nodes[q + 1] - nodes[q];
+                double midQ = 0.5 * (nodes[q] + nodes[q + 1]);
 
-                // Primary + the four geometric image tracks.
+                // The medium's image tracks for THIS pair. Midpoints identify the materials
+                // unambiguously — no element straddles an interface, by construction of the
+                // node list — so a coefficient that depends on ε(z), ε(z′) is a constant of
+                // the pair rather than a function of the quadrature point.
+                var tracks = set.MomentTracks(midP, midQ);
+                var images = tracks.Images;
+
+                // Primary + the medium's geometric image tracks.
                 var primary = ThinWireMomSolver.PairMoments(wire, p, q, k0);
-                var trackMoments = new ThinWireMomSolver.Moments[tracks.Length];
-                for (int t = 0; t < tracks.Length; t++)
+                var trackMoments = new ThinWireMomSolver.Moments[images.Count];
+                for (int t = 0; t < images.Count; t++)
                 {
-                    var map = tracks[t].Map;
+                    var map = images[t].SourceHeightMap;
                     trackMoments[t] = ThinWireMomSolver.GeometricPairMoments(
                         axis[p], axis[p + 1],
                         new Vector3D(0, 0, map(nodes[q])), new Vector3D(0, 0, map(nodes[q + 1])),
@@ -117,11 +177,9 @@ internal static class ProbeAssembly
                 Complex sc00 = default;
                 for (int i = 0; i < gaussNodes.Length; i++)
                 {
-                    double zi = nodes[p] + lengthP * gaussNodes[i];
                     for (int j = 0; j < gaussNodes.Length; j++)
                     {
-                        double zj = nodes[q] + lengthQ * gaussNodes[j];
-                        var (gzzS, _, phiS) = set.EvaluateSmoothG(a, zi, zj);
+                        var (gzzS, phiS) = smooth[(pairIndex * rule + i) * rule + j];
                         double w = gaussWeights[i] * gaussWeights[j] * lengthP * lengthQ;
                         Complex wv = w * gzzS;
                         sv00 += wv;
@@ -132,6 +190,7 @@ internal static class ProbeAssembly
                     }
                 }
                 var smoothVector = new ThinWireMomSolver.Moments(sv00, sv01, sv10, sv11);
+                pairIndex++;
 
                 foreach (var (basisP, risingP) in supports[p])
                     foreach (var (basisQ, risingQ) in supports[q])
@@ -140,12 +199,12 @@ internal static class ProbeAssembly
                         Complex vectorMoment =
                             ThinWireMomSolver.Combine(primary, risingP, risingQ)
                             + ThinWireMomSolver.Combine(smoothVector, risingP, risingQ);
-                        Complex chargeMoment = (1 / epsC) * primary.M00 + sc00;
-                        for (int t = 0; t < tracks.Length; t++)
+                        Complex chargeMoment = tracks.PrimaryCoefficientPhi * primary.M00 + sc00;
+                        for (int t = 0; t < images.Count; t++)
                         {
-                            vectorMoment += tracks[t].CoeffA
+                            vectorMoment += images[t].CoefficientA
                                 * ThinWireMomSolver.Combine(trackMoments[t], risingP, risingQ);
-                            chargeMoment += tracks[t].CoeffPhi * trackMoments[t].M00;
+                            chargeMoment += images[t].CoefficientPhi * trackMoments[t].M00;
                         }
                         double slopeP = (risingP ? 1.0 : -1.0) / lengthP;
                         double slopeQ = (risingQ ? 1.0 : -1.0) / lengthQ;
@@ -171,10 +230,15 @@ internal static class ProbeAssembly
     /// this IS a monopole of length L over a PEC ground, and must reproduce the
     /// thin-wire solver's monopole at the same discretization.</summary>
     public static (Complex InputImpedance, Complex[] Currents) SolveProbeOnly(
-        VerticalKernelSet set, ProbeFeed probe, double gapVolts = 1.0)
+        VerticalKernelSet set, ProbeFeed probe, double gapVolts = 1.0) =>
+        SolveProbeOnly(set, TubeNodes(set.Substrate, probe), probe, gapVolts);
+
+    /// <summary>The same standalone probe over any medium, given its node heights.</summary>
+    public static (Complex InputImpedance, Complex[] Currents) SolveProbeOnly(
+        VerticalKernels set, double[] nodes, ProbeFeed probe, double gapVolts = 1.0)
     {
         double omega = 2 * Math.PI * set.FrequencyHz;
-        var z = ProbeSelfBlock(set, probe, omega, includeTopBasis: false);
+        var z = ProbeSelfBlock(set, nodes, probe, omega, includeTopBasis: false);
         var rhs = new Complex[z.Rows];
         rhs[0] = gapVolts; // delta gap at the base: only the ground half basis has f(0) = 1
         var currents = ComplexLu.Factor(z).Solve(rhs);

@@ -10,9 +10,11 @@ namespace OpenSim.Rf.Surface;
 /// tube current per probe node (index 0 = ground contact = the port current; last = the
 /// junction current entering the patch), and the RAW (un-folded) edge currents so the
 /// accurate far field can add the junction's disc + half-RWG current exactly instead of
-/// through the mesh-scale fold.</summary>
+/// through the mesh-scale fold. <see cref="TubeNodes"/> carries the node heights the tube
+/// currents sit on — uniform for one slab, interface-pinned for a stackup.</summary>
 public sealed record ProbeFedSolution(
-    SurfaceMomSolution Surface, Complex[] TubeCurrents, Complex[] RawEdgeCurrents);
+    SurfaceMomSolution Surface, Complex[] TubeCurrents, Complex[] RawEdgeCurrents,
+    double[] TubeNodes);
 
 /// <summary>
 /// The probe-fed (coaxial feed) assembly path: the layered RWG system extended by the
@@ -33,8 +35,14 @@ public sealed record ProbeFedSolution(
 /// −jω⟨∇·f, V⟩ — valid for RWG bases (no rim flux) and for the junction's surface
 /// part AS A WHOLE (D's outer-edge flux is absorbed by the halves, interior boundary
 /// terms cancel pairwise). Transposed entries are assigned symmetrically — exact,
-/// because G_A^xz(d, z′) = −W̃(z′, d) makes the two directions the same integral.
+/// because G_A^xz(z_m, z′) = −W̃(z′, z_m) makes the two directions the same integral.
 /// The probe-absent path is untouched: Z_cc is the existing bitwise-pinned fill.
+///
+/// <para>The assembly is written ONCE against three seams and serves both media: the RWG
+/// block and its pair moments through <c>LayeredKernelSplit</c>, the junction disc through
+/// <see cref="IRadialGaKernel"/>, and the tube through <see cref="VerticalKernels"/>. The
+/// multi-layer entry point is in <c>SurfaceMomSolver.ProbeMultiLayer.cs</c>; nothing here
+/// knows which medium it is in.</para>
 /// </summary>
 public sealed partial class SurfaceMomSolver
 {
@@ -50,6 +58,18 @@ public sealed partial class SurfaceMomSolver
 
     public ProbeFedSolution SolveProbeFed(SurfaceStructure surface, LayeredKernelTable kernel,
         ProbeFeed probe, double gapVolts = 1.0)
+    {
+        int vertex = ResolveProbeVertex(surface, probe);
+        var set = new VerticalKernelSet(kernel.Substrate, kernel.FrequencyHz);
+        double[] tubeNodes = ProbeAssembly.TubeNodes(kernel.Substrate, probe);
+        return SolveProbeFedCore(surface, new LayeredKernelSplit(kernel),
+            new LayeredRadialGaKernel(kernel), kernel.FrequencyHz, set, tubeNodes,
+            kernel.Substrate.ThicknessMeters, probe, vertex, gapVolts);
+    }
+
+    /// <summary>The coplanarity + probe-position checks every probe-fed solve shares, returning
+    /// the mesh vertex the attachment fan anchors on.</summary>
+    private static int ResolveProbeVertex(SurfaceStructure surface, ProbeFeed probe)
     {
         if (surface.Ground is not null)
             throw new ArgumentException(
@@ -85,13 +105,21 @@ public sealed partial class SurfaceMomSolver
                 $"The probe position ({probe.X:g6}, {probe.Y:g6}) is not a mesh vertex (nearest is "
                 + $"{bestDistance:g3} m away) — build the mesh with the probe snap so the attachment "
                 + "fan has its anchor.", nameof(probe));
+        return vertex;
+    }
 
+    /// <param name="metalHeight">The height of the sheet metal above the ground — the tube's top
+    /// node and the coupling tables' observation plane. The slab top for a coplanar stackup, an
+    /// interior interface for a covered patch.</param>
+    private ProbeFedSolution SolveProbeFedCore(SurfaceStructure surface,
+        in LayeredKernelSplit split, IRadialGaKernel gaKernel, double frequencyHz,
+        VerticalKernels set, double[] tubeNodes, double metalHeight, ProbeFeed probe,
+        int vertex, double gapVolts)
+    {
         var fan = new AttachmentFan(surface, vertex, probe.RadiusMeters);
 
-        double omega = 2 * Math.PI * kernel.FrequencyHz;
-        var set = new VerticalKernelSet(kernel.Substrate, kernel.FrequencyHz);
-        double[] tubeNodes = ProbeAssembly.TubeNodes(kernel.Substrate, probe);
-        int segments = probe.Segments;
+        double omega = 2 * Math.PI * frequencyHz;
+        int segments = tubeNodes.Length - 1;
 
         // Tube-side quadrature: 2-point Gauss per element — these z′ nodes are the
         // coupling tables' fixed heights.
@@ -109,7 +137,8 @@ public sealed partial class SurfaceMomSolver
             maxRho = Math.Max(maxRho, Math.Sqrt(dx * dx + dy * dy));
         }
         double tableRhoMax = Math.Sqrt(maxRho * maxRho + probe.RadiusMeters * probe.RadiusMeters) * 1.02;
-        var tables = new ProbeCouplingTables(set, zNodes, tableRhoMax, MaxDegreeOfParallelism);
+        var tables = new ProbeCouplingTables(set, metalHeight, zNodes, tableRhoMax,
+            MaxDegreeOfParallelism);
 
         // Per tube basis: the Gauss-node weights of its value and slope. Basis n peaks
         // at tube node n; basis `segments` is the top half hat (the junction's tube leg).
@@ -215,7 +244,7 @@ public sealed partial class SurfaceMomSolver
                 for (int i = 0; i < wq.Length; i++)
                 {
                     var r = pa * l1[i] + pb * l2[i] + pc * l3[i];
-                    var (ax, ay) = fan.DiscPotential(kernel, surface, r);
+                    var (ax, ay) = fan.DiscPotential(gaKernel, surface, r);
                     foreach (var (basis, sign, opposite) in surface.TriangleSupports[t])
                     {
                         var fDir = r - surface.Vertices[opposite];
@@ -241,21 +270,20 @@ public sealed partial class SurfaceMomSolver
                 for (int i = 0; i < wq.Length; i++)
                 {
                     var r = pa * l1[i] + pb * l2[i] + pc * l3[i];
-                    var (ax, ay) = fan.DiscPotential(kernel, surface, r);
+                    var (ax, ay) = fan.DiscPotential(gaKernel, surface, r);
                     var fDir = pOpp - r; // the half form (p⁻ − r)
                     sum += wq[i] * panelArea * (fDir.X * ax + fDir.Y * ay);
                 }
             }
             discVHalfTotal += wedge.Gamma * jOmega * (lI / (2 * surface.TriangleAreas[t])) * sum;
         }
-        Complex discDD = jOmega * fan.DiscSelf(kernel, surface);
+        Complex discDD = jOmega * fan.DiscSelf(gaKernel, surface);
 
         // Half-RWG pairings against every RWG basis and against each other, through
         // the standard layered pair moments (the half is σ = −1 with the neighbor's
         // opposite vertex — one triangle of an ordinary RWG).
         Complex vectorFactor = Complex.ImaginaryOne * omega * RfConstants.Mu0 / (4 * Math.PI);
         Complex chargeFactor = -Complex.ImaginaryOne / (4 * Math.PI * RfConstants.Eps0 * omega);
-        var split = new LayeredKernelSplit(kernel);
         var halfRow = new Complex[nEdges];   // Σᵢβᵢ·⟨f_m, E(Hᵢ)⟩ per RWG m
         Complex halfHalf = Complex.Zero;     // ΣΣβᵢβⱼ⟨Hᵢ, E(Hⱼ)⟩
         // Heap buffers — stackalloc inside these loops would only release at method
@@ -334,8 +362,9 @@ public sealed partial class SurfaceMomSolver
         }
 
         // Extended system: [RWG 0..nE) | tube hats nE..nE+segments) | junction J].
-        var zCc = AssembleLayeredImpedanceMatrix(surface, kernel, omega, MaxDegreeOfParallelism);
-        var probeBlock = ProbeAssembly.ProbeSelfBlock(set, probe, omega, includeTopBasis: true);
+        var zCc = AssembleLayeredCore(surface, split, omega, MaxDegreeOfParallelism);
+        var probeBlock = ProbeAssembly.ProbeSelfBlock(set, tubeNodes, probe, omega,
+            includeTopBasis: true, MaxDegreeOfParallelism);
         int nTube = segments;          // bases 0..segments−1 (ground + interior hats)
         int total = nEdges + nTube + 1;
         int jIndex = total - 1;
@@ -387,7 +416,7 @@ public sealed partial class SurfaceMomSolver
         tubeCurrents[segments] = junction;
 
         return new ProbeFedSolution(
-            new SurfaceMomSolution(kernel.FrequencyHz, gapVolts / baseCurrent, edgeCurrents),
-            tubeCurrents, rawEdgeCurrents);
+            new SurfaceMomSolution(frequencyHz, gapVolts / baseCurrent, edgeCurrents),
+            tubeCurrents, rawEdgeCurrents, tubeNodes);
     }
 }
