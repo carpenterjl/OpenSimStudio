@@ -57,7 +57,7 @@ internal static class MultiLayerFieldKernels
         Complex c0 = 1 / (z >= zs
             ? (m == stackup.Layers.Count - 1
                 ? Complex.One : stackup.Layers[m + 1].ComplexPermittivity)
-            : ObservationPermittivity(stackup, z));
+            : RegionPermittivity(stackup, z));
         var ga = new[]
         {
             new MultiLayerImages.Image(hLow, Complex.One),
@@ -75,8 +75,10 @@ internal static class MultiLayerFieldKernels
     /// <see cref="TransmissionLineGreens.EvaluateField"/>'s own rule EXACTLY — region 0 (air)
     /// at or above the stack top, else the first layer whose top is ≥ z. Used only BELOW the
     /// source (see <see cref="FieldImages"/>): matching the kernel's own layer rule is what
-    /// makes the image cancel the observation-point Coulomb singularity there.</summary>
-    private static Complex ObservationPermittivity(LayeredStackup stackup, double z)
+    /// makes the image cancel the observation-point Coulomb singularity there. Shared with
+    /// <see cref="MultiLayerVerticalImages"/>, whose primary-image coefficient is written in
+    /// exactly these terms — one implementation of the region rule, never two.</summary>
+    internal static Complex RegionPermittivity(LayeredStackup stackup, double z)
     {
         int n = stackup.Layers.Count;
         var heights = stackup.InterfaceHeights();

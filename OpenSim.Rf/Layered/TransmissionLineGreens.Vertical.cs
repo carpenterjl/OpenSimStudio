@@ -63,38 +63,28 @@ internal static partial class TransmissionLineGreens
     /// guessed.</summary>
     public static (Complex GAzz, Complex GAxz, Complex KPhi) EvaluateVertical(
         LayeredStackup stackup, double k0, Complex kRho, Complex kz0, double z, double zPrime)
-    {
-        if (z < 0)
-            throw new ArgumentOutOfRangeException(nameof(z),
-                $"The observation height must be ≥ 0 (the PEC ground) — got {z} m.");
-        if (z > stackup.TotalThicknessMeters)
-            throw new ArgumentOutOfRangeException(nameof(z),
-                $"Observation above the stack (z = {z} m > {stackup.TotalThicknessMeters} m) is not "
-                + "in this scope. ∂₂g_TE is obtained by SWAPPING the two heights, and a source in "
-                + "the air above the stack is not an interface any of these systems can place one "
-                + "at; region 0 needs the logarithmic-derivative form instead, and is a named next "
-                + "step. The MoM never asks — a probe tube's current lives inside the substrate.");
+        => EvaluateVertical(PrepareVertical(stackup, z, zPrime), k0, kRho, kz0, z, zPrime);
 
-        var (split, m) = stackup.SplitAt(zPrime);
+    /// <summary>The same kernels from a geometry prepared ONCE for a (z, z′) pair. The stack
+    /// splits, the source interface and the swapped-problem split depend only on the two heights,
+    /// never on k_ρ — so a Sommerfeld sweep, which asks for a thousand spectral points at ONE
+    /// (z, z′), can hoist all of it out of the loop. Every arithmetic step below is the one the
+    /// per-call wrapper performs, on the identical stackup objects, so the two agree BITWISE
+    /// (gated); this only stops re-deriving geometry a thousand times over.</summary>
+    internal static (Complex GAzz, Complex GAxz, Complex KPhi) EvaluateVertical(
+        VerticalGeometry geometry, double k0, Complex kRho, Complex kz0, double z, double zPrime)
+    {
+        var (split, m, splitZ, mz) = geometry;
         int n = split.Layers.Count;
         var sp = Spectral(split, k0, kRho);
 
+        RefuseSourceOnAnInterface(sp, m, n, zPrime);
         Complex epsBelow = sp.Eps[m];
-        Complex epsAbove = m == n - 1 ? Complex.One : sp.Eps[m + 1];
-        if (epsBelow != epsAbove)
-            throw new ArgumentException(
-                $"A vertical current element at z′ = {zPrime} m sits exactly on a material "
-                + $"interface (εr {epsBelow} below, {epsAbove} above). Its source strength is "
-                + "−2µ₀/ε and the two sides disagree, so the kernel there is a limit that depends "
-                + "on which side you approach from, not a value. Split the current element at the "
-                + "interface and integrate each piece strictly inside one material.",
-                nameof(zPrime));
 
         // ---- The vertical TM solve: the homogeneous line with ONE source row. A z-directed
         // current excites no A_x at all, so every ε-contrast shunt source vanishes with it.
         var (tmM, tmRhs, _) = TmSystem(sp, kz0, new Complex[n], Complex.Zero);
-        int sourceRow = m == n - 1 ? 2 * n : 2 + 2 * m;
-        tmRhs[sourceRow] = -2 * RfConstants.Mu0 / epsBelow;
+        tmRhs[VerticalSourceRow(m, n)] = -2 * RfConstants.Mu0 / epsBelow;
         var verticalTm = ComplexLu.Factor(tmM).Solve(tmRhs);
         var zeroTe = new Complex[2 * n + 1];
         var (_, _, azCl, dzAzCl, epsAt, kzAt) = Profile(split, sp, kz0, zeroTe, verticalTm, z);
@@ -113,7 +103,6 @@ internal static partial class TransmissionLineGreens
         // ---- ∂₂g_TE(z, z′): the same Green's function read with the heights swapped. Splitting
         // again at z costs nothing (splitting is gated to change nothing) and turns the source
         // height into an interface the read-out can source from.
-        var (splitZ, mz) = split.SplitAt(z);
         Complex d2GTe = DzAx(splitZ, k0, kRho, kz0, mz, zPrime);
         if (ReferenceEquals(splitZ, split) && mz == m)
         {
@@ -136,13 +125,7 @@ internal static partial class TransmissionLineGreens
         // differentiated. The interface at the split carries zero contrast by construction (both
         // halves are the same material), which is exactly what keeps the kink at the source out
         // of the sum.
-        var axPrime = new Complex[n];
-        for (int i = 0; i < n; i++)
-        {
-            Complex contrast = i == n - 1 ? 1 / sp.Eps[n - 1] - 1 : 1 / sp.Eps[i] - 1 / sp.Eps[i + 1];
-            if (contrast == Complex.Zero) continue;
-            axPrime[i] = DzAx(split, k0, kRho, kz0, i, zPrime);
-        }
+        var axPrime = SourceHeightShunts(split, sp, k0, kRho, kz0, zPrime, residue: false);
         var (tmD, tmDRhs, _) = TmSystem(sp, kz0, axPrime, axPrime[n - 1]);
         var derivativeTm = ComplexLu.Factor(tmD).Solve(tmDRhs);
         var (_, _, dzPrimeAz, dzDzPrimeAz, _, _) = Profile(split, sp, kz0, zeroTe, derivativeTm, z);
@@ -170,13 +153,193 @@ internal static partial class TransmissionLineGreens
     /// the TE half of the per-z read-out, without the TM solve the full read-out would also do.
     /// Used for the source-height derivatives, which need this quantity once per interface.</summary>
     private static Complex DzAx(LayeredStackup stackup, double k0, Complex kRho, Complex kz0,
+        int m, double z) => DzAx(stackup, Spectral(stackup, k0, kRho), kz0, m, z);
+
+    /// <summary>∂_zA_x with the layer spectral profile already in hand — the same arithmetic, for
+    /// callers that have solved on this very stackup at this very k_ρ (the shunt read-outs, which
+    /// ask once per contrast interface).</summary>
+    private static Complex DzAx(LayeredStackup stackup, LayerSpectral sp, Complex kz0,
         int m, double z)
     {
-        var sp = Spectral(stackup, k0, kRho);
         int n = stackup.Layers.Count;
         var (teM, teRhs, _) = m == n - 1 ? TeSystem(sp, kz0) : TeSystemInterior(sp, kz0, m);
         var teSol = ComplexLu.Factor(teM).Solve(teRhs);
         var (_, dzAx, _, _, _, _) = Profile(stackup, sp, kz0, teSol, new Complex[2 * n + 1], z);
         return dzAx;
+    }
+
+    /// <summary>The residues of the three vertical kernels at a surface-wave pole, per (z, z′) —
+    /// what the spatial remainder integrator extracts so that a lossless stack’s real-axis pole
+    /// never sits on the integration path. The mode is source-independent, so only the right-hand
+    /// sides and the read-out heights move; each singular solve becomes the null-vector matrix
+    /// residue (<see cref="MatrixResidue"/>), exactly as <see cref="PoleFieldResidues"/> does.
+    ///
+    /// <para><b>Which pieces are singular is decided by the pole type, and the split is clean.</b>
+    /// At a TE pole the TE line is singular, so g_TE, its two first derivatives and every
+    /// interface read-out are — while the vertical TM solve, whose source carries no A_x at all, is
+    /// REGULAR and contributes nothing. At a TM pole it is exactly the other way round: the TE
+    /// quantities are regular (so the mixed term contributes nothing) and both TM solves are
+    /// singular.</para>
+    ///
+    /// <para><b>The mixed term is why the assembly is grouped as a logarithmic derivative.</b>
+    /// ∂₁g·(∂₂g/g) has a SIMPLE pole because the ratio is regular there: writing g = u(z_&lt;)v(z_&gt;)/W,
+    /// the ratio is v′/v above the source and u′/u below — free of the Wronskian W whose vanishing IS
+    /// the pole — so the residue is Res[∂₁g] × (that ratio), a sum of residues rather than the residue
+    /// of a quotient. Written the naive way the same number would have to arrive as a double pole
+    /// divided by a simple one.</para></summary>
+    public static (Complex GAzz, Complex GAxz, Complex KPhi) PoleVerticalResidues(
+        LayeredStackup stackup, double k0, Complex kp, bool isTm, double z, double zPrime)
+    {
+        ValidateVerticalHeights(stackup, z);
+        var (split, m) = stackup.SplitAt(zPrime);
+        int n = split.Layers.Count;
+        var sp = Spectral(split, k0, kp);
+        var kz0 = SpectralKernels.Kz(k0 * k0, kp);
+        RefuseSourceOnAnInterface(sp, m, n, zPrime);
+        var zeroTe = new Complex[2 * n + 1];
+        var zeroTm = new Complex[2 * n + 1];
+
+        // K̃_Φ is a plain read-out of the horizontal problem, so its residue is the shipped per-z
+        // field residue at the split interface — no new derivation, and the N = 1 identity gates it
+        // against the single-slab analytic residues transitively.
+        Complex resKPhi = PoleFieldResidues(split, k0, kp, isTm, m, z).Phi;
+
+        if (isTm)
+        {
+            var tmDeriv = MatrixDerivative(split, k0, kp, tm: true);
+            var (tmM, tmRhs, _) = TmSystem(sp, kz0, new Complex[n], Complex.Zero);
+            tmRhs[VerticalSourceRow(m, n)] = -2 * RfConstants.Mu0 / sp.Eps[m];
+            var resVertical = MatrixResidue(tmM, tmDeriv, tmRhs);
+            var (_, _, resAzCl, resDzAzCl, epsAt, kzAt) =
+                Profile(split, sp, kz0, zeroTe, resVertical, z);
+
+            // The TE line is regular at a TM pole, so the derivative system’s shunt sources are
+            // ordinary values and only its MATRIX is singular.
+            var axPrime = SourceHeightShunts(split, sp, k0, kp, kz0, zPrime, residue: false);
+            var (tmD, tmDRhs, _) = TmSystem(sp, kz0, axPrime, axPrime[n - 1]);
+            var resDeriv = MatrixResidue(tmD, tmDeriv, tmDRhs);
+            var (_, _, resDzPrimeAz, resDzDzPrimeAz, _, _) =
+                Profile(split, sp, kz0, zeroTe, resDeriv, z);
+
+            Complex scale = 1 / (k0 * k0 * epsAt);
+            Complex gAxz = scale * (resDzAzCl + resDzDzPrimeAz);
+            Complex gAzz = resAzCl + scale * (-kzAt * kzAt * resAzCl - kzAt * kzAt * resDzPrimeAz);
+            return (gAzz, gAxz, resKPhi);
+        }
+        else
+        {
+            var (teM, teRhs, _) = m == n - 1 ? TeSystem(sp, kz0) : TeSystemInterior(sp, kz0, m);
+            var teDeriv = m == n - 1
+                ? MatrixDerivative(split, k0, kp, tm: false)
+                : MatrixDerivativeTeInterior(split, k0, kp, m);
+            var resTe = MatrixResidue(teM, teDeriv, teRhs);
+            var (resGTe, resD1GTe, _, _, epsAt, kzAt) = Profile(split, sp, kz0, resTe, zeroTm, z);
+
+            var (splitZ, mz) = split.SplitAt(z);
+            Complex resD2GTe = DzAxResidue(splitZ, k0, kp, kz0, mz, zPrime);
+
+            var resAxPrime = SourceHeightShunts(split, sp, k0, kp, kz0, zPrime, residue: true);
+            var (tmD, tmDRhs, _) = TmSystem(sp, kz0, resAxPrime, resAxPrime[n - 1]);
+            var resDeriv = ComplexLu.Factor(tmD).Solve(tmDRhs);   // M regular, RHS = Res(b)
+            var (_, _, resDzPrimeAz, resDzDzPrimeAz, _, _) =
+                Profile(split, sp, kz0, zeroTe, resDeriv, z);
+
+            Complex scale = 1 / (k0 * k0 * epsAt);
+            Complex resMixed = resGTe == Complex.Zero
+                ? Complex.Zero : resD1GTe * (resD2GTe / resGTe);
+            Complex gAxz = scale * (resD2GTe + resDzDzPrimeAz);
+            Complex gAzz = scale * (resMixed - kzAt * kzAt * resDzPrimeAz);
+            return (gAzz, gAxz, resKPhi);
+        }
+    }
+
+    /// <summary>The interface shunt sources of the source-height-derivative TM system — ∂₂g_TE at
+    /// every contrast interface, as values (<paramref name="residue"/> false) or as their residues
+    /// at a TE pole (true). Zero-contrast interfaces are skipped: they launch no ã_z, and the
+    /// split interface is one of them by construction, which is what keeps the source kink out of
+    /// the sum.</summary>
+    private static Complex[] SourceHeightShunts(LayeredStackup split, LayerSpectral sp, double k0,
+        Complex kRho, Complex kz0, double zPrime, bool residue)
+    {
+        int n = split.Layers.Count;
+        var shunts = new Complex[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (EpsContrast(sp, i, n) == Complex.Zero) continue;
+            shunts[i] = residue
+                ? DzAxResidue(split, k0, kRho, kz0, i, zPrime)
+                : DzAx(split, sp, kz0, i, zPrime);
+        }
+        return shunts;
+    }
+
+    /// <summary>The geometry a (z, z′) pair implies: the stack split so the source sits on an
+    /// interface, and the same stack split AGAIN at the observation height so the swapped read-out
+    /// has an interface to source from. <c>ReferenceEquals(SplitZ, Split) &amp;&amp; Mz == M</c> is
+    /// how the coincident-height branch is recognised — <see cref="LayeredStackup.SplitAt"/>
+    /// returns THIS stackup when the height already is an interface.</summary>
+    internal readonly record struct VerticalGeometry(
+        LayeredStackup Split, int M, LayeredStackup SplitZ, int Mz);
+
+    /// <summary>Prepare the splits for one (z, z′) pair. Deterministic and k_ρ-independent.</summary>
+    internal static VerticalGeometry PrepareVertical(LayeredStackup stackup, double z, double zPrime)
+    {
+        ValidateVerticalHeights(stackup, z);
+        var (split, m) = stackup.SplitAt(zPrime);
+        var (splitZ, mz) = split.SplitAt(z);
+        return new VerticalGeometry(split, m, splitZ, mz);
+    }
+
+    /// <summary>∂_zA_x at <paramref name="z"/> for a HED source at interface <paramref name="m"/>,
+    /// AT a TE pole — the residue counterpart of <see cref="DzAx"/>.</summary>
+    private static Complex DzAxResidue(LayeredStackup stackup, double k0, Complex kp, Complex kz0,
+        int m, double z)
+    {
+        var sp = Spectral(stackup, k0, kp);
+        int n = stackup.Layers.Count;
+        var (teM, teRhs, _) = m == n - 1 ? TeSystem(sp, kz0) : TeSystemInterior(sp, kz0, m);
+        var deriv = m == n - 1
+            ? MatrixDerivative(stackup, k0, kp, tm: false)
+            : MatrixDerivativeTeInterior(stackup, k0, kp, m);
+        var res = MatrixResidue(teM, deriv, teRhs);
+        var (_, dzAx, _, _, _, _) = Profile(stackup, sp, kz0, res, new Complex[2 * n + 1], z);
+        return dzAx;
+    }
+
+    /// <summary>The TM row a vertical source at interface <paramref name="m"/> drives (the top
+    /// plane’s radiation row, else that interface’s derivative-jump row).</summary>
+    private static int VerticalSourceRow(int m, int n) => m == n - 1 ? 2 * n : 2 + 2 * m;
+
+    /// <summary>The ε-contrast that launches ã_z at interface i — 1/ε below minus 1/ε above, with
+    /// air above the top.</summary>
+    private static Complex EpsContrast(LayerSpectral sp, int i, int n) =>
+        i == n - 1 ? 1 / sp.Eps[n - 1] - 1 : 1 / sp.Eps[i] - 1 / sp.Eps[i + 1];
+
+    private static void ValidateVerticalHeights(LayeredStackup stackup, double z)
+    {
+        if (z < 0)
+            throw new ArgumentOutOfRangeException(nameof(z),
+                $"The observation height must be ≥ 0 (the PEC ground) — got {z} m.");
+        if (z > stackup.TotalThicknessMeters)
+            throw new ArgumentOutOfRangeException(nameof(z),
+                $"Observation above the stack (z = {z} m > {stackup.TotalThicknessMeters} m) is not "
+                + "in this scope. ∂₂g_TE is obtained by SWAPPING the two heights, and a source in "
+                + "the air above the stack is not an interface any of these systems can place one "
+                + "at; region 0 needs the logarithmic-derivative form instead, and is a named next "
+                + "step. The MoM never asks — a probe tube’s current lives inside the substrate.");
+    }
+
+    private static void RefuseSourceOnAnInterface(LayerSpectral sp, int m, int n, double zPrime)
+    {
+        Complex epsBelow = sp.Eps[m];
+        Complex epsAbove = m == n - 1 ? Complex.One : sp.Eps[m + 1];
+        if (epsBelow != epsAbove)
+            throw new ArgumentException(
+                $"A vertical current element at z′ = {zPrime} m sits exactly on a material "
+                + $"interface (εr {epsBelow} below, {epsAbove} above). Its source strength is "
+                + "−2µ₀/ε and the two sides disagree, so the kernel there is a limit that depends "
+                + "on which side you approach from, not a value. Split the current element at the "
+                + "interface and integrate each piece strictly inside one material.",
+                nameof(zPrime));
     }
 }
