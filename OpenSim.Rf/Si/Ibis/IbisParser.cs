@@ -9,17 +9,45 @@ namespace OpenSim.Rf.Si.Ibis;
 /// tables, and the reference/range keywords. Every numeric column is a min/typ/max triple
 /// with "NA" mapped to null; SPICE-style scale suffixes (T/G/M/k/m/u/n/p/f, case-sensitive
 /// M = mega vs m = milli) are honored and trailing units (V/A/F/s/ohm) ignored. Comments
-/// begin with '|'. Structural keywords not needed by the engine ([Pin], [Package],
-/// [Model Selector], …) are skipped with a warning — never silently, mirroring the Gerber
-/// reader's "warn, don't misrender" rule. A malformed numeric row in a table is a loud
-/// typed failure naming the line.
+/// begin with '|'. Sub-parameters take the spec's own syntax — <c>R_fixture = 50</c>,
+/// <c>R_fixture=50</c> and <c>R_fixture 50</c> are all one key and one value. Structural
+/// keywords not needed by the engine ([Pin], [Package], [Model Selector], …) are skipped with
+/// a warning — never silently, mirroring the Gerber reader's "warn, don't misrender" rule.
+/// A [Submodel] definition is skipped as a whole (its tables must not leak into a neighbouring
+/// [Model]); an [Add Submodel] reference list inside a model is skipped without ending the
+/// model. A malformed numeric row in a table is a loud typed failure naming the line.
 /// </summary>
 public sealed class IbisParser
 {
     public IbisFile ParseFile(string path) => Parse(File.ReadAllText(path));
 
-    // Sub-sections a data line can belong to.
-    private enum Section { None, Pullup, Pulldown, GndClamp, PowerClamp, Ramp, Rising, Falling }
+    // Sub-sections a data line can belong to. SkippedRows: a keyword whose rows are a list of
+    // names (an [Add Submodel] reference list, a [Driver Schedule], …) that the keyword itself
+    // already warned about — the rows are dropped without a warning each.
+    private enum Section { None, Pullup, Pulldown, GndClamp, PowerClamp, Ramp, Rising, Falling, SkippedRows }
+
+    /// <summary>Keywords that live INSIDE a [Model] and carry non-numeric rows the engine does
+    /// not consume. They end the current table section but not the model.</summary>
+    private static readonly HashSet<string> InModelListKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "add submodel", "driver schedule", "model spec", "receiver thresholds",
+    };
+
+    /// <summary>Top-level keywords: any of these ends a [Submodel] definition being skipped
+    /// (a [Model] and [Component] also end it; [End] ends the file).</summary>
+    private static readonly HashSet<string> TopLevelKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "model selector", "package", "pin", "pin mapping", "diff pin", "series pin mapping",
+        "series switch groups", "define package model", "end package model", "model",
+        "component", "end",
+    };
+
+    /// <summary>Header keywords that need no warning.</summary>
+    private static readonly HashSet<string> HeaderKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ibis ver", "file name", "file rev", "date", "source", "notes", "disclaimer",
+        "copyright", "manufacturer",
+    };
 
     public IbisFile Parse(string content)
     {
@@ -27,13 +55,17 @@ public sealed class IbisParser
         var models = new List<IbisModel>();
         string? component = null;
 
-
         ModelBuilder? model = null;
         var section = Section.None;
         WaveformBuilder? waveform = null;
-        // Sub-parameters this reader does not consume are named ONCE each (per model), not once
-        // per occurrence: a waveform block repeats its fixture lines for every table, and an
-        // un-deduplicated list would bury the warnings that matter.
+        // Inside a [Submodel] definition: every bracketed table keyword is ignored (not merely
+        // its rows) until the next top-level keyword, so a submodel's [Pullup] cannot append
+        // to the previous [Model] and its [Rising Waveform] cannot be flushed into the next.
+        bool skippingSubmodel = false;
+
+        // Sub-parameters and keywords this reader does not consume are named ONCE each (per
+        // model), not once per occurrence: a waveform block repeats its fixture lines for every
+        // table, and an un-deduplicated list would bury the warnings that matter.
         var skippedNoted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void NoteSkipped(string what)
         {
@@ -42,12 +74,24 @@ public sealed class IbisParser
                 warnings.Add($"IBIS: model '{model?.Name ?? "(header)"}' — sub-parameter "
                     + $"{what} is not modelled.");
         }
+        var skippedKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void NoteSkippedKeyword(string keyword, int lineNo)
+        {
+            if (skippedKeywords.Add(keyword))
+                warnings.Add($"IBIS: skipped unsupported keyword [{keyword}] (first at line {lineNo}).");
+        }
 
         void FlushWaveform()
         {
-            if (model is null || waveform is null) return;
-            var wf = new IbisWaveform(waveform.RFixture, waveform.VFixture, waveform.Rows);
-            (section == Section.Rising ? model.Rising : model.Falling).Add(wf);
+            if (waveform is null) return;
+            if (model is not null)
+            {
+                var wf = new IbisWaveform(waveform.RFixture,
+                    new IbisCorner(waveform.VFixture, waveform.VFixtureMin, waveform.VFixtureMax),
+                    waveform.Rows);
+                (section == Section.Rising ? model.Rising : model.Falling).Add(wf);
+            }
+            // Cleared even without a model, so a builder never survives into the next one.
             waveform = null;
         }
         void FlushModel()
@@ -66,15 +110,32 @@ public sealed class IbisParser
 
             if (line[0] == '[')
             {
-                FlushWaveform();
                 var (keyword, argument) = SplitKeyword(line);
+                if (skippingSubmodel)
+                {
+                    if (!TopLevelKeywords.Contains(keyword)) continue;   // still inside the submodel
+                    skippingSubmodel = false;
+                }
+                FlushWaveform();
                 switch (keyword.ToLowerInvariant())
                 {
-                    case "component": component = argument; break;
+                    case "component":
+                        FlushModel();
+                        component = argument;
+                        break;
                     case "model":
                         FlushModel();
                         model = new ModelBuilder { Name = argument };
                         section = Section.None;
+                        break;
+                    case "submodel":
+                        // A DEFINITION (top level), which re-uses the [Model] table keywords.
+                        // Everything up to the next top-level keyword belongs to it, not to
+                        // the models on either side.
+                        FlushModel();
+                        skippingSubmodel = true;
+                        warnings.Add($"IBIS: skipped [Submodel] '{argument}' (line {lineNo + 1}) — "
+                            + "submodels (dynamic clamps, bus hold, fall-back) are not modelled.");
                         break;
                     case "pullup": section = Section.Pullup; break;
                     case "pulldown": section = Section.Pulldown; break;
@@ -86,56 +147,74 @@ public sealed class IbisParser
                     case "falling waveform":
                         section = Section.Falling; waveform = new WaveformBuilder(); break;
                     case "voltage range":
+                        section = Section.None;
                         if (model is not null) model.VoltageRange = ParseCorner(argument, line); break;
                     case "pullup reference":
-                        if (model is not null) model.PullupRef = ParseNumber(FirstToken(argument), line); break;
+                        section = Section.None;
+                        if (model is not null) model.PullupRef = ParseCorner(argument, line); break;
                     case "pulldown reference":
-                        if (model is not null) model.PulldownRef = ParseNumber(FirstToken(argument), line); break;
+                        section = Section.None;
+                        if (model is not null) model.PulldownRef = ParseCorner(argument, line); break;
                     case "gnd clamp reference":
-                        if (model is not null) model.GndClampRef = ParseNumber(FirstToken(argument), line); break;
+                        section = Section.None;
+                        if (model is not null) model.GndClampRef = ParseCorner(argument, line); break;
                     case "power clamp reference":
-                        if (model is not null) model.PowerClampRef = ParseNumber(FirstToken(argument), line); break;
+                        section = Section.None;
+                        if (model is not null) model.PowerClampRef = ParseCorner(argument, line); break;
                     case "end":
                         FlushModel();
                         return new IbisFile(component, models, warnings);
                     default:
+                        if (InModelListKeywords.Contains(keyword) && model is not null)
+                        {
+                            // A reference list INSIDE the model ([Add Submodel] name/mode rows,
+                            // a [Driver Schedule], …): it ends the current table section only.
+                            // The model's later tables, references and waveforms are kept.
+                            section = Section.SkippedRows;
+                            warnings.Add($"IBIS: model '{model.Name}' — [{keyword}] (line {lineNo + 1}) "
+                                + "is not modelled; the model's own tables are used.");
+                            break;
+                        }
                         // A new top-level keyword ends any table section; note the ones we skip.
                         section = Section.None;
-                        if (keyword is not ("ibis ver" or "file name" or "file rev" or "date"
-                            or "source" or "notes" or "disclaimer" or "copyright" or "manufacturer"))
-                            warnings.Add($"IBIS: skipped unsupported keyword [{keyword}] (line {lineNo + 1}).");
+                        if (!HeaderKeywords.Contains(keyword))
+                            NoteSkippedKeyword(keyword, lineNo + 1);
                         break;
                 }
                 continue;
             }
 
-            if (model is null) continue;   // data before the first [Model] — header noise
-            var first = FirstToken(line);
-            var firstLower = first.ToLowerInvariant();
+            if (model is null) continue;   // data before the first [Model], or inside a skipped submodel
+            if (section == Section.SkippedRows) continue;
 
-            // Model sub-parameters (unbracketed key/value lines).
-            if (firstLower == "model_type") { model.ModelType = Rest(line); continue; }
-            if (firstLower == "c_comp") { model.CComp = ParseCorner(Rest(line), line); continue; }
+            // Model sub-parameters (unbracketed key/value lines). The spec writes them as
+            // "key = value", "key=value" or "key value"; all three are one key and one value.
+            var (key, value) = KeyValue(line);
+            var keyLower = key.ToLowerInvariant();
+            if (keyLower == "model_type") { model.ModelType = value; continue; }
+            if (keyLower == "c_comp") { model.CComp = ParseCorner(value, line); continue; }
             if (section is Section.Rising or Section.Falling && waveform is not null)
             {
-                if (firstLower == "r_fixture") { waveform.RFixture = ReqNum(Rest(line), line); continue; }
-                if (firstLower == "v_fixture") { waveform.VFixture = ReqNum(Rest(line), line); continue; }
-                if (firstLower is "c_fixture" or "l_fixture" or "r_dut" or "c_dut" or "l_dut")
+                if (keyLower == "r_fixture") { waveform.RFixture = ReqNum(FirstToken(value), line); continue; }
+                if (keyLower == "v_fixture") { waveform.VFixture = ReqNum(FirstToken(value), line); continue; }
+                if (keyLower == "v_fixture_min") { waveform.VFixtureMin = ReqNum(FirstToken(value), line); continue; }
+                if (keyLower == "v_fixture_max") { waveform.VFixtureMax = ReqNum(FirstToken(value), line); continue; }
+                if (keyLower is "c_fixture" or "l_fixture" or "r_dut" or "c_dut" or "l_dut")
                 {
                     // Reactive fixture elements. The switching-coefficient extraction assumes a
                     // purely RESISTIVE fixture (R_fixture to V_fixture), so a file that specifies
                     // reactance is approximated — warn, never misrender silently.
-                    NoteSkipped($"{first} (the Ku/Kd extraction assumes a resistive fixture)");
+                    NoteSkipped($"{key} (the Ku/Kd extraction assumes a resistive fixture)");
                     continue;
                 }
             }
             if (section == Section.Ramp)
             {
-                if (firstLower == "dv/dt_r") { model.RampRise = ParseRampEdge(Rest(line), line); continue; }
-                if (firstLower == "dv/dt_f") { model.RampFall = ParseRampEdge(Rest(line), line); continue; }
-                if (firstLower is "r_load")
+                if (keyLower == "dv/dt_r") { model.RampRise = ParseRampEdge(value, line); continue; }
+                if (keyLower == "dv/dt_f") { model.RampFall = ParseRampEdge(value, line); continue; }
+                if (keyLower is "r_load")
                 {
-                    NoteSkipped($"{first} in [Ramp] (the ramp slew is used as declared)");
+                    NoteSkipped($"{key} in [Ramp] (the ramp slew is used as declared)");
                     continue;
                 }
             }
@@ -165,7 +244,7 @@ public sealed class IbisParser
             // per keyword rather than dropped in silence (the file's own warn-don't-misrender
             // rule; a stream of duplicates would drown the real warnings, hence the dedup).
             if (!IsNumericRow(line))
-                NoteSkipped(first);
+                NoteSkipped(key);
         }
 
         FlushModel();
@@ -286,10 +365,16 @@ public sealed class IbisParser
         return t.Length > 0 ? t[0] : "";
     }
 
-    private static string Rest(string line)
+    /// <summary>An unbracketed sub-parameter line as (key, value): split at the first '=' when
+    /// the line has one ("R_fixture = 50", "R_fixture=50"), else at the first whitespace
+    /// ("R_fixture 50"). Both halves are trimmed; the value keeps its internal spacing so a
+    /// typ/min/max triple survives.</summary>
+    internal static (string Key, string Value) KeyValue(string line)
     {
+        int eq = line.IndexOf('=');
+        if (eq >= 0) return (line[..eq].Trim(), line[(eq + 1)..].Trim());
         var t = Tokens(line);
-        return t.Length > 1 ? string.Join(' ', t[1..]) : "";
+        return (t.Length > 0 ? t[0] : "", t.Length > 1 ? string.Join(' ', t[1..]) : "");
     }
 
     /// <summary>True when the line opens with a number — a data row of a table section that
@@ -311,6 +396,7 @@ public sealed class IbisParser
     {
         public double RFixture = 50;
         public double VFixture;
+        public double? VFixtureMin, VFixtureMax;
         public List<IbisVtRow> Rows { get; } = new();
     }
 
@@ -328,7 +414,7 @@ public sealed class IbisParser
         public List<IbisWaveform> Rising { get; } = new();
         public List<IbisWaveform> Falling { get; } = new();
         public IbisCorner? VoltageRange;
-        public double? PullupRef, PulldownRef, GndClampRef, PowerClampRef;
+        public IbisCorner? PullupRef, PulldownRef, GndClampRef, PowerClampRef;
 
         public IbisModel Build() => new()
         {
@@ -345,10 +431,10 @@ public sealed class IbisParser
             RisingWaveforms = Rising,
             FallingWaveforms = Falling,
             VoltageRange = VoltageRange,
-            PullupReferenceVolts = PullupRef,
-            PulldownReferenceVolts = PulldownRef,
-            GndClampReferenceVolts = GndClampRef,
-            PowerClampReferenceVolts = PowerClampRef,
+            PullupReference = PullupRef,
+            PulldownReference = PulldownRef,
+            GndClampReference = GndClampRef,
+            PowerClampReference = PowerClampRef,
         };
 
         private static IbisRampEdge Zero() =>

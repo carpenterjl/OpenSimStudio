@@ -258,12 +258,16 @@ C_comp          0.0
         var bare = new IbisParser().Parse(EclPair("")).Model("ECL");
         Assert.Equal(5.0, bare.PulldownRailAt(IbisCornerSelection.Typ), 12);
 
-        // An explicit [Pulldown Reference] wins: pad at 3.0 V, V_table = 4.5 − 3.0 = 1.5 →
-        // −30 mA into the pad → +30 mA into the line. (Min/Max corners are asserted once the
-        // parser keeps the triple, WI-3.)
+        // An explicit [Pulldown Reference] wins, at every corner: pad at 3.0 V, V_table =
+        // V_ref − 3.0 → −(V_ref − 3.0)/50 into the pad → +(V_ref − 3.0)/50 into the line:
+        // 30 mA at the 4.5 V Typ reference, 26 mA at 4.3 V Min, 34 mA at 4.7 V Max.
         var referenced = new IbisParser().Parse(EclPair("[Pulldown Reference] 4.5 4.3 4.7")).Model("ECL");
         Assert.Equal(4.5, referenced.PulldownRailAt(IbisCornerSelection.Typ), 12);
-        Assert.Equal(+0.030, Held(referenced, high: false).Evaluate(3.0, 0).Current, 12);
+        Assert.Equal(4.3, referenced.PulldownRailAt(IbisCornerSelection.Min), 12);
+        Assert.Equal(4.7, referenced.PulldownRailAt(IbisCornerSelection.Max), 12);
+        Assert.Equal(+0.030, Held(referenced, high: false, IbisCornerSelection.Typ).Evaluate(3.0, 0).Current, 12);
+        Assert.Equal(+0.026, Held(referenced, high: false, IbisCornerSelection.Min).Evaluate(3.0, 0).Current, 12);
+        Assert.Equal(+0.034, Held(referenced, high: false, IbisCornerSelection.Max).Evaluate(3.0, 0).Current, 12);
     }
 
     [Fact]

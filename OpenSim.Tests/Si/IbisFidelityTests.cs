@@ -53,9 +53,9 @@ dV/dt_f     1.65/0.5n    1.65/0.5n    1.65/0.5n
     public void EachTableIsReferencedToItsOwnRail()
     {
         var m = Model(SplitRail, "DRV_SPLIT");
-        Assert.Equal(3.3, m.PullupRail, 12);
-        Assert.Equal(-0.5, m.PulldownRail, 12);
-        Assert.Equal(-0.5, m.GndClampRail, 12);
+        Assert.Equal(3.3, m.PullupRailAt(IbisCornerSelection.Typ), 12);
+        Assert.Equal(-0.5, m.PulldownRailAt(IbisCornerSelection.Typ), 12);
+        Assert.Equal(-0.5, m.GndClampRailAt(IbisCornerSelection.Typ), 12);
         Assert.Equal(5.0, m.PowerClampRailAt(IbisCornerSelection.Typ), 12);
     }
 
@@ -81,10 +81,13 @@ C_comp          0.0
 [End]
 ";
         var m = Model(bare, "B");
-        Assert.Equal(0.0, m.PulldownRail, 15);
-        Assert.Equal(0.0, m.GndClampRail, 15);
-        Assert.Equal(2.5, m.PullupRail, 12);
-        Assert.Equal(m.PullupRail, m.PowerClampRailAt(IbisCornerSelection.Typ), 12);
+        foreach (var c in new[] { IbisCornerSelection.Typ, IbisCornerSelection.Min, IbisCornerSelection.Max })
+        {
+            Assert.Equal(0.0, m.PulldownRailAt(c), 15);
+            Assert.Equal(0.0, m.GndClampRailAt(c), 15);
+            Assert.Equal(2.5, m.PullupRailAt(c), 12);
+            Assert.Equal(m.PullupRailAt(c), m.PowerClampRailAt(c), 12);
+        }
     }
 
     [Fact]

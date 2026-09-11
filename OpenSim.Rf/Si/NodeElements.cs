@@ -63,7 +63,7 @@ public sealed class IbisReceiverElement : INonlinearDriver
                 "Receiver termination must be positive (PositiveInfinity for none).");
         _gc = PwlTable.FromTable(model.GndClamp, corner);
         _pc = PwlTable.FromTable(model.PowerClamp, corner);
-        _gcRail = model.GndClampRail;
+        _gcRail = model.GndClampRailAt(corner);
         _pcRail = model.PowerClampRailAt(corner);
         _g = double.IsPositiveInfinity(terminationOhms) ? 0 : 1 / terminationOhms;
         CompCapacitanceFarads = model.CComp.At(corner) ?? 0;

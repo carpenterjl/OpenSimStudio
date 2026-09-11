@@ -73,8 +73,8 @@ V_fixture   3.3
 
         // Voltage range + references.
         Assert.Equal(3.3, m.VoltageRange!.Value.Typ!.Value, 12);
-        Assert.Equal(3.3, m.PullupRail, 12);
-        Assert.Equal(0.0, m.PulldownReferenceVolts!.Value, 12);
+        Assert.Equal(3.3, m.PullupRailAt(IbisCornerSelection.Typ), 12);
+        Assert.Equal(0.0, m.PulldownReference!.Value.Typ!.Value, 12);
 
         // Pulldown table: milli suffix, typ/min/max order.
         Assert.Equal(3, m.Pulldown.Count);
@@ -98,11 +98,13 @@ V_fixture   3.3
         // Waveforms: fixtures + 3 rows each; the ns time suffix must scale.
         Assert.Single(m.RisingWaveforms);
         Assert.Equal(50.0, m.RisingWaveforms[0].RFixtureOhms, 12);
-        Assert.Equal(0.0, m.RisingWaveforms[0].VFixtureVolts, 12);
+        Assert.Equal(0.0, m.RisingWaveforms[0].VFixture.Typ!.Value, 12);
         Assert.Equal(1.0e-9, m.RisingWaveforms[0].Rows[2].TimeSeconds, 15);
         Assert.Equal(3.3, m.RisingWaveforms[0].Rows[2].VoltageVolts.Typ!.Value, 12);
         Assert.Single(m.FallingWaveforms);
-        Assert.Equal(3.3, m.FallingWaveforms[0].VFixtureVolts, 12);
+        Assert.Equal(3.3, m.FallingWaveforms[0].VFixture.Typ!.Value, 12);
+        // No V_fixture_min/_max: every corner falls back to V_fixture.
+        Assert.Equal(3.3, m.FallingWaveforms[0].VFixture.At(IbisCornerSelection.Min)!.Value, 12);
 
         // The unsupported [Pin] keyword is skipped with a warning, not silently.
         Assert.Contains(file.Warnings, w => w.Contains("[Pin]"));

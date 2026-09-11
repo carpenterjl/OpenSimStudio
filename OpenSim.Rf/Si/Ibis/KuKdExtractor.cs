@@ -69,7 +69,7 @@ public static class KuKdExtractor
         var pc = PwlTable.FromTable(model.PowerClamp, corner);
         double vPu = model.PullupRailAt(corner);
         double vPd = model.PulldownRailAt(corner);
-        double vGc = model.GndClampRail;
+        double vGc = model.GndClampRailAt(corner);
         double vPc = model.PowerClampRailAt(corner);
         bool ecl = model.IsEcl;
         double cComp = model.CComp.At(corner) ?? 0;
@@ -100,7 +100,10 @@ public static class KuKdExtractor
             for (int w = 0; w < waveforms.Count; w++)
             {
                 double v = sampled[w][n].V, dv = sampled[w][n].DvDt;
-                double rf = waveforms[w].RFixtureOhms, vf = waveforms[w].VFixtureVolts;
+                // V_fixture_min / V_fixture_max when the file gives them — the fixture of a
+                // supply-referenced measurement moves with the corner, and so must the
+                // load line the coefficients are backed out against.
+                double rf = waveforms[w].RFixtureOhms, vf = waveforms[w].VFixture.At(corner) ?? 0;
                 // The same axes IbisDriver.Evaluate reads the tables on — the extractor and
                 // the driver must agree exactly, or every coefficient carries the mismatch.
                 a[w] = IbisTableAxis.EvalSupplyReferenced(pu, vPu, v).I;

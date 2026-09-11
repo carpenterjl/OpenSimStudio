@@ -178,7 +178,7 @@ public class NonlinearLinkTests
             Name = "LIN", ModelType = "Output", CComp = new IbisCorner(0, 0, 0),
             Pullup = pu, Pulldown = pd,
             VoltageRange = new IbisCorner(vcc, vcc, vcc),
-            PullupReferenceVolts = vcc,
+            PullupReference = new IbisCorner(vcc, vcc, vcc),
             Ramp = new IbisRamp(
                 new IbisRampEdge(new IbisCorner(vcc, vcc, vcc), new IbisCorner(1e-10, 1e-10, 1e-10)),
                 new IbisRampEdge(new IbisCorner(vcc, vcc, vcc), new IbisCorner(1e-10, 1e-10, 1e-10))),

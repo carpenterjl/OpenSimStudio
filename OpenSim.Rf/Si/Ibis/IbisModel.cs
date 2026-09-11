@@ -26,8 +26,13 @@ public readonly record struct IbisVtRow(double TimeSeconds, IbisCorner VoltageVo
 /// <summary>A [Rising Waveform] / [Falling Waveform]: the fixture it was measured into
 /// (R_fixture to V_fixture) and the sampled V(t) rows. The two-waveform switching-coefficient
 /// extraction uses the fixture to back out Ku(t)/Kd(t).</summary>
+/// <param name="RFixtureOhms">R_fixture (scalar; the spec has no min/max form).</param>
+/// <param name="VFixture">V_fixture as Typ, with V_fixture_min / V_fixture_max as Min / Max
+/// when the file gives them ("when the fixture voltage is related to the power supply
+/// voltages") — <see cref="IbisCorner.At"/> falls back to V_fixture when they are absent.</param>
+/// <param name="Rows">The sampled V(t) rows.</param>
 public sealed record IbisWaveform(
-    double RFixtureOhms, double VFixtureVolts, IReadOnlyList<IbisVtRow> Rows);
+    double RFixtureOhms, IbisCorner VFixture, IReadOnlyList<IbisVtRow> Rows);
 
 /// <summary>One [Ramp] edge as Δv over Δt (min/typ/max); the slew rate is Δv/Δt.</summary>
 public sealed record IbisRampEdge(IbisCorner DeltaVolts, IbisCorner DeltaSeconds);
@@ -79,47 +84,50 @@ public sealed record IbisModel
     public IReadOnlyList<IbisWaveform> RisingWaveforms { get; init; } = Array.Empty<IbisWaveform>();
     public IReadOnlyList<IbisWaveform> FallingWaveforms { get; init; } = Array.Empty<IbisWaveform>();
     public IbisCorner? VoltageRange { get; init; }
-    public double? PullupReferenceVolts { get; init; }
-    public double? PulldownReferenceVolts { get; init; }
-    public double? GndClampReferenceVolts { get; init; }
-    public double? PowerClampReferenceVolts { get; init; }
+
+    /// <summary>[Pullup Reference] / [Pulldown Reference] / [GND Clamp Reference] /
+    /// [POWER Clamp Reference] as the typ/min/max triples the spec defines ("Provide actual
+    /// voltages … in the typ, min, max format"). Null when the keyword is absent; the
+    /// <c>…RailAt(corner)</c> members apply the spec's defaults. There is deliberately no
+    /// scalar rail property: a Min run of a 3.3 / 3.0 / 3.6 V part must drive against 3.0 V,
+    /// and a caller that could reach for "the" rail would silently get 3.3.</summary>
+    public IbisCorner? PullupReference { get; init; }
+    public IbisCorner? PulldownReference { get; init; }
+    public IbisCorner? GndClampReference { get; init; }
+    public IbisCorner? PowerClampReference { get; init; }
 
     /// <summary>The supply rail the pull-up pulls toward: [Pullup Reference] if present, else
-    /// the top of [Voltage Range] at the requested corner. A Min/Max run of a part whose
-    /// [Voltage Range] lists corners drives against THAT corner's rail — using Typ there would
-    /// silently report a typical-supply swing for a worst-case run.</summary>
+    /// [Voltage Range], each at the requested corner. A Min/Max run of a part whose keywords
+    /// list corners drives against THAT corner's rail — using Typ there would silently report
+    /// a typical-supply swing for a worst-case run.</summary>
     public double PullupRailAt(IbisCornerSelection corner) =>
-        PullupReferenceVolts ?? VoltageRange?.At(corner) ?? 0;
+        PullupReference?.At(corner) ?? VoltageRange?.At(corner) ?? 0;
 
-    /// <summary>The Typ-corner supply rail (the pre-corner-aware behavior).</summary>
-    public double PullupRail => PullupRailAt(IbisCornerSelection.Typ);
-
-    /// <summary>The rail the PULL-DOWN table is referenced to — [Pulldown Reference] when the
-    /// file gives one; else ground for a non-ECL model, and the PULL-UP rail (the corner's
-    /// [Pullup Reference] / [Voltage Range]) for an ECL model, whose [Pulldown] the spec
-    /// tabulates "Vcc relative" (see <see cref="Pulldown"/>). Non-zero on split-rail parts,
-    /// where assuming ground shifts the whole pull-down characteristic.</summary>
+    /// <summary>The rail the PULL-DOWN table is referenced to — [Pulldown Reference] at the
+    /// corner when the file gives one; else ground for a non-ECL model ("If this keyword is
+    /// not present, the voltage data points in the [Pulldown] I-V table are referenced to
+    /// 0 V"), and the PULL-UP rail for an ECL model, whose [Pulldown] the spec tabulates "Vcc
+    /// relative" (see <see cref="Pulldown"/>). Non-zero on split-rail parts, where assuming
+    /// ground shifts the whole pull-down characteristic.</summary>
     public double PulldownRailAt(IbisCornerSelection corner) =>
-        PulldownReferenceVolts ?? (IsEcl ? PullupRailAt(corner) : 0);
+        PulldownReference?.At(corner) ?? (IsEcl ? PullupRailAt(corner) : 0);
 
-    /// <summary>The Typ-corner pull-down rail.</summary>
-    public double PulldownRail => PulldownRailAt(IbisCornerSelection.Typ);
-
-    /// <summary>The rail the GND-clamp table is referenced to — [GND Clamp Reference] when
-    /// given, else ground.</summary>
-    public double GndClampRail => GndClampReferenceVolts ?? 0;
+    /// <summary>The rail the GND-clamp table is referenced to — [GND Clamp Reference] at the
+    /// corner when given, else ground.</summary>
+    public double GndClampRailAt(IbisCornerSelection corner) =>
+        GndClampReference?.At(corner) ?? 0;
 
     /// <summary>True for the ECL model types (Input_ECL, Output_ECL, I/O_ECL, 3-state_ECL),
     /// which "follow different conventions for the [Pulldown] keyword": the pull-down table is
     /// tabulated against V_ref − V_out like the pull-up, not V_out − V_ref.</summary>
     public bool IsEcl => ModelType.Contains("ECL", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The rail the POWER-clamp table is referenced to — [POWER Clamp Reference] when
-    /// given, else the pull-up rail. These differ on a part whose clamp diode returns to a
-    /// different supply than the output stage pulls to, and the clamp then conducts at the
-    /// wrong voltage if the pull-up rail is substituted.</summary>
+    /// <summary>The rail the POWER-clamp table is referenced to — [POWER Clamp Reference] at
+    /// the corner when given, else the pull-up rail. These differ on a part whose clamp diode
+    /// returns to a different supply than the output stage pulls to, and the clamp then
+    /// conducts at the wrong voltage if the pull-up rail is substituted.</summary>
     public double PowerClampRailAt(IbisCornerSelection corner) =>
-        PowerClampReferenceVolts ?? PullupRailAt(corner);
+        PowerClampReference?.At(corner) ?? PullupRailAt(corner);
 
     /// <summary>True when this model has the pull-up + pull-down output stage of a driver.</summary>
     public bool IsOutput => Pullup.Count > 0 && Pulldown.Count > 0;

@@ -62,7 +62,7 @@ public sealed class IbisDriver : INonlinearDriver
         // exactly, so a file without the reference keywords is unchanged; a split-rail part,
         // where these genuinely differ, is no longer evaluated against the wrong supply.
         _pdRail = model.PulldownRailAt(corner);
-        _gcRail = model.GndClampRail;
+        _gcRail = model.GndClampRailAt(corner);
         _pcRail = model.PowerClampRailAt(corner);
         _isEcl = model.IsEcl;
     }
