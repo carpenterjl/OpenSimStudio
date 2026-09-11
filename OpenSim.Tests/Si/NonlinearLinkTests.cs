@@ -166,11 +166,12 @@ public class NonlinearLinkTests
             new IbisIvRow(0.0, new IbisCorner(0, 0, 0)),
             new IbisIvRow(vcc, new IbisCorner(gPulldown * vcc, gPulldown * vcc, gPulldown * vcc)),
         };
-        // [Pullup] I(V−Vcc) = G_u·(V−Vcc) (into pad, supply-referenced; negative when sourcing).
+        // [Pullup] on the IBIS axis V_table = Vcc − V: I = G_u·(V−Vcc) = −G_u·V_table (into
+        // pad, "Vcc relative"; negative when sourcing).
         var pu = new[]
         {
-            new IbisIvRow(-vcc, new IbisCorner(-gPullup * vcc, -gPullup * vcc, -gPullup * vcc)),
             new IbisIvRow(0.0, new IbisCorner(0, 0, 0)),
+            new IbisIvRow(vcc, new IbisCorner(-gPullup * vcc, -gPullup * vcc, -gPullup * vcc)),
         };
         return new IbisModel
         {

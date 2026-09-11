@@ -33,12 +33,13 @@ public sealed class LinearTheveninDriver : INonlinearDriver
 
 /// <summary>
 /// The IBIS behavioral driver (Stage S11): the current pushed into the line is
-/// −[Ku(t)·I_pu(V−Vcc) + Kd(t)·I_pd(V) + I_gndclamp(V) + I_powerclamp(V−Vcc)] (IBIS positive
-/// current is INTO the pad, so the into-line current is its negative). The switching
-/// coefficients Ku(t)/Kd(t) follow the bit stream through a trapezoid whose edge time comes
-/// from [Ramp] (Δv/Δt). Pull-up / POWER-clamp tables are referenced to the supply
-/// (voltage axis = V − Vcc); pull-down / GND-clamp to ground. Currents interpolate the
-/// monotone PWL tables with linear extrapolation past the ends.
+/// −[Ku(t)·I_pu(Vcc−V) + Kd(t)·I_pd(V−V_pd) + I_gndclamp(V−V_gc) + I_powerclamp(V_pc−V)]
+/// (IBIS positive current is INTO the pad, so the into-line current is its negative). The
+/// switching coefficients Ku(t)/Kd(t) follow the bit stream through a trapezoid whose edge time
+/// comes from [Ramp] (Δv/Δt). Pull-up / POWER-clamp tables are "Vcc relative" (voltage axis
+/// = Vcc − V); pull-down / GND-clamp are rail-referenced (V − V_ref) — except an ECL model's
+/// pull-down, which is Vcc relative too (<see cref="IbisTableAxis"/>). Currents interpolate
+/// the monotone PWL tables with linear extrapolation past the ends.
 /// </summary>
 public sealed class IbisDriver : INonlinearDriver
 {
@@ -60,12 +61,14 @@ public sealed class IbisDriver : INonlinearDriver
         // ground, POWER clamp to the pull-up rail) reproduce the previous hardcoded behavior
         // exactly, so a file without the reference keywords is unchanged; a split-rail part,
         // where these genuinely differ, is no longer evaluated against the wrong supply.
-        _pdRail = model.PulldownRail;
+        _pdRail = model.PulldownRailAt(corner);
         _gcRail = model.GndClampRail;
         _pcRail = model.PowerClampRailAt(corner);
+        _isEcl = model.IsEcl;
     }
 
     private readonly double _pdRail, _gcRail, _pcRail;
+    private readonly bool _isEcl;
 
     public double CompCapacitanceFarads => _model.CComp.At(_corner) ?? 0;
 
@@ -195,14 +198,18 @@ public sealed class IbisDriver : INonlinearDriver
         n = Math.Clamp(n, 0, _ku.Length - 1);
         double ku = _ku[n], kd = _kd[n];
         // IBIS into-pad current, then negate for into-line. Pull-up / POWER-clamp tables are
-        // supply-referenced, pull-down / GND-clamp ground-referenced — each against its own
-        // declared reference rather than a shared assumption.
-        var (ipu, gpu) = _pu.Eval(v - _vcc);
-        var (ipd, gpd) = _pd.Eval(v - _pdRail);
-        var (igc, ggc) = _gc.Eval(v - _gcRail);
-        var (ipc, gpc) = _pc.Eval(v - _pcRail);
+        // "Vcc relative" (V_table = rail − V, slope sign −1), pull-down / GND-clamp rail-
+        // referenced (V − rail, +1) — except an ECL pull-down, which is Vcc relative. Each
+        // table is read against its own declared reference; IbisTableAxis owns the convention
+        // and folds the chain-rule sign into the returned slope, so every G here is dI/dV.
+        var (ipu, gpu) = IbisTableAxis.EvalSupplyReferenced(_pu, _vcc, v);
+        var (ipd, gpd) = _isEcl
+            ? IbisTableAxis.EvalSupplyReferenced(_pd, _pdRail, v)
+            : IbisTableAxis.EvalGroundReferenced(_pd, _pdRail, v);
+        var (igc, ggc) = IbisTableAxis.EvalGroundReferenced(_gc, _gcRail, v);
+        var (ipc, gpc) = IbisTableAxis.EvalSupplyReferenced(_pc, _pcRail, v);
         double iPad = ku * ipu + kd * ipd + igc + ipc;
-        double gPad = ku * gpu + kd * gpd + ggc + gpc;   // dI/dV (V−Vcc and V share dV)
+        double gPad = ku * gpu + kd * gpd + ggc + gpc;
         return (-iPad, -gPad);
     }
 }

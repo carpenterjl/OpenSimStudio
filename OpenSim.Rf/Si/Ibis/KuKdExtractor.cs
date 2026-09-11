@@ -20,10 +20,12 @@ public sealed record KuKdSchedule(
 /// <para><b>The equation.</b> A waveform is V(t) measured at the pad while the buffer drives a
 /// known fixture (R_fixture to V_fixture). At every sample the pad node balances:</para>
 /// <code>
-///   Ku·I_pu(V − V_pu) + Kd·I_pd(V − V_pd) + I_gc(V − V_gc) + I_pc(V − V_pc)
+///   Ku·I_pu(V_pu − V) + Kd·I_pd(V − V_pd) + I_gc(V − V_gc) + I_pc(V_pc − V)
 ///     + C_comp·dV/dt + (V − V_fixture)/R_fixture = 0
 /// </code>
-/// <para>Everything except Ku and Kd is known at that sample, so ONE waveform gives one linear
+/// <para>(each table on its IBIS axis — pull-up and POWER clamp "Vcc relative", pull-down and
+/// GND clamp rail-referenced, an ECL pull-down Vcc relative; see <see cref="IbisTableAxis"/>).
+/// Everything except Ku and Kd is known at that sample, so ONE waveform gives one linear
 /// equation in two unknowns and TWO waveforms measured into DIFFERENT fixtures give a 2×2
 /// system — which is exactly why IBIS invites two fixtures per edge.</para>
 ///
@@ -66,9 +68,10 @@ public static class KuKdExtractor
         var gc = PwlTable.FromTable(model.GndClamp, corner);
         var pc = PwlTable.FromTable(model.PowerClamp, corner);
         double vPu = model.PullupRailAt(corner);
-        double vPd = model.PulldownRail;
+        double vPd = model.PulldownRailAt(corner);
         double vGc = model.GndClampRail;
         double vPc = model.PowerClampRailAt(corner);
+        bool ecl = model.IsEcl;
         double cComp = model.CComp.At(corner) ?? 0;
 
         var ku = new double[sampleCount];
@@ -98,9 +101,14 @@ public static class KuKdExtractor
             {
                 double v = sampled[w][n].V, dv = sampled[w][n].DvDt;
                 double rf = waveforms[w].RFixtureOhms, vf = waveforms[w].VFixtureVolts;
-                a[w] = pu.Eval(v - vPu).I;
-                b[w] = pd.Eval(v - vPd).I;
-                double known = gc.Eval(v - vGc).I + pc.Eval(v - vPc).I
+                // The same axes IbisDriver.Evaluate reads the tables on — the extractor and
+                // the driver must agree exactly, or every coefficient carries the mismatch.
+                a[w] = IbisTableAxis.EvalSupplyReferenced(pu, vPu, v).I;
+                b[w] = ecl
+                    ? IbisTableAxis.EvalSupplyReferenced(pd, vPd, v).I
+                    : IbisTableAxis.EvalGroundReferenced(pd, vPd, v).I;
+                double known = IbisTableAxis.EvalGroundReferenced(gc, vGc, v).I
+                             + IbisTableAxis.EvalSupplyReferenced(pc, vPc, v).I
                              + cComp * dv
                              + (rf > 0 ? (v - vf) / rf : 0);
                 r[w] = -known;

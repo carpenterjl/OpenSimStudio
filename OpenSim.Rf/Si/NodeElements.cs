@@ -74,9 +74,11 @@ public sealed class IbisReceiverElement : INonlinearDriver
     public (double Current, double Conductance) Evaluate(double v, double t)
     {
         // IBIS currents are INTO the pad; the into-line current is their negative, the same
-        // convention IbisDriver uses. Each clamp is referenced to its own rail (Stage B2).
-        var (igc, ggc) = _gc.Eval(v - _gcRail);
-        var (ipc, gpc) = _pc.Eval(v - _pcRail);
+        // convention IbisDriver uses. Each clamp is referenced to its own rail (Stage B2), on
+        // its own axis: the GND clamp against V − V_gc, the POWER clamp "Vcc relative"
+        // (V_pc − V), with the chain-rule sign folded into G by IbisTableAxis.
+        var (igc, ggc) = IbisTableAxis.EvalGroundReferenced(_gc, _gcRail, v);
+        var (ipc, gpc) = IbisTableAxis.EvalSupplyReferenced(_pc, _pcRail, v);
         return (-(igc + ipc) - _g * v, -(ggc + gpc) - _g);
     }
 }

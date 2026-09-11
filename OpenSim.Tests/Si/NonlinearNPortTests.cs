@@ -126,8 +126,9 @@ public class NonlinearNPortTests
     /// end nearly doubles it.
     ///
     /// <para><b>Clamp signs.</b> The engine's convention is into-line current = −I_table, so a
-    /// clamp only DISSIPATES if its table current carries the same sign as its voltage
-    /// excursion: POWER clamp positive at positive (V − Vcc), GND clamp negative at negative V.
+    /// clamp only DISSIPATES if its table current carries the same sign as its excursion past
+    /// the rail: GND clamp negative at negative V; POWER clamp positive when V is ABOVE Vcc —
+    /// which on the IBIS "Vcc relative" axis (V_table = Vcc − V) is a NEGATIVE table voltage.
     /// The opposite sign makes the element inject current where it should sink it — a negative
     /// resistance with no stable operating point, which the node solve refuses rather than
     /// returning a number for. (That refusal is how this fixture's first draft was caught.)</para></summary>
@@ -144,17 +145,17 @@ C_comp          0.0
 [Pulldown]
    0.0        0.0         0.0         0.0
    1.0       100.0m      100.0m      100.0m
-[Pullup]
+[Pullup]                                 | Vtable = Vcc - Voutput
    0.0        0.0         0.0         0.0
-  -1.0      -100.0m     -100.0m     -100.0m
+   1.0      -100.0m     -100.0m     -100.0m
 [GND Clamp]
   -0.7      -500.0m     -500.0m     -500.0m
   -0.3        0.0         0.0         0.0
    0.0        0.0         0.0         0.0
-[POWER Clamp]
+[POWER Clamp]                            | Vtable = Vcc - Voutput
    0.0        0.0         0.0         0.0
-   0.3        0.0         0.0         0.0
-   0.7       500.0m     500.0m     500.0m
+  -0.3        0.0         0.0         0.0
+  -0.7       500.0m     500.0m     500.0m
 [Ramp]
 dV/dt_r     0.5/0.1n     0.5/0.1n     0.5/0.1n
 dV/dt_f     0.5/0.1n     0.5/0.1n     0.5/0.1n

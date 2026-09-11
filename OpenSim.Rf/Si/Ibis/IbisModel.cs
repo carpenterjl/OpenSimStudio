@@ -47,9 +47,33 @@ public sealed record IbisModel
     public required string Name { get; init; }
     public required string ModelType { get; init; }
     public IbisCorner CComp { get; init; }
+
+    /// <summary>[Pullup] rows. IBIS axis: <c>V_table = V_ref − V_out</c> ("Vcc relative"), with
+    /// V_ref = <see cref="PullupRailAt"/> ([Pullup Reference], else [Voltage Range]). Current is
+    /// INTO the pad, so a pull-up sourcing current into the line reads NEGATIVE, and a 100 Ω
+    /// pull-up to 3.3 V has the row (3.3 V, −33 mA). Evaluate through
+    /// <see cref="IbisTableAxis.SupplyReferenced"/>.</summary>
     public IReadOnlyList<IbisIvRow> Pullup { get; init; } = Array.Empty<IbisIvRow>();
+
+    /// <summary>[Pulldown] rows. IBIS axis: <c>V_table = V_out − V_ref</c> with V_ref =
+    /// <see cref="PulldownRailAt"/> ([Pulldown Reference], else 0 V) — EXCEPT for ECL model
+    /// types (<see cref="IsEcl"/>), whose [Pulldown] is "Vcc relative" exactly like the
+    /// pull-up: <c>V_table = V_ref − V_out</c>, V_ref defaulting to the pull-up rail. Current
+    /// INTO the pad. (IBIS [Pulldown] keyword, "Other Notes": "When tabulating data for ECL
+    /// models … in BOTH of these cases, the data is referenced to the Vcc supply voltage, using
+    /// the equation: Vtable = Vcc - Voutput.")</summary>
     public IReadOnlyList<IbisIvRow> Pulldown { get; init; } = Array.Empty<IbisIvRow>();
+
+    /// <summary>[GND Clamp] rows. Axis <c>V_table = V_out − V_ref</c>, V_ref =
+    /// <see cref="GndClampRailAt"/> ([GND Clamp Reference], else 0 V) — ground-referenced for
+    /// ECL models too. Current INTO the pad, so the clamp conducting below ground reads
+    /// negative at negative V_table.</summary>
     public IReadOnlyList<IbisIvRow> GndClamp { get; init; } = Array.Empty<IbisIvRow>();
+
+    /// <summary>[POWER Clamp] rows. Axis <c>V_table = V_ref − V_out</c> ("Vcc relative"),
+    /// V_ref = <see cref="PowerClampRailAt"/> ([POWER Clamp Reference], else the pull-up
+    /// rail). Current INTO the pad, so the clamp conducting above the rail reads POSITIVE at
+    /// NEGATIVE V_table.</summary>
     public IReadOnlyList<IbisIvRow> PowerClamp { get; init; } = Array.Empty<IbisIvRow>();
     public IbisRamp? Ramp { get; init; }
     public IReadOnlyList<IbisWaveform> RisingWaveforms { get; init; } = Array.Empty<IbisWaveform>();
@@ -71,13 +95,24 @@ public sealed record IbisModel
     public double PullupRail => PullupRailAt(IbisCornerSelection.Typ);
 
     /// <summary>The rail the PULL-DOWN table is referenced to — [Pulldown Reference] when the
-    /// file gives one, else ground. Non-zero on split-rail parts, where assuming ground shifts
-    /// the whole pull-down characteristic.</summary>
-    public double PulldownRail => PulldownReferenceVolts ?? 0;
+    /// file gives one; else ground for a non-ECL model, and the PULL-UP rail (the corner's
+    /// [Pullup Reference] / [Voltage Range]) for an ECL model, whose [Pulldown] the spec
+    /// tabulates "Vcc relative" (see <see cref="Pulldown"/>). Non-zero on split-rail parts,
+    /// where assuming ground shifts the whole pull-down characteristic.</summary>
+    public double PulldownRailAt(IbisCornerSelection corner) =>
+        PulldownReferenceVolts ?? (IsEcl ? PullupRailAt(corner) : 0);
+
+    /// <summary>The Typ-corner pull-down rail.</summary>
+    public double PulldownRail => PulldownRailAt(IbisCornerSelection.Typ);
 
     /// <summary>The rail the GND-clamp table is referenced to — [GND Clamp Reference] when
     /// given, else ground.</summary>
     public double GndClampRail => GndClampReferenceVolts ?? 0;
+
+    /// <summary>True for the ECL model types (Input_ECL, Output_ECL, I/O_ECL, 3-state_ECL),
+    /// which "follow different conventions for the [Pulldown] keyword": the pull-down table is
+    /// tabulated against V_ref − V_out like the pull-up, not V_out − V_ref.</summary>
+    public bool IsEcl => ModelType.Contains("ECL", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The rail the POWER-clamp table is referenced to — [POWER Clamp Reference] when
     /// given, else the pull-up rail. These differ on a part whose clamp diode returns to a

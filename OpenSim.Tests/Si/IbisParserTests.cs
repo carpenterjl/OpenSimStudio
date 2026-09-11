@@ -26,16 +26,16 @@ C_comp          2.0pF    1.5pF    2.5pF     | die capacitance
    0.0        0.0         0.0         0.0
    1.65       20.0m       17.0m       24.0m
    3.3        45.0m       38.0m       53.0m
-[Pullup]
+[Pullup]                                 | Vtable = Vcc - Voutput (IBIS Vcc-relative axis)
    0.0        0.0         0.0         0.0
-   -1.65      -20.0m      -17.0m      -24.0m
-   -3.3       -45.0m      -38.0m      NA
+   1.65       -20.0m      -17.0m      -24.0m
+   3.3        -45.0m      -38.0m      NA
 [GND Clamp]
    -1.0       -5.0m       -4.0m       -6.0m
     0.0        0.0         0.0         0.0
-[POWER Clamp]
+[POWER Clamp]                            | Vtable = Vcc - Voutput
     0.0        0.0         0.0         0.0
-    1.0       -5.0m       -4.0m       -6.0m
+   -1.0       -5.0m       -4.0m       -6.0m
 [Ramp]
 dV/dt_r     1.65/0.5n    1.50/0.6n    1.80/0.4n
 dV/dt_f     1.65/0.5n    1.50/0.6n    1.80/0.4n

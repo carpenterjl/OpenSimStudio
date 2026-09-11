@@ -49,12 +49,13 @@ public class KuKdExtractorTests
         sb.AppendLine($"[Pullup Reference]   {Vcc}");
         sb.AppendLine("[Pulldown Reference] 0.0");
         // Linear tables spanning the operating range (linear interpolation of a linear
-        // function is exact, so the tables ARE the conductances).
+        // function is exact, so the tables ARE the conductances). The pull-up is tabulated on
+        // the IBIS axis V_table = Vcc − V: I_pu = g_pu·(V − Vcc) = −g_pu·V_table.
         sb.AppendLine("[Pullup]");
-        for (int k = -3; k <= 1; k++)
+        for (int k = -1; k <= 3; k++)
         {
-            double v = k * Vcc / 2;
-            sb.AppendLine($"   {v:R}   {Gpu * v:R}   {Gpu * v:R}   {Gpu * v:R}");
+            double vt = k * Vcc / 2;
+            sb.AppendLine($"   {vt:R}   {-Gpu * vt:R}   {-Gpu * vt:R}   {-Gpu * vt:R}");
         }
         sb.AppendLine("[Pulldown]");
         for (int k = -1; k <= 3; k++)
