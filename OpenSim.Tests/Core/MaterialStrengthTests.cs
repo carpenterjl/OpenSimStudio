@@ -77,6 +77,27 @@ public sealed class MaterialStrengthTests : IDisposable
     }
 
     /// <summary>
+    /// Structural steel's electrical conductivity was 1.45e6 S/m — four times too low for a
+    /// plain carbon steel (ρ ≈ 1.7e-7 Ω·m ⇒ 5.9e6 S/m; handbook range 5.5–6.5e6) and below
+    /// the 304 stainless entry, which its own comment says should sit notably below carbon
+    /// steel. The band excludes the defective value, so reverting the fix fails here; the
+    /// ordering checks are supplementary (the wrong value satisfied Cu &gt; Al &gt; steel too).
+    /// </summary>
+    [Fact]
+    public void StructuralSteel_ConductivityIsCarbonSteels()
+    {
+        var library = BuiltIns();
+        double Sigma(string name) => library.Single(m => m.Name == name).ElectricalConductivity!.Value;
+
+        double steel = Sigma("Structural steel");
+        Assert.InRange(steel, 5.5e6, 6.5e6);
+
+        Assert.True(steel > Sigma("Stainless steel 304"), "carbon steel conducts better than 304");
+        Assert.True(Sigma("Copper (annealed)") > Sigma("Aluminum 6061-T6"), "Cu > Al");
+        Assert.True(Sigma("Aluminum 6061-T6") > steel, "Al > steel");
+    }
+
+    /// <summary>
     /// Brittle materials keep a NULL yield strength — the documented "not characterised"
     /// case, following the Silicon conductivity precedent. A safety factor is then not
     /// offered rather than computed from an invented allowable.

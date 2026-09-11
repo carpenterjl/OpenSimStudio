@@ -155,8 +155,12 @@ public sealed class MaterialLibrary
         // ---- Metals ----
         new Material
         {
+            // σ: plain carbon steel (ASTM A36 / AISI 1018), ρ ≈ 1.6–1.8e-7 Ω·m at 20 °C
+            // ⇒ 5.5–6.5e6 S/m (MatWeb; CRC Handbook "Resistivity of selected alloys").
+            // The former 1.45e6 was ~4× too low — below the 304 stainless entry, which the
+            // comment there says must sit notably BELOW carbon steel.
             Name = "Structural steel", YoungsModulus = 200e9, PoissonRatio = 0.30, Density = 7850,
-            ThermalConductivity = 45, SpecificHeat = 480, ElectricalConductivity = 1.45e6,
+            ThermalConductivity = 45, SpecificHeat = 480, ElectricalConductivity = 5.9e6,
             Emissivity = 0.80,
             YieldStrength = 250e6, UltimateTensileStrength = 460e6,
             Color = "#8C9BAB", IsBuiltIn = true
