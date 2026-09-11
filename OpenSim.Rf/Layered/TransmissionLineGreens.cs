@@ -281,56 +281,25 @@ internal static partial class TransmissionLineGreens
         return (c, s / c);
     }
 
-    /// <summary>The TE surface-wave dispersion function: its zeros are the TE poles (of
-    /// both G̃_A and K̃_Φ). D̃_TE = jk_z0 + jk_z,top·(1 − R)/(1 + R), R the bottom-up TE
-    /// reflection at the top of the stack (ground = short, Γ = −1). Proportional (never
-    /// equal) to the single-slab reduced D̂_TE — only the ROOTS are used, so the constant
-    /// is irrelevant; residues come from the matrix, not this function's derivative.</summary>
-    public static Complex TeDispersion(LayeredStackup stackup, double k0, Complex kRho)
-    {
-        var sp = Spectral(stackup, k0, kRho);
-        var kz0 = SpectralKernels.Kz(k0 * k0, kRho);
-        Complex r = Reflection(sp, groundVoltageReflection: -1, tmAdmittance: false);
-        var j = Complex.ImaginaryOne;
-        Complex kzTop = sp.Kz[^1];
-        return j * kz0 + j * kzTop * (1 - r) / (1 + r);
-    }
+    /// <summary>The TE surface-wave characteristic function: its zeros are the TE poles (of
+    /// both G̃_A and K̃_Φ). This is the transfer-matrix Robin residual
+    /// <see cref="SurfaceWaveDispersion.Dispersion"/> — entire on the bound-mode segment and
+    /// REAL there for a lossless stack — NOT the reflection-recursion form
+    /// jk_z0 + jk_z,top·(1 − R)/(1 + R), which has poles at k_z1·d = π (TE) that a sign-change
+    /// bracketer converged onto (defect D2). For one slab it equals the pinned single-slab
+    /// function up to the positive factor 1/u. Only the roots are used; residues come from
+    /// the matrix, not this function's derivative.</summary>
+    public static Complex TeDispersion(LayeredStackup stackup, double k0, Complex kRho) =>
+        SurfaceWaveDispersion.Dispersion(stackup, k0, kRho, isTm: false);
 
-    /// <summary>The TM surface-wave dispersion function: its zeros are the TM poles. The
-    /// A_z line has admittance k_z/ε and is OPEN at the ground (∂_zA_z = 0, Γ = +1);
-    /// j·(Y_up + Y_down) with Y_up = k_z0 (air). The leading j matches <see cref="TeDispersion"/>'s
-    /// convention: on the lossless bound-mode segment (k₀, k₀√εr_max) a lossless stack's
-    /// admittance is reactive and jk_z0 = γ₀, so the function is REAL there — the root
-    /// finder works on that real value. Zeros only; residues come from the matrix.</summary>
-    public static Complex TmDispersion(LayeredStackup stackup, double k0, Complex kRho)
-    {
-        var sp = Spectral(stackup, k0, kRho);
-        var kz0 = SpectralKernels.Kz(k0 * k0, kRho);
-        Complex r = Reflection(sp, groundVoltageReflection: 1, tmAdmittance: true);
-        Complex yTop = sp.Kz[^1] / sp.Eps[^1];
-        return Complex.ImaginaryOne * (kz0 + yTop * (1 - r) / (1 + r));
-    }
-
-    /// <summary>Bottom-up voltage-reflection recursion at the top of the stack. The ground
-    /// terminates layer 0 (<paramref name="groundVoltageReflection"/>: −1 short for TE,
-    /// +1 open for the A_z line). Each interface uses the Fresnel voltage reflection from
-    /// the characteristic admittances (k_z for TE, k_z/ε for TM). Every step multiplies by
-    /// φ² = e^{−2jk_z t} with |φ| ≤ 1, so |R| ≤ 1 and nothing overflows.</summary>
-    private static Complex Reflection(LayerSpectral sp, double groundVoltageReflection, bool tmAdmittance)
-    {
-        var (eps, kz, phi) = sp;
-        int n = kz.Length;
-        Complex Y(int i) => tmAdmittance ? kz[i] / eps[i] : kz[i];
-        Complex r = groundVoltageReflection * phi[0] * phi[0];
-        for (int i = 1; i < n; i++)
-        {
-            Complex ya = Y(i), yb = Y(i - 1);
-            Complex gamma = (ya - yb) / (ya + yb);          // wave in layer i onto layer i-1
-            r = (gamma + r) / (1 + gamma * r);
-            r *= phi[i] * phi[i];
-        }
-        return r;
-    }
+    /// <summary>The TM surface-wave characteristic function: its zeros are the TM poles.
+    /// The A_z line is OPEN at the ground (∂_zA_z = 0) with (1/ε)∂_zA_z continuous at every
+    /// interface — the same conditions <see cref="TmSystem"/> imposes — closed by the decaying
+    /// condition above the stack. Transfer-matrix form (<see cref="SurfaceWaveDispersion"/>),
+    /// pole-free on the segment; for one slab it is the pinned TM function up to a negative
+    /// constant. Zeros only; residues come from the matrix.</summary>
+    public static Complex TmDispersion(LayeredStackup stackup, double k0, Complex kRho) =>
+        SurfaceWaveDispersion.Dispersion(stackup, k0, kRho, isTm: true);
 
     /// <summary>The residues of G̃_A and K̃_Φ at a surface-wave pole <paramref name="kp"/>
     /// (already located), computed ANALYTICALLY from the singular TE or TM system by the
@@ -468,14 +437,31 @@ internal static partial class TransmissionLineGreens
     /// <summary>Right (or left, via the transpose) null vector of the near-singular pole
     /// matrix by inverse iteration: a solve against a near-singular M amplifies the null
     /// direction by the reciprocal of the tiny smallest singular value, so a couple of
-    /// normalized solves converge to it.</summary>
+    /// normalized solves converge to it. A pole located to full precision (WI-4's Newton
+    /// polish) can make M(k_p) EXACTLY singular — a zero LU pivot — in which case the
+    /// iteration is shifted: (M − σI) with σ = 1e-14·max|M_ij| (then 1e-12) is regular and
+    /// its eigenvector nearest σ is the same null direction to O(σ/‖M‖). The unshifted
+    /// factorization is tried first so every previously pinned residue stays bitwise.</summary>
     private static Complex[] NullVector(ComplexDenseMatrix m, bool transpose)
     {
         int n = m.Rows;
         var a = new ComplexDenseMatrix(n, n);
+        double maxAbs = 0;
         for (int i = 0; i < n; i++)
-            for (int k = 0; k < n; k++) a[i, k] = transpose ? m[k, i] : m[i, k];
-        var lu = ComplexLu.Factor(a);
+            for (int k = 0; k < n; k++)
+            {
+                a[i, k] = transpose ? m[k, i] : m[i, k];
+                maxAbs = Math.Max(maxAbs, a[i, k].Magnitude);
+            }
+        ComplexLu lu;
+        try { lu = ComplexLu.Factor(a); }
+        catch (InvalidOperationException)
+        {
+            lu = ShiftedFactor(a, 1e-14 * maxAbs) ?? ShiftedFactor(a, 1e-12 * maxAbs)
+                ?? throw new InvalidOperationException(
+                    "The pole matrix stayed singular under a 1e-12 diagonal shift — the null "
+                    + "vector for the residue cannot be extracted.");
+        }
         var z = new Complex[n];
         for (int i = 0; i < n; i++) z[i] = 1.0;
         for (int iter = 0; iter < 3; iter++)
@@ -485,6 +471,16 @@ internal static partial class TransmissionLineGreens
             for (int i = 0; i < n; i++) z[i] /= norm;
         }
         return z;
+    }
+
+    /// <summary>LU of (A − σI), or null when that too has an exactly zero pivot.</summary>
+    private static ComplexLu? ShiftedFactor(ComplexDenseMatrix a, double sigma)
+    {
+        int n = a.Rows;
+        var shifted = a.Clone();
+        for (int i = 0; i < n; i++) shifted[i, i] -= sigma;
+        try { return ComplexLu.Factor(shifted); }
+        catch (InvalidOperationException) { return null; }
     }
 
     /// <summary>Entrywise k_ρ derivative of the TE or TM pole matrix by central difference

@@ -56,18 +56,21 @@ public class MultiLayerPoleTests
         }
     }
 
-    [Fact]
-    public void Residues_MatchARichardsonLimitOfTheGeneralKernel()
+    [Theory]
+    [InlineData(10e9, 0.635e-3, 0.5e-3)]    // below onset: TM0 only
+    [InlineData(25e9, 1.27e-3, 1.0e-3)]     // above onset (WI-4): several branches per family
+    public void Residues_MatchARichardsonLimitOfTheGeneralKernel(double fHz, double hBase, double hTop)
     {
         // A genuinely two-layer stack so the residue is not the single-slab closed form.
         var stackup = new LayeredStackup(new[]
         {
-            new LayeredStackup.Layer(10.2, 0, 0.635e-3),   // high-εr base carries the TM0
-            new LayeredStackup.Layer(2.2, 0, 0.5e-3),
+            new LayeredStackup.Layer(10.2, 0, hBase),   // high-εr base carries the TM0
+            new LayeredStackup.Layer(2.2, 0, hTop),
         });
-        double k0 = K0;
+        double k0 = 2 * Math.PI * fHz / 299_792_458.0;
         var poles = SurfaceWavePoles.Find(stackup, k0);
         Assert.NotEmpty(poles);
+        if (fHz > 20e9) Assert.True(poles.Count >= 2, $"the thick stack should carry several modes, got {poles.Count}");
         foreach (var pole in poles)
         {
             double kp = pole.KRho.Real;
@@ -109,18 +112,30 @@ public class MultiLayerPoleTests
     }
 
     [Fact]
-    public void ThickHighEpsStack_SupportsMultipleModes()
+    public void ThickHighEpsStack_EqualsThePinnedFinder_BranchForBranch()
     {
-        // Electrically thick, high-εr ⇒ several surface-wave branches (TM0, TE1, TM1, …).
-        var stackup = new LayeredStackup(new[] { new LayeredStackup.Layer(10.2, 0, 6.0e-3) });
+        // Electrically thick, high-εr ⇒ several surface-wave branches: u_max = d√(k₁² − k₀²) =
+        // 3.81 puts TM0, TE1 and TM1 on the segment (cutoffs at 0, π/2, π) and nothing else. The
+        // old reflection-recursion dispersion had poles at u = π/2 and π that the sign-change
+        // bracketer converged onto, so this test used to accept "Count ≥ 3" with FIVE poles
+        // (defect D2). Now: equality with the single-slab finder, branch for branch.
+        var substrate = new SubstrateStackup(10.2, 0, 6.0e-3);
         double k0 = K0;
-        var poles = SurfaceWavePoles.Find(stackup, k0);
-        Assert.True(poles.Count >= 3, $"expected multiple modes, got {poles.Count}");
-        // Every pole sits in the bound-mode window and on/under the real axis.
-        foreach (var p in poles)
+        var reference = SurfaceWavePoles.Find(substrate, k0);
+        var general = SurfaceWavePoles.Find(LayeredStackup.FromSubstrate(substrate), k0);
+        Assert.Equal(3, reference.Count);
+        Assert.Equal(reference.Count, general.Count);
+        foreach (var r in reference)
         {
-            Assert.InRange(p.KRho.Real / k0, 1.0, Math.Sqrt(10.2));
-            Assert.True(p.KRho.Imaginary <= 1e-12 * k0);
+            var g = general.Single(p => p.IsTm == r.IsTm && Math.Abs(p.KRho.Real - r.KRho.Real) < 1e-6 * k0);
+            Assert.True((g.KRho - r.KRho).Magnitude < 1e-9 * k0, $"k_p {g.KRho} vs pinned {r.KRho}");
+            Assert.True((g.ResiduePhi - r.ResiduePhi).Magnitude < 1e-7 * r.ResiduePhi.Magnitude,
+                $"Res_Φ {g.ResiduePhi} vs pinned {r.ResiduePhi}");
+            if (r.ResidueA.Magnitude > 0)
+                Assert.True((g.ResidueA - r.ResidueA).Magnitude < 1e-7 * r.ResidueA.Magnitude,
+                    $"Res_A {g.ResidueA} vs pinned {r.ResidueA}");
+            Assert.InRange(g.KRho.Real / k0, 1.0, Math.Sqrt(10.2));
+            Assert.True(g.KRho.Imaginary <= 1e-12 * k0);
         }
     }
 }
