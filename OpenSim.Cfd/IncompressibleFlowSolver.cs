@@ -1341,7 +1341,9 @@ public sealed class IncompressibleFlowSolver
     /// temperature rides along because both the diffusive Dirichlet term and the
     /// advective inflow term must read the same boundary state — they used to reach it
     /// through two different lookups, and the advective one (the dominant term at an
-    /// inlet) could not see an opening at all.
+    /// inlet) could not see an opening at all. The rule itself lives on
+    /// <see cref="CfdSettings.BoundaryAt"/>, shared with <see cref="InflowState"/> so the
+    /// state the fluid properties are evaluated at is the state this solver injects.
     /// </summary>
     private (FlowFaceKind Kind, Vector3D Velocity, double? Temperature) BoundaryAt(
         int axis, bool high, Vector3D pos)
@@ -1358,14 +1360,7 @@ public sealed class IncompressibleFlowSolver
             1 => (pos.X, pos.Z),
             _ => (pos.X, pos.Y)
         };
-        foreach (var opening in _settings.Openings)
-        {
-            if (opening.Face != face) continue;
-            if (uCoord >= opening.UMin && uCoord <= opening.UMax
-                && vCoord >= opening.VMin && vCoord <= opening.VMax)
-                return (opening.Kind, opening.Velocity, opening.Temperature);
-        }
-        return (_settings.FaceKind(face), _settings.InletVelocity, null);
+        return _settings.BoundaryAt(face, uCoord, vCoord);
     }
 
     private bool HasAnyOutletFace()

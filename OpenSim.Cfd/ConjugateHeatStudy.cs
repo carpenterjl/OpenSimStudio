@@ -73,13 +73,6 @@ public static class ConjugateHeatStudy
         // (water through a copper block) whose surroundings are a different fluid
         // entirely; null keeps the external-flow meaning, where the CFD IS the environment.
         var fluidProps = cfd.ResolveFluid() ?? environment.ResolveFluid()!;
-        // Film-state properties at the ambient: the conjugate loop could re-evaluate at
-        // the film temperature per iteration, but property drift is a few percent over
-        // tens of kelvin — a named refinement, stated here rather than silently skipped.
-        var fluid = fluidProps.AtTemperature(ambient);
-        log.Add($"Conjugate heat: {fluidProps.Name} at {ambient:F2} K " +
-                $"(ν = {fluid.KinematicViscosity:G3} m²/s, α = {fluid.ThermalDiffusivity:G3} m²/s, " +
-                "properties at ambient — film-temperature update is a named refinement).");
 
         // ---- The surroundings, when the CFD does not resolve them. An internal circuit
         //      leaves the block outer skin exposed to whatever the environment says it
@@ -115,6 +108,28 @@ public static class ConjugateHeatStudy
             AmbientTemperature = ambient,
             Gravity = environment.Gravity
         };
+
+        // ---- Fluid properties at the INFLOW state, whatever the fluid-selection mode.
+        //      The solver freezes ν, ρ, α, β at construction, so one temperature stands
+        //      for the whole fluid, and the honest one is the stream's own — never the
+        //      surroundings' ambient, which for a water circuit in air is a different
+        //      fluid at a different state. The Reynolds guard reads this same state.
+        //      Re-evaluating at the film temperature per outer iteration means
+        //      rebuilding the solver: a named refinement, stated rather than skipped.
+        var inflow = InflowState.PropertyTemperature(domain.Grid, cfd, thermalOptions);
+        var fluid = fluidProps.AtTemperature(inflow.Temperature);
+        log.Add($"Conjugate heat: {fluidProps.Name} properties at inflow T = " +
+                $"{inflow.Temperature:F2} K ({inflow.Describe()}): " +
+                $"ν = {fluid.KinematicViscosity:G3} m²/s, α = {fluid.ThermalDiffusivity:G3} m²/s, " +
+                $"ρ = {fluid.Density:G4} kg/m³; the Reynolds guard reads the same state; " +
+                "a film-temperature update per outer iteration is a named refinement.");
+        if (!fluidProps.Covers(inflow.Temperature))
+        {
+            var (tMin, tMax) = fluidProps.TemperatureRange;
+            log.Add($"WARNING: {inflow.Temperature:F2} K lies outside the {fluidProps.Name} " +
+                    $"property table ({tMin:F0}–{tMax:F0} K); the end-row properties are used.");
+        }
+
         var flowSolver = new IncompressibleFlowSolver(domain, cfd, fluid,
             thermal: thermalOptions, maxDegreeOfParallelism: maxDegreeOfParallelism);
 

@@ -182,6 +182,27 @@ public sealed record CfdSettings
         _ => throw new ArgumentOutOfRangeException(nameof(face))
     };
 
+    /// <summary>
+    /// What the domain boundary does at one in-plane point (u, v) of one box face: the
+    /// FIRST opening containing the point wins (its kind, velocity and stream
+    /// temperature), else the face's own kind with the uniform <see cref="InletVelocity"/>
+    /// and no stream temperature. The in-plane axes are the remaining world axes in
+    /// x→y→z order (see <see cref="FlowOpening.UMin"/>). This is THE point-in-opening
+    /// rule: the flow solver's boundary lookup and the inflow-state property temperature
+    /// both read it, so a face cannot be an inlet to one and a wall to the other.
+    /// </summary>
+    public (FlowFaceKind Kind, Vector3D Velocity, double? Temperature) BoundaryAt(
+        BoxFace face, double u, double v)
+    {
+        foreach (var opening in Openings)
+        {
+            if (opening.Face != face) continue;
+            if (u >= opening.UMin && u <= opening.UMax && v >= opening.VMin && v <= opening.VMax)
+                return (opening.Kind, opening.Velocity, opening.Temperature);
+        }
+        return (FaceKind(face), InletVelocity, null);
+    }
+
     /// <summary>True when any face or opening lets fluid cross the domain boundary —
     /// a fully closed box needs the pressure level pinned differently (pure-Neumann
     /// Poisson) and a compatibility check on the net inflow.</summary>
