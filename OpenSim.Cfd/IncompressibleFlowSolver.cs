@@ -36,8 +36,13 @@ public readonly record struct EnergyMarch(int Steps, int Planned, bool Settled);
 /// <see cref="FlowFaceKind.InletVelocity"/> face whose velocity is tangential (zero
 /// normal component) is therefore a MOVING NO-SLIP WALL, which is how a lid-driven
 /// cavity is expressed without a dedicated face kind. Solid (voxel) boundaries impose
-/// no-penetration exactly on the shared face and no-slip at the neighbouring parallel
-/// face — the stated first-order staircase treatment.
+/// no-penetration exactly on the shared face, and no-slip through the SAME half-cell
+/// reflected ghost a domain wall uses: a tangential face whose neighbour one cell over
+/// lies inside the solid sees the wall at the shared cell boundary, h/2 away (see
+/// <see cref="TransverseNeighbourKind"/>). The velocity wall therefore sits where the
+/// thermal wall already sat. Only a stair-step CORNER — a neighbour that is itself a
+/// no-penetration face — keeps its known zero at distance h, the first-order
+/// staircase treatment.
 /// </para>
 /// Determinism: assembly, CG and reductions are sequential in canonical (k, j, i) face
 /// order; the explicit sweeps (advection, correction) are pure per-entry functions of
@@ -108,6 +113,7 @@ public sealed class IncompressibleFlowSolver
         public double[] Rhs = null!;
         public double[] Star = null!;         // predictor solution (warm-started)
         public double[] Prev = null!;         // previous Values copy for the march residual
+        public TransverseKind[] Transverse = null!; // per face: what it is to a transverse neighbour
 
         public int Dim(int d) => d == 0 ? D0 : d == 1 ? D1 : D2;
         public int Stride(int d) => d == 0 ? 1 : d == 1 ? D0 : D0 * D1;
@@ -861,11 +867,64 @@ public sealed class IncompressibleFlowSolver
         comp.ActiveFaces = active.ToArray();
         comp.ActiveCount = active.Count;
         for (int n = 0; n < active.Count; n++) comp.Map[active[n]] = n;
+        comp.Transverse = new TransverseKind[comp.Count];
+        for (int f = 0; f < comp.Count; f++)
+            comp.Transverse[f] = TransverseNeighbourKind(comp, f);
         comp.RhsFixed = new double[comp.ActiveCount];
         comp.Adv = new double[comp.ActiveCount];
         comp.Rhs = new double[comp.ActiveCount];
         comp.Star = new double[comp.ActiveCount];
         return comp;
+    }
+
+    /// <summary>What a face is to the viscous stencil of a neighbouring ACTIVE face of the
+    /// same component one cell over in a TRANSVERSE direction (the direction along the
+    /// component's own axis never asks: an inactive neighbour there is the no-penetration
+    /// face on a solid's surface, a genuine zero at distance h).</summary>
+    private enum TransverseKind
+    {
+        /// <summary>An unknown of the Helmholtz system.</summary>
+        Active,
+        /// <summary>A face with a known value at its own position, distance h: a
+        /// prescribed inlet face, a wall/symmetry face, or a no-penetration face on a
+        /// stair-step corner (exactly one of its cells is solid — the velocity really is
+        /// zero THERE, and the wall plane between it and the active face is only half
+        /// covered by solid).</summary>
+        KnownValue,
+        /// <summary>A face lying inside a solid: every cell it touches along its own axis
+        /// is solid. The physical no-slip wall is then the cell boundary between the
+        /// active face's fluid cells and this face's solid cells — HALF a cell from the
+        /// active face — so it is imposed the way a domain wall is, through the reflected
+        /// ghost u_ghost = −u, never as a known zero a full cell out (that widened every
+        /// voxel passage by one cell and under-predicted Δp and shear by ≈50 % on a
+        /// 2-cell bore).</summary>
+        InsideSolid
+    }
+
+    /// <summary>
+    /// The single classifier both the Helmholtz assembly and the advection ghost read
+    /// (<see cref="BuildHelmholtz"/>, <see cref="NeighbourValue"/>), so the two can never
+    /// disagree about where a wall is. Never indexes outside the grid: a face on a domain
+    /// plane has ONE interior cell and only that cell is read — so a solid pressed against
+    /// a pressure-outlet plane classifies its plane faces <see cref="TransverseKind.InsideSolid"/>
+    /// too, the same geometry as in the interior (the solid's face is the cell boundary
+    /// h/2 from the outlet face).
+    /// </summary>
+    private TransverseKind TransverseNeighbourKind(Component comp, int nf)
+    {
+        if (comp.Map[nf] >= 0) return TransverseKind.Active;
+        comp.Decode(nf, out int i, out int j, out int k);
+        int a = comp.Axis;
+        int own = a == 0 ? i : a == 1 ? j : k;
+        // The cell AHEAD of the face along its axis shares the face's coordinates and
+        // exists unless the face is on the high domain plane; the cell BEHIND is one
+        // back and exists unless the face is on the low plane.
+        bool aheadExists = own < AxisCells(a);
+        bool behindExists = own > 0;
+        bool aheadSolid = aheadExists && !_grid.IsFluid(i, j, k);
+        bool behindSolid = behindExists && !_grid.IsFluidCell(CellBehind(i, j, k, a));
+        bool allSolid = (!aheadExists || aheadSolid) && (!behindExists || behindSolid);
+        return allSolid ? TransverseKind.InsideSolid : TransverseKind.KnownValue;
     }
 
     /// <summary>Assembles (1/Δt − ν∇²) for one component's active faces, and the
@@ -898,6 +957,15 @@ public sealed class IncompressibleFlowSolver
                     {
                         int nf = f + s * comp.Stride(d);
                         int nid = comp.Map[nf];
+                        if (d != comp.Axis && comp.Transverse[nf] == TransverseKind.InsideSolid)
+                        {
+                            // The neighbouring face lies inside a solid: the no-slip wall
+                            // is the shared cell boundary half a cell away, imposed through
+                            // the reflected ghost u_ghost = −u — the domain-wall branch
+                            // below, verbatim, and no RHS term.
+                            diag += 2 * _nu * invH2;
+                            continue;
+                        }
                         diag += _nu * invH2;
                         if (nid >= 0)
                             entries.Add((nid, -_nu * invH2));
@@ -963,8 +1031,12 @@ public sealed class IncompressibleFlowSolver
     {
         int own = d == 0 ? i : d == 1 ? j : k;
         if (own + s >= 0 && own + s < comp.Dim(d))
-            return comp.Values[comp.Flat(i + (d == 0 ? s : 0), j + (d == 1 ? s : 0),
-                k + (d == 2 ? s : 0))];
+        {
+            int nf = comp.Flat(i + (d == 0 ? s : 0), j + (d == 1 ? s : 0), k + (d == 2 ? s : 0));
+            if (d != comp.Axis && comp.Transverse[nf] == TransverseKind.InsideSolid)
+                return -self;              // no-slip wall at the shared cell boundary: reflected ghost
+            return comp.Values[nf];
+        }
         if (d == comp.Axis) return self; // outlet normal direction: zero gradient
         var (kind, velocity, _) = BoundaryAt(d, s > 0, FaceCenter(comp, i, j, k));
         if (kind is FlowFaceKind.Wall or FlowFaceKind.InletVelocity)
