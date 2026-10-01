@@ -12,8 +12,9 @@ public sealed record MutualReport(
     IReadOnlyList<string> Assumptions);
 
 /// <summary>
-/// Mutual inductance and coupling between two oriented chains, composed pairwise from the
-/// exact filament kernel: M = Σᵢ Σⱼ M(aᵢ, bⱼ) signed by each chain's own start → end
+/// Mutual inductance and coupling between two oriented chains, composed pairwise from
+/// <see cref="LoopComposer"/>'s segment kernel (finite-section for parallel bars, exact
+/// filament otherwise): M = Σᵢ Σⱼ M(aᵢ, bⱼ) signed by each chain's own start → end
 /// orientation, and k = |M| / √(L_A·L_B) with L_A, L_B the chains' partial inductances.
 /// The series LOOP closure pairs endpoints by proximity — the jumper connects whichever
 /// end of B is nearer to A's end — and reports which way B is traversed instead of
@@ -60,8 +61,8 @@ public sealed class MutualCouplingAnalyzer
             "DC / uniform current distribution (no skin or proximity effect).",
             "Series loop: the return chain is traversed " + (forward ? "start → end" : "end → start") +
             " (endpoint-proximity pairing); the two jumpers closing the loop are not modeled.",
-            "Mutual terms are the exact straight-filament Neumann solution (Grover), with a " +
-            "geometric-mean-distance correction for parallel finite cross-sections.",
+            LoopComposer.MutualModelAssumption,
+            LoopComposer.BendAssumption,
             "k = |M|/√(L_A·L_B) uses the chains' PARTIAL inductances."
         };
         return new MutualReport(m, k, loop, forward, assumptions);

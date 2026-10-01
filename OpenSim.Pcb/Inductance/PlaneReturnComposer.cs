@@ -60,13 +60,22 @@ public sealed class PlaneReturnComposer
         double mutual = new MutualCouplingAnalyzer().MutualBetween(chain, image);
         double loop = partial + mutual;
 
+        // A loop stores positive energy. No bound against the partial inductance is
+        // imposed: a vertical conductor's image current is CO-directed, so its image
+        // mutual is positive and its loop legitimately exceeds its partial value.
+        if (!double.IsFinite(loop) || loop <= 0)
+            return Failure(
+                $"the composed loop inductance came out {loop * 1e9:g4} nH, which is not a " +
+                "physical value (it must be finite and positive)");
+
         var assumptions = new[]
         {
             "Infinite perfect-conductor return plane; the return current flows entirely in the plane.",
             $"Image conductors mirrored at the plane surface z = {planeSurfaceZ * 1e3:g4} mm " +
             "(the copper face toward the chain).",
             "DC / uniform current distribution (no skin or proximity effect).",
-            "Mutual terms are the exact straight-filament Neumann solution (Grover)."
+            LoopComposer.MutualModelAssumption,
+            LoopComposer.BendAssumption
         };
         return new PlaneReturnReport(loop, null, assumptions);
     }

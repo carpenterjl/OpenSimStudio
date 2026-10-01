@@ -71,21 +71,6 @@ public class FilamentMutualTests
     // ---------------- structured cases with closed-form references ----------------
 
     [Fact]
-    public void EqualParallel_WithGmd_MatchesTheLegacyFormulaExactly()
-    {
-        // Full overlap must reduce identically to Grover's equal-parallel formula that
-        // PartialInductance has always shipped (its 2.99 nH pin stays authoritative).
-        const double l = 10e-3, d = 2e-3, w = 4e-4, t = 35e-6;
-        double gmd = PartialInductance.GeometricMeanDistance(d, w, t);
-
-        double kernel = FilamentMutual.Between(
-            Mm(0, 0, 0), Mm(10, 0, 0), Mm(0, 2, 0), Mm(10, 2, 0), gmd);
-        double legacy = PartialInductance.MutualInductanceParallel(l, d, w, t);
-
-        Assert.Equal(legacy, kernel, legacy * 1e-12);
-    }
-
-    [Fact]
     public void EqualParallel_PureFilament_MatchesHandValueAndOracle()
     {
         // l = 100 mm, d = 10 mm: M = 2e-7·l·[asinh(l/d) − √(1+(d/l)²) + d/l] ≈ 41.86 nH.

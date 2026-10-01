@@ -19,7 +19,7 @@ public class MutualCouplingTests
 
         var analyzer = new MutualCouplingAnalyzer();
         double m = analyzer.MutualBetween(a, b);
-        double expected = PartialInductance.MutualInductanceParallel(10e-3, 2e-3, W, T);
+        double expected = PartialInductance.BarBarMutual(W, T, 10e-3, W, T, 10e-3, 2e-3, 0, 0);
         Assert.Equal(expected, m, expected * 1e-12);
 
         var report = analyzer.Analyze(a, b);

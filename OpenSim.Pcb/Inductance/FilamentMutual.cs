@@ -6,10 +6,12 @@ namespace OpenSim.Pcb.Inductance;
 /// Exact mutual inductance between two straight current filaments in arbitrary 3D
 /// position — the closed-form solution of the Neumann double integral
 /// M = (µ₀/4π)·cosε·∬ ds dt / r (Grover 1946, ch. 7; the same construction FastHenry
-/// uses). Replaces the parallel-equal-bar-only approximation for chain composition:
-/// collinear, staggered, oblique, and vertical (via-barrel) segment pairs are all exact
-/// at the filament level. Finite rectangular cross-sections enter through the
-/// geometric-mean-distance substitution on the parallel branch.
+/// uses). Collinear, staggered, oblique, and vertical (via-barrel) segment pairs are all
+/// exact at the filament level. It knows nothing of cross-sections: a parallel pair of
+/// rectangular bars goes to <see cref="PartialInductance.BarBarMutual"/> instead, because
+/// substituting any geometric mean distance here keeps a second-order END error (the
+/// GMD is a long-conductor concept), and the small-section expansion shipped before
+/// was wrong in form for wide bars over near planes.
 /// </summary>
 public static class FilamentMutual
 {
@@ -30,14 +32,9 @@ public static class FilamentMutual
     /// Signed mutual inductance [H] between filaments A1→A2 and B1→B2. Positive when
     /// currents traversing A1→A2 and B1→B2 aid each other, negative when they oppose —
     /// the sign comes from the endpoints, so chain composers need no direction-cosine
-    /// scaling of their own. <paramref name="parallelGmdDistance"/> (&gt; 0) replaces the
-    /// geometric perpendicular distance on the parallel side-by-side branch to account
-    /// for finite cross-sections; 0 means pure filaments. It is ignored for collinear
-    /// pairs (a cross-section GMD is a perpendicular-offset correction — wrong physics
-    /// end-to-end, and Grover shows the collinear finite-section correction is negligible).
+    /// scaling of their own.
     /// </summary>
-    public static double Between(Vector3D a1, Vector3D a2, Vector3D b1, Vector3D b2,
-        double parallelGmdDistance = 0)
+    public static double Between(Vector3D a1, Vector3D a2, Vector3D b1, Vector3D b2)
     {
         var da = a2 - a1;
         var db = b2 - b1;
@@ -49,20 +46,8 @@ public static class FilamentMutual
         if (Math.Abs(cos) < PerpendicularTolerance)
             return 0.0;
         if (1 - Math.Abs(cos) < ParallelTolerance)
-            return ParallelBranch(a1, b1, b2, da / l, l, m, Math.Sign(cos), parallelGmdDistance);
+            return ParallelBranch(a1, b1, b2, da / l, l, m, Math.Sign(cos));
         return SkewBranch(a1, a2, b1, b2, l, m, cos);
-    }
-
-    /// <summary>
-    /// Perpendicular distance between the (parallel) carrier lines of the two filaments —
-    /// what a composer feeds to <see cref="PartialInductance.GeometricMeanDistance"/> to
-    /// build the finite-section correction for side-by-side pairs.
-    /// </summary>
-    public static double PerpendicularSeparation(Vector3D a1, Vector3D a2, Vector3D b1)
-    {
-        var u = (a2 - a1).Normalized();
-        var w = b1 - a1;
-        return (w - Vector3D.Dot(w, u) * u).Length;
     }
 
     // ------------------------------------------------------------------
@@ -73,12 +58,12 @@ public static class FilamentMutual
     // Φ(u) = u·asinh(u/ρ) − √(u² + ρ²), giving
     //   I = Φ(s_b) + Φ(l − s_a) − Φ(s_a) − Φ(l − s_b).
     // Full overlap (s_a = 0, s_b = l) reduces identically to Grover's equal-parallel
-    // formula in PartialInductance.MutualInductanceParallel. As d → 0 the same
+    // formula l·[asinh(l/d) − √(1 + (d/l)²) + d/l]. As d → 0 the same
     // combination converges to the collinear form Φ₀(u) = |u|·ln|u| − |u| — the ln ρ
     // divergences cancel exactly when the segments do not overlap.
     // ------------------------------------------------------------------
     private static double ParallelBranch(Vector3D a1, Vector3D b1, Vector3D b2,
-        Vector3D unit, double l, double m, int sign, double gmd)
+        Vector3D unit, double l, double m, int sign)
     {
         double s1 = Vector3D.Dot(b1 - a1, unit);
         double s2 = Vector3D.Dot(b2 - a1, unit);
@@ -101,9 +86,8 @@ public static class FilamentMutual
                    * (Phi0(sb) + Phi0(l - sa) - Phi0(sa) - Phi0(l - sb));
         }
 
-        double rho = gmd > 0 ? gmd : d;
         return sign * Mu0Over4Pi
-               * (Phi(sb, rho) + Phi(l - sa, rho) - Phi(sa, rho) - Phi(l - sb, rho));
+               * (Phi(sb, d) + Phi(l - sa, d) - Phi(sa, d) - Phi(l - sb, d));
     }
 
     private static double Phi(double u, double rho) =>

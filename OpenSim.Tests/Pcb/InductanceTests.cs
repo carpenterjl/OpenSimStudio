@@ -6,13 +6,20 @@ namespace OpenSim.Tests.Pcb;
 
 public class InductanceTests
 {
-    // Ruehli's rectangular-bar self-inductance, hand-evaluated for a 10 mm × 1 mm ×
-    // 35 µm trace: L = (µ₀/2π)·l·[ln(2l/(w+t)) + 0.5 + (w+t)/(3l)] ≈ 6.99 nH.
+    // The reference trace, 10 mm × 1 mm × 35 µm. Ruehli's slender-bar form
+    // L = (µ₀/2π)·l·[ln(2l/(w+t)) + 0.5 + (w+t)/(3l)] hand-evaluates to 6.99 nH; the
+    // exact uniform-current value (Hoer–Love, evaluated to 60 digits outside this
+    // code base) is 6.98638222352 nH — 0.076 % below it, inside the same band.
     [Fact]
-    public void SelfInductance_MatchesRuehliClosedForm()
+    public void SelfInductance_OfTheReferenceTrace_IsTheExactUniformCurrentValue()
     {
         double l = PartialInductance.SelfInductance(10e-3, 1e-3, 35e-6);
         Assert.Equal(6.99e-9, l, 0.05e-9);
+        Assert.Equal(6.9863822235186e-9, l, 6.99e-9 * 1e-10);
+
+        double ruehli = 2e-7 * 10e-3 * (Math.Log(2 * 10e-3 / 1.035e-3) + 0.5 + 1.035e-3 / 30e-3);
+        Assert.True(l < ruehli, "A slender straight bar sits BELOW the slender-bar formula.");
+        Assert.Equal(ruehli, l, ruehli * 1e-3);
 
         // ~0.7 nH/mm is the expected order for a wide PCB trace (below the 1 nH/mm
         // round-wire rule of thumb because the trace is wide).
@@ -35,15 +42,25 @@ public class InductanceTests
     public void MutualInductance_IsPositiveBelowSelfAndDecaysWithSeparation()
     {
         double self = PartialInductance.SelfInductance(10e-3, 1e-3, 35e-6);
-        double near = PartialInductance.MutualInductanceParallel(10e-3, 2e-3, 1e-3, 35e-6);
-        double far = PartialInductance.MutualInductanceParallel(10e-3, 8e-3, 1e-3, 35e-6);
+        double near = SideBySide(2e-3);
+        double far = SideBySide(8e-3);
 
         Assert.True(near > 0 && near < self, "Mutual must be positive and below the self-inductance.");
         Assert.True(far < near, "Mutual coupling decreases with separation.");
 
-        // Hand value at 2 mm separation ≈ 2.99 nH.
+        // Hand value at 2 mm separation: the centre FILAMENTS give
+        // (µ₀/2π)·l·[asinh(l/d) − √(1+(d/l)²) + d/l] = 2.985 nH. Side by side, the 1 mm
+        // widths put more copper nearer than farther on the log scale, so the exact
+        // value sits ABOVE the filament one: 3.02837222806 nH (60-digit evaluation).
         Assert.Equal(2.99e-9, near, 0.05e-9);
+        Assert.Equal(3.028372228056e-9, near, 3.03e-9 * 1e-10);
+        double filament = 2e-7 * 10e-3 * (Math.Asinh(5) - Math.Sqrt(1 + 0.04) + 0.2);
+        Assert.True(near > filament);
     }
+
+    /// <summary>Two 10 mm × 1 mm × 35 µm bars side by side at the given centre pitch.</summary>
+    private static double SideBySide(double pitch) =>
+        PartialInductance.BarBarMutual(1e-3, 35e-6, 10e-3, 1e-3, 35e-6, 10e-3, pitch, 0, 0);
 
     [Fact]
     public void LoopComposer_ReturnPathReducesLoopInductance()
@@ -60,8 +77,8 @@ public class InductanceTests
             "An anti-parallel return path must reduce the loop inductance below the summed self terms.");
 
         double self = PartialInductance.SelfInductance(10e-3, 1e-3, 35e-6);
-        double mutual = PartialInductance.MutualInductanceParallel(10e-3, 2e-3, 1e-3, 35e-6);
-        Assert.Equal(2 * self - 2 * mutual, report.LoopInductance, 0.1e-9);
+        double mutual = SideBySide(2e-3);
+        Assert.Equal(2 * self - 2 * mutual, report.LoopInductance, report.LoopInductance * 1e-12);
         Assert.NotEmpty(report.Assumptions);
     }
 
