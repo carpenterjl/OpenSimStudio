@@ -40,7 +40,7 @@ public class JouleCouplingBenchmarks
         const double volts = 0.005;
         const double t0 = 300.0;
 
-        var mesh = MeshBox(length, width, thick, 0.008);
+        var mesh = MeshBox(length, width, thick, 0.005);
         var output = new JouleHeatingStudy().Solve(new SolveInput
         {
             Mesh = mesh,
@@ -76,7 +76,7 @@ public class JouleCouplingBenchmarks
         const double length = 0.1, width = 0.02, thick = 0.01;
         const double volts = 0.005;
 
-        var mesh = MeshBox(length, width, thick, 0.008);
+        var mesh = MeshBox(length, width, thick, 0.005);
         var output = new JouleHeatingStudy().Solve(new SolveInput
         {
             Mesh = mesh,

@@ -283,7 +283,7 @@ public class HarmonicElectricBenchmarks
     [Fact]
     public void Frames_GeometricSweep_FirstFrequencyIsDefault()
     {
-        var mesh = MeshBox(0.02, 0.01, 0.01, 0.006);
+        var mesh = MeshBox(0.02, 0.01, 0.01, 0.005);
         var output = new HarmonicElectricSolver().Solve(
             PlateInput(mesh, LossyDielectric, 1e3, 1e7, 5));
 

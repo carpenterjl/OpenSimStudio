@@ -13,14 +13,14 @@ public class ProjectSerializerTests
     public void SaveAndLoad_RoundTripsFullProject()
     {
         var geometry = PrimitiveFactory.CreateBox(0.1, 0.02, 0.01);
-        var mesh = new DelaunayMeshGenerator().Generate(geometry, new MeshSettings { TargetEdgeLength = 0.008 });
+        var mesh = new DelaunayMeshGenerator().Generate(geometry, new MeshSettings { TargetEdgeLength = 0.005 });
 
         var body = new Body
         {
             Name = "Beam",
             GeometrySource = "Box 0.1×0.02×0.01 m",
             Geometry = geometry,
-            MeshSettings = new MeshSettings { TargetEdgeLength = 0.008 },
+            MeshSettings = new MeshSettings { TargetEdgeLength = 0.005 },
             Mesh = mesh,
             Material = new Material
             {
@@ -56,7 +56,7 @@ public class ProjectSerializerTests
             Assert.Equal(mesh.NodeCount, loadedBody.Mesh!.NodeCount);
             Assert.Equal(mesh.ElementCount, loadedBody.Mesh.ElementCount);
             Assert.Equal(mesh.TotalVolume(), loadedBody.Mesh.TotalVolume(), 12);
-            Assert.Equal(0.008, loadedBody.MeshSettings.TargetEdgeLength);
+            Assert.Equal(0.005, loadedBody.MeshSettings.TargetEdgeLength);
             Assert.Equal("Test steel", loadedBody.Material!.Name);
             Assert.Equal(200e9, loadedBody.Material.YoungsModulus);
             Assert.Equal(0.35, loadedBody.Material.Emissivity);
@@ -215,7 +215,7 @@ public class Phase2PersistenceTests
     public void FeMeshRegionIds_RoundTrip_AndOldFormatLoadsWithoutThem()
     {
         var geometry = PrimitiveFactory.CreateBox(0.05, 0.02, 0.01);
-        var meshed = new DelaunayMeshGenerator().Generate(geometry, new MeshSettings { TargetEdgeLength = 0.008 });
+        var meshed = new DelaunayMeshGenerator().Generate(geometry, new MeshSettings { TargetEdgeLength = 0.005 });
         var regions = Enumerable.Range(0, meshed.ElementCount).Select(e => e % 2).ToArray();
         var mesh = new FeMesh(meshed.Nodes, meshed.Elements, meshed.BoundaryTriangles, regions);
 

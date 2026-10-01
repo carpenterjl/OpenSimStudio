@@ -10,7 +10,7 @@ namespace OpenSim.Tests.Core;
 public class QuadraticMeshTests
 {
     private static FeMesh LinearBox() => new DelaunayMeshGenerator().Generate(
-        PrimitiveFactory.CreateBox(0.05, 0.02, 0.01), new MeshSettings { TargetEdgeLength = 0.008 });
+        PrimitiveFactory.CreateBox(0.05, 0.02, 0.01), new MeshSettings { TargetEdgeLength = 0.005 });
 
     [Fact]
     public void Upgrade_AddsOneExactMidpointPerUniqueEdge_SharedBetweenElements()

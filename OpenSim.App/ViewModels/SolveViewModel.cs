@@ -85,6 +85,8 @@ public partial class SolveViewModel : ObservableObject
             return;
         }
 
+        if (!await MeshesPassTheAuditAsync(new[] { body })) return;
+
         body.Material = _session.SelectedMaterial;
         var kind = _session.SelectedAnalysis.Kind;
         bool transientRequested = kind == AnalysisType.TransientThermal
@@ -170,6 +172,32 @@ public partial class SolveViewModel : ObservableObject
     }
 
     /// <summary>
+    /// A mesh that has not been through the post-mesh audit - one loaded from a project
+    /// file, which carries no verdict - is audited here, against its body's geometry, before
+    /// any solver sees it. A mesh that fails the audit does not reach a solver.
+    /// </summary>
+    private async Task<bool> MeshesPassTheAuditAsync(IReadOnlyList<Body> bodies)
+    {
+        try
+        {
+            foreach (var body in bodies)
+            {
+                var report = await Task.Run(() => OpenSim.Meshing.MeshAuditGate.AuditIfNeeded(body));
+                if (report is null) continue;
+                body.Mesh = body.Mesh!.WithAudit(report);
+                _log.Append($"Mesh '{body.Name}' had not been audited; audited before solving: passed.");
+            }
+            return true;
+        }
+        catch (MeshAuditException ex)
+        {
+            _log.Append($"Validation: {ex.Message}");
+            _session.StatusText = "Validation failed";
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Environment heat flow: the whole assembly solved at once. Every body is meshed
     /// independently and merged here (<see cref="FeMeshAssembler"/>), the joints between
     /// them are detected and given a finite conductance, each body's dissipation becomes a
@@ -184,6 +212,8 @@ public partial class SolveViewModel : ObservableObject
             _log.Append("The project has no solid bodies to solve.");
             return;
         }
+
+        if (!await MeshesPassTheAuditAsync(bodies)) return;
 
         var environment = _environment.Build();
         _session.Project.Environment = environment;
@@ -304,6 +334,8 @@ public partial class SolveViewModel : ObservableObject
         if (fluidBodies > 0)
             _log.Append($"{fluidBodies} body(ies) marked as fluid volumes are excluded from the " +
                         "FE assembly; they define the flow domain instead.");
+
+        if (!await MeshesPassTheAuditAsync(bodies)) return;
 
         var environment = _environment.Build();
         _session.Project.Environment = environment;

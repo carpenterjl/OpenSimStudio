@@ -28,6 +28,13 @@ namespace OpenSim.Meshing;
 /// Geometry with no feature edges - a single-face STL, a PCB net - seeds exactly the
 /// candidate list, in exactly the order, that it always did.
 /// </para>
+/// <para>
+/// There is NO boundary recovery: step 4 keeps what the triangulation happens to offer.
+/// What stands in for it is <see cref="MeshAudit"/>. A geometry with a wall or gap under
+/// two elements across is refused before step 1, and the finished mesh is audited against
+/// the geometry before it is returned - a mesh that is not the geometry is an exception,
+/// not a result.
+/// </para>
 /// </summary>
 public sealed class DelaunayMeshGenerator : IMeshGenerator
 {
@@ -43,23 +50,118 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
             throw new InvalidOperationException(
                 "Geometry is not watertight; repair the surface before meshing.");
 
-        var bounds = geometry.Bounds;
-        double h = settings.TargetEdgeLength > 0
-            ? settings.TargetEdgeLength
-            : bounds.Diagonal * AutoEdgeFraction;
+        // A feature thinner than two elements is one this pipeline bridges, fills or drops
+        // without a trace in the volume, so it is refused here, on the geometry alone,
+        // before any meshing work - and the finished mesh is audited against the same
+        // analysis at the end.
+        var audit = BeginAudit(geometry, settings, AutoEdgeFraction);
+        audit.ThrowIfUnresolved();
+        double h = audit.EdgeLength;
 
+        var refined = SurfaceRefiner.Refine(geometry, h);
+        var classifier = new SolidClassifier(geometry);
+        var surfaceTree = new KdTree(refined.Vertices);
+        var distanceField = new SurfaceDistanceField(refined);
+
+        // Seed, triangulate, clip, skin - then audit. Nothing in that pipeline recovers the
+        // boundary: the skin is whatever survives the clip, so a mesh that is not the
+        // geometry must not leave this method.
+        //
+        // Two defects are this pipeline's own, are recognisable, and are repaired by
+        // rebuilding rather than refused. A mesh that passes first time - every convex
+        // part, and most others - is produced exactly as it always was.
+        //
+        // PITS. A sliver culled where it touches the surface along an edge leaves a slit;
+        // the pinch resolver closes the slit by removing the sound tetrahedron beside it,
+        // and the result is a pit half an element deep with INTERIOR points on the skin,
+        // which a mesh of the geometry never has. Those points are what made the sliver:
+        // the rebuild leaves them out. Every other point keeps its jittered position, so
+        // the rebuild differs only around the pits.
+        //
+        // CUT REENTRANT EDGES. Where surface points sit about half an element from a
+        // reentrant edge on both of its faces, a Delaunay face joins them across the void
+        // and the edge is chamfered by a quarter of an element or so. Seeding the feature
+        // edges twice as densely makes the faces beside the edge Delaunay instead. It is
+        // done as a rebuild, not by default, because it changes every point's jitter and
+        // with it the mesh of every part that has a feature edge at all.
+        var droppedCells = new HashSet<(int, int, int)>();
+        var blocked = new List<Vector3D>();
+        var remarks = new List<string>();
+        int creaseDivisions = 1;
+        for (int attempt = 0; ; attempt++)
+        {
+            var seeds = BuildSeeds(geometry, refined, classifier, surfaceTree, h, creaseDivisions, droppedCells,
+                cancellationToken);
+            var (mesh, pointOfNode) = Triangulate(seeds.Points, seeds.ExactFeaturePositions, classifier,
+                distanceField, h, settings, blocked, cancellationToken);
+            var report = audit.Evaluate(mesh);
+            if (remarks.Count > 0)
+                report = report with { Warnings = report.Warnings.Concat(remarks).ToArray() };
+
+            if (report.Passed)
+            {
+                // The quadratic upgrade is the last step so mid-edge nodes are generated on
+                // the final refined, smoothed linear geometry.
+                return (settings.ElementOrder == ElementOrder.Quadratic
+                    ? QuadraticMeshBuilder.Upgrade(mesh)
+                    : mesh).WithAudit(report);
+            }
+
+            var exposed = new SortedSet<int>();
+            foreach (var t in mesh.BoundaryTriangles)
+                foreach (int node in new[] { t.A, t.B, t.C })
+                    if (pointOfNode[node] >= seeds.SurfacePointCount) exposed.Add(node);
+
+            if (attempt < MaxRebuilds && exposed.Count > 0)
+            {
+                foreach (int node in exposed)
+                {
+                    int point = pointOfNode[node];
+                    if (seeds.CellOfPoint.TryGetValue(point, out var cell)) droppedCells.Add(cell);
+                    else blocked.Add(mesh.Nodes[node]);     // a refinement point: keep the refiner off this spot
+                }
+                remarks.Add($"Rebuild {attempt + 1}: the sliver cull left {exposed.Count} interior point(s) on the " +
+                            "skin (pits); rebuilt without them.");
+                continue;
+            }
+            if (attempt < MaxRebuilds && creaseDivisions == 1 && geometry.FeatureEdges.Edges.Count > 0)
+            {
+                creaseDivisions = 2;
+                remarks.Add($"Rebuild {attempt + 1}: the skin did not conform (a cut reentrant edge is the usual " +
+                            "cause); rebuilt with feature edges seeded twice as densely.");
+                continue;
+            }
+
+            throw new MeshAuditException(report);
+        }
+    }
+
+    /// <summary>How many times a triangulation that fails the audit in a way this mesher
+    /// knows how to repair is rebuilt before the failure is reported.</summary>
+    private const int MaxRebuilds = 4;
+
+    /// <summary>The point set of one attempt: surface samples first, then the interior
+    /// grid, all jittered.</summary>
+    /// <param name="CellOfPoint">The grid cell of each interior point, by point index.</param>
+    private sealed record Seeds(List<Vector3D> Points, int SurfacePointCount,
+        Dictionary<int, Vector3D> ExactFeaturePositions, Dictionary<int, (int, int, int)> CellOfPoint);
+
+    /// <summary>Steps 1 and 2, and the jitter.</summary>
+    private static Seeds BuildSeeds(TriangleMesh geometry, TriangleMesh refined, SolidClassifier classifier,
+        KdTree surfaceTree, double h, int creaseDivisions, HashSet<(int, int, int)> droppedCells,
+        CancellationToken cancellationToken)
+    {
         // 1. Surface sample points from the refined surface, thinned to a roughly
         // uniform spacing so anisotropic triangulations (long thin cap fans, dense
         // facet rings) cannot flood the Delaunay stage with badly spaced points.
         // Feature corners and edges are seeded first so they always survive the thinning.
-        var refined = SurfaceRefiner.Refine(geometry, h);
-        var points = ThinPoints(BuildSurfaceSeeds(geometry, refined, h), 0.45 * h,
+        var points = ThinPoints(BuildSurfaceSeeds(geometry, refined, h, creaseDivisions), 0.45 * h,
             out var exactFeaturePositions);
         int surfacePointCount = points.Count;
 
         // 2. Interior grid points, kept at least 0.45·h away from surface samples.
-        var classifier = new SolidClassifier(geometry);
-        var surfaceTree = new KdTree(refined.Vertices);
+        var cells = new List<(int, int, int)>();
+        var bounds = geometry.Bounds;
         var min = bounds.Min;
         var size = bounds.Size;
         int nx = Math.Max(1, (int)Math.Floor(size.X / h));
@@ -80,7 +182,10 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
                     if (nearest >= 0 && Vector3D.Distance(refined.Vertices[nearest], p) < 0.45 * h)
                         continue;
                     if (classifier.IsInside(p))
+                    {
                         points.Add(p);
+                        cells.Add((i, j, k));
+                    }
                 }
             }
         }
@@ -98,10 +203,76 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
                 (rng.NextDouble() - 0.5) * amplitude);
         }
 
+        // Interior points a rebuild leaves out are removed AFTER the jitter, so every
+        // point that stays is where it was in the attempt before.
+        var kept = new List<Vector3D>(points.Count);
+        var cellOfPoint = new Dictionary<int, (int, int, int)>(cells.Count);
+        for (int i = 0; i < points.Count; i++)
+        {
+            if (i >= surfacePointCount)
+            {
+                var cell = cells[i - surfacePointCount];
+                if (droppedCells.Contains(cell)) continue;
+                cellOfPoint[kept.Count] = cell;
+            }
+            kept.Add(points[i]);
+        }
+        return new Seeds(kept, surfacePointCount, exactFeaturePositions, cellOfPoint);
+    }
+
+    /// <summary>
+    /// The audit this mesher holds its output to, set up for a geometry and its settings;
+    /// its edge length is the one the mesh is built at. Exposed so a mesh made earlier -
+    /// loaded from a project file - can be audited the same way.
+    /// <para>
+    /// An explicit target edge length is taken as given. The AUTOMATIC one starts at a
+    /// fraction of the bounding-box diagonal and is then made finer, as far as
+    /// <see cref="AutoRefinementLimit"/> times, when that would leave a wall or a gap less
+    /// than two elements across: "automatic" has to mean a size the part can be meshed at,
+    /// or a plate, a beam or anything else slender has no automatic size at all (the
+    /// reference beam, 200 x 60 x 20 mm, is 20 mm thick against an automatic 14 mm). Past
+    /// that limit the refusal stands and names the size that would do, because resolving a
+    /// very thin feature uniformly is a decision about cost, and not one to take silently.
+    /// </para>
+    /// </summary>
+    public static MeshAudit BeginAudit(TriangleMesh geometry, MeshSettings settings,
+        double autoEdgeFraction = 1.0 / 15.0)
+    {
+        if (settings.TargetEdgeLength > 0) return MeshAudit.Begin(geometry, settings.TargetEdgeLength);
+
+        double coarse = geometry.Bounds.Diagonal * autoEdgeFraction;
+        var audit = MeshAudit.Begin(geometry, coarse);
+        // A finer sampling can find a thinner feature than the coarse one saw, hence rounds.
+        for (int round = 0; round < 3 && audit.Resolution.Outcome == MeshAuditOutcome.Failed; round++)
+        {
+            double thinnest = audit.Resolution.Observed!.Value;
+            double resolved = thinnest / MeshAudit.ResolutionFactor;
+            if (resolved < coarse / AutoRefinementLimit) break;
+            audit = MeshAudit.Begin(geometry, resolved);
+            audit.AddNote($"Automatic edge length reduced from {coarse:g3} m to {resolved:g3} m: the thinnest wall or " +
+                          $"gap is {thinnest:g3} m, and the mesher needs two elements across it.");
+        }
+        return audit;
+    }
+
+    /// <summary>How much finer than its default the automatic edge length may be made to
+    /// resolve a thin feature. Four keeps the worst case - a blocky part with one thin
+    /// feature - to a few hundred thousand elements.</summary>
+    public const double AutoRefinementLimit = 4;
+
+    /// <summary>
+    /// Steps 3-6: triangulate and refine the point set, keep the interior tetrahedra, and
+    /// extract the skin. Returns the mesh and, for each of its nodes, the index of the
+    /// point it came from (refinement points follow the seeds).
+    /// </summary>
+    private static (FeMesh Mesh, int[] PointOfNode) Triangulate(List<Vector3D> points,
+        Dictionary<int, Vector3D> exactFeaturePositions, SolidClassifier classifier,
+        SurfaceDistanceField distanceField, double h, MeshSettings settings,
+        IReadOnlyList<Vector3D> blocked, CancellationToken cancellationToken)
+    {
         // 3. Delaunay triangulation, then quality-driven refinement: Steiner points at
         // the circumcenters of bad tets (longest-edge midpoints for boundary slivers,
         // whose circumcenters escape the solid), mirroring the 2D PlanarMesher.Refine.
-        var distanceField = new SurfaceDistanceField(refined);
         var triangulation = new BowyerWatson();
         triangulation.Triangulate(points, cancellationToken);
         if (settings.TargetMinQuality > 0)
@@ -110,7 +281,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
                 ? settings.MaxRefinementPoints
                 : Math.Max(1024, points.Count);
             TetRefiner.Refine(triangulation, points, classifier, distanceField, h,
-                settings.TargetMinQuality, budget, cancellationToken);
+                settings.TargetMinQuality, budget, cancellationToken, blocked);
         }
         var tets = triangulation.FiniteTets();
 
@@ -156,12 +327,14 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
         // 5. Compact node numbering to used nodes.
         var nodeMap = new Dictionary<int, int>();
         var nodes = new List<Vector3D>();
+        var pointOfNode = new List<int>();
         int Map(int old)
         {
             if (!nodeMap.TryGetValue(old, out int idx))
             {
                 idx = nodes.Count;
                 nodes.Add(points[old]);
+                pointOfNode.Add(old);
                 nodeMap[old] = idx;
             }
             return idx;
@@ -195,13 +368,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
         MeshSmoother.Smooth(nodes, elements, boundaryNodes);
 
         var boundary = ExtractBoundary(nodes, faceUse, distanceField);
-        var mesh = new FeMesh(nodes, elements, boundary);
-
-        // The quadratic upgrade is the last step so mid-edge nodes are generated on
-        // the final refined, smoothed linear geometry.
-        return settings.ElementOrder == ElementOrder.Quadratic
-            ? QuadraticMeshBuilder.Upgrade(mesh)
-            : mesh;
+        return (new FeMesh(nodes, elements, boundary), pointOfNode.ToArray());
     }
 
     /// <summary>
@@ -282,7 +449,8 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
     /// the answer is not to leave the gap for it to bridge.
     /// </para>
     /// </summary>
-    private static List<SurfaceSeed> BuildSurfaceSeeds(TriangleMesh geometry, TriangleMesh refined, double h)
+    private static List<SurfaceSeed> BuildSurfaceSeeds(TriangleMesh geometry, TriangleMesh refined, double h,
+        int creaseDivisions)
     {
         var features = geometry.FeatureEdges;
         var seeds = new List<SurfaceSeed>();
@@ -302,7 +470,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
 
                 seeds.Add(new SurfaceSeed(a, true));
                 seeds.Add(new SurfaceSeed(b, true));
-                int steps = Math.Max(1, (int)Math.Ceiling((b - a).Length / h));
+                int steps = Math.Max(1, (int)Math.Ceiling((b - a).Length / h)) * creaseDivisions;
                 for (int k = 1; k < steps; k++)
                     seeds.Add(new SurfaceSeed(a + (b - a) * ((double)k / steps), true));
             }

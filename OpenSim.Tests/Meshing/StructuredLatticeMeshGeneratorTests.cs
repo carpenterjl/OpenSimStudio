@@ -291,7 +291,7 @@ public class StructuredLatticeMeshGeneratorTests
     public void SelectorWithDefaultSettings_ProducesTheDelaunayMeshUnchanged()
     {
         var geometry = PrimitiveFactory.CreateBox(0.05, 0.02, 0.01);
-        var settings = new MeshSettings { TargetEdgeLength = 0.006 };
+        var settings = new MeshSettings { TargetEdgeLength = 0.005 };
 
         var direct = new DelaunayMeshGenerator().Generate(geometry, settings);
         var routed = new MeshGeneratorSelector(

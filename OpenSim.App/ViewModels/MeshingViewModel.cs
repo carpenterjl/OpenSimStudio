@@ -175,6 +175,7 @@ public partial class MeshingViewModel : ObservableObject
 
             _session.RaiseMeshChanged();
             _log.Append($"Mesh generated: {mesh.NodeCount} nodes, {mesh.ElementCount} tetrahedra.");
+            LogAudit(body.Name, mesh);
             _session.StatusText = "Mesh ready";
         }
         catch (Exception ex) { _session.ReportError(ex); }
@@ -222,6 +223,7 @@ public partial class MeshingViewModel : ObservableObject
                     body.Mesh = await Task.Run(() => _meshGenerator.Generate(geometry, settings));
                     _log.Append($"Mesh '{body.Name}': {body.Mesh.NodeCount:N0} nodes, " +
                                 $"{body.Mesh.ElementCount:N0} tetrahedra.");
+                    LogAudit(body.Name, body.Mesh);
                 }
                 catch (Exception ex)
                 {
@@ -238,6 +240,19 @@ public partial class MeshingViewModel : ObservableObject
         }
     }
 
+    /// <summary>What the post-mesh audit found, for the log. A mesh only ever arrives here
+    /// having passed - a failed audit is an exception out of the mesher - so this is the
+    /// record that it was checked, and any remark the audit attached.</summary>
+    private void LogAudit(string name, FeMesh mesh)
+    {
+        if (mesh.Audit is not { } audit) return;
+        int passed = audit.Checks.Count(c => c.Outcome == MeshAuditOutcome.Passed);
+        _log.Append($"Mesh audit '{name}': {passed} of {audit.Checks.Count} checks passed" +
+                    (passed < audit.Checks.Count ? ", the rest not applicable." : "."));
+        foreach (string note in audit.Warnings)
+            _log.Append($"Mesh audit note: {note}");
+    }
+
     /// <summary>Recomputes the info readout from the session body's mesh.</summary>
     private void RefreshMeshInfo()
     {
@@ -251,6 +266,9 @@ public partial class MeshingViewModel : ObservableObject
         MeshInfo = $"{stats.NodeCount} nodes, {stats.ElementCount} elements\n" +
                    $"volume {stats.TotalVolume:g4} m³\n" +
                    $"quality avg {stats.AverageQuality:f3}, min {stats.MinQuality:f4}\n" +
-                   $"edges {stats.MinEdgeLength:g3}–{stats.MaxEdgeLength:g3} m";
+                   $"edges {stats.MinEdgeLength:g3}–{stats.MaxEdgeLength:g3} m\n" +
+                   (mesh.Audit is { } audit
+                       ? $"audit: {(audit.Passed ? "passed" : "FAILED")} ({audit.Checks.Count} checks)"
+                       : "audit: not yet run on this mesh (runs before solving)");
     }
 }

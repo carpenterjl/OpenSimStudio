@@ -163,6 +163,20 @@ public sealed class FeMesh
     private readonly Lazy<BoundaryEdgeSet> _edges;
 
     /// <summary>
+    /// What the post-mesh audit found when this mesh was generated: a record for the
+    /// meshing view to show, nothing a solver reads. Null on a mesh that did not come out of
+    /// an audited mesher - one loaded from a project file, built by the PCB mesher, or
+    /// assembled by hand - and never persisted, since a stored verdict could only go stale.
+    /// </summary>
+    [JsonIgnore]
+    public MeshAuditReport? Audit { get; private init; }
+
+    /// <summary>The same mesh, carrying its audit report.</summary>
+    public FeMesh WithAudit(MeshAuditReport report) =>
+        new(Nodes, Elements, BoundaryTriangles, ElementRegionIds, MidEdgeNodes, HexElements,
+            HexMidEdgeNodes, BoundaryQuads) { Audit = report };
+
+    /// <summary>
     /// The geometric edges and vertices of the boundary skin, derived on first use and
     /// cached. Derived rather than stored: the ids are a function of the skin and its face
     /// tags, so a second copy could only ever disagree with them.

@@ -59,7 +59,7 @@ public class RedundantComputationTests
     [InlineData(ElementOrder.Quadratic)]
     public void StressFromStrain_IsBitwiseTheTwoCallRecoveryItReplaced(ElementOrder order)
     {
-        var mesh = MeshBox(0.012, order);
+        var mesh = MeshBox(0.010, order);
         var assembler = new AssemblerProbe(mesh, Steel, order);
         var u = SyntheticDisplacements(mesh);
 
@@ -148,7 +148,7 @@ public class RedundantComputationTests
     {
         var mesh = new DelaunayMeshGenerator().Generate(
             PrimitiveFactory.CreateBox(0.10, 0.04, 0.02),
-            new MeshSettings { TargetEdgeLength = 0.011 });
+            new MeshSettings { TargetEdgeLength = 0.010 });
 
         // Independent oracle: rebuild the skin from the finished mesh the way the retired
         // counting pass did — four faces per element in element order, keep the once-used.

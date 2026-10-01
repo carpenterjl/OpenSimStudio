@@ -32,7 +32,7 @@ public class AcSweepReductionTests
     private static FeMesh Block() =>
         new DelaunayMeshGenerator().Generate(
             PrimitiveFactory.CreateBox(0.02, 0.01, 0.005),
-            new MeshSettings { TargetEdgeLength = 0.003 });
+            new MeshSettings { TargetEdgeLength = 0.0025 });
 
     private static (CsrMatrix Conductance, CsrMatrix Capacitance) Assemblies(FeMesh mesh)
     {

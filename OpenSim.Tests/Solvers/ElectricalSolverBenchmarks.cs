@@ -79,7 +79,7 @@ public class ElectricalSolverBenchmarks
         const double length = 0.1, width = 0.02, thick = 0.01;
         const double volts = 0.001;
 
-        var mesh = MeshBox(length, width, thick, 0.008);
+        var mesh = MeshBox(length, width, thick, 0.005);
         var output = new ElectricalConductionSolver().Solve(new SolveInput
         {
             Mesh = mesh,
@@ -119,7 +119,7 @@ public class ElectricalSolverBenchmarks
         const double length = 0.1, width = 0.02, thick = 0.01;
         const double amps = 10.0;
 
-        var mesh = MeshBox(length, width, thick, 0.008);
+        var mesh = MeshBox(length, width, thick, 0.005);
         var output = new ElectricalConductionSolver().Solve(new SolveInput
         {
             Mesh = mesh,
@@ -161,7 +161,7 @@ public class ElectricalSolverBenchmarks
         const double volts = 0.001;
         var halfConductive = Copper with { Name = "Half copper", ElectricalConductivity = Copper.ElectricalConductivity / 2 };
 
-        var baseMesh = MeshBox(length, width, thick, 0.008);
+        var baseMesh = MeshBox(length, width, thick, 0.005);
         var regions = new int[baseMesh.ElementCount];
         for (int e = 0; e < baseMesh.ElementCount; e++)
         {

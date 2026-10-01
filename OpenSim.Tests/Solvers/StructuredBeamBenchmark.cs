@@ -152,7 +152,7 @@ public class StructuredBeamBenchmark
 
         // MEASURED: 7.87687e-4 m, 102.4% of the Ansys 7.6947e-4, at the reference's own
         // 100 x 25 x 2 divisions. The band is that measurement plus a stated margin, and it
-        // is narrow enough to fail on the Delaunay mesher's 87.9% at a comparable cost.
+        // is narrow enough to fail on the Delaunay mesher's 88.9% at a comparable cost.
         Assert.InRange(ratio, 0.95, 1.10);
     }
 
@@ -188,13 +188,13 @@ public class StructuredBeamBenchmark
 
         var delaunay = new DelaunayMeshGenerator().Generate(
             PrimitiveFactory.CreateBox(Length, Height, Thickness),
-            new MeshSettings { TargetEdgeLength = 0.011, ElementOrder = ElementOrder.Quadratic });
+            new MeshSettings { TargetEdgeLength = 0.010, ElementOrder = ElementOrder.Quadratic });
         var delaunayOut = new LinearStaticSolver().Solve(Setup(delaunay, Steel(), Load500));
         double delaunayRatio =
             ((NodalVectorField)delaunayOut.Fields.First(f => f.Name == "Displacement"))
             .Values.Max(v => v.Length) / AnsysDeflection;
 
-        _output.WriteLine($"structured {structured:P2} vs Delaunay(h=11mm) {delaunayRatio:P2} of Ansys");
+        _output.WriteLine($"structured {structured:P2} vs Delaunay(h=10mm) {delaunayRatio:P2} of Ansys");
         Assert.True(Math.Abs(structured - 1) < Math.Abs(delaunayRatio - 1),
             $"Structured {structured:P2} is no closer to Ansys than Delaunay {delaunayRatio:P2}.");
     }

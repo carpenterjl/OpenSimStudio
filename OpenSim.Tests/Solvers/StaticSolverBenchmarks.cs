@@ -90,7 +90,7 @@ public class StaticSolverBenchmarks
         const double force = 1000.0;
         var material = Steel with { PoissonRatio = 0.0 };
 
-        var mesh = MeshBox(length, width, thick, 0.012);
+        var mesh = MeshBox(length, width, thick, 0.010);
         var input = new SolveInput
         {
             Mesh = mesh,

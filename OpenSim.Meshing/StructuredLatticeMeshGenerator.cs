@@ -74,7 +74,7 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
         var bounds = box.Bounds;
         var size = bounds.Size;
 
-        var divisions = ResolveDivisions(settings, bounds);
+        var divisions = ResolveDivisions(settings, bounds, AutoEdgeFraction);
         long nodeCount = (long)(divisions.Nx + 1) * (divisions.Ny + 1) * (divisions.Nz + 1);
         if (nodeCount > MaxNodes)
             throw new InvalidOperationException(
@@ -100,8 +100,13 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
             }
         }
 
+        var audit = BeginAudit(geometry, divisions, bounds);
+
         if (shape == ElementShape.Hexahedral)
-            return GenerateHex(nodes, Index, nx, ny, nz, box, cancellationToken);
+        {
+            var hex = GenerateHex(nodes, Index, nx, ny, nz, box, cancellationToken);
+            return hex.WithAudit(audit.Check(hex));
+        }
 
         var elements = new List<Tet4>(6 * nx * ny * nz);
         var corner = new int[8];
@@ -124,11 +129,12 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
         }
 
         var mesh = new FeMesh(nodes, elements, Skin(nodes, elements, box));
+        var report = audit.Check(mesh);
 
         // Quadratic last, on the final linear geometry — the Delaunay mesher's order.
-        return settings.ElementOrder == ElementOrder.Quadratic
+        return (settings.ElementOrder == ElementOrder.Quadratic
             ? QuadraticMeshBuilder.Upgrade(mesh)
-            : mesh;
+            : mesh).WithAudit(report);
     }
 
     /// <summary>
@@ -237,7 +243,7 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
     /// mesh's element quality is fixed by its cell aspect ratio, so there is nothing for
     /// refinement to improve — the knob that matters here is the division counts.
     /// </summary>
-    private LatticeDivisions ResolveDivisions(MeshSettings settings, Aabb bounds)
+    private static LatticeDivisions ResolveDivisions(MeshSettings settings, Aabb bounds, double autoEdgeFraction)
     {
         if (settings.Divisions is { } given)
         {
@@ -250,9 +256,30 @@ public sealed class StructuredLatticeMeshGenerator : IMeshGenerator
 
         double h = settings.TargetEdgeLength > 0
             ? settings.TargetEdgeLength
-            : bounds.Diagonal * AutoEdgeFraction;
+            : bounds.Diagonal * autoEdgeFraction;
         var size = bounds.Size;
         return new LatticeDivisions(DivisionsFor(size.X, h), DivisionsFor(size.Y, h), DivisionsFor(size.Z, h));
+    }
+
+    /// <summary>
+    /// The audit this mesher holds its output to. Its length scale is the largest cell
+    /// edge. The sub-resolution guard is left out: it exists for a mesher that loses what
+    /// it cannot resolve, and this one lays exact planes whatever the cell size - a plate
+    /// one cell thick is a coarse mesh, not a lost feature. Exposed so a mesh made earlier -
+    /// loaded from a project file - can be audited the same way.
+    /// </summary>
+    public static MeshAudit BeginAudit(TriangleMesh geometry, MeshSettings settings,
+        double autoEdgeFraction = 1.0 / 15.0)
+    {
+        var bounds = BoxFit.Detect(geometry).Bounds;
+        return BeginAudit(geometry, ResolveDivisions(settings, bounds, autoEdgeFraction), bounds);
+    }
+
+    private static MeshAudit BeginAudit(TriangleMesh geometry, LatticeDivisions divisions, Aabb bounds)
+    {
+        var size = bounds.Size;
+        double cell = Math.Max(size.X / divisions.Nx, Math.Max(size.Y / divisions.Ny, size.Z / divisions.Nz));
+        return MeshAudit.Begin(geometry, cell, new MeshAuditOptions { SkipResolutionGuard = true });
     }
 
     /// <summary>Cells along one axis for a target edge length — at least one.</summary>

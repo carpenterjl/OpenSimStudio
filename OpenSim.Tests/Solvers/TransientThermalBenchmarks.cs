@@ -53,7 +53,7 @@ public class TransientThermalBenchmarks
         const double q = 2e7;                                      // W/m³
         const double duration = 5.0, dt = 0.5;
 
-        var mesh = MeshBox(0.03, 0.02, 0.01, 0.008);
+        var mesh = MeshBox(0.03, 0.02, 0.01, 0.005);
         var output = new TransientThermalSolver().Solve(new SolveInput
         {
             Mesh = mesh,
@@ -125,7 +125,7 @@ public class TransientThermalBenchmarks
         const double length = 0.1, width = 0.02, thick = 0.01;
         const double power = 20.0, h = 500.0, ambient = 300.0;
 
-        var mesh = MeshBox(length, width, thick, 0.008);
+        var mesh = MeshBox(length, width, thick, 0.005);
         var bcs = new BoundaryCondition[]
         {
             new HeatFlux { Name = "Heater", FaceIds = new[] { 0 }, TotalPower = power },
@@ -250,7 +250,7 @@ public class TransientThermalBenchmarks
     {
         var conductive = Copper with { ElectricalConductivity = 5.96e7 };
         const double length = 0.05, cross = 0.01;
-        var mesh = MeshBox(length, cross, cross, 0.006);
+        var mesh = MeshBox(length, cross, cross, 0.005);
         var bcs = new BoundaryCondition[]
         {
             new VoltagePotential { Name = "V+", FaceIds = new[] { 0 }, Volts = 0.05 },

@@ -48,7 +48,7 @@ public class GeometryScopeResolverTests
     public void AGeometryScope_ResolvesToTheMeshEdgesAlongTheSameCurves()
     {
         var geometry = Beam();
-        var mesh = Delaunay(geometry, 0.012);
+        var mesh = Delaunay(geometry, 0.010);
 
         var resolved = GeometryScopeResolver.Resolve(Supports(geometry), geometry, mesh);
 
@@ -79,8 +79,8 @@ public class GeometryScopeResolverTests
 
         foreach (var mesh in new[]
                  {
-                     Delaunay(geometry, 0.020),
-                     Delaunay(geometry, 0.011),
+                     Delaunay(geometry, 0.010),
+                     Delaunay(geometry, 0.008),
                      Lattice(geometry, 20, 6, 2)
                  })
         {
@@ -119,7 +119,7 @@ public class GeometryScopeResolverTests
         var rims = geometry.FeatureEdges.Edges;
         Assert.Equal(2, rims.Count);
 
-        var mesh = Delaunay(geometry, 0.012);
+        var mesh = Delaunay(geometry, 0.010);
         Assert.Equal(2, mesh.Edges.Edges.Count);
 
         foreach (var rim in rims)
@@ -151,7 +151,7 @@ public class GeometryScopeResolverTests
     public void AGeometryVertexScope_ResolvesToTheCornerItNames()
     {
         var geometry = Beam();
-        var mesh = Delaunay(geometry, 0.012);
+        var mesh = Delaunay(geometry, 0.010);
         var corner = geometry.FeatureEdges.Vertices[0];
 
         var resolved = GeometryScopeResolver.Resolve(new FixedSupport
@@ -167,7 +167,7 @@ public class GeometryScopeResolverTests
     public void AConditionWithNoGeometryScope_IsReturnedUntouched()
     {
         var geometry = Beam();
-        var mesh = Delaunay(geometry, 0.020);
+        var mesh = Delaunay(geometry, 0.010);
         var condition = new ForceLoad
         {
             Name = "Load", FaceIds = new[] { 3 }, TotalForce = new Vector3D(0, -1, 0)
@@ -182,7 +182,7 @@ public class GeometryScopeResolverTests
     public void AnUnknownGeometryEdgeId_IsATypedFailureNamingTheCount()
     {
         var geometry = Beam();
-        var mesh = Delaunay(geometry, 0.020);
+        var mesh = Delaunay(geometry, 0.010);
         var condition = new FixedSupport
         {
             Name = "Stale", FaceIds = Array.Empty<int>(), GeometryEdgeIds = new[] { 99 }
@@ -197,7 +197,7 @@ public class GeometryScopeResolverTests
     [Fact]
     public void AGeometryScopeWithoutGeometry_IsATypedFailure()
     {
-        var mesh = Delaunay(Beam(), 0.020);
+        var mesh = Delaunay(Beam(), 0.010);
         var condition = new FixedSupport
         {
             Name = "Orphan", FaceIds = Array.Empty<int>(), GeometryEdgeIds = new[] { 0 }
@@ -217,7 +217,7 @@ public class GeometryScopeResolverTests
     public void AnUnresolvedGeometryScope_IsRefusedByValidate()
     {
         var geometry = Beam();
-        var mesh = Delaunay(geometry, 0.020);
+        var mesh = Delaunay(geometry, 0.010);
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => BoundaryScope.Validate(Supports(geometry), mesh));
@@ -231,7 +231,7 @@ public class GeometryScopeResolverTests
     public void AGeometryEdgeScopedLoad_IsStillAZeroAreaRefusal()
     {
         var geometry = Beam();
-        var mesh = Delaunay(geometry, 0.020);
+        var mesh = Delaunay(geometry, 0.010);
         var load = new ForceLoad
         {
             Name = "Edge load", FaceIds = Array.Empty<int>(),
@@ -248,7 +248,7 @@ public class GeometryScopeResolverTests
     {
         var geometry = Beam();
         var stored = Supports(geometry);
-        var resolved = GeometryScopeResolver.Resolve(stored, geometry, Delaunay(geometry, 0.020));
+        var resolved = GeometryScopeResolver.Resolve(stored, geometry, Delaunay(geometry, 0.010));
 
         Assert.Equal("2 edge(s)", stored.ScopeSummary);
         Assert.Equal(stored.ScopeSummary, resolved.ScopeSummary);

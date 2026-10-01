@@ -131,7 +131,7 @@ public class ModalSolverBenchmarks
     [Fact]
     public void Tet10Mass_TotalMassExact()
     {
-        var mesh = QuadraticMeshBuilder.Upgrade(MeshBox(0.06, 0.04, 0.02, 0.015));
+        var mesh = QuadraticMeshBuilder.Upgrade(MeshBox(0.06, 0.04, 0.02, 0.010));
         var mass = new Tet10Assembler(mesh, Steel).AssembleMass();
 
         // Row sums per axis: (M·1)_i summed over the axis's DOFs = ρ·V.
@@ -182,7 +182,7 @@ public class ModalSolverBenchmarks
     [Fact]
     public void Validate_MissingSupportOrBadModeCount_Throws()
     {
-        var mesh = MeshBox(0.1, 0.05, 0.05, 0.03);
+        var mesh = MeshBox(0.1, 0.05, 0.05, 0.025);
         var solver = new ModalAnalysisSolver();
 
         var unsupported = new SolveInput

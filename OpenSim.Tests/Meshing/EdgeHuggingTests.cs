@@ -44,7 +44,7 @@ public class EdgeHuggingTests
     [Fact]
     public void EveryEdgeNode_LiesExactlyOnTheLineWhereItsTwoFacesMeet()
     {
-        var mesh = MeshBox(0.012);
+        var mesh = MeshBox(0.010);
         double tolerance = 1e-12 * new Vector3D(Lx, Ly, Lz).Length;
 
         Assert.Equal(12, mesh.Edges.Edges.Count);
@@ -69,7 +69,7 @@ public class EdgeHuggingTests
     [Fact]
     public void EveryBoxCorner_IsAMeshNode_Bitwise()
     {
-        var mesh = MeshBox(0.012);
+        var mesh = MeshBox(0.010);
         var nodes = mesh.Nodes.ToHashSet();
 
         foreach (var corner in PrimitiveFactory.CreateBox(Lx, Ly, Lz).Vertices)
@@ -83,7 +83,7 @@ public class EdgeHuggingTests
     [Fact]
     public void HuggingDoesNotPinchTheSkin_OrInvertAnyElement()
     {
-        foreach (double h in new[] { 0.020, 0.012, 0.008 })
+        foreach (double h in new[] { 0.010, 0.008, 0.006 })
         {
             var mesh = MeshBox(h);
             Assert.Equal(0, mesh.Edges.NonManifoldEdgeCount);
@@ -103,7 +103,7 @@ public class EdgeHuggingTests
     [Fact]
     public void MidEdgeNodesOfAnEdgeScope_AreAlsoExactlyOnTheLine()
     {
-        var mesh = MeshBox(0.012, ElementOrder.Quadratic);
+        var mesh = MeshBox(0.010, ElementOrder.Quadratic);
         double tolerance = 1e-12 * new Vector3D(Lx, Ly, Lz).Length;
 
         var support = mesh.Edges.EdgesBetween(new[] { 2, 0 });
@@ -163,13 +163,14 @@ public class EdgeHuggingTests
     }
 
     /// <summary>
-    /// Geometry with no feature edges at all — one face id over the whole surface, which is
-    /// what a raw STL or a PCB net looks like — still meshes. It takes the seeding path
-    /// unchanged from before edge hugging existed, so this is the pin that says the new
-    /// code cannot have broken it.
+    /// Geometry whose creases are not face boundaries - one face id over a whole box - has
+    /// no feature edges, so nothing is hugged: it takes the seeding path unchanged from
+    /// before edge hugging existed, and that path rounds every sharp edge by about a quarter
+    /// of an element. That used to be returned as a mesh of the box (volume within 2%, so
+    /// nothing noticed). The post-mesh audit refuses it, and says where.
     /// </summary>
     [Fact]
-    public void GeometryWithNoFeatureEdges_MeshesExactlyAsItAlwaysDid()
+    public void GeometryWhoseCreasesAreNotFaceBoundaries_IsRefused_NotMeshedWithRoundedEdges()
     {
         var box = PrimitiveFactory.CreateBox(Lx, Ly, Lz);
         var single = new TriangleMesh(box.Vertices, box.Triangles,
@@ -178,12 +179,19 @@ public class EdgeHuggingTests
         Assert.Empty(single.FeatureEdges.Edges);
         Assert.Empty(single.FeatureEdges.Vertices);
 
-        var mesh = new DelaunayMeshGenerator().Generate(
-            single, new MeshSettings { TargetEdgeLength = 0.012 });
+        var ex = Assert.Throws<MeshAuditException>(() => new DelaunayMeshGenerator().Generate(
+            single, new MeshSettings { TargetEdgeLength = 0.010 }));
 
-        Assert.Empty(mesh.Edges.Edges);
-        Assert.InRange(mesh.TotalVolume() / (Lx * Ly * Lz), 0.98, 1.02);
-        Assert.True(MeshQuality.Compute(mesh).MinQuality > 0.02);
+        var coverage = ex.Report["A8"]!;
+        Assert.Equal(MeshAuditOutcome.Failed, coverage.Outcome);
+        // The worst of it is on an edge of the box, a quarter of an element off the skin.
+        var at = coverage.Location!.Value;
+        int onPlanes = new[] { at.X / Lx, at.Y / Ly, at.Z / Lz }.Count(c => c < 1e-3 || c > 1 - 1e-3);
+        Assert.True(onPlanes >= 2, $"reported at {at}, which is not on an edge of the box");
+        Assert.InRange(coverage.Observed!.Value / 0.010, MeshAudit.DistanceFactor, 0.5);
+        // Everything that does not need the edges is fine: this is one defect, named once.
+        foreach (string id in new[] { "A1", "A2", "A3", "A4", "A6", "A9" })
+            Assert.Equal(MeshAuditOutcome.Passed, ex.Report[id]!.Outcome);
     }
 
     /// <summary>Mesh quality must survive the hugging: the seeded edge samples and the
@@ -192,7 +200,7 @@ public class EdgeHuggingTests
     [Fact]
     public void HuggedMeshes_KeepTheDocumentedQualityFloor()
     {
-        foreach (double h in new[] { 0.020, 0.012 })
+        foreach (double h in new[] { 0.010, 0.008 })
         {
             var stats = MeshQuality.Compute(MeshBox(h));
             Assert.True(stats.MinQuality > 0.02, $"h = {h}: min quality {stats.MinQuality:g3}.");

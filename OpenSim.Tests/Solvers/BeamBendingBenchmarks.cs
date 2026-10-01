@@ -131,7 +131,7 @@ public class BeamBendingBenchmarks
     [Fact]
     public void AtFixedPoissonRatio_DeflectionScalesAsOneOverE_AndStressIsEIndependent()
     {
-        var mesh = MeshBeam(0.012);
+        var mesh = MeshBeam(0.010);
         var soft = Solve(mesh, Make("soft", 1.0e9, 0.3), Load500);
         var stiff = Solve(mesh, Make("stiff", 2.0e11, 0.3), Load500);
 
@@ -148,7 +148,7 @@ public class BeamBendingBenchmarks
     [Fact]
     public void DoublingTheLoad_DoublesEveryField()
     {
-        var mesh = MeshBeam(0.012);
+        var mesh = MeshBeam(0.010);
         var steel = Make("Structural steel", 2.0e11, 0.30);
         var single = Solve(mesh, steel, Load500);
         var doubled = Solve(mesh, steel, 2 * Load500);
@@ -170,7 +170,7 @@ public class BeamBendingBenchmarks
     [Fact]
     public void MaxDeflectionTimesE_IsMaterialIndependent_ToTheReferenceSpread()
     {
-        var mesh = MeshBeam(0.012);
+        var mesh = MeshBeam(0.010);
         var products = new List<double>();
         foreach (var (name, e, nu, _) in Reference)
         {
@@ -181,7 +181,7 @@ public class BeamBendingBenchmarks
 
         double mean = products.Average();
         double spread = (products.Max() - products.Min()) / mean;
-        // Measured 4.48% on this mesh against the reference 3.81%: the same physics on a
+        // Measured 3.77% on this mesh (h = 10 mm) against the reference 3.81%: the same physics on a
         // different discretization, so the gate is the reference width plus a stated margin.
         _output.WriteLine($"spread = {spread:P2} (Ansys reference: 3.81%)");
         Assert.InRange(spread, 0.0, 0.06);
@@ -195,7 +195,7 @@ public class BeamBendingBenchmarks
     [Fact]
     public void AverageVonMises_IsMaterialIndependent_ToTheReferenceSpread()
     {
-        var mesh = MeshBeam(0.012);
+        var mesh = MeshBeam(0.010);
         var means = new List<double>();
         foreach (var (name, e, nu, _) in Reference)
         {
@@ -205,7 +205,7 @@ public class BeamBendingBenchmarks
         }
 
         double spread = (means.Max() - means.Min()) / means.Average();
-        // Measured 0.99% against the reference 0.46%.
+        // Measured 0.82% (h = 10 mm) against the reference 0.46%.
         _output.WriteLine($"spread = {spread:P2} (Ansys reference: 0.46%)");
         Assert.InRange(spread, 0.0, 0.02);
     }
@@ -226,7 +226,7 @@ public class BeamBendingBenchmarks
         const double ansys = 7.6947e-4;
 
         double finest = 0;
-        foreach (double h in new[] { 0.020, 0.015, 0.011 })
+        foreach (double h in new[] { 0.010, 0.009, 0.008 })
         {
             var mesh = MeshBeam(h);
             var run = Solve(mesh, steel, Load500);
@@ -239,8 +239,8 @@ public class BeamBendingBenchmarks
         // Euler-Bernoulli for a simply supported beam under this UDL gives 7.234e-4 m and
         // the reference reads 7.6947e-4, i.e. +6.4% of shear deformation at L/h = 3.33 —
         // so the true answer is bracketed and our mesh must land in that neighbourhood.
-        // MEASURED at h = 11 mm: 87.9% of the Ansys value, from below and converging
-        // monotonically with refinement (out of suite, TET10: 91.5% at 8 mm, 94.5% at 6 mm,
+        // MEASURED: 88.9% / 90.4% / 91.5% of the Ansys value at h = 10 / 9 / 8 mm, from below and converging
+        // monotonically with refinement (out of suite, TET10: 94.5% at 6 mm,
         // 96.1% at 5 mm / 44k nodes). What remains at these sizes is DISCRETIZATION, not
         // the support model: since edge hugging landed, the fixed nodes lie exactly on the
         // support line rather than within a jitter amplitude of it. Matching the reference

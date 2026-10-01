@@ -122,8 +122,8 @@ public class GeometryEdgeSetTests
             .Select(e => (e.Id, e.FaceA, e.FaceB, e.Length)).ToArray();
 
         var mesher = new DelaunayMeshGenerator();
-        mesher.Generate(geometry, new MeshSettings { TargetEdgeLength = 0.020 });
-        mesher.Generate(geometry, new MeshSettings { TargetEdgeLength = 0.012 });
+        mesher.Generate(geometry, new MeshSettings { TargetEdgeLength = 0.010 });
+        mesher.Generate(geometry, new MeshSettings { TargetEdgeLength = 0.008 });
 
         var after = geometry.FeatureEdges.Edges
             .Select(e => (e.Id, e.FaceA, e.FaceB, e.Length)).ToArray();

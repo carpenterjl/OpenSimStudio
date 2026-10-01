@@ -81,6 +81,14 @@ App (WPF/Helix) → ViewModels → Core interfaces → Geometry / Meshing / Solv
   optimized polarity composition is pinned vertex-exact against the naive fold).
 - Determinism matters: parallel code paths must produce bitwise-identical output to
   their sequential form (see `ImportDeterminismTests` for the pattern).
+- **Mesh a fixture at two elements or more through its thinnest dimension.** The Delaunay
+  mesher refuses anything thinner (`MeshAudit`, check A0) and audits what it does produce
+  against the geometry, so a benchmark on a 10 mm bar uses `TargetEdgeLength ≤ 0.005`. To
+  test the audit itself, do not try to coax a wrong mesh out of a mesher: build the mesh
+  of a deliberately different solid with `GridSolid` / `SurfaceBuilder`
+  (`OpenSim.Tests/Meshing/MeshAuditFixtures.cs`) and audit it against the geometry, so the
+  assertion can name the check that must catch it. Every such fixture has a control
+  beside it — the same solid meshed correctly — that must pass everything.
 
 ## Things that look wrong but are deliberate
 
@@ -89,6 +97,13 @@ Before "fixing" one of these, read the rationale in `CLAUDE.md` — each was har
 - The tet mesher uses a **symbolic infinite vertex**, not a finite super-tetrahedron,
   and applies **deterministic jitter** to every inserted point (including Steiner
   points). Both prevent floating-point predicate failures.
+- The Delaunay mesher **audits its own output and throws** (`MeshAuditException`) rather
+  than return a mesh that is not the geometry, and it **rebuilds** — without the interior
+  points a sliver cull exposed, or with feature edges seeded twice as densely — before it
+  gives up. Neither rebuild runs on a mesh that passes first time, which is what keeps
+  every existing mesh bitwise what it was. The audit's thresholds (`MeshAudit.DistanceFactor`
+  and friends) are twice what named fixtures measure, and a test asserts the "twice": do
+  not tune them to make a mesh pass.
 - Transient thermal is **backward Euler on purpose** (unconditionally stable *and*
   monotone; Crank–Nicolson oscillates on step changes).
 - Modal analysis uses **subspace iteration, not Lanczos** (the breakdown/ghost-mode risk

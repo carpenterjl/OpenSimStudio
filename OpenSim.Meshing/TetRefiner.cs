@@ -28,13 +28,18 @@ public static class TetRefiner
         double h,
         double targetMinQuality,
         int maxInsertions,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<Vector3D>? blocked = null)
     {
         // Termination proof: passes are capped, insertions are budgeted, and the
         // spacing grid rejects any candidate within 0.2·h of an existing point, so
         // point density (and thus work) is bounded regardless of geometry.
         var spacing = new SpacingGrid(0.2 * h);
         foreach (var p in points) spacing.Add(p);
+        // Spots the caller has ruled out (a refinement point there produced a pit last
+        // time): registered as occupied, so no candidate lands within the spacing of one.
+        if (blocked is not null)
+            foreach (var p in blocked) spacing.Add(p);
 
         // Exact circumcenters (equidistant from four vertices) and exact edge midpoints
         // (collinear with their endpoints) are precisely the degenerate inputs that

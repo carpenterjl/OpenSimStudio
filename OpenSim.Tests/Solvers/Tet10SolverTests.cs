@@ -95,7 +95,7 @@ public class Tet10SolverTests
         const double force = 1000.0;
         var material = Steel with { PoissonRatio = 0.0 };
 
-        var mesh = MeshBox(length, width, thick, 0.012);
+        var mesh = MeshBox(length, width, thick, 0.010);
         var output = new LinearStaticSolver().Solve(new SolveInput
         {
             Mesh = mesh,
@@ -160,7 +160,7 @@ public class Tet10SolverTests
     [Fact]
     public void ScalarSolvers_RejectQuadraticMeshes_Loudly()
     {
-        var mesh = MeshBox(0.05, 0.02, 0.01, 0.01);
+        var mesh = MeshBox(0.05, 0.02, 0.01, 0.005);
         var copper = new Material
         {
             Name = "Copper", YoungsModulus = 110e9, PoissonRatio = 0.34, Density = 8960,

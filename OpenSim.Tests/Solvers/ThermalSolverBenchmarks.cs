@@ -41,7 +41,7 @@ public class ThermalSolverBenchmarks
         const double t0 = 300.0;
         const double q = 5e6;                                     // W/m³
 
-        var mesh = MeshBox(length, width, thick, 0.008);
+        var mesh = MeshBox(length, width, thick, 0.005);
         var source = Enumerable.Repeat(q, mesh.ElementCount).ToArray();
 
         var output = new HeatConductionSolver().Solve(new SolveInput
@@ -81,7 +81,7 @@ public class ThermalSolverBenchmarks
         const double h = 500.0;                                    // W/(m²·K)
         const double ambient = 300.0;
 
-        var mesh = MeshBox(length, width, thick, 0.008);
+        var mesh = MeshBox(length, width, thick, 0.005);
         var output = new HeatConductionSolver().Solve(new SolveInput
         {
             Mesh = mesh,
