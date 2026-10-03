@@ -22,8 +22,8 @@ fully testable.
 | **Thermal** | Steady-state and transient heat conduction (backward Euler) |
 | **Electrical** | DC conduction (voltage, current density, resistance), AC electro-quasistatic frequency sweeps (complex-symmetric COCG solver) |
 | **Coupled** | One-way Joule heating (I²R → steady or transient thermal) |
-| **PCB** | Gerber RS-274X + Excellon + IPC-2581 import, per-net copper meshing, pad-to-pad trace resistance, full 3D PEEC inductance (self, mutual, coupling k, plane-return loops), lumped R + jωL trace estimates |
-| **RF** | First-party method-of-moments antenna solvers: thin-wire EFIE (dipoles, loops, monopoles, board trace chains) and RWG surface MoM for PEC sheets (plates, patches, PCB copper islands), both with optional infinite PEC ground by image theory; **microstrip substrates** via a rigorous layered-media Green's function (direct Sommerfeld integration, surface-wave poles extracted into the power ledger); **coaxial probe feeds** through the slab with a classical 1/ρ attachment mode; input impedance, far-field patterns, directivity, surface-wave power, and near-field E maps in free space, over ground, and inside/above the substrate |
+| **PCB** | Gerber RS-274X + Excellon + IPC-2581 import, per-net copper meshing, pad-to-pad trace resistance, 3D partial-inductance chain composition (DC, finite-section parallel bars: self, mutual, coupling k, plane-return loops), lumped R + jωL trace estimates |
+| **RF** | First-party method-of-moments antenna solvers: thin-wire EFIE (dipoles, loops, monopoles, board trace chains) and RWG surface MoM for PEC sheets (plates, patches, PCB copper islands), both with optional infinite PEC ground by image theory; **microstrip substrates** (single- and multi-layer grounded stackups) via a rigorous layered-media Green's function (direct Sommerfeld integration; surface-wave poles found from a pole-free dispersion function with mode counting, and extracted into the power ledger); **coaxial probe feeds** through the slab with a classical 1/ρ attachment mode; input impedance, far-field patterns, directivity, surface-wave power, and near-field E maps in free space, over ground, and inside/above the substrate |
 
 ## What it can import
 
@@ -76,8 +76,9 @@ A slower correct answer always beats a faster wrong one. Concretely:
   infinite vertex, CGAL-style), and the subspace eigensolver are core IP, documented,
   and independently tested. The single external runtime dependency for simulation is
   **Clipper2** (MIT), wrapped behind an interface for 2D polygon booleans only.
-- **Educational transparency.** Assumptions are printed with results (e.g. PEEC reports
-  DC-current assumptions; monopole results state the image-plane halving) rather than
+- **Educational transparency.** Assumptions are printed with results (e.g. the inductance
+  report states its DC uniform-current kernel and that bends are not corrected; monopole
+  results state the image-plane halving) rather than
   hidden inside a black box.
 - **Fully offline.** No telemetry, no cloud solves, no license server.
 
@@ -90,7 +91,7 @@ targets plain `net8.0` (no WPF), which mechanically enforces the UI/simulation s
 OpenSim.App       WPF shell, per-concern MVVM viewmodels, Helix 3D rendering, DI root
 OpenSim.Rf        thin-wire + RWG surface MoM, layered-media (microstrip) kernels,
                   probe feeds, far/near fields, trace-chain adapter
-OpenSim.Pcb       Gerber/Excellon/IPC-2581 import, 2.5D PCB meshing, PEEC inductance
+OpenSim.Pcb       Gerber/Excellon/IPC-2581 import, 2.5D PCB meshing, partial inductance
 OpenSim.Solvers   TET4/TET10 assembly; static, modal, thermal, DC/AC electrical, Joule
 OpenSim.Meshing   Bowyer–Watson Delaunay tet mesher, quality metrics, refinement
 OpenSim.Geometry  STL + first-party STEP import, primitives, face detection
@@ -110,8 +111,8 @@ the rest of the platform.
 | Milestone 1 | End-to-end vertical slice: geometry → mesh → static solve → results | ✅ Complete |
 | Phase 1 | Mesh quality refinement, TET10 elements, docking UI, contours/sections | ✅ Complete |
 | Phase 2 | PCB import, DC electrical, thermal, Joule coupling, materials, STEP import | ✅ Largely complete (SVG import deferred) |
-| Phase 3 | Multi-frame results, transient thermal, modal, AC sweeps, 3D PEEC | ✅ Solver track complete |
-| Phase 4 | RF antenna simulator | 🚧 In progress — thin-wire MoM, PEC ground planes, RWG surface MoM, layered-media microstrip (rigorous Sommerfeld Green's function), substrate near-field maps, deterministic parallel solves (11.8× on 16 cores, bitwise-identical at any thread count), and coax probe feeds all shipped; probe UI wiring, multi-layer stackups, optimization, plugin SDK, and reporting open |
+| Phase 3 | Multi-frame results, transient thermal, modal, AC sweeps, 3D partial-inductance composition | ✅ Solver track complete |
+| Phase 4 | RF antenna simulator | 🚧 In progress — thin-wire MoM, PEC ground planes, RWG surface MoM, layered-media microstrip (rigorous Sommerfeld Green's function), multi-layer stackups, substrate near-field maps, deterministic parallel solves (11.8× on 16 cores, bitwise-identical at any thread count), and coax probe feeds with their UI all shipped; optimization, plugin SDK, and reporting open |
 
 ## Known limitations
 
@@ -149,6 +150,30 @@ means in practice:
   come from the 2.5-D PCB mesher, which this audit does not cover.
 - Turning mesh refinement off, or capping it at a handful of points, leaves slivers that
   the audit may refuse.
+
+**PCB inductance is a DC, uniform-current composition.** Every parallel pair of
+rectangular bars — a bar with itself, side by side, stacked, collinear or staggered —
+uses one finite-section kernel (Hoer & Love), so a trace gives the same inductance however
+it is segmented and a wide trace over a plane gives a positive loop inductance. Not
+modelled: skin and proximity effect, and finite-section effects at bends (non-parallel
+neighbours couple as filaments). A composed loop inductance that is not finite and
+positive is an error, not a number.
+
+**Multi-layer surface-wave poles** come from a transfer-matrix dispersion function that
+has no poles of its own, with roots isolated by mode counting; a stack whose modes merge
+under loss is refused by name rather than returned with a duplicate.
+
+**IBIS models** are read on the specification's axes (pull-up and POWER clamp relative to
+Vcc, ECL pull-down included) with typ/min/max reference rails, in the spec's own syntax
+(`R_fixture = 50`, `V_fixture_min/max`). `[Submodel]` contents, `[Package]`,
+`[Driver Schedule]`, `[Model Spec]` and `[Receiver Thresholds]` are not used; each is
+skipped with one warning. No vendor `.ibs` file ships with the tests — the gates are
+closed-form load lines and round-trip extractions on hand-written fixtures.
+
+**Conjugate CFD is laminar on a voxel grid.** Solid walls are stair-stepped; the no-slip
+wall sits on the cell boundary, so a duct's friction converges at second order (a 2-cell
+passage is still a coarse answer). Fluid properties are evaluated once, at the
+inflow-weighted stream temperature, and are not updated as the fluid warms.
 
 ## Contributing
 

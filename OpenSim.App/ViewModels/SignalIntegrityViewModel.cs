@@ -80,7 +80,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     // ------------------------------------------------------------------
     // IBIS driver (Stage S11): a nonlinear behavioral buffer replaces the Thevenin driver.
-    // Single driven line only (the nonlinear engine); coupled lines keep the linear path.
+    // Coupled lines are solved together in the same nonlinear solve (NonlinearLink.SolveNPort).
     // ------------------------------------------------------------------
     [ObservableProperty] private bool _useIbisDriver;
 
@@ -621,7 +621,10 @@ public partial class SignalIntegrityViewModel : ObservableObject
             + $"jitter p-p = {eye.JitterPeakToPeakSeconds * 1e12:g3} ps ({note})";
         SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
             + " Nonlinear IBIS driver (V-I tables, C_comp backward-Euler) into "
-            + $"the single-line channel FIR + R∥C receiver. Switching profile: {switchingSource}. "
+            + (lines > 1
+                ? $"the {lines}-line coupled channel (matrix FIR, all lines solved together). "
+                : "the single-line channel FIR. ")
+            + $"Switching profile: {switchingSource}. "
             + (UseReceiverClamps
                 ? "Receiver = the buffer's own GND/POWER protection clamps (nonlinear) plus the "
                   + "termination."

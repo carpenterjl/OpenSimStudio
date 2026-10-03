@@ -22,6 +22,22 @@ formulas, dipole radiation resistance, …). They are the project's correctness 
 your change shifts a benchmarked value, the PR must explain the physics or numerics of
 why — "the test was too strict" is not an explanation.
 
+The gates are not all in `Solvers`. These, elsewhere in `OpenSim.Tests`, each pin a
+defect that once shipped a wrong number, and each fails on the code before its fix:
+
+| Gate | Where | What it holds |
+|---|---|---|
+| Voxel Poiseuille identity | `Cfd/VoxelWallTests` | Flow between voxel slabs equals the domain-wall closed form to 1e-8 on every axis (the no-slip wall is on the cell boundary) |
+| Square-duct f·Re | `Cfd/VoxelWallTests` | Converges to Shah & London's 56.908 at second order, from below |
+| Inflow property state | `Cfd/InflowStateTests` | Fluid properties are taken at the inflow-weighted stream temperature, not the surroundings' ambient |
+| Hoer–Love oracles | `Pcb/RectangularBarKernelTests` | Bar–bar mutual against the cross-section average of the exact filament kernel (1e-8), self against the slender series and the subdivision identity, both kernel regimes agreeing on their boundary |
+| Subdivision invariance | `Pcb/LoopComposer3DTests` | A straight bar composes to one inductance however it is segmented (1e-9) |
+| Plane-return loops | `Pcb/PlaneReturnTests` | Trace over plane against an independent sub-filament quadrature (1e-4); wide traces positive and inside the microstrip band |
+| Thick-stack pole equality | `Rf/MultiLayerPoleTests`, `Rf/SurfaceWaveDispersionTests` | The multi-layer pole finder equals the pinned single-slab finder branch for branch; mode counts equal the closed-form cutoff counts |
+| IBIS axis convention | `Si/IbisConventionTests`, `Si/IbisSpecSyntaxTests` | Closed-form load lines on the spec's Vcc-relative axis, finite-difference conductance on all four tables, round-trip extraction at typ/min/max, spec syntax and `[Submodel]` isolation |
+| Mesh-audit fixtures | `Meshing/MeshAudit*Tests` | Each known way a mesh can differ from its geometry is caught by a named check, beside a control that passes; thresholds are twice what the fixtures measure |
+| Steel conductivity | `Core/MaterialStrengthTests` | Structural steel σ in the carbon-steel handbook band, above 304 stainless |
+
 The priority order for every decision:
 **1. accuracy, 2. numerical stability, 3. clean architecture, 4. extensibility,
 5. performance, 6. UX, 7. visual polish.** A slower correct answer beats a faster

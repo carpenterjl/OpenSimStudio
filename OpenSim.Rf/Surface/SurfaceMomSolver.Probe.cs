@@ -53,7 +53,7 @@ public sealed partial class SurfaceMomSolver
         "One dielectric slab (εr, tanδ) on an infinite PEC ground; all sheet metal coplanar at the slab top.",
         "Coaxial probe: a vertical tube from ground to patch, delta-gap driven at its BASE (a real port voltage against ground).",
         "Classical 1/ρ attachment mode at the junction (the probe position is a mesh vertex); the tube and disc deltas cancel exactly — no junction point charge.",
-        "Far field and the power ledger use the sheet currents (the junction's transported current mapped onto the fan outer edges); the electrically short probe's own radiation is neglected (k₀d ≪ 1)."
+        "Far field and the power ledger add the tube's own vertical leg and the junction's exact transforms to the sheet currents; the three add coherently."
     };
 
     public ProbeFedSolution SolveProbeFed(SurfaceStructure surface, LayeredKernelTable kernel,

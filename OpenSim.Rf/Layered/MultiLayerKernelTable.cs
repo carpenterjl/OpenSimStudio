@@ -21,8 +21,8 @@ namespace OpenSim.Rf.Layered;
 /// single-slab 2d image). The single-slab path (<see cref="LayeredKernelTable"/>) is untouched
 /// — this is an additive sibling, pinned to it at N = 1 by the extraction gates.
 ///
-/// Only the two potential kernels are carried (no K_V / vertical kernels — those are
-/// single-slab features whose multi-layer versions are named follow-ups).
+/// Only the two potential kernels are carried here; the multi-layer vertical kernels a
+/// probe feed needs live in <see cref="MultiLayerVerticalKernelSet"/>.
 /// </summary>
 public sealed class MultiLayerKernelTable
 {

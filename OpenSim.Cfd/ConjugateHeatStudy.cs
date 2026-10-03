@@ -21,10 +21,12 @@ namespace OpenSim.Cfd;
 /// converged state satisfies the exact nonlinear exchange.
 /// </para>
 /// <para>
-/// Transient: FROZEN-FLOW mode, a stated v1 decision — the flow and its film are solved
-/// once at the initial wall temperatures and held while the solid marches through time.
-/// Honest when the flow settles much faster than the solid warms (t_flow = L/U ≪
-/// τ_thermal, checked and logged); time-accurate conjugate stepping is a named deferral.
+/// Transient: FROZEN-MOMENTUM mode, a stated v1 decision — the velocity field is solved
+/// once (isothermal, at the initial state) and held, while the fluid ENERGY equation
+/// marches in lockstep with the solid and hands it a fresh film every step (explicit
+/// exchange, first order in the step). Honest when the flow settles much faster than the
+/// solid warms (t_flow = L/U ≪ τ_thermal, checked and logged); a momentum field that
+/// follows the changing buoyancy is a named deferral.
 /// </para>
 /// </summary>
 public static class ConjugateHeatStudy

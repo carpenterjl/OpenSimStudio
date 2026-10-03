@@ -38,7 +38,7 @@ public sealed partial class SurfaceMomSolver
         "Perfect electric conductor, zero-thickness sheet (no ohmic loss).",
         "A grounded dielectric stackup (one or more layers, per-layer εr/tanδ) on an infinite PEC ground plane; all metal coplanar at a single interface — the slab top, or buried under a dielectric cover of any εr (a covered patch).",
         "Rigorous layered-media Green's function (MPIE, direct Sommerfeld integration) — surface waves included; only TM0/TE modes above cutoff are extracted into the power ledger.",
-        "No vias or probe feeds (vertical currents are out of scope in v1); delta-gap voltage feed across an interior mesh edge.",
+        "No vias; delta-gap voltage feed across an interior mesh edge (a coaxial probe feed is a separate solve with its own vertical current — SolveProbeFed).",
         "Current normal to the sheet rim is zero by construction (no wire attachments)."
     };
 

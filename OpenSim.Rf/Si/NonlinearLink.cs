@@ -258,8 +258,8 @@ public sealed record NonlinearResult(
 ///
 /// <para>The engine does NOT claim the exact-periodic identity the linear <see cref="TransientLink"/>
 /// holds — a nonlinear system has no closed-form periodic answer — but a LINEAR driver reduces
-/// it to that engine (gated). Single driven line only; multi-line nonlinear crosstalk is a named
-/// follow-up.</para>
+/// it to that engine (gated). This entry point takes a single driven line; coupled lines with a
+/// nonlinear element at every port go through <see cref="SolveNPort"/>.</para>
 /// </summary>
 public static partial class NonlinearLink
 {
