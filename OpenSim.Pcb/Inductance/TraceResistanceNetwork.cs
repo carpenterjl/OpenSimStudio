@@ -61,11 +61,18 @@ public static class TraceResistanceNetwork
         // The label reads as "the #3 pad at (…)" inside MapTerminal's message.
         var padNode = new int[pads.Count];
         var padNote = new string?[pads.Count];
+        // How far beyond the pad's own copper (and the junction's own scale) the nearest
+        // junction lies. The attachment itself is a zero-ohm wire, so a gap is copper —
+        // a pour, or the middle of a wide trace — that this resistance does not include.
+        var padGap = new double[pads.Count];
         for (int i = 0; i < pads.Count; i++)
         {
             padNode[i] = TraceChainBuilder.MapTerminal(pads[i], $"#{i}",
-                junctions, graph.LayerZ!, out var failure);
+                junctions, graph.LayerZ!, out var failure, out double distance);
             padNote[i] = failure;
+            if (padNode[i] >= 0)
+                padGap[i] = Math.Max(0,
+                    distance - Math.Max(pads[i].Reach, junctions[padNode[i]].Tolerance));
         }
 
         // Connected components over the segment graph (union-find, path compression).
@@ -158,8 +165,20 @@ public static class TraceResistanceNetwork
                     pairs.Add(new PadPairResistance(i, j, null,
                         "not connected by drawn traces/vias"));
                 else
-                    pairs.Add(new PadPairResistance(i, j, pairResistance[(i, j)], null));
+                    pairs.Add(new PadPairResistance(i, j, pairResistance[(i, j)], GapNote(i, j)));
             }
+
+        string? GapNote(int i, int j)
+        {
+            var parts = new List<string>();
+            foreach (int k in new[] { i, j })
+                if (padGap[k] > 0)
+                    parts.Add($"pad #{k} is {padGap[k] * 1e3:g3} mm from the nearest drawn trace end");
+            return parts.Count == 0
+                ? null
+                : string.Join(" and ", parts) + " — the copper in between (a pour or pad, not a drawn " +
+                  "trace) is NOT in this resistance, which is therefore low";
+        }
 
         var assumptions = new List<string>
         {

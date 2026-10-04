@@ -125,7 +125,7 @@ public static class DcNetEvaluator
                 NetTraceExtractor.ForNet(board, net), net.StitchingVias, meshOptions,
                 net.Islands, pads.Select(p => p.LayerOrder).Distinct().ToList());
             var resistance = TraceResistanceNetwork.Solve(graph,
-                pins.Select(p => new ChainTerminal(p.Center, p.LayerOrder)).ToList(),
+                pins.Select(p => new ChainTerminal(p.Center, p.LayerOrder) { Reach = p.Size / 2 }).ToList(),
                 options.ConductivitySiemensPerMeter);
             if (resistance.FailureReason is not null)
                 return (new List<DcNetRow>(), 0, false, $"{label} — {resistance.FailureReason}");
