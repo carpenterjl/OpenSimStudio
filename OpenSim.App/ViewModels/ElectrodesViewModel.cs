@@ -184,7 +184,16 @@ public partial class ElectrodesViewModel : ObservableObject
             return;
         }
 
-        var regionMaterials = _materials.ResolveRegionMaterials(body);
+        IReadOnlyDictionary<int, OpenSim.Core.Model.Material>? regionMaterials;
+        try
+        {
+            regionMaterials = _materials.ResolveRegionMaterials(body);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.Append($"Validation: {ex.Message}");
+            return;
+        }
         var input = new SolveInput
         {
             Mesh = body.Mesh,

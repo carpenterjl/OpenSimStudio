@@ -6,11 +6,16 @@ namespace OpenSim.Pcb.Inductance;
 public sealed record ImpedancePoint(double Frequency, double Magnitude, double PhaseDegrees);
 
 /// <summary>A lumped R + jωL impedance sweep with the assumptions that produced it.</summary>
+/// <param name="SkinCrossoverHz">The frequency at which the skin depth in copper falls to
+/// half the thinnest conductor dimension of the chain. Below it the DC resistance stands;
+/// above it the real resistance rises (as √f once well past it) and the points of the
+/// sweep carry too little R.</param>
 public sealed record NetImpedanceReport(
     double ResistanceOhms,
     double InductanceHenries,
     IReadOnlyList<ImpedancePoint> Points,
-    IReadOnlyList<string> Assumptions);
+    IReadOnlyList<string> Assumptions,
+    double SkinCrossoverHz = double.PositiveInfinity);
 
 /// <summary>
 /// Lumped trace impedance Z(f) = R + jωL: R comes from the DC FIELD solve (it carries
@@ -21,6 +26,16 @@ public sealed record NetImpedanceReport(
 /// </summary>
 public static class NetImpedanceEstimator
 {
+    /// <summary>Annealed copper [S/m] — what the skin-depth crossover is stated for.</summary>
+    public const double CopperConductivity = 5.8e7;
+
+    /// <summary>
+    /// The frequency at which the skin depth δ = 1/√(π·f·μ₀·σ) equals half of
+    /// <paramref name="dimension"/>: f = 4/(π·μ₀·σ·d²). 14 MHz for 35 µm copper.
+    /// </summary>
+    public static double SkinCrossover(double dimension, double conductivity = CopperConductivity) =>
+        4 / (Math.PI * 4e-7 * Math.PI * conductivity * dimension * dimension);
+
     public static NetImpedanceReport Estimate(double dcResistanceOhms,
         IReadOnlyList<TraceCenterline> chain, double copperThickness,
         double fMin, double fMax, int points)
@@ -70,10 +85,28 @@ public static class NetImpedanceEstimator
             assumptions = assumptions.Append(
                 $"Includes {barrels} plated via barrel(s) modeled as thin tubes " +
                 "(mean shell radius; barrel spans copper mid-plane to mid-plane).");
+        // Where the constant-R model stops: the skin depth against the thinnest dimension
+        // any bar of the chain has (its copper thickness, on a board).
+        double thinnest = chain
+            .Where(s => s.Profile == SegmentProfile.Bar)
+            .Select(s => Math.Min(s.Width, s.Thickness))
+            .DefaultIfEmpty(chain.Min(s => Math.Min(s.Width, s.Thickness)))
+            .Min();
+        double crossover = SkinCrossover(thinnest);
+        int past = sweep.Count(p => p.Frequency > crossover);
+        string skin = $"R is the DC field-solve value, constant over the sweep (no skin-effect rise). " +
+                      $"That holds up to about {crossover / 1e6:g3} MHz, where the skin depth in copper " +
+                      $"is half the {thinnest * 1e6:g3} µm conductor";
+        skin += past == 0
+            ? "; the whole sweep lies below it."
+            : $"; {past} of {sweep.Count} points lie ABOVE it (up to " +
+              $"{sweep[^1].Frequency / crossover:g3}× past), where the real R is higher — by about " +
+              $"√(f/{crossover / 1e6:g3} MHz) well above the crossover — and |Z| there is a lower bound " +
+              "wherever R still matters against ωL.";
         assumptions = assumptions
             .Append("Open trace chain: PARTIAL inductance only — no return-path loop closure.")
-            .Append("R is the DC field-solve value, constant over the sweep (no skin-effect rise).");
+            .Append(skin);
         return new NetImpedanceReport(dcResistanceOhms, inductance.LoopInductance, sweep.ToList(),
-            assumptions.ToList());
+            assumptions.ToList(), crossover);
     }
 }

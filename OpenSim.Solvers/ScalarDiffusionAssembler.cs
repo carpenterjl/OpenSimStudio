@@ -23,7 +23,16 @@ public sealed class ScalarDiffusionAssembler
         _coefficient = coefficient;
         _gradients = new Vector3D[mesh.ElementCount][];
         for (int i = 0; i < mesh.ElementCount; i++)
+        {
+            // The element volume is SIGNED and multiplies every entry: an inverted element
+            // would subtract its conductance from the matrix instead of adding it.
+            double volume = mesh.ElementVolume(i);
+            if (!(volume > 0))
+                throw new InvalidOperationException(
+                    $"Element {i} has a non-positive volume ({volume:g3} m³): it is inverted or " +
+                    "degenerate and cannot be assembled. Re-generate the mesh.");
             _gradients[i] = Tet4ShapeGradients.Compute(mesh, i);
+        }
     }
 
     public int DofCount => _mesh.NodeCount;

@@ -95,9 +95,12 @@ public partial class SolveViewModel : ObservableObject
         // id, a curve the mesh no longer carries), so it is reported the way a validation
         // failure is rather than escaping the command.
         IReadOnlyList<BoundaryCondition> conditions;
+        IReadOnlyDictionary<int, OpenSim.Core.Model.Material>? regionMaterials;
         try
         {
             conditions = BuildBoundaryConditions(kind, body);
+            // A region whose material name no longer resolves is a failure, not a fallback.
+            regionMaterials = _materials.ResolveRegionMaterials(body);
         }
         catch (Exception ex)
         {
@@ -111,7 +114,7 @@ public partial class SolveViewModel : ObservableObject
             Mesh = body.Mesh,
             Material = _session.SelectedMaterial,
             BoundaryConditions = conditions,
-            RegionMaterials = _materials.ResolveRegionMaterials(body),
+            RegionMaterials = regionMaterials,
             TransientThermal = transientRequested
                 ? new TransientThermalSettings
                 {

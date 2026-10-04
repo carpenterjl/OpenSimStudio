@@ -83,15 +83,36 @@ internal static class ScalarSolverHelpers
         }
     }
 
-    /// <summary>Volume-weighted nodal average of per-element scalars, for smooth contours.</summary>
-    public static double[] NodalAverage(FeMesh mesh, IReadOnlyList<double> elementValues)
+    /// <summary>
+    /// Volume-weighted nodal average of per-element scalars, for smooth contours.
+    /// <para>
+    /// With <paramref name="elementGroups"/> (one id per element — the material) the
+    /// average never crosses a material interface. Current density, power density and
+    /// heat flux are discontinuous there: averaged across, a node on a copper/FR4
+    /// interface showed the copper's current density diluted by the volume of the FR4
+    /// elements around it — 8 % of the true value with 35 µm copper on 0.4 mm laminate.
+    /// A node has one value, so a node shared by several materials shows the average of
+    /// the side where the quantity is LARGEST; the element field holds both sides.
+    /// </para>
+    /// </summary>
+    public static double[] NodalAverage(FeMesh mesh, IReadOnlyList<double> elementValues,
+        IReadOnlyList<int>? elementGroups = null)
     {
         var nodal = new double[mesh.NodeCount];
         var weight = new double[mesh.NodeCount];
+        var shared = SharedNodes(mesh, elementGroups);
+        var sides = shared is null ? null : new Dictionary<(int Node, int Group), (double Sum, double Weight)>();
         Accumulate(mesh, (e, w) =>
         {
             foreach (int n in ElementNodes(mesh, e))
             {
+                if (shared is not null && shared[n])
+                {
+                    var key = (n, elementGroups![e]);
+                    var (sum, total) = sides!.GetValueOrDefault(key);
+                    sides[key] = (sum + elementValues[e] * w, total + w);
+                    continue;
+                }
                 nodal[n] += elementValues[e] * w;
                 weight[n] += w;
             }
@@ -99,18 +120,41 @@ internal static class ScalarSolverHelpers
         for (int i = 0; i < nodal.Length; i++)
             if (weight[i] > 0)
                 nodal[i] /= weight[i];
+        if (sides is not null)
+        {
+            var best = new Dictionary<int, double>();
+            foreach (var ((node, _), (sum, total)) in sides)
+            {
+                if (!(total > 0)) continue;
+                double value = sum / total;
+                if (!best.TryGetValue(node, out double current) || Math.Abs(value) > Math.Abs(current))
+                    best[node] = value;
+            }
+            foreach (var (node, value) in best) nodal[node] = value;
+        }
         return nodal;
     }
 
-    /// <summary>Volume-weighted nodal average of per-element vectors.</summary>
-    public static Vector3D[] NodalAverage(FeMesh mesh, IReadOnlyList<Vector3D> elementValues)
+    /// <summary>Volume-weighted nodal average of per-element vectors; see the scalar
+    /// overload for what <paramref name="elementGroups"/> does at a material interface.</summary>
+    public static Vector3D[] NodalAverage(FeMesh mesh, IReadOnlyList<Vector3D> elementValues,
+        IReadOnlyList<int>? elementGroups = null)
     {
         var nodal = new Vector3D[mesh.NodeCount];
         var weight = new double[mesh.NodeCount];
+        var shared = SharedNodes(mesh, elementGroups);
+        var sides = shared is null ? null : new Dictionary<(int Node, int Group), (Vector3D Sum, double Weight)>();
         Accumulate(mesh, (e, w) =>
         {
             foreach (int n in ElementNodes(mesh, e))
             {
+                if (shared is not null && shared[n])
+                {
+                    var key = (n, elementGroups![e]);
+                    var (sum, total) = sides!.GetValueOrDefault(key);
+                    sides[key] = (sum + elementValues[e] * w, total + w);
+                    continue;
+                }
                 nodal[n] += elementValues[e] * w;
                 weight[n] += w;
             }
@@ -118,8 +162,68 @@ internal static class ScalarSolverHelpers
         for (int i = 0; i < nodal.Length; i++)
             if (weight[i] > 0)
                 nodal[i] /= weight[i];
+        if (sides is not null)
+        {
+            var best = new Dictionary<int, Vector3D>();
+            foreach (var ((node, _), (sum, total)) in sides)
+            {
+                if (!(total > 0)) continue;
+                var value = sum / total;
+                if (!best.TryGetValue(node, out var current) || value.LengthSquared > current.LengthSquared)
+                    best[node] = value;
+            }
+            foreach (var (node, value) in best) nodal[node] = value;
+        }
         return nodal;
     }
+
+    /// <summary>Which nodes belong to elements of more than one group; null when there
+    /// are no groups or no such node (the plain average then applies everywhere).</summary>
+    private static bool[]? SharedNodes(FeMesh mesh, IReadOnlyList<int>? elementGroups)
+    {
+        if (elementGroups is null) return null;
+        var first = new int[mesh.NodeCount];
+        Array.Fill(first, int.MinValue);
+        var shared = new bool[mesh.NodeCount];
+        bool any = false;
+        for (int e = 0; e < mesh.ElementCount; e++)
+        {
+            int group = elementGroups[e];
+            foreach (int n in ElementNodes(mesh, e))
+            {
+                if (first[n] == int.MinValue) first[n] = group;
+                else if (first[n] != group && !shared[n])
+                {
+                    shared[n] = true;
+                    any = true;
+                }
+            }
+        }
+        return any ? shared : null;
+    }
+
+    /// <summary>One id per element naming its material, for the interface-aware nodal
+    /// averages; null when the whole mesh is one material.</summary>
+    public static int[]? MaterialGroups(SolveInput input)
+    {
+        if (input.RegionMaterials is null || input.Mesh.ElementRegionIds is null) return null;
+        var ids = new Dictionary<Material, int>();
+        var groups = new int[input.Mesh.ElementCount];
+        for (int e = 0; e < groups.Length; e++)
+        {
+            var material = input.MaterialOf(e);
+            if (!ids.TryGetValue(material, out int id))
+                ids[material] = id = ids.Count;
+            groups[e] = id;
+        }
+        return ids.Count > 1 ? groups : null;
+    }
+
+    /// <summary>The log line that goes with an interface-aware nodal field.</summary>
+    public static string InterfaceNote(string quantities) =>
+        $"The nodal {quantities} are averaged within each material only. At a node shared by " +
+        "two materials the value shown is that of the side where it is larger (the field is " +
+        "discontinuous there).";
 
     /// <summary>
     /// Mesh region ids that no anchor can reach — the steady-state well-posedness test for an

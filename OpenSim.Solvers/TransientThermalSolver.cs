@@ -338,7 +338,8 @@ public sealed class TransientThermalSolver : ISolver
         var fields = new List<IResultField>
         {
             new NodalScalarField("Temperature", "K", (double[])temperature.Clone()),
-            new NodalVectorField("Heat flux", "W/m²", ScalarSolverHelpers.NodalAverage(mesh, flux))
+            new NodalVectorField("Heat flux", "W/m²",
+                ScalarSolverHelpers.NodalAverage(mesh, flux, ScalarSolverHelpers.MaterialGroups(input)))
         };
         // Present in EVERY frame of an environment run, so the frame field sets stay
         // identical and the UI keeps its selected field while scrubbing.

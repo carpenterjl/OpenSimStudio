@@ -10,9 +10,11 @@ namespace OpenSim.Solvers;
 /// Harmonic electro-quasistatic (EQS) solver over TET4 elements: ∇·((σ + jωε₀εᵣ)∇φ) = 0
 /// swept over geometrically spaced frequencies. Physically meaningful for dielectric and
 /// capacitive studies (lossy insulators, RC media) — NOT for conductor+dielectric
-/// composites: the σ-spread conditioning ban of the DC solver stands at AC because
-/// ωε₀εᵣ never rescues a ~10²¹ copper/FR4 contrast, so such inputs are rejected loudly
-/// with a pointer at the copper-only mesh path and the lumped R + jωL estimator.
+/// composites: ωε₀εᵣ never rescues a ~10²¹ copper/FR4 contrast, and one complex solve
+/// cannot resolve it, so such inputs are rejected loudly with a pointer at the DC solver
+/// (which stages conductors and insulators) and the lumped R + jωL estimator.
+/// NOT for a metal either: with ωε ≪ σ everywhere the equation is the DC one at every
+/// frequency, and the sweep says so (<see cref="NoteAllConductors"/>).
 /// Conventions: phasor amplitudes are PEAK values; the loss density is the time average
 /// ½σ|∇φ|². Assumes no magnetic induction (fields quasi-static — valid while structures
 /// are small against the wavelength and skin effect is negligible).
@@ -22,8 +24,11 @@ public sealed class HarmonicElectricSolver : ISolver
     private const double Epsilon0 = 8.8541878128e-12;   // vacuum permittivity [F/m]
 
     /// <summary>Maximum admissible spread of |σ + jωε₀εᵣ| across elements — the same
-    /// CG/COCG-conditioning policy as the DC solver's copper+FR4 ban.</summary>
-    private const double AdmittivitySpreadLimit = 1e8;
+    /// limit past which the DC solver stops solving conductors and insulators as one
+    /// system (<see cref="ElectricalConductionSolver.ConductivitySpreadLimit"/>).</summary>
+    private const double AdmittivitySpreadLimit = ElectricalConductionSolver.ConductivitySpreadLimit;
+
+    private const double Mu0 = 4e-7 * Math.PI;           // vacuum permeability [H/m]
 
     public string Name => "AC electrical (electro-quasistatic)";
 
@@ -100,9 +105,45 @@ public sealed class HarmonicElectricSolver : ISolver
             throw new InvalidOperationException(
                 $"The admittivity |σ + jωε| spans a factor of {max / min:g2} across the mesh at " +
                 $"ω = {omega:g3} rad/s — far beyond what the iterative solver can condition (limit 1e8). " +
-                "Conductor+dielectric composites stay banned at AC just like at DC: mesh the copper " +
-                "alone (copper-only PCB path) for conduction, or use the lumped R + jωL trace-impedance " +
-                "estimate in the electrical setup panel.");
+                "A conductor+dielectric composite cannot be swept: for conduction use the DC solve " +
+                "(it handles copper on a dielectric) or mesh the copper alone (copper-only PCB path), and for the frequency " +
+                "behaviour use the lumped R + jωL trace-impedance estimate in the electrical setup panel.");
+    }
+
+    /// <summary>
+    /// A sweep over a mesh that is ALL conductor (ωε ≪ σ in every element up to f max)
+    /// solves ∇·(σ∇φ) = 0 at every frequency: |Z| is the DC resistance throughout, with
+    /// no inductance and no skin effect, and looked like a measured flat response. Said
+    /// here, with the skin depth against the body so the reader can see where even the
+    /// resistance stops holding. Returns the warning, or null when a dielectric takes part.
+    /// </summary>
+    internal static string? NoteAllConductors(SolveInput input, HarmonicElectricSettings settings)
+    {
+        double omegaMax = 2 * Math.PI * settings.MaxFrequency;
+        double muSigma = 0;
+        for (int e = 0; e < input.Mesh.ElementCount; e++)
+        {
+            var m = input.MaterialOf(e);
+            if (omegaMax * Permittivity(m) > 1e-3 * Sigma(m)) return null;
+            muSigma = Math.Max(muSigma, Mu0 * (m.RelativePermeability ?? 1) * Sigma(m));
+        }
+
+        var bounds = Aabb.FromPoints(input.Mesh.Nodes);
+        var size = bounds.Max - bounds.Min;
+        double extent = Math.Min(size.X, Math.Min(size.Y, size.Z));
+        double depth = Math.Sqrt(2 / (omegaMax * muSigma));
+        // δ = extent/2: below this the current fills the cross-section.
+        double crossover = 4 / (Math.PI * muSigma * extent * extent);
+        string tail = crossover < settings.MaxFrequency
+            ? $"above about {FormatFrequency(crossover)} the current no longer fills the " +
+              "cross-section, so the real resistance is higher than shown as well."
+            : "the resistance itself holds over this sweep; the inductive part does not exist here.";
+        return "WARNING: every material in this mesh is a conductor over the whole sweep (ωε below " +
+               "0.001·σ), so this quasi-static solve returns the DC resistance as |Z| at every " +
+               "frequency: it has no inductance and no skin effect. Skin depth at " +
+               $"{FormatFrequency(settings.MaxFrequency)} is {depth * 1e3:g3} mm against a smallest " +
+               $"body extent of {extent * 1e3:g3} mm; " + tail +
+               " For a trace's impedance against frequency use the lumped R + jωL estimate.";
     }
 
     public SolveOutput Solve(SolveInput input, IProgress<SolverProgress>? progress = null,
@@ -115,6 +156,10 @@ public sealed class HarmonicElectricSolver : ISolver
 
         log.Add("Electro-quasistatic sweep: peak phasors; loss density is the time average ½σ|∇φ|²; " +
                 "magnetic induction and skin effect are neglected.");
+        if (NoteAllConductors(input, settings) is { } metallic) log.Add(metallic);
+        var groups = ScalarSolverHelpers.MaterialGroups(input);
+        if (groups is not null)
+            log.Add(ScalarSolverHelpers.InterfaceNote("current density and loss density"));
 
         progress?.Report(new SolverProgress("Assembling σ and ε matrices", 0.03));
         var assembler = new ScalarDiffusionAssembler(mesh, el => Sigma(input.MaterialOf(el)));
@@ -208,7 +253,7 @@ public sealed class HarmonicElectricSolver : ISolver
                         $"phase {impedance.Phase * 180 / Math.PI:g3}° " +
                         $"(COCG {iterations.Iterations} iterations).");
             }
-            frames.Add(BuildFrame(f, omega, phi, mesh, assembler, input, frameSummary));
+            frames.Add(BuildFrame(f, omega, phi, mesh, assembler, input, frameSummary, groups));
             progress?.Report(new SolverProgress($"f = {FormatFrequency(f)}",
                 0.05 + 0.95 * (fi + 1) / frequencies.Length));
         }
@@ -253,7 +298,7 @@ public sealed class HarmonicElectricSolver : ISolver
 
     private static ResultFrame BuildFrame(double frequency, double omega, Complex[] phi,
         FeMesh mesh, ScalarDiffusionAssembler assembler, SolveInput input,
-        Dictionary<string, double>? frameSummary)
+        Dictionary<string, double>? frameSummary, IReadOnlyList<int>? groups)
     {
         var magnitude = new double[mesh.NodeCount];
         var phase = new double[mesh.NodeCount];
@@ -285,9 +330,9 @@ public sealed class HarmonicElectricSolver : ISolver
             new NodalScalarField("Potential magnitude", "V", magnitude),
             new NodalScalarField("Potential phase", "°", phase),
             new NodalScalarField("Current density |J|", "A/m²",
-                ScalarSolverHelpers.NodalAverage(mesh, currentDensity)),
+                ScalarSolverHelpers.NodalAverage(mesh, currentDensity, groups)),
             new NodalScalarField("Loss density", "W/m³",
-                ScalarSolverHelpers.NodalAverage(mesh, lossDensity))
+                ScalarSolverHelpers.NodalAverage(mesh, lossDensity, groups))
         };
         return new ResultFrame($"f = {FormatFrequency(frequency)}", frequency, fields)
         {

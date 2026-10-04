@@ -253,11 +253,16 @@ public sealed class HeatConductionSolver : ISolver
             flux_[e] = assembler.ElementGradient(e, temperatureField)
                        * -input.MaterialOf(e).ThermalConductivity!.Value;   // q = −k∇T
 
+        var groups = ScalarSolverHelpers.MaterialGroups(input);
+        if (groups is not null)
+            log.Add(ScalarSolverHelpers.InterfaceNote("heat flux"));
+
         progress?.Report(new SolverProgress("Done", 1.0));
         var fields = new List<IResultField>
         {
             new NodalScalarField("Temperature", "K", temperatureField),
-            new NodalVectorField("Heat flux", "W/m²", ScalarSolverHelpers.NodalAverage(mesh, flux_))
+            new NodalVectorField("Heat flux", "W/m²",
+                ScalarSolverHelpers.NodalAverage(mesh, flux_, groups))
         };
         if (film is not null)
             fields.Add(new NodalScalarField("Film coefficient", "W/(m²·K)",

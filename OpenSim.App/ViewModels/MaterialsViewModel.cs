@@ -71,17 +71,13 @@ public partial class MaterialsViewModel : ObservableObject
     public Material DefaultConductor() =>
         _materialLibrary.Materials.First(m => m.Name.Contains("Copper"));
 
-    /// <summary>Resolves a body's per-region material names against the library for a multi-material solve.</summary>
-    public IReadOnlyDictionary<int, Material>? ResolveRegionMaterials(OpenSim.Core.Model.Body body)
-    {
-        if (body.RegionMaterialNames is not { Count: > 0 }) return null;
-        var map = new Dictionary<int, Material>();
-        foreach (var (region, name) in body.RegionMaterialNames)
-        {
-            var material = _materialLibrary.Materials.FirstOrDefault(m => m.Name == name)
-                           ?? Materials.FirstOrDefault(m => m.Name == name);
-            if (material is not null) map[region] = material;
-        }
-        return map.Count > 0 ? map : null;
-    }
+    /// <summary>Resolves a body's per-region material names against the library for a
+    /// multi-material solve. A name that resolves to nothing is a failure naming the
+    /// region and the material — the region used to fall back, silently, to whatever
+    /// material was selected, so a board whose laminate had been renamed solved as copper
+    /// throughout.</summary>
+    public IReadOnlyDictionary<int, Material>? ResolveRegionMaterials(OpenSim.Core.Model.Body body) =>
+        OpenSim.Core.Model.RegionMaterialResolver.Resolve(body.Name, body.RegionMaterialNames,
+            name => _materialLibrary.Materials.FirstOrDefault(m => m.Name == name)
+                    ?? Materials.FirstOrDefault(m => m.Name == name));
 }
