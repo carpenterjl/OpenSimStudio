@@ -114,8 +114,8 @@ public static class ContactDetector
             found.Clear();
             for (int c = 0; c < 3; c++)
             {
-                int target = Project(mesh, triangles, grid, body, area, normal, corners[c], t,
-                    tolerance, settings.NormalOpposition, out double l0, out double l1, out double l2);
+                int target = Project(mesh, triangles, grid, body, area, normal,
+                    mesh.Nodes[corners[c]], t, tolerance, settings.NormalOpposition, out double l0, out double l1, out double l2);
                 if (target < 0) { unpaired++; continue; }
                 if (partner < 0) partner = body[target];
                 if (body[target] != partner) { unpaired++; continue; }
@@ -132,6 +132,25 @@ public static class ContactDetector
                 if (body[t] == key.Item1) acc.AreaA += weight * 2; else acc.AreaB += weight * 2;
             }
             acc.Unpaired += unpaired;
+
+            // How much of THIS triangle lies inside the joint, for the environment (which
+            // must not cool the covered part). Sampled at the three interior Gauss points
+            // rather than the vertices: a triangle just outside the joint whose vertices sit
+            // ON its rim pairs at those vertices, but none of its area is covered.
+            int inside = 0;
+            var pa = mesh.Nodes[tri.A];
+            var pb = mesh.Nodes[tri.B];
+            var pc = mesh.Nodes[tri.C];
+            for (int g = 0; g < 3; g++)
+            {
+                double wa = g == 0 ? 2.0 / 3 : 1.0 / 6, wb = g == 1 ? 2.0 / 3 : 1.0 / 6,
+                       wc = g == 2 ? 2.0 / 3 : 1.0 / 6;
+                int target = Project(mesh, triangles, grid, body, area, normal,
+                    pa * wa + pb * wb + pc * wc, t, tolerance, settings.NormalOpposition,
+                    out _, out _, out _);
+                if (target >= 0 && body[target] == partner) inside++;
+            }
+            if (inside > 0) acc.Covered.Add((t, inside / 3.0));
         }
 
         var result = new List<ContactInterface>();
@@ -148,7 +167,8 @@ public static class ContactDetector
                 CoupledArea = coupled,
                 AreaA = acc.AreaA,
                 AreaB = acc.AreaB,
-                UnpairedPoints = acc.Unpaired
+                UnpairedPoints = acc.Unpaired,
+                CoveredTriangles = acc.Covered
             };
             result.Add(contact);
             log?.Invoke($"Contact bodies {a}–{b}: {coupled:g4} m² coupled " +
@@ -165,6 +185,7 @@ public static class ContactDetector
     private sealed class Accumulator
     {
         public List<ContactStamp> Stamps { get; } = new();
+        public List<(int Triangle, double Fraction)> Covered { get; } = new();
         public double AreaA;
         public double AreaB;
         public int Unpaired;
@@ -177,11 +198,10 @@ public static class ContactDetector
     /// index, so the result never depends on traversal order.
     /// </summary>
     private static int Project(FeMesh mesh, IReadOnlyList<BoundaryTriangle> triangles, TriangleGrid grid,
-        int[] body, double[] area, Vector3D[] normal, int node, int sourceTriangle,
+        int[] body, double[] area, Vector3D[] normal, Vector3D p, int sourceTriangle,
         double tolerance, double opposition, out double l0, out double l1, out double l2)
     {
         l0 = l1 = l2 = 0;
-        var p = mesh.Nodes[node];
         var ns = normal[sourceTriangle];
         int sourceBody = body[sourceTriangle];
         int best = -1;

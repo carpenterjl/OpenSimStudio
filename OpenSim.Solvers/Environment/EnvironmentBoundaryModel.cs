@@ -15,6 +15,12 @@ namespace OpenSim.Solvers.Environment;
 /// added to it. Merging the two would silently double up the surface exchange on exactly
 /// the face a user chose to specify by hand, and there is no way to display that.
 /// </para>
+/// <para>
+/// <b>Contacts.</b> The part of the skin a thermal contact couples faces the other body,
+/// not the surroundings: it carries the contact conductance only. Each triangle's film is
+/// scaled by its exposed fraction, a wholly buried triangle is left out of its panel, and
+/// panel areas and length scales are those of the exposed part.
+/// </para>
 /// </summary>
 public sealed class EnvironmentBoundaryModel
 {
@@ -39,17 +45,23 @@ public sealed class EnvironmentBoundaryModel
     private readonly FluidProperties? _fluid;
     private readonly BoundaryAdjacency _adjacency;
     private readonly List<SurfacePanel> _panels;
+    private readonly double[] _exposed;
     private readonly SortedSet<string> _notes = new();
 
     private EnvironmentBoundaryModel(FeMesh mesh, EnvironmentSettings environment,
-        BoundaryAdjacency adjacency, List<SurfacePanel> panels)
+        BoundaryAdjacency adjacency, List<SurfacePanel> panels, double[] exposed)
     {
         _mesh = mesh;
         _environment = environment;
         _fluid = environment.ResolveFluid();
         _adjacency = adjacency;
         _panels = panels;
+        _exposed = exposed;
     }
+
+    /// <summary>Per boundary triangle, the fraction of its area open to the surroundings
+    /// (the rest lies inside a body-to-body contact).</summary>
+    public IReadOnlyList<double> ExposedFractions => _exposed;
 
     /// <summary>The exposed panels, in ascending face-id order.</summary>
     public IReadOnlyList<SurfacePanel> Panels => _panels;
@@ -89,11 +101,16 @@ public sealed class EnvironmentBoundaryModel
                 claimed.UnionWith(bc.FaceIds);
 
         var adjacency = BoundaryAdjacency.Build(mesh);
+        var exposed = ContactInterface.ExposedFractions(mesh.BoundaryTriangles.Count,
+            input.ThermalContacts);
+        double buriedArea = 0;
         var byFace = new SortedDictionary<int, List<int>>();
         for (int t = 0; t < mesh.BoundaryTriangles.Count; t++)
         {
             int faceId = mesh.BoundaryTriangles[t].FaceId;
             if (claimed.Contains(faceId)) continue;
+            buriedArea += (1 - exposed[t]) * adjacency.Areas[t];
+            if (!(exposed[t] > 0)) continue;       // wholly inside a joint
             if (!byFace.TryGetValue(faceId, out var list))
                 byFace[faceId] = list = new List<int>();
             list.Add(t);
@@ -101,8 +118,11 @@ public sealed class EnvironmentBoundaryModel
 
         if (byFace.Count == 0)
         {
-            log.Add("Environment: every exterior face carries a user thermal condition, so the " +
-                    "environment adds nothing to this solve.");
+            log.Add(buriedArea > 0
+                ? "Environment: every face is either inside a body-to-body contact or carries a " +
+                  "user thermal condition, so the environment adds nothing to this solve."
+                : "Environment: every exterior face carries a user thermal condition, so the " +
+                  "environment adds nothing to this solve.");
             return null;
         }
 
@@ -115,7 +135,7 @@ public sealed class EnvironmentBoundaryModel
         var panels = new List<SurfacePanel>(byFace.Count);
         foreach (var (faceId, triangles) in byFace)
         {
-            var panel = BuildPanel(input, adjacency, faceId, triangles, up, flowExtents);
+            var panel = BuildPanel(input, adjacency, exposed, faceId, triangles, up, flowExtents);
             // A face of zero area exchanges nothing, and dividing by it would put a NaN into
             // the matrix instead of saying so.
             if (!(panel.Area > 0))
@@ -129,7 +149,10 @@ public sealed class EnvironmentBoundaryModel
         if (panels.Count == 0) return null;
 
         LogAssumptions(environment, panels, claimed, log);
-        return new EnvironmentBoundaryModel(mesh, environment, adjacency, panels);
+        if (buriedArea > 0)
+            log.Add($"  {buriedArea:g4} m² of skin lies inside body-to-body contacts and takes no " +
+                    "convection or radiation (it exchanges heat through the contact only).");
+        return new EnvironmentBoundaryModel(mesh, environment, adjacency, panels, exposed);
     }
 
     /// <summary>
@@ -165,8 +188,10 @@ public sealed class EnvironmentBoundaryModel
             if (_environment.IncludeRadiation && panel.Emissivity > 0)
                 h += ConvectionCorrelations.RadiativeFilmCoefficient(panel.Emissivity, surface, ambient);
 
+            // A triangle partly inside a joint exchanges over its exposed part only; the
+            // Robin term integrates h over the whole triangle, so the fraction scales h.
             foreach (int t in panel.TriangleIndices)
-                coefficients[t] = h;
+                coefficients[t] = h * _exposed[t];
         }
 
         return new SurfaceFilmModel
@@ -243,7 +268,7 @@ public sealed class EnvironmentBoundaryModel
         foreach (int t in panel.TriangleIndices)
         {
             var bt = _mesh.BoundaryTriangles[t];
-            sum += _adjacency.Areas[t] * (nodal[bt.A] + nodal[bt.B] + nodal[bt.C]) / 3.0;
+            sum += _exposed[t] * _adjacency.Areas[t] * (nodal[bt.A] + nodal[bt.B] + nodal[bt.C]) / 3.0;
         }
         return sum / panel.Area;
     }
@@ -288,15 +313,16 @@ public sealed class EnvironmentBoundaryModel
     }
 
     private static SurfacePanel BuildPanel(SolveInput input, BoundaryAdjacency adjacency,
-        int faceId, List<int> triangles, Vector3D up, Dictionary<int, double> flowExtents)
+        double[] exposed, int faceId, List<int> triangles, Vector3D up,
+        Dictionary<int, double> flowExtents)
     {
         var mesh = input.Mesh;
         double area = 0;
         var weightedNormal = new Vector3D(0, 0, 0);
         foreach (int t in triangles)
         {
-            area += adjacency.Areas[t];
-            weightedNormal += adjacency.OutwardNormals[t] * adjacency.Areas[t];
+            area += exposed[t] * adjacency.Areas[t];
+            weightedNormal += adjacency.OutwardNormals[t] * (exposed[t] * adjacency.Areas[t]);
         }
 
         double normalLength = weightedNormal.Length;

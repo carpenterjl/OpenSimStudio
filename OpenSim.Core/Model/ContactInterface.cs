@@ -61,6 +61,35 @@ public sealed record ContactInterface
     /// </summary>
     public int UnpairedPoints { get; init; }
 
+    /// <summary>
+    /// The boundary triangles this interface covers, each with the fraction of it that is
+    /// coupled (interior sample points that project onto the other body / 3; 1 for a
+    /// triangle wholly inside the joint, a third or two thirds where it straddles the rim
+    /// of a partial overlap). The covered part of a triangle
+    /// faces the other body, not the surroundings, so it takes no environment convection
+    /// or radiation. Empty for an interface built by hand without detection — nothing is
+    /// then excluded.
+    /// </summary>
+    public IReadOnlyList<(int Triangle, double Fraction)> CoveredTriangles { get; init; }
+        = Array.Empty<(int, double)>();
+
+    /// <summary>
+    /// Per boundary triangle, the fraction of its area that is NOT inside any contact
+    /// (1 = fully exposed to the surroundings, 0 = buried in a joint).
+    /// </summary>
+    public static double[] ExposedFractions(int triangleCount,
+        IReadOnlyList<ContactInterface>? contacts)
+    {
+        var exposed = new double[triangleCount];
+        Array.Fill(exposed, 1.0);
+        if (contacts is null) return exposed;
+        foreach (var contact in contacts)
+            foreach (var (triangle, fraction) in contact.CoveredTriangles)
+                if (triangle >= 0 && triangle < triangleCount)
+                    exposed[triangle] = Math.Max(0, exposed[triangle] - fraction);
+        return exposed;
+    }
+
     /// <summary>Throws when the interface cannot be assembled against a mesh of this size.</summary>
     public void Validate(int nodeCount)
     {

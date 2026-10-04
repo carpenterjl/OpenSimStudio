@@ -327,11 +327,16 @@ public static class ConjugateHeatStudy
 
         var coefficients = film.TriangleFilmCoefficient.ToArray();
         var references = film.TriangleReferenceTemperature!.ToArray();
+        // Skin inside a body-to-body contact faces the other body, not the surroundings:
+        // it radiates nothing to ambient (the same rule the Stage 1 panels apply).
+        var exposed = ContactInterface.ExposedFractions(mesh.BoundaryTriangles.Count,
+            solidInput.ThermalContacts);
         int radiating = 0;
         for (int t = 0; t < mesh.BoundaryTriangles.Count; t++)
         {
             var tri = mesh.BoundaryTriangles[t];
             if (claimed.Contains(tri.FaceId)) continue;
+            if (!(exposed[t] > 0)) continue;
 
             int body = BodyOfNode(nodeBases, tri.A);
             var material = solidInput.RegionMaterials?.GetValueOrDefault(body) ?? solidInput.Material;
@@ -343,7 +348,7 @@ public static class ConjugateHeatStudy
             if (emissivity.Value <= 0) continue;
 
             double ts = Math.Max(surfaceTemperature[t], 1.0);
-            double hr = ConvectionCorrelations.RadiativeFilmCoefficient(
+            double hr = exposed[t] * ConvectionCorrelations.RadiativeFilmCoefficient(
                 emissivity.Value, ts, ambient);
             radiating++;
             if (double.IsNaN(coefficients[t]))
