@@ -199,16 +199,14 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     private RlgcResult ExtractRlgc(CoupledLineCrossSection section)
     {
-        var rlgc = RlgcExtractor.Extract(section);
+        // The board model: thickness, return-path and crowding loss with its internal
+        // inductance, causal dielectric. The proximity option replaces the STRIPS' share of
+        // the conductor loss with the filament solve and keeps the plane's.
+        var rlgc = RlgcExtractor.Extract(section, RlgcModel.Board);
         if (ProximityEffect)
         {
             double fMax = Math.Max(1e10, BitRateGbps * 1e9 * 20);
-            var prox = ProximityExtractor.Extract(section, 1e3, fMax);
-            rlgc = rlgc with
-            {
-                ResistanceMatrixOhmsPerMeter = prox.ResistanceMatrix,
-                InternalInductanceHenriesPerMeter = prox.InternalInductance,
-            };
+            rlgc = ProximityExtractor.Attach(rlgc, ProximityExtractor.Extract(section, 1e3, fMax));
         }
         return rlgc;
     }
@@ -224,10 +222,10 @@ public partial class SignalIntegrityViewModel : ObservableObject
     private void ShowAssumptions(RlgcResult rlgc) =>
         SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
             + (ProximityEffect
-                ? " Proximity effect ON: R(f) and internal L(f) from the 2D filament solve "
-                  + "(current crowding + skin effect, full N×N)."
-                : " R = max(R_dc, R_s√f) per conductor (enable Proximity effect for the "
-                  + "filament R(f)/L(f)).")
+                ? " Proximity effect ON: the strips' R(f) and internal L(f) come from the 2D "
+                  + "filament solve over a perfect plane (current crowding + skin effect, full "
+                  + "N×N); the plane's own loss is added from the incremental-inductance rule."
+                : "")
             + " Linear Thevenin driver + R∥C receiver (this run did not use an IBIS buffer).";
 
     // ------------------------------------------------------------------
@@ -266,6 +264,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                     Stackup = options.Stackup,
                     CopperThicknessMeters = options.CopperThickness,
                     SwapEnds = SwapBoardEnds,
+                    Model = RlgcModel.Board,
                 }));
             if (extraction.FailureReason is not null)
             {

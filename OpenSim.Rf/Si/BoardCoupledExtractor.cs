@@ -48,6 +48,12 @@ public sealed record BoardCoupledOptions
     /// names its driver.</summary>
     public bool SwapEnds { get; init; }
 
+    /// <summary>The per-unit-length model every section is extracted with. The default is the
+    /// bare kernel (zero-thickness strips, forward-conductor loss only, constant ε), which is
+    /// what the extractor's geometric gates are written against; a caller that wants numbers
+    /// for a real board passes <see cref="RlgcModel.Board"/>, as the app does.</summary>
+    public RlgcModel Model { get; init; } = RlgcModel.Kernel;
+
     /// <summary>Substrate εr when the board has no per-gap permittivity (Gerber sets).</summary>
     public double DefaultEpsR { get; init; } = 4.4;
 
@@ -374,7 +380,7 @@ public static class BoardCoupledExtractor
 
         var rlgcCache = new Dictionary<CoupledLineCrossSection, RlgcResult>(ReferenceEqualityComparer.Instance);
         RlgcResult Rlgc(CoupledLineCrossSection s) =>
-            rlgcCache.TryGetValue(s, out var r) ? r : rlgcCache[s] = RlgcExtractor.Extract(s);
+            rlgcCache.TryGetValue(s, out var r) ? r : rlgcCache[s] = RlgcExtractor.Extract(s, options.Model);
         var network = result.BuildNetwork(Rlgc);
         var rlgc = Rlgc(coupledSections[principal]);
 

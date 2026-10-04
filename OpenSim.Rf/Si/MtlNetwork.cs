@@ -176,6 +176,7 @@ public sealed class MtlNetwork
         double omega = 2 * Math.PI * frequencyHz;
         var rlgc = section.Rlgc;
         var g = rlgc.ConductancePerMeter(frequencyHz);
+        var c = rlgc.CapacitancePerMeter(frequencyHz);   // the same matrix when ε is constant
 
         // The proximity-effect providers (Stage S8) carry the full N×N R(f) and the internal
         // ΔL(f); when absent the generator is bitwise the v1 scalar-diagonal-R + external-L path.
@@ -192,7 +193,7 @@ public sealed class MtlNetwork
                 Complex z = new Complex(0, omega * lFull);
                 if (rMatrix is not null) z += rMatrix[i, j];
                 else if (i == j) z += rlgc.ResistancePerMeter(i, frequencyHz);
-                Complex y = new Complex(g[i, j], omega * rlgc.CapacitanceFaradsPerMeter[i, j]);
+                Complex y = new Complex(g[i, j], omega * c[i, j]);
                 generator[i, n + j] = z * section.LengthMeters;
                 generator[n + i, j] = y * section.LengthMeters;
             }

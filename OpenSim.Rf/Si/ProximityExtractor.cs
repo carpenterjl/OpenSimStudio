@@ -58,10 +58,22 @@ public sealed class ProximityResult
     {
         int n = ConductorCount;
         double logf = Math.Log(Math.Max(frequencyHz, double.Epsilon));
-        // Below/above the tabulated band: clamp (R plateaus at R_dc below, √f slope above
-        // is captured by the top sample; ΔL → its endpoint). No extrapolation past the band.
+        // Below the tabulated band: clamp (R has plateaued at R_dc, ΔL at its DC value).
+        // Above it the current is a surface current and the surface-impedance law continues:
+        // R grows as √f and the internal inductance falls as 1/√f. (Both used to be held flat
+        // at the top sample, under a comment saying the √f slope was captured.)
         if (logf <= _logF[0]) return table[0];
-        if (logf >= _logF[^1]) return table[^1];
+        if (logf >= _logF[^1])
+        {
+            double ratio = Math.Sqrt(frequencyHz / FrequenciesHz[^1]);
+            double scale = ReferenceEquals(table, _r) ? ratio : 1 / ratio;
+            var top = table[^1];
+            var scaled = new double[n, n];
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++)
+                    scaled[i, j] = top[i, j] * scale;
+            return scaled;
+        }
         int hi = 1;
         while (_logF[hi] < logf) hi++;
         double t = (logf - _logF[hi - 1]) / (_logF[hi] - _logF[hi - 1]);
@@ -107,6 +119,16 @@ public static class ProximityExtractor
 {
     private const double Mu0 = 4e-7 * Math.PI;
     private const double Epsilon0 = 8.8541878128e-12;
+
+    /// <summary>Bounds of the automatic cell count through the thickness, and how many first
+    /// cells a skin depth must hold. At 2.5 the resistance of a 0.3 mm × 35 µm strip at 10 GHz
+    /// is within 2 % of the 40-cell value.</summary>
+    public const int MinAutoThicknessCells = 10;
+    public const int MaxAutoThicknessCells = 24;
+    private const double FirstCellPerSkinDepth = 2.5;
+
+    private static double SkinDepth(double frequencyHz, double conductivity) =>
+        1 / Math.Sqrt(Math.PI * frequencyHz * Mu0 * conductivity);
 
     /// <summary>
     /// Solves the per-unit-length conductor impedance matrix Z_cond [Ω/m] at one frequency
@@ -181,14 +203,25 @@ public static class ProximityExtractor
     /// [<paramref name="minFrequencyHz"/>, <paramref name="maxFrequencyHz"/>] on a log grid
     /// of <paramref name="points"/> samples. Conductors are tiled <paramref name="lateralCells"/>
     /// (cosine-graded in x) × <paramref name="thicknessCells"/> (cosine-graded in z) filaments;
-    /// the ground image references the total inductance. ΔL(f) = L_full(f) − L_full(f_max) is
-    /// the internal part (→ 0 at the top of the band, where the current is on the surface).
+    /// the ground image references the total inductance. ΔL(f) = L_full(f) − L_full(f_max) +
+    /// R(f_max)/ω_max is the internal part: at the top of the band the current is a surface
+    /// current, whose internal reactance equals its resistance, so that is what is left there
+    /// rather than zero.
     /// Frequency samples run in parallel into ordered slots — bitwise-identical at any DOP
     /// (the LU is, and each sample is independent).
+    ///
+    /// <para><b>Resolution through the thickness.</b> The cells nearest a surface must be
+    /// thinner than the skin depth or the solve under-reads R: ten cosine cells through 35 µm
+    /// copper leave a first cell of 0.86 µm against δ = 0.66 µm at 10 GHz, and R came out
+    /// 20 % low there (measured against 40 cells). Left unset, <paramref name="thicknessCells"/>
+    /// is chosen so the first cell is at most δ/2.5 at the top of the band, up to
+    /// <see cref="MaxAutoThicknessCells"/>; if that is still not enough the table stops at the
+    /// frequency it does resolve and the surface-impedance law (R ∝ √f) carries on from there.
+    /// A caller that passes a cell count gets exactly that count over the whole band.</para>
     /// </summary>
     public static ProximityResult Extract(CoupledLineCrossSection section,
         double minFrequencyHz, double maxFrequencyHz, int points = 24,
-        int lateralCells = 24, int thicknessCells = 10, int? maxDegreeOfParallelism = null)
+        int lateralCells = 24, int? thicknessCells = null, int? maxDegreeOfParallelism = null)
     {
         if (minFrequencyHz <= 0 || maxFrequencyHz <= minFrequencyHz)
             throw new ArgumentException("Need 0 < minFrequency < maxFrequency.", nameof(minFrequencyHz));
@@ -201,7 +234,32 @@ public static class ProximityExtractor
 
         int n = section.Traces.Count;
         double metalZ = section.Stackup.InterfaceHeights()[section.MetalInterface];
-        var filaments = BuildFilaments(section.Traces, metalZ, lateralCells, thicknessCells);
+        int cells;
+        if (thicknessCells is { } given)
+            cells = given;
+        else
+        {
+            cells = MinAutoThicknessCells;
+            foreach (var trace in section.Traces)
+            {
+                double delta = SkinDepth(maxFrequencyHz, trace.ConductivitySiemensPerMeter);
+                double argument = 1 - 2 * (delta / FirstCellPerSkinDepth) / trace.ThicknessMeters;
+                int needed = argument <= -1 ? 1 : (int)Math.Ceiling(Math.PI / Math.Acos(argument));
+                cells = Math.Max(cells, needed);
+            }
+            if (cells > MaxAutoThicknessCells)
+            {
+                cells = MaxAutoThicknessCells;
+                foreach (var trace in section.Traces)
+                {
+                    double first = trace.ThicknessMeters * (1 - Math.Cos(Math.PI / cells)) / 2;
+                    double delta = FirstCellPerSkinDepth * first;
+                    double resolved = 1 / (Math.PI * Mu0 * trace.ConductivitySiemensPerMeter * delta * delta);
+                    if (resolved > minFrequencyHz) maxFrequencyHz = Math.Min(maxFrequencyHz, resolved);
+                }
+            }
+        }
+        var filaments = BuildFilaments(section.Traces, metalZ, lateralCells, cells);
 
         var freqs = new double[points];
         double logLo = Math.Log(minFrequencyHz), logHi = Math.Log(maxFrequencyHz);
@@ -227,16 +285,18 @@ public static class ProximityExtractor
             lFull[k] = l;
         });
 
-        // ΔL(f) = L_full(f) − L_full(top): the frequency-dependent INTERNAL part, referenced
+        // ΔL(f) = L_full(f) − L_external: the frequency-dependent INTERNAL part, referenced
         // so the external inductance (µ₀ε₀C_air⁻¹) carries the rest without double-counting.
-        var lExternal = lFull[^1];
+        // L_external is the top sample less the internal inductance still present there,
+        // R(top)/ω_top (surface impedance: ωL_int = R).
+        double omegaTop = 2 * Math.PI * freqs[^1];
         var dlTable = new double[points][,];
         for (int k = 0; k < points; k++)
         {
             var dl = new double[n, n];
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++)
-                    dl[i, j] = lFull[k][i, j] - lExternal[i, j];
+                    dl[i, j] = lFull[k][i, j] - lFull[^1][i, j] + rTable[^1][i, j] / omegaTop;
             dlTable[k] = dl;
         }
         return new ProximityResult(n, freqs, rTable, dlTable);
@@ -272,6 +332,37 @@ public static class ProximityExtractor
             }
         }
         return filaments;
+    }
+
+    /// <summary>Attach a proximity table to an extraction. The filament solve images the
+    /// strips in a PERFECT plane, so the plane's own loss is not in it; when the extraction
+    /// carries the plane's share of the skin resistance (the board model) it is added here,
+    /// with its internal inductance, blended to nothing at DC on the same crossover the
+    /// strips have.</summary>
+    public static RlgcResult Attach(RlgcResult rlgc, ProximityResult proximity)
+    {
+        var plane = rlgc.PlaneSkinResistanceOhmsPerMeterPerSqrtHz;
+        if (plane is null)
+            return rlgc with
+            {
+                ResistanceMatrixOhmsPerMeter = proximity.ResistanceMatrix,
+                InternalInductanceHenriesPerMeter = proximity.InternalInductance,
+            };
+        var shared = new ConductorImpedance(rlgc.ResistanceDcOhmsPerMeter, plane, sharedOnly: true);
+        double[,] Sum(double[,] a, double[,] b)
+        {
+            int n = a.GetLength(0);
+            var s = new double[n, n];
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) s[i, j] = a[i, j] + b[i, j];
+            return s;
+        }
+        return rlgc with
+        {
+            ResistanceMatrixOhmsPerMeter = f => Sum(proximity.ResistanceMatrix(f), shared.Resistance(f)),
+            InternalInductanceHenriesPerMeter =
+                f => Sum(proximity.InternalInductance(f), shared.InternalInductance(f)),
+        };
     }
 
     /// <summary>The external inductance the internal ΔL(f) rides on: µ₀ε₀·C_air⁻¹ from the

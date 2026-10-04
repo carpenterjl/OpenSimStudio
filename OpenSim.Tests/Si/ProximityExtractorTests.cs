@@ -215,7 +215,7 @@ public class ProximityExtractorTests
     }
 
     [Fact]
-    public void InternalInductance_IsMonotoneDecreasing_AndVanishesAtTheTop()
+    public void InternalInductance_IsMonotoneDecreasing_AndIsTheSurfaceReactanceAtTheTop()
     {
         var result = ProximityExtractor.Extract(Pair(0.3e-3), 1e3, 1e11, points: 20);
         double prev = double.MaxValue;
@@ -226,8 +226,12 @@ public class ProximityExtractorTests
             Assert.True(dl <= prev + 1e-12, $"ΔL must fall with frequency (at {f:g2}: {dl:g4})");
             prev = dl;
         }
-        // ΔL(f_max) = 0 by construction (the reference is the top sample).
-        Assert.True(Math.Abs(result.InternalInductance(1e11)[0, 0]) < 1e-15, "ΔL → 0 at the band top");
+        // At the top of the table the current is a surface current, whose internal reactance
+        // equals its resistance: ω·ΔL = R there by construction. (ΔL used to be referenced to
+        // ZERO at the top sample, which threw that reactance away — Fix 15.)
+        double top = result.FrequenciesHz[^1];
+        Assert.Equal(result.ResistanceMatrix(top)[0, 0],
+            2 * Math.PI * top * result.InternalInductance(top)[0, 0], 9);
     }
 
     [Fact]
