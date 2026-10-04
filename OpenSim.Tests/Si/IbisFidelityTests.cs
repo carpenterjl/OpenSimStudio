@@ -202,9 +202,11 @@ dV/dt_f     1.0/4.0n     1.0/4.0n     1.0/4.0n
         var driver = IbisDriver.FromBits(
             m, IbisCornerSelection.Typ, new[] { true, false }, spui, dt);
 
-        // Rising edge: 1 V at 1 V/ns → 1 ns → 8 samples. Falling: 4 ns → 32 samples.
-        Assert.Equal(8, EdgeLength(driver, bit: 0, spui, dt));
-        Assert.Equal(32, EdgeLength(driver, bit: 1, spui, dt));
+        // The ramp's dt covers 20 %–80 % of the swing, so the whole edge is dt / 0.6. Rising:
+        // 1 ns → 1.667 ns → 13 samples. Falling: 4 ns → 6.667 ns → 53 samples. (These were 8
+        // and 32, from swing / slew with the swing taken as the rail.)
+        Assert.Equal(13, EdgeLength(driver, bit: 0, spui, dt));
+        Assert.Equal(53, EdgeLength(driver, bit: 1, spui, dt));
     }
 
     /// <summary>Reads the Ku schedule back through the public evaluator: with linear tables and

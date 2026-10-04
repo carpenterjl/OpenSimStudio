@@ -6,7 +6,9 @@ namespace OpenSim.Rf.Si;
 
 /// <summary>A nonlinear buffer at the driver node: the current it pushes INTO the line at a
 /// node voltage and time, plus that current's slope dI/dV (for the Newton step) and its die
-/// capacitance C_comp (integrated separately, backward-Euler).</summary>
+/// capacitance C_comp (a linear shunt the engines account for themselves, both by the
+/// trapezoidal rule: the N-port engine inside its channel reduction, the single-line engine
+/// in its time stepping).</summary>
 public interface INonlinearDriver
 {
     (double Current, double Conductance) Evaluate(double nodeVolts, double timeSeconds);
@@ -35,8 +37,11 @@ public sealed class LinearTheveninDriver : INonlinearDriver
 /// The IBIS behavioral driver (Stage S11): the current pushed into the line is
 /// −[Ku(t)·I_pu(Vcc−V) + Kd(t)·I_pd(V−V_pd) + I_gndclamp(V−V_gc) + I_powerclamp(V_pc−V)]
 /// (IBIS positive current is INTO the pad, so the into-line current is its negative). The
-/// switching coefficients Ku(t)/Kd(t) follow the bit stream through a trapezoid whose edge time
-/// comes from [Ramp] (Δv/Δt). Pull-up / POWER-clamp tables are "Vcc relative" (voltage axis
+/// switching coefficients Ku(t)/Kd(t) follow the bit stream through the measured waveform
+/// tables, or failing those a linear ramp whose 0–100 % time is the [Ramp] dt divided by 0.6
+/// (the ramp's dV is the 20 %–80 % part of the swing). An edge is not confined to its unit
+/// interval: it runs until it settles or until the next transition takes over from wherever
+/// it had got to. Pull-up / POWER-clamp tables are "Vcc relative" (voltage axis
 /// = Vcc − V); pull-down / GND-clamp are rail-referenced (V − V_ref) — except an ECL model's
 /// pull-down, which is Vcc relative too (<see cref="IbisTableAxis"/>). Currents interpolate
 /// the monotone PWL tables with linear extrapolation past the ends.
@@ -72,6 +77,16 @@ public sealed class IbisDriver : INonlinearDriver
 
     public double CompCapacitanceFarads => _model.CComp.At(_corner) ?? 0;
 
+    /// <summary>The pull-up and pull-down switching coefficients over one pattern period, one
+    /// value per sample — what the bit stream was turned into.</summary>
+    internal IReadOnlyList<double> PullupSchedule => _ku;
+    internal IReadOnlyList<double> PulldownSchedule => _kd;
+
+    /// <summary>The [Ramp] sub-parameters give dV/dt with dV defined as the 20 % to 80 % part
+    /// of the swing into the ramp's test load, so the time for the whole swing along that
+    /// straight line is dt / 0.6 — whatever the load and whatever the rail.</summary>
+    internal const double RampSwingFraction = 0.6;
+
     /// <summary>Builds the driver for a bit stream sampled at <paramref name="samplesPerUi"/>.
     /// Bit 1 = driving high (Ku → 1), bit 0 = low (Kd → 1); the edge ramps over the [Ramp]
     /// time (falls back to one UI when no ramp). The Ku/Kd schedule spans the whole pattern
@@ -90,7 +105,8 @@ public sealed class IbisDriver : INonlinearDriver
         var warnings = new List<string>();
         switchingWarnings = warnings;
         if (!model.IsOutput)
-            throw new ArgumentException($"IBIS model '{model.Name}' is not an output buffer (needs [Pullup] and [Pulldown]).");
+            throw new ArgumentException($"IBIS model '{model.Name}' is not an output buffer (needs "
+                + "[Pullup] and [Pulldown], or the one it has when [Model_type] is an Open_* type).");
         if (!model.TypeIsDriverCapable)
             throw new ArgumentException(
                 $"IBIS model '{model.Name}' declares [Model_type] {model.ModelType}, which cannot "
@@ -98,8 +114,11 @@ public sealed class IbisDriver : INonlinearDriver
                 + "believing the tables over the file's own declaration — pick a driver model.");
         double vcc = model.PullupRailAt(corner);
         int n = bits.Count * samplesPerUi;
-        // Edge sample count from the ramp slew: t_edge = swing / (Δv/Δt); clamp to [2, 1 UI].
-        double swing = vcc;
+        // Edge sample count from [Ramp]: the whole-swing time is dt / 0.6 (see
+        // RampSwingFraction). It was taken as Vcc / (dV/dt), which is the same thing only if
+        // the swing into the test load reached the rail; a 25 Ω output into the default 50 Ω
+        // swings two thirds of it and came out 1.5× slow. The edge is NOT clamped to one UI:
+        // a buffer too slow for the bit rate has to show that, not be sped up to fit.
         int edgeRise = samplesPerUi, edgeFall = samplesPerUi;
         var ramp = model.Ramp;
         if (ramp is not null)
@@ -109,11 +128,9 @@ public sealed class IbisDriver : INonlinearDriver
             // symmetric buffer, a real timing error on an asymmetric one.
             int EdgeOf(IbisRampEdge e)
             {
-                double dv = e.DeltaVolts.At(corner) ?? swing;
-                double dtr = e.DeltaSeconds.At(corner) ?? dt;
-                double slew = dv / dtr;                 // V/s
-                return slew > 0
-                    ? Math.Clamp((int)Math.Round(swing / slew / dt), 2, samplesPerUi)
+                double? dtr = e.DeltaSeconds.At(corner);
+                return dtr is > 0
+                    ? Math.Max(2, (int)Math.Round(dtr.Value / RampSwingFraction / dt))
                     : samplesPerUi;
             }
             edgeRise = EdgeOf(ramp.Rising);
@@ -131,33 +148,86 @@ public sealed class IbisDriver : INonlinearDriver
             model, corner, model.FallingWaveforms, rising: false, dt, samplesPerUi,
             edgeFall, from: 1, to: 0, warnings);
 
+        WarnIfSlowerThanTheBit(riseKu, riseKd, "rising", samplesPerUi, dt, warnings);
+        WarnIfSlowerThanTheBit(fallKu, fallKd, "falling", samplesPerUi, dt, warnings);
+
+        // The schedule on the CONTINUOUS timeline. A transition starts its edge profile and the
+        // profile then runs for as long as it is, across unit-interval boundaries; a held bit
+        // simply lets it continue and, once it is exhausted, sits at its settled value (so the
+        // steady level always agrees with the edge that reached it). A transition arriving
+        // before the previous edge has settled takes over from where that edge had got to: the
+        // new profile is entered at the point where its own drive balance Ku − Kd first passes
+        // the present one. (The schedule used to be cut to one UI: a slower edge froze at
+        // whatever it had reached at the UI boundary and the next edge restarted from the far
+        // rail — a step in the drive.) Two passes, so the state the pattern ends in is the
+        // state it starts from.
         var ku = new double[n];
         var kd = new double[n];
-        for (int b = 0; b < bits.Count; b++)
-        {
-            int target = bits[b] ? 1 : 0;
-            int prev = bits[(b - 1 + bits.Count) % bits.Count] ? 1 : 0;
-            var (eKu, eKd) = target > prev ? (riseKu, riseKd) : (fallKu, fallKd);
-            for (int s = 0; s < samplesPerUi; s++)
+        bool level = bits[^1];
+        var (activeKu, activeKd) = level ? (riseKu, riseKd) : (fallKu, fallKd);
+        int position = activeKu.Length;                      // settled
+        for (int pass = 0; pass < 2; pass++)
+            for (int b = 0; b < bits.Count; b++)
             {
-                // A transition plays its edge profile; a held bit sits at that profile's
-                // SETTLED value, so the steady level always agrees with the edge that
-                // reached it (the two models must not disagree about "fully driven").
-                int idx = b * samplesPerUi + s;
-                if (prev != target) { ku[idx] = eKu[s]; kd[idx] = eKd[s]; }
-                else if (target == 1) { ku[idx] = riseKu[^1]; kd[idx] = riseKd[^1]; }
-                else { ku[idx] = fallKu[^1]; kd[idx] = fallKd[^1]; }
+                if (bits[b] != level)
+                {
+                    // Where the drive IS: the last sample played (the settled end when the
+                    // profile has run out).
+                    int at = Math.Clamp(position - 1, 0, activeKu.Length - 1);
+                    double balance = activeKu[at] - activeKd[at];
+                    double settled = activeKu[^1] - activeKd[^1];
+                    level = bits[b];
+                    (activeKu, activeKd) = level ? (riseKu, riseKd) : (fallKu, fallKd);
+                    position = Math.Abs(balance - settled) <= SettledBalance
+                        ? 0
+                        : EntryIndex(activeKu, activeKd, balance, rising: level);
+                }
+                for (int s = 0; s < samplesPerUi; s++, position++)
+                {
+                    int at = Math.Min(position, activeKu.Length - 1);
+                    ku[b * samplesPerUi + s] = activeKu[at];
+                    kd[b * samplesPerUi + s] = activeKd[at];
+                }
             }
-        }
         switchingSource = riseSource == fallSource
             ? riseSource
             : $"rising: {riseSource}; falling: {fallSource}";
         return new IbisDriver(model, corner, vcc, dt, ku, kd);
     }
 
-    /// <summary>One edge's Ku/Kd over a UI: the measured two-/one-waveform extraction when the
-    /// model carries waveforms for that edge, else the [Ramp] trapezoid — which is the profile
-    /// that has always run, reproduced here verbatim so a ramp-only file is unchanged.</summary>
+    /// <summary>An edge counts as settled when its drive balance Ku − Kd (which runs from −1 to
+    /// +1) is within this of its final value: 2 % of the span.</summary>
+    private const double SettledBalance = 0.04;
+
+    /// <summary>Where to enter an edge profile so that it continues from the present drive
+    /// balance: the first sample that has moved strictly past it in the edge's direction (the
+    /// end of the profile when it never does — the buffer is already beyond that edge).</summary>
+    private static int EntryIndex(double[] ku, double[] kd, double balance, bool rising)
+    {
+        for (int j = 0; j < ku.Length; j++)
+        {
+            double here = ku[j] - kd[j];
+            if (rising ? here > balance : here < balance) return j;
+        }
+        return ku.Length - 1;
+    }
+
+    private static void WarnIfSlowerThanTheBit(double[] ku, double[] kd, string edge,
+        int samplesPerUi, double dt, List<string> warnings)
+    {
+        double final = ku[^1] - kd[^1];
+        int settle = 0;
+        for (int j = 0; j < ku.Length; j++)
+            if (Math.Abs(ku[j] - kd[j] - final) > SettledBalance) settle = j + 1;
+        if (settle <= samplesPerUi) return;
+        warnings.Add($"The buffer's {edge} edge takes {settle * dt * 1e9:g3} ns to settle, longer "
+            + $"than the {samplesPerUi * dt * 1e9:g3} ns unit interval: an isolated bit does not "
+            + "reach its full level before the next transition, and consecutive edges overlap.");
+    }
+
+    /// <summary>One edge's Ku/Kd from its start until it has settled: the measured two-/one-
+    /// waveform extraction when the model carries waveforms for that edge (over the whole span
+    /// of its tables, and at least one UI), else the [Ramp] line over its own edge time.</summary>
     private static (double[] Ku, double[] Kd, string Source) EdgeProfile(
         IbisModel model, IbisCornerSelection corner, IReadOnlyList<IbisWaveform> waveforms,
         bool rising, double dt, int samplesPerUi, int edge, int from, int to,
@@ -167,7 +237,14 @@ public sealed class IbisDriver : INonlinearDriver
         {
             try
             {
-                var sched = KuKdExtractor.Extract(model, corner, waveforms, rising, dt, samplesPerUi);
+                double span = 0;
+                foreach (var waveform in waveforms)
+                    if (waveform.Rows.Count > 0)
+                        span = Math.Max(span, waveform.Rows.Max(r => r.TimeSeconds)
+                                              - waveform.Rows.Min(r => r.TimeSeconds));
+                int samples = Math.Max(samplesPerUi,
+                    (int)Math.Min(1 << 20, Math.Floor(span / dt * (1 + 1e-12))));
+                var sched = KuKdExtractor.Extract(model, corner, waveforms, rising, dt, samples);
                 warnings.AddRange(sched.Warnings);
                 return (sched.Ku, sched.Kd, sched.Source);
             }
@@ -181,15 +258,15 @@ public sealed class IbisDriver : INonlinearDriver
             }
         }
 
-        var ku = new double[samplesPerUi];
-        var kd = new double[samplesPerUi];
-        for (int s = 0; s < samplesPerUi; s++)
+        var ku = new double[edge];
+        var kd = new double[edge];
+        for (int s = 0; s < edge; s++)
         {
-            double frac = s < edge ? from + (to - from) * (s + 1.0) / edge : to;
+            double frac = from + (to - from) * (s + 1.0) / edge;
             ku[s] = frac;
             kd[s] = 1 - frac;
         }
-        return (ku, kd, "[Ramp] slew (no usable waveform tables)");
+        return (ku, kd, "[Ramp] slew (no usable waveform tables; a straight line over dt/0.6)");
     }
 
     public (double Current, double Conductance) Evaluate(double v, double t)
@@ -251,8 +328,9 @@ public sealed record NonlinearResult(
 /// transfer H(ω) — sampled and inverse-FFT'd, then truncated at a measured tail-energy bound.
 /// The driver node is time-stepped: at each sample the channel presents a Norton equivalent
 /// (its instantaneous admittance y_in[0] + a history current from past node voltages), and the
-/// nonlinear node equation I_drv(V) = y_in[0]·V + hist + C_comp·(V−V₋)/Δt is solved by Newton
-/// on the monotone buffer curves (backward-Euler C_comp — the house transient precedent). The
+/// nonlinear node equation I_drv(V) = y_in[0]·V + hist + I_C is solved by Newton on the
+/// monotone buffer curves, with the die capacitance's current I_C by the trapezoidal rule
+/// (backward Euler made its time constant 12–23 % long at 32 samples per UI). The
 /// receiver waveform is the FIR H convolved with the settled node voltage. Warm-up over several
 /// periods primes the FIR; the last period is the steady state.
 ///
@@ -310,6 +388,13 @@ public static partial class NonlinearLink
         int period = bits.Count * samplesPerUi;
         int total = (warmupPeriods + 1) * period;
         double ccomp = driver.CompCapacitanceFarads;
+        // C_comp by the trapezoidal rule: I_C[n] = (2C/Δt)(V[n] − V[n−1]) − I_C[n−1], second
+        // order in the step. Where the step does not resolve the capacitor's time constant
+        // against the channel (2C/Δt below the channel's instantaneous admittance) the
+        // trapezoidal rule rings sample to sample, and the capacitor is too small to matter at
+        // this step anyway, so backward Euler is kept there.
+        bool trapezoidal = ccomp > 0 && 2 * ccomp / dt >= Math.Abs(g0);
+        double capCurrent = 0;                               // I_C at the previous sample
         var vNode = new double[total];
         for (int n = 0; n < total; n++)
         {
@@ -319,14 +404,17 @@ public static partial class NonlinearLink
             int kMax = Math.Min(memory, n);
             for (int k = 1; k <= kMax; k++) hist += yInFir[k] * vNode[n - k];
 
-            // Newton: g(V) = I_drv(V) − g0·V − hist − C_comp·(V − vPrev)/Δt = 0.
+            // Newton: g(V) = I_drv(V) − g0·V − hist − I_C(V) = 0.
             double v = vPrev;
             bool converged = false;
             for (int iter = 0; iter < 60; iter++)
             {
                 var (idrv, gdrv) = driver.Evaluate(v, tSchedule);
-                double gv = idrv - g0 * v - hist - ccomp * (v - vPrev) / dt;
-                double slope = gdrv - g0 - ccomp / dt;
+                double iCap = trapezoidal
+                    ? 2 * ccomp * (v - vPrev) / dt - capCurrent
+                    : ccomp * (v - vPrev) / dt;
+                double gv = idrv - g0 * v - hist - iCap;
+                double slope = gdrv - g0 - (trapezoidal ? 2 : 1) * ccomp / dt;
                 if (slope == 0) break;
                 double step = gv / slope;
                 v -= step;
@@ -336,6 +424,7 @@ public static partial class NonlinearLink
                 throw new InvalidOperationException(
                     $"The nonlinear driver Newton solve did not converge at sample {n} "
                     + "(a non-monotone V-I table or a degenerate channel admittance).");
+            if (trapezoidal) capCurrent = 2 * ccomp * (v - vPrev) / dt - capCurrent;
             vNode[n] = v;
         }
 

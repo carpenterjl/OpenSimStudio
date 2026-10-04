@@ -22,7 +22,19 @@ internal sealed class PwlTable
         if (table.Count == 0) return new PwlTable(Array.Empty<double>(), Array.Empty<double>());
         var pts = table.Select(r => (V: r.VoltageVolts, I: r.CurrentAmps.At(corner) ?? 0))
                        .OrderBy(p => p.V).ToArray();
-        return new PwlTable(pts.Select(p => p.V).ToArray(), pts.Select(p => p.I).ToArray());
+        // Two rows at ONE voltage have no slope between them: the segment's conductance is
+        // 0/0 or ±∞, and it then surfaces as a "singular" or "stalled" Newton step that blames
+        // the table's sign convention. The first row at each voltage is kept (the sort is
+        // stable); the parser warns about the others.
+        var v = new List<double>(pts.Length);
+        var i = new List<double>(pts.Length);
+        foreach (var p in pts)
+        {
+            if (v.Count > 0 && p.V - v[^1] <= 1e-12 * Math.Max(1.0, Math.Abs(p.V))) continue;
+            v.Add(p.V);
+            i.Add(p.I);
+        }
+        return new PwlTable(v.ToArray(), i.ToArray());
     }
 
     /// <summary>True when the table is absent — an unpopulated keyword contributes no current.</summary>

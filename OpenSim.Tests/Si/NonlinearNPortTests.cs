@@ -238,9 +238,12 @@ dV/dt_f     0.5/0.1n     0.5/0.1n     0.5/0.1n
         // buffer drives line 0 while line 1 sits quiet behind its own buffer, and the victim
         // must pick up crosstalk — computed in the SAME nonlinear solve, so the victim's
         // clamps see the coupled energy rather than a linear superposition of it.
+        // Two-UI holds: the fixture's ramp (0.1 ns for 20–80 %, so 0.167 ns for the whole
+        // swing) is longer than its 0.128 ns unit interval, and since Fix 14 an edge is no
+        // longer sped up to fit the bit — on 1010 the buffer never reaches its levels.
         const int spui = 32, periodSamples = 32 * 4;
         const double dt = 4e-12;
-        var bits = new[] { true, false, true, false };
+        var bits = new[] { true, true, false, false };
         var quiet = new[] { false, false, false, false };
         var model = new IbisParser().Parse(ClampedIbis).Model("DRV");
         var network = new MtlNetwork(new[]

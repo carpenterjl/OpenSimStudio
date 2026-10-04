@@ -219,9 +219,11 @@ public class KuKdExtractorTests
 
         Assert.Contains("[Ramp]", source);
 
-        // Reproduce the trapezoid independently and compare through the public evaluator.
-        double swing = Vcc, slew = 1.65 / 0.5e-9;
-        int edge = Math.Clamp((int)Math.Round(swing / slew / dt), 2, spui);
+        // Reproduce the ramp independently and compare through the public evaluator. The
+        // ramp's dV is the 20 %–80 % part of the swing, so the whole swing takes dt / 0.6 =
+        // 0.833 ns: 13 samples. (This used to restate the implementation's Vcc / slew = 1 ns,
+        // which is the defect Fix 14 removed.)
+        int edge = Math.Max(2, (int)Math.Round(0.5e-9 / 0.6 / dt));
         for (int b = 0; b < 2; b++)
         {
             int target = b == 0 ? 1 : 0, prev = b == 0 ? 0 : 1;

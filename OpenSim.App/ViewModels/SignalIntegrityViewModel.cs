@@ -652,7 +652,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
         EyeResult = $"IBIS eye ({model.Name}, {IbisCorner}) at {BitRateGbps:g3} Gb/s: "
             + $"{EyeMetrics(eye)} ({note})";
         SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
-            + " Nonlinear IBIS driver (V-I tables, C_comp backward-Euler) into "
+            + " Nonlinear IBIS driver (V-I tables; C_comp and the load capacitance carried in "
+            + "the channel reduction; edges on the continuous timeline) into "
             + (lines > 1
                 ? $"the {lines}-line coupled channel (matrix FIR, all lines solved together). "
                 : "the single-line channel FIR. ")

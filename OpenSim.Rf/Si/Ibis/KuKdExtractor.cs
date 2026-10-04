@@ -73,6 +73,13 @@ public static class KuKdExtractor
         double vPc = model.PowerClampRailAt(corner);
         bool ecl = model.IsEcl;
         double cComp = model.CComp.At(corner) ?? 0;
+        // An open-drain (or open-source) buffer has ONE switching stage, so one unknown: the
+        // first waveform determines it, and nothing is assumed.
+        bool singleStage = pu.IsEmpty != pd.IsEmpty;
+        if (pu.IsEmpty && pd.IsEmpty)
+            throw new InvalidOperationException(
+                "The model has neither a [Pullup] nor a [Pulldown] table, so there is no "
+                + "switching stage to extract a schedule for.");
 
         var ku = new double[sampleCount];
         var kd = new double[sampleCount];
@@ -118,7 +125,16 @@ public static class KuKdExtractor
             }
 
             double kuN, kdN;
-            if (waveforms.Count == 2)
+            if (singleStage)
+            {
+                double stage = pu.IsEmpty ? b[0] : a[0];
+                double previous = n > 0 ? (pu.IsEmpty ? kd[n - 1] : ku[n - 1]) : 0;
+                double k = Math.Abs(stage) <= 1e-30 ? previous : r[0] / stage;
+                // The absent stage's coefficient multiplies an empty table; it is set to the
+                // complement so the drive balance Ku − Kd still describes the edge.
+                (kuN, kdN) = pu.IsEmpty ? (1 - k, k) : (k, 1 - k);
+            }
+            else if (waveforms.Count == 2)
             {
                 double det = a[0] * b[1] - a[1] * b[0];
                 double scale = Math.Max(Math.Abs(a[0] * b[1]), Math.Abs(a[1] * b[0]));
@@ -162,7 +178,10 @@ public static class KuKdExtractor
                 + "are used AS EXTRACTED rather than clamped, so the inconsistency stays "
                 + "visible in the result.");
 
-        string source = waveforms.Count == 2
+        string source = singleStage
+            ? $"single-stage extraction ({(pu.IsEmpty ? "pull-down" : "pull-up")} only) from the "
+              + $"{(rising ? "rising" : "falling")} edge's {waveforms[0].RFixtureOhms:g3} Ω fixture"
+            : waveforms.Count == 2
             ? $"two-waveform extraction from the {(rising ? "rising" : "falling")} edge's "
               + $"{waveforms[0].RFixtureOhms:g3} Ω and {waveforms[1].RFixtureOhms:g3} Ω fixtures"
             : $"one-waveform extraction from the {(rising ? "rising" : "falling")} edge's "

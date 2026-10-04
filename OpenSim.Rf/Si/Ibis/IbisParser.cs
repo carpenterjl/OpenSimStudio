@@ -214,7 +214,8 @@ public sealed class IbisParser
                 if (keyLower == "dv/dt_f") { model.RampFall = ParseRampEdge(value, line); continue; }
                 if (keyLower is "r_load")
                 {
-                    NoteSkipped($"{key} in [Ramp] (the ramp slew is used as declared)");
+                    NoteSkipped($"{key} in [Ramp] (the edge time is the ramp's dt / 0.6, which "
+                        + "does not depend on the load)");
                     continue;
                 }
             }
@@ -230,6 +231,13 @@ public sealed class IbisParser
                     Section.GndClamp => model.GndClamp,
                     _ => model.PowerClamp,
                 };
+                if (target.Any(row => row.VoltageVolts == v))
+                {
+                    warnings.Add($"IBIS: model '{model.Name}' — [{section}] has a second row at "
+                        + $"{v:g6} V (line {lineNo + 1}); the first is kept. Two rows at one "
+                        + "voltage leave the table's slope undefined there.");
+                    continue;
+                }
                 target.Add(new IbisIvRow(v, c));
                 continue;
             }

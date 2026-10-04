@@ -34,6 +34,19 @@ public static partial class NonlinearLink
     /// <para>The reference conductance appears on both sides and cancels identically; it exists
     /// only to keep the reduction well-conditioned at DC and at degenerate lengths.</para>
     ///
+    /// <para><b>Port capacitance.</b> Every element's C_comp (a driver's die capacitance, a
+    /// receiver's load capacitance) is a LINEAR shunt at its port, so it belongs to the linear
+    /// part: it is added to the reduction, Z′ = (Z⁻¹ + Y_C)⁻¹, and the time stepping never
+    /// integrates it separately. Y_C is the TRAPEZOIDAL-rule capacitor on this sampling grid,
+    /// (2C/Δt)·j·tan(ωΔt/2) — jωC to second order in ωΔt — and not jωC itself: a continuous
+    /// capacitor's response is not band-limited, so sampling it to Nyquist leaves a
+    /// discontinuity there and a slowly decaying, non-causal FIR (measured: 8191 taps and a
+    /// 1.6 % error until the warm-up outlasted them). The trapezoidal form is periodic in
+    /// frequency and causal in time, and being solved together with the line it has none of
+    /// the sample-to-sample ringing the trapezoidal rule shows when stepped explicitly.
+    /// It used to be stepped by backward Euler, which is first order: at 32 samples per UI a
+    /// 5 pF load's time constant came out 12–23 % long.</para>
+    ///
     /// <para>Crosstalk is not a separate mechanism here: the off-diagonal entries of z carry it,
     /// so a quiet victim's clamps respond to the aggressor's coupled energy in the same solve.
     /// That is what the linear engine could already do and the scalar nonlinear one could
@@ -78,6 +91,14 @@ public static partial class NonlinearLink
         var spectra = new Complex[ports * ports][];
         for (int e = 0; e < spectra.Length; e++) spectra[e] = new Complex[fft];
 
+        var capacitance = new double[ports];
+        bool anyCapacitance = false;
+        for (int p = 0; p < ports; p++)
+        {
+            capacitance[p] = Math.Max(0, elements[p].CompCapacitanceFarads);
+            anyCapacitance |= capacitance[p] > 0;
+        }
+
         int half = fft / 2;
         var slots = new Complex[half + 1][];
         try
@@ -88,8 +109,28 @@ public static partial class NonlinearLink
                     double f = m / (fft * dt);
                     var z = network.TransferImpedance(f, referenceSiemens);
                     var flat = new Complex[ports * ports];
-                    for (int i = 0; i < ports; i++)
-                        for (int j = 0; j < ports; j++) flat[i * ports + j] = z[i, j];
+                    if (anyCapacitance && m > 0)
+                    {
+                        // Z′ = (Z⁻¹ + Y_C)⁻¹ = (I + Z·Y_C)⁻¹ Z, column by column, with the
+                        // trapezoidal capacitor Y_C = j·(2C/Δt)·tan(ωΔt/2).
+                        double omega = 2 / dt * Math.Tan(Math.PI * f * dt);
+                        var system = new ComplexDenseMatrix(ports, ports);
+                        for (int i = 0; i < ports; i++)
+                            for (int j = 0; j < ports; j++)
+                                system[i, j] = (i == j ? Complex.One : Complex.Zero)
+                                    + z[i, j] * new Complex(0, omega * capacitance[j]);
+                        var lu = ComplexLu.Factor(system, 1);
+                        var column = new Complex[ports];
+                        for (int j = 0; j < ports; j++)
+                        {
+                            for (int i = 0; i < ports; i++) column[i] = z[i, j];
+                            var solved = lu.Solve(column);
+                            for (int i = 0; i < ports; i++) flat[i * ports + j] = solved[i];
+                        }
+                    }
+                    else
+                        for (int i = 0; i < ports; i++)
+                            for (int j = 0; j < ports; j++) flat[i * ports + j] = z[i, j];
                     slots[m] = flat;                     // ordered slot — bitwise at any DOP
                 });
         }
@@ -128,6 +169,7 @@ public static partial class NonlinearLink
         var pivot = new int[ports];
         var trial = new double[ports];
         // The port "source" current the channel sees: element current + the reference term.
+        // (No capacitor current: the port capacitances are inside z.)
         var driveHistory = new double[ports][];
         for (int p = 0; p < ports; p++) driveHistory[p] = new double[total];
 
@@ -162,9 +204,7 @@ public static partial class NonlinearLink
             for (int i = 0; i < ports; i++)
             {
                 var (cur, _) = elements[i].Evaluate(v[i], t);
-                double cComp = elements[i].CompCapacitanceFarads;
-                double icap = cComp > 0 ? -cComp * (v[i] - vPrev[i]) / dt : 0;
-                driveHistory[i][step_n] = cur + icap + referenceSiemens * v[i];
+                driveHistory[i][step_n] = cur + referenceSiemens * v[i];
                 history[i][step_n] = v[i];
             }
             Array.Copy(v, vPrev, ports);
@@ -202,9 +242,7 @@ public static partial class NonlinearLink
             for (int j = 0; j < ports; j++)
             {
                 var (cur, _) = elements[j].Evaluate(x[j], t);
-                double cComp = elements[j].CompCapacitanceFarads;
-                double icap = cComp > 0 ? -cComp * (x[j] - vPrev[j]) / dt : 0;
-                portCurrent[j] = cur + icap + g * x[j];
+                portCurrent[j] = cur + g * x[j];
             }
             double norm = 0;
             for (int i = 0; i < ports; i++)
@@ -223,13 +261,12 @@ public static partial class NonlinearLink
         {
             if (norm0 < 1e-12) return;
 
-            // Jacobian: I − z0·(diag(dI/dV) + g·I), with C_comp's backward-Euler conductance.
+            // Jacobian: I − z0·(diag(dI/dV) + g·I).
             // Each port's conductance is evaluated ONCE and reused down its column.
             for (int j = 0; j < ports; j++)
             {
                 var (_, cond) = elements[j].Evaluate(v[j], t);
-                double cComp = elements[j].CompCapacitanceFarads;
-                portConductance[j] = cond - (cComp > 0 ? cComp / dt : 0) + g;
+                portConductance[j] = cond + g;
             }
             for (int i = 0; i < ports; i++)
                 for (int j = 0; j < ports; j++)

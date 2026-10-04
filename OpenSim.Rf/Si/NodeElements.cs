@@ -15,8 +15,8 @@ public sealed class LinearLoadElement : INonlinearDriver
     private readonly double _g;
 
     /// <param name="loadOhms">Shunt resistance; <see cref="double.PositiveInfinity"/> for an open.</param>
-    /// <param name="loadCapacitanceFarads">Shunt capacitance, integrated by backward Euler at
-    /// the node exactly as a driver's C_comp is.</param>
+    /// <param name="loadCapacitanceFarads">Shunt capacitance, carried in the channel reduction
+    /// exactly as a driver's C_comp is.</param>
     public LinearLoadElement(double loadOhms, double loadCapacitanceFarads = 0)
     {
         if (loadOhms <= 0)

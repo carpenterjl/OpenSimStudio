@@ -34,7 +34,9 @@ public readonly record struct IbisVtRow(double TimeSeconds, IbisCorner VoltageVo
 public sealed record IbisWaveform(
     double RFixtureOhms, IbisCorner VFixture, IReadOnlyList<IbisVtRow> Rows);
 
-/// <summary>One [Ramp] edge as Δv over Δt (min/typ/max); the slew rate is Δv/Δt.</summary>
+/// <summary>One [Ramp] edge as Δv over Δt (min/typ/max); the slew rate is Δv/Δt. By the
+/// keyword's definition Δv is the 20 % to 80 % part of the swing into the ramp's test load,
+/// so the straight line through it covers the whole swing in Δt / 0.6.</summary>
 public sealed record IbisRampEdge(IbisCorner DeltaVolts, IbisCorner DeltaSeconds);
 
 /// <summary>The [Ramp] block: the rising and falling edge slews (the fallback switching
@@ -129,8 +131,16 @@ public sealed record IbisModel
     public double PowerClampRailAt(IbisCornerSelection corner) =>
         PowerClampReference?.At(corner) ?? PullupRailAt(corner);
 
-    /// <summary>True when this model has the pull-up + pull-down output stage of a driver.</summary>
-    public bool IsOutput => Pullup.Count > 0 && Pulldown.Count > 0;
+    /// <summary>True when this model has the output stage of a driver: a pull-up and a
+    /// pull-down, or — for an Open_* model type (open drain, open sink, open source), which
+    /// has only one switching device by construction — the one table it carries.</summary>
+    public bool IsOutput =>
+        (Pullup.Count > 0 && Pulldown.Count > 0)
+        || (IsOpenStage && (Pullup.Count > 0 || Pulldown.Count > 0));
+
+    /// <summary>True for the open-drain / open-sink / open-source model types, whose output
+    /// stage is a single switching device working against an external termination.</summary>
+    public bool IsOpenStage => ModelType.Contains("open", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>True when [Model_type] names a buffer that can DRIVE (Output, 3-state,
     /// Open_drain/sink/source, I/O and their variants). An empty or unrecognized type is
