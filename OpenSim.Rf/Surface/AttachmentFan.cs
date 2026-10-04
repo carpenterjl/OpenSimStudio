@@ -28,7 +28,17 @@ namespace OpenSim.Rf.Surface;
 /// absorbs it (βᵢ = ±θᵢ/(2π·lᵢ)), its normal flux vanishes on the neighbor's other
 /// edges (the (p⁻ − r) form is edge-parallel there), and its ordinary −l/A divergence
 /// is where the junction current's charge finally accumulates — standard pair-moment
-/// machinery, no line charges, no new singular families.
+/// machinery, no new singular families.
+///
+/// <para><b>What is NOT matched.</b> The TOTAL flux through each outer edge is matched;
+/// its DISTRIBUTION along the edge is not. D leaves with normal component
+/// h/(2π(h² + x²)) (h the vertex's distance to the edge, x the position along it) and
+/// the half-RWG takes it up uniformly, θ/(2πl). The difference is a line charge of zero
+/// net along each outer edge, and it is omitted. On an equilateral wedge the two differ
+/// by +10 % at the foot and −17 % at the ends; on a strongly skewed fan (a vertex
+/// snapped close to a neighbour) by ±80 %. <see cref="OuterFluxMismatch"/> reports the
+/// worst case so a caller can warn; the Hwu–Wilton–Rao junction basis would remove
+/// it and is not implemented.</para>
 /// </summary>
 internal sealed class AttachmentFan
 {
@@ -47,6 +57,14 @@ internal sealed class AttachmentFan
 
     private readonly double _radiusFloor;
 
+    /// <summary>Gauss order per direction on each cell of the disc potential's inner rule,
+    /// and the cell-size-to-distance ratio above which a cell is split. Measured against a
+    /// rule of order 8 at ratio 0.5: the potential agrees to better than 0.1 % anywhere in
+    /// the fan for a/b from 0.3 down to 0.001.</summary>
+    internal const int PotentialOrder = 4;
+    internal const double PotentialResolve = 1.0;
+    private const int MaxSplitDepth = 60;
+
     public int Vertex { get; }
     public Vector3D VertexPosition { get; }
     public IReadOnlyList<Wedge> Wedges { get; }
@@ -54,6 +72,12 @@ internal sealed class AttachmentFan
     /// <summary>Total wedge angle — 2π at an interior vertex; Σθᵢ/2π = 1 is the
     /// discrete junction-continuity identity the tests assert.</summary>
     public double TotalAngle { get; }
+
+    /// <summary>The worst relative difference, over every outer edge, between the disc's
+    /// normal flux density and the uniform density of the half-RWG that takes it up (see
+    /// the class remarks). 0.17 on an equilateral fan; above about 0.5 the fan is skewed
+    /// enough that the omitted line charge is no longer a small correction.</summary>
+    public double OuterFluxMismatch { get; }
 
     public AttachmentFan(SurfaceStructure surface, int vertex, double radiusFloor)
     {
@@ -66,6 +90,7 @@ internal sealed class AttachmentFan
 
         var wedges = new List<Wedge>();
         double total = 0;
+        double mismatch = 0;
         for (int t = 0; t < surface.Triangles.Count; t++)
         {
             var (a, b, c) = surface.Triangles[t];
@@ -92,6 +117,21 @@ internal sealed class AttachmentFan
             int neighborOpposite = rwg.PlusTriangle == t ? rwg.MinusOpposite : rwg.PlusOpposite;
             double sign = rwg.PlusTriangle == t ? 1.0 : -1.0;
             double gamma = angle / (2 * Math.PI * rwg.Length);
+
+            // D·n along the outer edge against the half-RWG's uniform θ/(2πl): the ratio is
+            // h·l/(θ(h² + x²)), largest at the foot of the perpendicular (or the nearer end
+            // when the foot falls outside the edge) and smallest at the farther end.
+            var along = (surface.Vertices[w] - surface.Vertices[u]) * (1.0 / rwg.Length);
+            double xu = Vector3D.Dot(du, along), xw = Vector3D.Dot(dw, along);
+            double h = (du - along * xu).Length;
+            if (h > 0 && angle > 0)
+            {
+                double nearest = xu * xw <= 0 ? 0 : Math.Min(Math.Abs(xu), Math.Abs(xw));
+                double farthest = Math.Max(Math.Abs(xu), Math.Abs(xw));
+                double high = h * rwg.Length / (angle * (h * h + nearest * nearest));
+                double low = h * rwg.Length / (angle * (h * h + farthest * farthest));
+                mismatch = Math.Max(mismatch, Math.Max(Math.Abs(high - 1), Math.Abs(low - 1)));
+            }
             wedges.Add(new Wedge(t, edge, angle, gamma, sign, neighbor, neighborOpposite));
         }
         if (wedges.Count == 0)
@@ -109,6 +149,7 @@ internal sealed class AttachmentFan
                 + $"{total / (2 * Math.PI):g4}). Move the attachment inside the sheet.");
         Wedges = wedges;
         TotalAngle = total;
+        OuterFluxMismatch = mismatch;
     }
 
     /// <summary>The junction surface current's in-plane spectral transform per unit
@@ -239,54 +280,111 @@ internal sealed class AttachmentFan
 
     /// <summary>As above, against any radial G_A source (<see cref="IRadialGaKernel"/>) — the
     /// only kernel fact the disc integral uses. The single-slab overload delegates here, so the
-    /// shipped probe path runs this exact code.</summary>
+    /// shipped probe path runs this exact code.
+    ///
+    /// <para>The source is smooth in the ray variables but the kernel is not: at a test point
+    /// inside or beside the fan it peaks to 1/a over a region of size a. Each wedge's (s, t)
+    /// square is therefore split, longer physical side first, until every cell is no larger
+    /// than its reduced distance to the test point; a far test point takes one cell per
+    /// wedge. (The earlier fixed 6 × 6 rule per wedge was 9 % high to 19 % low inside the fan
+    /// once a/b fell below 0.03.)</para></summary>
     public (Complex Ax, Complex Ay) DiscPotential(IRadialGaKernel kernel,
-        SurfaceStructure surface, Vector3D r)
+        SurfaceStructure surface, Vector3D r) =>
+        DiscPotential(kernel, surface, r, PotentialOrder, PotentialResolve);
+
+    internal (Complex Ax, Complex Ay) DiscPotential(IRadialGaKernel kernel,
+        SurfaceStructure surface, Vector3D r, int order, double resolve)
     {
         Complex ax = Complex.Zero, ay = Complex.Zero;
-        var (nodes, weights) = GaussLegendre.Rule(6, 0, 1);
+        var (nodes, weights) = GaussLegendre.Rule(order, 0, 1);
         foreach (var wedge in Wedges)
         {
             var (a, b, c) = surface.Triangles[wedge.Triangle];
             var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
             var eu = surface.Vertices[u] - VertexPosition;
             var ew = surface.Vertices[w] - VertexPosition;
-            // Ray form r′ = v + t·e(s), e(s) = (1−s)eu + s·ew, t ∈ (0,1]:
-            // dS′ = t·|e × (ew−eu)| ds dt and D = e/(t·|e|²)/2π ⇒ the t cancels in
-            // D dS′ = e(s)·|e×(ew−eu)|/(2π|e(s)|²) ds dt.
-            double cross = Vector3D.Cross(eu, ew - eu).Length;
-            for (int si = 0; si < nodes.Length; si++)
-            {
-                var e = eu * (1 - nodes[si]) + ew * nodes[si];
-                double scale = cross / (2 * Math.PI * e.LengthSquared);
-                double wx = e.X * scale, wy = e.Y * scale;
-                for (int ti = 0; ti < nodes.Length; ti++)
-                {
-                    var rPrime = VertexPosition + e * nodes[ti];
-                    double dx = r.X - rPrime.X, dy = r.Y - rPrime.Y;
-                    double rhoEff = Math.Sqrt(dx * dx + dy * dy + _radiusFloor * _radiusFloor);
-                    var gA = kernel.EvaluateGa(rhoEff);
-                    var weight = weights[si] * weights[ti] * gA;
-                    ax += wx * weight;
-                    ay += wy * weight;
-                }
-            }
+            WedgePotential(kernel, eu, ew, r, 0, 1, 0, 1, 0, nodes, weights, resolve,
+                ref ax, ref ay);
         }
         return (ax, ay);
     }
 
-    /// <summary>∬ D·D′ G_A — the disc's vector self term (outer in the same ray form,
-    /// panelled by refinement of the radial direction being unnecessary: the measure
-    /// cancellation makes the integrand bounded except G_A's own peak, softened by
-    /// the ρ_eff floor).</summary>
+    /// <summary>One cell [s0, s1] × [t0, t1] of one wedge in the ray form r′ = v + t·e(s),
+    /// e(s) = (1−s)eu + s·ew: dS′ = t·|e × (ew−eu)| ds dt and D = e/(t·|e|²)/2π, so the t
+    /// cancels in D dS′ = e(s)·|e×(ew−eu)|/(2π|e(s)|²) ds dt.</summary>
+    private void WedgePotential(IRadialGaKernel kernel, Vector3D eu, Vector3D ew, Vector3D r,
+        double s0, double s1, double t0, double t1, int depth,
+        double[] nodes, double[] weights, double resolve, ref Complex ax, ref Complex ay)
+    {
+        double sm = 0.5 * (s0 + s1), tm = 0.5 * (t0 + t1);
+        var em = eu * (1 - sm) + ew * sm;
+        double radial = em.Length * (t1 - t0);
+        double arc = (ew - eu).Length * (s1 - s0) * t1;
+        var centre = VertexPosition + em * tm;
+        double cx = r.X - centre.X, cy = r.Y - centre.Y;
+        double distance = Math.Sqrt(cx * cx + cy * cy + _radiusFloor * _radiusFloor);
+        if (Math.Max(radial, arc) > resolve * distance && depth < MaxSplitDepth)
+        {
+            if (radial >= arc)
+            {
+                WedgePotential(kernel, eu, ew, r, s0, s1, t0, tm, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+                WedgePotential(kernel, eu, ew, r, s0, s1, tm, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+            }
+            else
+            {
+                WedgePotential(kernel, eu, ew, r, s0, sm, t0, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+                WedgePotential(kernel, eu, ew, r, sm, s1, t0, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+            }
+            return;
+        }
+
+        double cross = Vector3D.Cross(eu, ew - eu).Length;
+        double cell = (s1 - s0) * (t1 - t0);
+        for (int si = 0; si < nodes.Length; si++)
+        {
+            double sv = s0 + (s1 - s0) * nodes[si];
+            var e = eu * (1 - sv) + ew * sv;
+            double scale = cell * cross / (2 * Math.PI * e.LengthSquared);
+            double wx = e.X * scale, wy = e.Y * scale;
+            for (int ti = 0; ti < nodes.Length; ti++)
+            {
+                var rPrime = VertexPosition + e * (t0 + (t1 - t0) * nodes[ti]);
+                double dx = r.X - rPrime.X, dy = r.Y - rPrime.Y;
+                double rhoEff = Math.Sqrt(dx * dx + dy * dy + _radiusFloor * _radiusFloor);
+                var weight = weights[si] * weights[ti] * kernel.EvaluateGa(rhoEff);
+                ax += wx * weight;
+                ay += wy * weight;
+            }
+        }
+    }
+
+    /// <summary>∬ D·D′ G_A — the disc's vector self term.
+    ///
+    /// <para>The outer rule must NOT share its nodes with the inner one. It once did (the same
+    /// 6 × 6 Gauss points on the same wedge for both integrals), so every node met itself at
+    /// zero separation and contributed G_A(a) = µ₀/(4πa): a term growing as 1/a that the true
+    /// integral, which grows only as ln(1/a), does not contain. It read 1.17× at a/b = 0.03
+    /// and 3.5× at 0.003, and since it is purely reactive the power ledger could not see it —
+    /// it appeared as a series inductance at the junction that grew with the mesh size.</para>
+    ///
+    /// <para>Here the inner integral is <see cref="DiscPotential(IRadialGaKernel, SurfaceStructure, Vector3D)"/>,
+    /// which resolves the kernel's peak around whatever point it is handed, and the outer one
+    /// samples it on panels graded toward the vertex (the potential varies on the scale a
+    /// there, and on the scale of the fan elsewhere). Order 3 on both sides is within 2e-4 of
+    /// order 8 at half the cell ratio for a/b from 0.03 to 0.003, and within the 0.5 % bracket
+    /// of the closed-form circular disc down to a/b = 0.001.</para></summary>
     public Complex DiscSelf(LayeredKernelTable kernel, SurfaceStructure surface) =>
         DiscSelf(new LayeredRadialGaKernel(kernel), surface);
 
     /// <summary>As above, against any radial G_A source.</summary>
-    public Complex DiscSelf(IRadialGaKernel kernel, SurfaceStructure surface)
+    public Complex DiscSelf(IRadialGaKernel kernel, SurfaceStructure surface) =>
+        DiscSelf(kernel, surface, outerOrder: 3, sPanels: 1, innerOrder: 3, PotentialResolve);
+
+    internal Complex DiscSelf(IRadialGaKernel kernel, SurfaceStructure surface,
+        int outerOrder, int sPanels, int innerOrder, double innerResolve)
     {
         Complex sum = Complex.Zero;
-        var (nodes, weights) = GaussLegendre.Rule(6, 0, 1);
+        var (nodes, weights) = GaussLegendre.Rule(outerOrder, 0, 1);
         foreach (var wedge in Wedges)
         {
             var (a, b, c) = surface.Triangles[wedge.Triangle];
@@ -294,17 +392,32 @@ internal sealed class AttachmentFan
             var eu = surface.Vertices[u] - VertexPosition;
             var ew = surface.Vertices[w] - VertexPosition;
             double cross = Vector3D.Cross(eu, ew - eu).Length;
-            for (int si = 0; si < nodes.Length; si++)
-            {
-                var e = eu * (1 - nodes[si]) + ew * nodes[si];
-                double scale = cross / (2 * Math.PI * e.LengthSquared);
-                for (int ti = 0; ti < nodes.Length; ti++)
+
+            // Radial panels: halving toward the vertex until a panel is inside the radius.
+            double reach = Math.Min(eu.Length, ew.Length);
+            var breaks = new List<double> { 1.0 };
+            while (breaks[^1] * reach > _radiusFloor && breaks.Count < MaxSplitDepth)
+                breaks.Add(breaks[^1] / 2);
+            breaks.Add(0.0);
+
+            for (int sp = 0; sp < sPanels; sp++)
+                for (int si = 0; si < nodes.Length; si++)
                 {
-                    var rPrime = VertexPosition + e * nodes[ti];
-                    var (ax, ay) = DiscPotential(kernel, surface, rPrime);
-                    sum += weights[si] * weights[ti] * scale * (e.X * ax + e.Y * ay);
+                    double sv = (sp + nodes[si]) / sPanels;
+                    var e = eu * (1 - sv) + ew * sv;
+                    double scale = cross / (2 * Math.PI * e.LengthSquared) * weights[si] / sPanels;
+                    for (int tp = 0; tp + 1 < breaks.Count; tp++)
+                    {
+                        double tHigh = breaks[tp], tLow = breaks[tp + 1];
+                        for (int ti = 0; ti < nodes.Length; ti++)
+                        {
+                            var rPrime = VertexPosition + e * (tLow + (tHigh - tLow) * nodes[ti]);
+                            var (ax, ay) = DiscPotential(kernel, surface, rPrime,
+                                innerOrder, innerResolve);
+                            sum += weights[ti] * (tHigh - tLow) * scale * (e.X * ax + e.Y * ay);
+                        }
+                    }
                 }
-            }
         }
         return sum;
     }

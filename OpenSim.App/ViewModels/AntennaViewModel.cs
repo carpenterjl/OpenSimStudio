@@ -1634,6 +1634,10 @@ public partial class AntennaViewModel : ObservableObject
                             $"j{Math.Abs(display.InputImpedance.Imaginary):g4} Ω at {FrequencyMHz:g4} MHz " +
                             $"({surface.BasisCount} RWG + {wire.BasisCount} wire unknowns, " +
                             $"{display.IncidenceDegrees:g3}° incidence)";
+            if (display.FanFluxMismatch > OpenSim.Rf.Surface.WireAttachedSolution.SkewedFanThreshold)
+                AntennaResult += $". Warning: the contact point sits close to a neighbouring mesh " +
+                                 $"vertex (junction flux mismatch {display.FanFluxMismatch:P0}); the " +
+                                 "reactance is less reliable — move the contact or change the mesh size";
             AntennaAssumptions = "Assumptions: " + string.Join(" ",
                 OpenSim.Rf.Surface.SurfaceMomSolver.WireAttachedAssumptions);
             _log.Append($"Antenna: {AntennaResult}");

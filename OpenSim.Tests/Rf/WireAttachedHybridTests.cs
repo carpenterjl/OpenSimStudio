@@ -15,21 +15,22 @@ namespace OpenSim.Tests.Rf;
 /// a finite plate. They must agree on the radiation resistance, and the finite plate's remaining
 /// difference must shrink where a discretization difference should.</para>
 ///
-/// <para><b>What is gated as a value and what is gated as a trend, and why.</b> The RESISTANCE is
-/// robust — it is an integral of the whole current distribution, and it lands within a few ohms
-/// of the image-theory answer at every mesh tried. The REACTANCE is not: it is a near-field
-/// quantity concentrated at the contact, and its value carries a ln(mesh/wire radius) term, so it
-/// is only correct once the sheet mesh resolves the region around the wire. That is the same
-/// statement the delta-gap feed already carries in this solver, and it is gated the same way —
-/// as CONVERGENCE toward the reference, measured:</para>
+/// <para><b>What the mesh does and does not move.</b> The resistance is an integral of the whole
+/// current distribution and lands within a few ohms of the image-theory answer at every mesh.
+/// The reactance is a near-field quantity concentrated at the contact, and until Fix 11 it moved
+/// strongly with the sheet mesh (j49.9 at λ/8, j31.5 at λ/12). That was read as a physical
+/// ln(mesh/wire radius) term and gated as "convergence"; it was the junction disc's self term
+/// integrated with coincident nodes, a spurious series inductance growing as mesh²/radius. With
+/// the self term integrated properly, measured (plate 1λ, wire radius λ/2000, infinite-ground
+/// reference 41.2 + j22.0 Ω):</para>
 /// <code>
-///   plate 1λ, wire radius λ/2000, infinite-ground reference 41.2 + j22.0 Ω
-///     mesh λ/8   43.49 + j49.93     P_rad/P_in 1.00198
-///     mesh λ/10  43.32 + j37.98     P_rad/P_in 1.00132
-///     mesh λ/12  43.21 + j31.54     P_rad/P_in 1.00094
-///     mesh λ/16  43.10 + j25.20     P_rad/P_in 1.00054
+///   mesh λ/6   43.80 + j16.97
+///   mesh λ/8   43.41 + j17.09
+///   mesh λ/10  43.27 + j17.14
+///   mesh λ/12  43.19 + j17.20
 /// </code>
-/// <para>— R flat to 0.9%, X marching toward 22 Ω, and the power ledger tightening as it goes.</para>
+/// <para>— flat to 0.25 Ω. The 5 Ω that remains against the infinite ground is the finite plate
+/// (a 1.5λ plate reads 38.5 + j17.9), not the mesh.</para>
 /// </summary>
 public class WireAttachedHybridTests
 {
@@ -205,14 +206,13 @@ public class WireAttachedHybridTests
     }
 
     [Fact]
-    public void RefiningTheSheetMesh_DrivesTheReactanceTowardTheInfiniteGroundValue()
+    public void RefiningTheSheetMesh_DoesNotMoveTheImpedance()
     {
-        // The junction's reactance is a contact-local quantity carrying a ln(mesh/radius) term,
-        // so its VALUE at any one mesh is not the physics — its convergence is. Three meshes at a
-        // fixed plate: the reactance must fall monotonically toward the image-theory reference,
-        // and the resistance must NOT move (it is an integral of the whole current, and a "fix"
-        // that moved it would be describing a different antenna).
-        double referenceX = InfiniteGroundMonopole().Imaginary;
+        // Three meshes at a fixed plate. Neither part may move: the resistance is an integral of
+        // the whole current, and the junction's reactance depends on the wire radius and the
+        // plate, not on the triangles around the contact. Measured j17.09, j17.14, j17.20.
+        // (This test used to require the reactance to FALL monotonically with refinement, from
+        // j49.9 toward the reference. That fall was the defect — see the class remarks.)
         var solver = new SurfaceMomSolver();
         var impedances = new List<Complex>();
         foreach (int divisions in new[] { 8, 10, 12 })
@@ -222,19 +222,16 @@ public class WireAttachedHybridTests
                 .InputImpedance);
         }
 
-        for (int i = 1; i < impedances.Count; i++)
-        {
-            Assert.True(Math.Abs(impedances[i].Imaginary - referenceX)
-                < Math.Abs(impedances[i - 1].Imaginary - referenceX),
-                $"reactance stopped converging at step {i}: "
-                + string.Join(", ", impedances.Select(z => z.ToString())));
-            Assert.True(impedances[i].Imaginary < impedances[i - 1].Imaginary,
-                "the reactance must fall monotonically toward the reference");
-        }
+        string all = string.Join(", ", impedances.Select(z => z.ToString()));
+        double xSpread = impedances.Max(z => z.Imaginary) - impedances.Min(z => z.Imaginary);
+        Assert.True(xSpread < 0.5, $"the reactance moved with the mesh by {xSpread:F2} Ω: {all}");
         // The resistance is the stable half: it moves by under 2% across the same refinement.
         double first = impedances[0].Real, last = impedances[^1].Real;
         Assert.True(Math.Abs(last - first) / first < 0.02,
             $"the resistance moved with the mesh: {first:F3} → {last:F3}");
+        // And the reactance sits within the finite plate's distance of the image-theory value.
+        double referenceX = InfiniteGroundMonopole().Imaginary;
+        Assert.InRange(impedances[^1].Imaginary - referenceX, -7.0, 0.0);
     }
 
     [Theory]

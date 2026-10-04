@@ -12,7 +12,17 @@ namespace OpenSim.Rf.Surface;
 public sealed record WireAttachedSolution(
     double FrequencyHz, Complex InputImpedance,
     Complex[] EdgeCurrents, Complex[] WireCurrents, Complex[] RawEdgeCurrents,
-    double IncidenceDegrees);
+    double IncidenceDegrees)
+{
+    /// <summary>How unevenly the junction's disc current meets the triangles that continue
+    /// it: the worst relative difference between the disc's flux density along a fan outer edge
+    /// and the uniform density the continuation assumes. About 0.17 on a regular mesh; above
+    /// <see cref="SkewedFanThreshold"/> the contact vertex sits close to one of its neighbours
+    /// and the omitted edge line charge is no longer small.</summary>
+    public double FanFluxMismatch { get; init; }
+
+    public const double SkewedFanThreshold = 0.5;
+}
 
 /// <summary>
 /// The wire↔sheet hybrid assembly: a free-space RWG sheet, a thin wire that ENDS on it, and ONE
@@ -55,6 +65,7 @@ public sealed partial class SurfaceMomSolver
         "Free space — no dielectric substrate and no image ground plane; a wire over a substrate is named future work.",
         "The sheet is planar and the wire ends ON one of its interior mesh vertices.",
         "Classical 1/ρ attachment mode at the junction: the wire and disc endpoint deltas cancel exactly — no junction point charge.",
+        "The disc's flux is handed to the surrounding triangles in total, not point by point along each edge; the zero-net line charge this leaves is neglected (small on a regular mesh, reported when the contact vertex is badly placed).",
         "Thin-wire reduced kernel R = √(d² + a²); the attachment is refused below 10° of incidence, where the wire's tube overlaps the sheet.",
         "Delta-gap voltage feed at one wire basis (feeding the attachment basis is the monopole-over-a-finite-plate case)."
     };
@@ -119,7 +130,10 @@ public sealed partial class SurfaceMomSolver
         for (int b = 0; b < nWire; b++) wireCurrents[b] = x[wireIndex[b]];
 
         return new WireAttachedSolution(frequencyHz, gapVolts / feedCurrent,
-            edgeCurrents, wireCurrents, rawEdgeCurrents, junction.IncidenceDegrees);
+            edgeCurrents, wireCurrents, rawEdgeCurrents, junction.IncidenceDegrees)
+        {
+            FanFluxMismatch = junction.Fan.OuterFluxMismatch
+        };
     }
 
     /// <summary>The hybrid system itself, exposed so its complex symmetry can be gated directly:
