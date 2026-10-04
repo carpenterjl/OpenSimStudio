@@ -66,7 +66,9 @@ public sealed record BoardCoupledResult(
 /// jogs; the long run is the coupled line), requires the runs to be mutually parallel and
 /// laterally separated, and reads off the uniform coupled cross-section: trace widths from
 /// the draws, lateral centers from the perpendicular offsets, the substrate from the
-/// dielectric gap adjacent to the trace layer. The coupled SECTION length is the runs'
+/// reference planes the board actually has above and below the runs
+/// (<see cref="BoardReferencePlanes"/>: microstrip, embedded microstrip or stripline — or
+/// a refusal when no layer has copper under them). The coupled SECTION length is the runs'
 /// longitudinal overlap; the non-overlapping tails are reported as leads. The cross-section
 /// feeds the same <see cref="RlgcExtractor"/> / <see cref="MtlNetwork"/> the wizard uses —
 /// so a synthetic two-trace board round-trips to the wizard geometry's RLGC exactly.
@@ -178,12 +180,15 @@ public static class BoardCoupledExtractor
                     + "coplanar coupled line.");
         }
 
-        // The substrate: the dielectric gap adjacent to the trace layer (below preferred).
-        var substrate = ResolveSubstrate(board, layer, options, out string dielectricNote);
+        // The substrate: the dielectric between the runs and the reference plane(s) the
+        // board has above and below them.
+        var ownIslands = nets.SelectMany(n => n.Islands).ToList();
+        var substrate = BoardReferencePlanes.Resolve(board, layer,
+            runs.Select(r => new TraceCenterline(layer, r.A, r.B, r.Width)).ToList(),
+            ownIslands, options, out string planeFailure);
         if (substrate is null)
-            return BoardCoupledResult.Failure(
-                $"no dielectric gap is adjacent to the trace layer L{layer} — a microstrip "
-                + "cross-section needs a reference plane above or below the traces.");
+            return BoardCoupledResult.Failure(planeFailure);
+        string dielectricNote = substrate.Note;
 
         double copperThickness = StackupOf(board, options).CopperThicknessOf(layer);
         var traces = new TraceCrossSection[runs.Length];
@@ -192,7 +197,11 @@ public static class BoardCoupledExtractor
                 copperThickness, options.ConductivitySiemensPerMeter);
 
         CoupledLineCrossSection section;
-        try { section = new CoupledLineCrossSection(substrate, 0, traces); }
+        try
+        {
+            section = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface,
+                traces, substrate.TopGround);
+        }
         catch (ArgumentException ex) { return BoardCoupledResult.Failure(ex.Message); }
 
         var rlgc = RlgcExtractor.Extract(section);
@@ -233,7 +242,8 @@ public static class BoardCoupledExtractor
             var leadRlgc = new RlgcResult[runs.Length];
             for (int i = 0; i < runs.Length; i++)
             {
-                var single = new CoupledLineCrossSection(substrate, 0, new[] { traces[i] with { CenterMeters = 0 } });
+                var single = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface,
+                    new[] { traces[i] with { CenterMeters = 0 } }, substrate.TopGround);
                 leadRlgc[i] = RlgcExtractor.Extract(single);
             }
             var sections = new List<MtlSectionBase>();
@@ -316,38 +326,4 @@ public static class BoardCoupledExtractor
         options.Stackup ?? BoardStackup.FromBoard(board, options.DefaultBoardThicknessMeters,
             options.DefaultEpsR, options.DefaultTanD, options.CopperThicknessMeters);
 
-    /// <summary>The single-slab substrate beneath (or above) the trace layer, read from
-    /// <see cref="StackupOf"/>. Returns null when the trace layer has no adjacent dielectric
-    /// gap (a one-layer board has no reference plane).
-    /// Internal — <see cref="TraceCapacitanceExtractor"/> shares this exact gap-below-then-above
-    /// rule; a second implementation would drift.</summary>
-    internal static LayeredStackup? ResolveSubstrate(PcbBoard board, int layer,
-        BoardCoupledOptions options, out string note)
-    {
-        var file = board.Stackup;
-        int numGaps = file is not null && file.DielectricGapThicknesses.Count > 0
-            ? file.DielectricGapThicknesses.Count
-            : Math.Max(0, MaxCopperOrder(board) - 1);
-
-        // Gap k sits between copper orders k and k+1. Prefer the gap BELOW the trace
-        // layer (k = layer); fall back to the gap above (k = layer − 1).
-        int gap;
-        bool below = false;
-        if (layer >= 1 && layer <= numGaps) { gap = layer; below = true; }
-        else if (layer - 1 >= 1 && layer - 1 <= numGaps) { gap = layer - 1; }
-        else { note = ""; return null; }
-
-        var stackup = StackupOf(board, options);
-        double h = stackup.GapThicknessOf(gap);
-        double epsR = stackup.PermittivityOf(gap), tanD = stackup.LossTangentOf(gap);
-
-        note = $"Substrate = the dielectric gap {(below ? "below" : "above")} trace layer L{layer} "
-            + $"({stackup.Source}: εr {epsR:g3}, tanδ {tanD:g3}, "
-            + $"h {h * 1e3:g3} mm); the reference plane is the adjacent copper layer, and coupling "
-            + "to any other layer is out of scope by construction.";
-        return new LayeredStackup(new[] { new LayeredStackup.Layer(epsR, tanD, h) });
-    }
-
-    private static int MaxCopperOrder(PcbBoard board) =>
-        board.Islands.Count > 0 ? board.Islands.Max(i => i.LayerOrder) : 1;
 }

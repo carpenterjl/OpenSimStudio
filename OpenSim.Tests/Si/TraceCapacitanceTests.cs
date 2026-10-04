@@ -28,11 +28,15 @@ public class TraceCapacitanceTests
 
     /// <summary>A one-net board: given centerlines (all inside one large island per layer),
     /// optional pads, and a per-gap stackup. The island is the bounding box per layer —
-    /// containment is all <see cref="OpenSim.Pcb.Inductance.NetTraceExtractor"/> needs.</summary>
+    /// containment is all <see cref="OpenSim.Pcb.Inductance.NetTraceExtractor"/> needs.
+    /// <paramref name="planeLayers"/> carry a solid copper plane of ANOTHER net — the
+    /// reference the extractor now looks for instead of assuming; the default is one
+    /// plane on the layer below the net's lowest.</summary>
     private static (PcbBoard Board, CopperNet Net) OneNetBoard(
         IReadOnlyList<TraceCenterline> centerlines,
         IReadOnlyList<CopperPad>? pads = null,
-        PcbStackupSettings? stackup = null)
+        PcbStackupSettings? stackup = null,
+        int[]? planeLayers = null)
     {
         var islands = new List<CopperIsland>();
         int id = 0;
@@ -44,10 +48,14 @@ public class TraceCapacitanceTests
                 Rect(-100e-3, -100e-3, 100e-3, 100e-3)));
         }
         var net = new CopperNet(1, islands) { Name = "NET1" };
+        var boardIslands = new List<CopperIsland>(islands);
+        foreach (int layer in planeLayers ?? new[] { islands.Max(i => i.LayerOrder) + 1 })
+            boardIslands.Add(new CopperIsland(id++, layer, $"L{layer} plane",
+                Rect(-150e-3, -150e-3, 150e-3, 150e-3)));
         var board = new PcbBoard
         {
             Outline = Array.Empty<Polygon2>(),
-            Islands = islands,
+            Islands = boardIslands,
             Pads = pads ?? Array.Empty<CopperPad>(),
             Vias = Array.Empty<Via>(),
             Nets = new[] { net },
@@ -163,30 +171,121 @@ public class TraceCapacitanceTests
             $"multi-width total {result.TotalFarads:g9} vs Σ C'(w)·l {want:g9}");
     }
 
-    [Fact]
-    public void MultiLayerNet_UsesEachLayersOwnGap()
+    /// <summary>C′ [F/m] of one trace of width <paramref name="width"/> in a hand-built
+    /// cross-section — the reference each board case below must reproduce exactly.</summary>
+    private static double HandBuiltCPerMeter(double width, int metalInterface, bool topGround,
+        params (double EpsR, double TanD, double H)[] layersGroundUp)
     {
-        // Segments on L1 (gap 0: 0.2 mm, εr 4.4) and L2 (gap 1: 0.4 mm, εr 3.0) — the
-        // per-layer substrate rule, each arm priced over ITS adjacent dielectric.
-        var stackup = new PcbStackupSettings
+        var stack = new LayeredStackup(layersGroundUp
+            .Select(l => new LayeredStackup.Layer(l.EpsR, l.TanD, l.H)).ToArray());
+        var options = new BoardCoupledOptions();
+        var section = new CoupledLineCrossSection(stack, metalInterface, new[]
         {
-            DielectricGapThicknesses = new[] { H, 0.4e-3 },
-            DielectricGapPermittivities = new[] { EpsR, 3.0 },
-            DielectricGapLossTangents = new[] { TanD, 0.01 },
-        };
+            new TraceCrossSection(0, width, options.CopperThicknessMeters,
+                options.ConductivitySiemensPerMeter),
+        }, topGround);
+        return RlgcExtractor.Extract(section).CapacitanceFaradsPerMeter[0, 0];
+    }
+
+    // Gap 1 (L1–L2): 0.2 mm, εr 4.4. Gap 2 (L2–L3): 0.4 mm, εr 3.0.
+    private static readonly PcbStackupSettings ThreeLayer = new()
+    {
+        DielectricGapThicknesses = new[] { H, 0.4e-3 },
+        DielectricGapPermittivities = new[] { EpsR, 3.0 },
+        DielectricGapLossTangents = new[] { TanD, 0.01 },
+    };
+
+    [Fact]
+    public void InnerLayerTrace_BetweenTwoPlanes_IsAStripline()
+    {
+        // L2 trace with planes on L1 and L3. This used to be priced as a microstrip on
+        // the gap below with AIR above (the test that stood here pinned exactly that).
+        var (board, net) = OneNetBoard(new[]
+        {
+            new TraceCenterline(2, new Point2(0, 5e-3), new Point2(30e-3, 5e-3), W),
+        }, stackup: ThreeLayer, planeLayers: new[] { 1, 3 });
+        var result = TraceCapacitanceExtractor.Extract(board, net);
+
+        Assert.Null(result.FailureReason);
+        // Ground-up: gap 2 under the trace, gap 1 over it, a plane closing each end.
+        double stripline = HandBuiltCPerMeter(W, 0, topGround: true, (3.0, 0.01, 0.4e-3), (EpsR, TanD, H));
+        double want = stripline * 30e-3;
+        Assert.True(Math.Abs(result.TotalFarads - want) <= 1e-12 * want,
+            $"inner-layer total {result.TotalFarads:g9} vs stripline C'·l {want:g9}");
+        Assert.Contains(result.Assumptions, a => a.StartsWith("Stripline: trace layer L2") && a.Contains("L1 above") && a.Contains("L3 below"));
+
+        // The size of the old error: the microstrip-on-the-gap-below number is far too low.
+        double oldMicrostrip = WizardCPerMeter(W, epsR: 3.0, tanD: 0.01, h: 0.4e-3);
+        Assert.True(stripline > 2 * oldMicrostrip,
+            $"stripline C' {stripline:g4} F/m should be more than twice the old {oldMicrostrip:g4} F/m");
+        // And it is at least the two parallel plates.
+        Assert.True(stripline > Epsilon0 * W * (3.0 / 0.4e-3 + EpsR / H));
+    }
+
+    [Fact]
+    public void MultiLayerNet_EachLayerIsSolvedAgainstTheBoardsRealPlane()
+    {
+        // The net routes on L1 and L2; the only plane is L3. L1 is then a microstrip over
+        // BOTH gaps (the net's own L2 copper is not its reference), and L2 is an embedded
+        // microstrip: gap 2 to the plane, gap 1 as dielectric cover, air above.
         var (board, net) = OneNetBoard(new[]
         {
             new TraceCenterline(1, new Point2(0, 0), new Point2(25e-3, 0), W),
             new TraceCenterline(2, new Point2(0, 5e-3), new Point2(30e-3, 5e-3), W),
-        }, stackup: stackup);
+        }, stackup: ThreeLayer);
         var result = TraceCapacitanceExtractor.Extract(board, net);
 
         Assert.Null(result.FailureReason);
-        // L2's preferred gap is BELOW it: index layer−1 = 1 (0.4 mm, εr 3.0).
-        double want = WizardCPerMeter(W) * 25e-3
-                    + WizardCPerMeter(W, epsR: 3.0, tanD: 0.01, h: 0.4e-3) * 30e-3;
+        var layers = new[] { (3.0, 0.01, 0.4e-3), (EpsR, TanD, H) };       // ground-up from L3
+        double want = HandBuiltCPerMeter(W, 1, topGround: false, layers) * 25e-3
+                    + HandBuiltCPerMeter(W, 0, topGround: false, layers) * 30e-3;
         Assert.True(Math.Abs(result.TotalFarads - want) <= 1e-12 * want,
-            $"multi-layer total {result.TotalFarads:g9} vs per-gap sum {want:g9}");
+            $"multi-layer total {result.TotalFarads:g9} vs per-layer sum {want:g9}");
+        Assert.Contains(result.Assumptions, a => a.Contains("Reference plane L3 below trace layer L1"));
+        Assert.Contains(result.Assumptions, a => a.Contains("Reference plane L3 below trace layer L2") && a.Contains("embedded microstrip"));
+    }
+
+    [Fact]
+    public void BottomLayerTrace_UnderAPlane_IsTheMirroredMicrostrip()
+    {
+        var (board, net) = OneNetBoard(new[]
+        {
+            new TraceCenterline(3, new Point2(0, 0), new Point2(20e-3, 0), W),
+        }, stackup: ThreeLayer, planeLayers: new[] { 2 });
+        var result = TraceCapacitanceExtractor.Extract(board, net);
+
+        Assert.Null(result.FailureReason);
+        double want = WizardCPerMeter(W, epsR: 3.0, tanD: 0.01, h: 0.4e-3) * 20e-3;
+        Assert.True(Math.Abs(result.TotalFarads - want) <= 1e-12 * want);
+        Assert.Contains(result.Assumptions, a => a.Contains("the dielectric gap above trace layer L3") && a.Contains("L2"));
+    }
+
+    [Fact]
+    public void NoCopperUnderTheTrace_IsRefused_WithTheCoverageFound()
+    {
+        // A two-layer board whose L2 "plane" stops well short of the trace: 40 mm of trace,
+        // copper under the first 10 mm only.
+        var trace = new TraceCenterline(1, new Point2(0, 0), new Point2(40e-3, 0), W);
+        var own = new CopperIsland(0, 1, "L1", Rect(-1e-3, -1e-3, 41e-3, 1e-3));
+        var partial = new CopperIsland(1, 2, "L2", Rect(-5e-3, -5e-3, 10e-3, 5e-3));
+        var net = new CopperNet(1, new[] { own }) { Name = "NET1" };
+        var board = new PcbBoard
+        {
+            Outline = Array.Empty<Polygon2>(),
+            Islands = new[] { own, partial },
+            Pads = Array.Empty<CopperPad>(),
+            Vias = Array.Empty<Via>(),
+            Nets = new[] { net },
+            Layers = Array.Empty<BoardLayer>(),
+            Warnings = Array.Empty<string>(),
+            TraceCenterlines = new[] { trace },
+        };
+        var result = TraceCapacitanceExtractor.Extract(board, net);
+
+        Assert.NotNull(result.FailureReason);
+        Assert.Contains("no copper layer has copper under the traces on L1", result.FailureReason);
+        Assert.Contains("L2: 2", result.FailureReason);            // about a quarter covered
+        Assert.Contains("reference plane", result.FailureReason);
     }
 
     [Fact]

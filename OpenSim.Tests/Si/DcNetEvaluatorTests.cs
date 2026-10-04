@@ -41,6 +41,10 @@ public class DcNetEvaluatorTests
     private static TraceCenterline Trace(double x1, double y1, double x2, double y2) =>
         new(1, new Point2(x1 * 1e-3, y1 * 1e-3), new Point2(x2 * 1e-3, y2 * 1e-3), W);
 
+    /// <summary>The L2 reference plane (copper of no listed net) the capacitance needs.</summary>
+    private static CopperIsland GroundPlane(int index) =>
+        new(index, 2, "L2", Rect(-200e-3, -200e-3, 200e-3, 200e-3));
+
     private static PcbStackupSettings Stackup() => new()
     {
         DielectricGapThicknesses = new[] { H },
@@ -67,7 +71,7 @@ public class DcNetEvaluatorTests
         return new PcbBoard
         {
             Outline = Array.Empty<Polygon2>(),
-            Islands = islands,
+            Islands = islands.Append(GroundPlane(5)).ToArray(),
             Pads = new[]
             {
                 Pad(0, 0, "H5", "1", "HDR-SMD"), Pad(40, 0, "U1", "3", "SOT-223"), Pad(20, 0), // SIG1 (+via landing)
@@ -231,7 +235,7 @@ public class DcNetEvaluatorTests
         var board = new PcbBoard
         {
             Outline = Array.Empty<Polygon2>(),
-            Islands = new[] { island },
+            Islands = new[] { island, GroundPlane(1) },
             Pads = new[] { Pad(0, 0, "U1", "1", "IC"), Pad(40, 0, "U1", "2", "IC"), Pad(80, 40, "U3", "1", "IC") },
             Vias = Array.Empty<Via>(),
             Nets = new[] { new CopperNet(1, new[] { island }) { Name = "SIG1" } },

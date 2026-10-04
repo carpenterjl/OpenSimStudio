@@ -48,10 +48,11 @@ public sealed record TraceCapacitanceResult(
 /// (a current path — branches pruned because they carry no current) this consumes every
 /// centerline of the net, bends and branches included, and totals
 /// C = Σ over (layer, width) groups of C′(width, gap) × summed length. C′ comes from the
-/// SAME 1-conductor <see cref="RlgcExtractor"/> BEM the SI wizard uses (the layered
-/// electrostatic image series — the dielectric gap's real εr, tanδ and thickness), and
-/// the substrate resolution is the S6 rule verbatim (gap below the trace layer preferred,
-/// then above). Translational invariance of the uniform cross-section makes bends exact
+/// SAME 1-conductor <see cref="RlgcExtractor"/> BEM the SI wizard uses, over the
+/// cross-section the board really has on that layer: <see cref="BoardReferencePlanes"/>
+/// finds the copper planes above and below the traces, so an inner layer between two
+/// planes is priced as a stripline, not as a microstrip with air above (the S6 coupled
+/// extraction shares the same resolver). Translational invariance of the uniform cross-section makes bends exact
 /// for same-width runs; corner effects are ignored and SAID so (the PEEC arcs-as-chords
 /// class of assumption).
 ///
@@ -83,16 +84,17 @@ public static class TraceCapacitanceExtractor
         var traces = TraceChainBuilder.Deduplicate(centerlines.ToList(), tolerance);
         int duplicatesDropped = centerlines.Count - traces.Count;
 
-        // One substrate per layer that carries copper (the S6 gap rule, shared code).
-        var substrates = new Dictionary<int, (LayeredStackup Stackup, string Note)>();
+        // One cross-section per layer that carries traces: the reference planes the board
+        // has under and over this net's traces on that layer (shared with S6).
+        var substrates = new Dictionary<int, BoardSubstrate>();
         foreach (int layer in traces.Select(t => t.LayerOrder).Distinct().OrderBy(l => l))
         {
-            var stackup = BoardCoupledExtractor.ResolveSubstrate(board, layer, options, out string note);
-            if (stackup is null)
-                return TraceCapacitanceResult.Failure(
-                    $"no dielectric gap is adjacent to trace layer L{layer} — capacitance "
-                    + "to ground needs a reference plane above or below the traces.");
-            substrates[layer] = (stackup, note);
+            var substrate = BoardReferencePlanes.Resolve(board, layer,
+                traces.Where(t => t.LayerOrder == layer).ToList(), net.Islands, options,
+                out string planeFailure);
+            if (substrate is null)
+                return TraceCapacitanceResult.Failure($"net '{net.Label}': {planeFailure}");
+            substrates[layer] = substrate;
         }
 
         // Group the routed length by (layer, width): C′ is a pure cross-section property,
@@ -116,9 +118,10 @@ public static class TraceCapacitanceExtractor
             Parallel.For(0, groupKeys.Count, i =>
             {
                 var (layer, width) = groupKeys[i];
-                var section = new CoupledLineCrossSection(substrates[layer].Stackup, 0,
+                var substrate = substrates[layer];
+                var section = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface,
                     new[] { new TraceCrossSection(0, width, boardStackup.CopperThicknessOf(layer),
-                        options.ConductivitySiemensPerMeter) });
+                        options.ConductivitySiemensPerMeter) }, substrate.TopGround);
                 var rlgc = RlgcExtractor.Extract(section);
                 groups[i] = new TraceCapacitanceGroup(layer, width, groupLength[(layer, width)],
                     rlgc.CapacitanceFaradsPerMeter[0, 0], rlgc.AirCapacitanceFaradsPerMeter[0, 0]);
@@ -132,24 +135,26 @@ public static class TraceCapacitanceExtractor
         double traceFarads = 0;
         foreach (var g in groups) traceFarads += g.TotalFarads;
 
-        // Pads: parallel-plate ε₀εr·A/h over the pad layer's gap. No fringing — a stated
-        // lower bound (fringing only adds). Pads on a layer without an adjacent gap are
-        // counted and NAMED, never silently dropped (the Gerber warn-not-silent rule).
+        // Pads: parallel-plate ε₀εr·A/h to each reference plane of the pad's layer (in
+        // series through the gaps in between). No fringing — a stated lower bound (fringing
+        // only adds). Pads on a layer with no plane under them are counted and NAMED, never
+        // silently dropped (the Gerber warn-not-silent rule).
         double padFarads = 0;
         int padCount = 0, padsSkipped = 0;
-        foreach (var pad in NetTraceExtractor.PadsForNet(board, net))
+        var netPads = NetTraceExtractor.PadsForNet(board, net);
+        foreach (var pad in netPads)
         {
             if (!substrates.TryGetValue(pad.LayerOrder, out var sub))
             {
-                var stackup = BoardCoupledExtractor.ResolveSubstrate(board, pad.LayerOrder,
-                    options, out string note);
-                if (stackup is null) { padsSkipped++; continue; }
-                sub = (stackup, note);
+                // A layer the net has pads on but no traces: the planes under those pads.
+                var resolved = BoardReferencePlanes.Resolve(board, pad.LayerOrder,
+                    netPads.Where(p => p.LayerOrder == pad.LayerOrder).Select(p => p.Center).ToList(),
+                    net.Islands, options, out _);
+                if (resolved is null) { padsSkipped++; continue; }
+                sub = resolved;
                 substrates[pad.LayerOrder] = sub;
             }
-            var gap = sub.Stackup.Layers[0];
-            padFarads += Epsilon0 * gap.RelativePermittivity * pad.Shape.Area()
-                / gap.ThicknessMeters;
+            padFarads += sub.PlateCapacitancePerSquareMeter * pad.Shape.Area();
             padCount++;
         }
 
@@ -160,18 +165,19 @@ public static class TraceCapacitanceExtractor
                 + "invariance of the uniform cross-section; corner/junction effects and via "
                 + "barrels are ignored (stated, like PEEC's arcs-as-chords). Branches DO "
                 + "count: all of the net's copper holds charge.",
-            "The net is modeled alone over an infinite reference plane at the adjacent "
-                + "stackup gap — other nets are absent, so shielding by neighbours is not "
-                + "modeled and the number is the isolated-net capacitance to ground.",
-            $"Pads add parallel-plate ε₀εr·A/h terms ({padCount} pads) — no fringing, a "
-                + "stated lower bound for the pad contribution.",
+            "The net is modeled alone against the reference plane(s) found above and below "
+                + "each trace layer, taken as infinite and solid — other nets are absent, so "
+                + "shielding by neighbours is not modeled and the number is the isolated-net "
+                + "capacitance to those planes.",
+            $"Pads add parallel-plate ε₀εr·A/h terms to each plane ({padCount} pads) — no "
+                + "fringing, a stated lower bound for the pad contribution.",
         };
         if (duplicatesDropped > 0)
             assumptions.Add($"{duplicatesDropped} coincident duplicate draw(s) collapsed "
                 + "(wider wins) so redrawn copper is not double-counted.");
         if (padsSkipped > 0)
-            assumptions.Add($"{padsSkipped} pad(s) sit on a layer with no adjacent "
-                + "dielectric gap and are OMITTED from the pad term.");
+            assumptions.Add($"{padsSkipped} pad(s) sit on a layer with no reference plane "
+                + "under or over them and are OMITTED from the pad term.");
         foreach (var layer in substrates.Keys.OrderBy(l => l))
             assumptions.Add(substrates[layer].Note);
 

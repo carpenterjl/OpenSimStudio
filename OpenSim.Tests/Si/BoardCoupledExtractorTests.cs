@@ -46,6 +46,8 @@ public class BoardCoupledExtractorTests
             nets.Add(new CopperNet(idx + 1, new[] { island }) { Name = $"NET{idx + 1}" });
             idx++;
         }
+        // The L2 reference plane (another net's copper): the extractor looks for it now.
+        islands.Add(new CopperIsland(idx, 2, "L2", Rect(-100e-3, -100e-3, 100e-3, 100e-3)));
 
         var board = new PcbBoard
         {

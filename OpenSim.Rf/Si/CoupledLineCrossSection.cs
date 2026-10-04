@@ -21,7 +21,8 @@ public sealed record TraceCrossSection(
 /// The 2D cross-section of an N-conductor coupled transmission line over a grounded
 /// dielectric stackup: every trace lies at the SAME interface of the stackup (the
 /// coplanar-metal contract the whole layered track shares — a microstrip when the metal
-/// is on top, an embedded line when it is buried under cover layers). Broadside-coupled
+/// is on top, an embedded line when it is buried under cover layers, a stripline when
+/// <see cref="TopGround"/> closes the stack with a second plane). Broadside-coupled
 /// conductors on different layers are a typed failure by construction: they cannot be
 /// expressed. The lateral axis is x; the stackup provides ε per layer and the PEC ground.
 /// </summary>
@@ -37,13 +38,27 @@ public sealed record CoupledLineCrossSection
     /// pair is one conductor drawn twice, and the BEM would return a garbage C matrix.</summary>
     public IReadOnlyList<TraceCrossSection> Traces { get; }
 
+    /// <summary>
+    /// True when a second infinite PEC plane closes the TOP of the stackup (a stripline:
+    /// the conductors lie between two reference planes). False is the open stack — free
+    /// space above the top layer — that <see cref="LayeredStackup"/> describes by itself.
+    /// The layers above <see cref="MetalInterface"/> are then the dielectric between the
+    /// conductors and the upper plane, so the metal cannot be at the stack top.
+    /// </summary>
+    public bool TopGround { get; }
+
     public CoupledLineCrossSection(LayeredStackup stackup, int metalInterface,
-        IReadOnlyList<TraceCrossSection> traces)
+        IReadOnlyList<TraceCrossSection> traces, bool topGround = false)
     {
         if (metalInterface < 0 || metalInterface >= stackup.Layers.Count)
             throw new ArgumentOutOfRangeException(nameof(metalInterface),
                 $"Metal interface {metalInterface} is out of range for a "
                 + $"{stackup.Layers.Count}-layer stackup.");
+        if (topGround && metalInterface == stackup.Layers.Count - 1)
+            throw new ArgumentException(
+                "With a top ground plane the conductors need at least one dielectric layer "
+                + "above them — metal at the stack top would lie on the plane itself.",
+                nameof(metalInterface));
         if (traces is null || traces.Count == 0)
             throw new ArgumentException("At least one trace is required.", nameof(traces));
         foreach (var trace in traces)
@@ -69,5 +84,6 @@ public sealed record CoupledLineCrossSection
         Stackup = stackup;
         MetalInterface = metalInterface;
         Traces = sorted;
+        TopGround = topGround;
     }
 }

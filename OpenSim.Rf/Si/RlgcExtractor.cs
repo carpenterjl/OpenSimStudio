@@ -69,6 +69,21 @@ public sealed record RlgcResult(
 /// D·u·arctan(u/D) — no near-singular quadrature anywhere, and the D → 0 primary is the
 /// classic u²(2ln|u|−3)/4 self-term. The matrix is symmetric by construction.</para>
 ///
+/// <para><b>Spectral kernel.</b> The image series is used for the single grounded slab
+/// (the microstrip the wizard builds — its arithmetic is untouched). A section with
+/// <see cref="CoupledLineCrossSection.TopGround"/> (a stripline) has no image series worth
+/// truncating — two PEC planes reflect every image for ever — and a several-layer open
+/// stack can defeat the truncation (the residual monopole does not close). For both, the
+/// kernel is taken in the spectral domain instead, where it is one line: the line charge
+/// sees the stack below and the stack above in parallel, G̃(k) = 1/(Y↓(k) + Y↑(k)), each Y
+/// the electrostatic input admittance of its layers (ε·k·coth(kh) for one layer on a PEC,
+/// k for the open half-space; the usual tanh recursion through several). The log singularity is removed in
+/// closed form — G̃ → 1/(ε₀k(ε↓+ε↑)) at large k, and (1 − e^{−kd})/k transforms to
+/// ½ln((x²+d²)/x²), which the SAME G₂ four-corner moments integrate exactly — and the
+/// remainder, bounded at k = 0 and decaying like e^{−2k·h_min}, is integrated numerically
+/// with the Galerkin panel integrals done analytically under the k integral
+/// (∫e^{ikx}dx over a panel = w·sinc(kw/2)·e^{ikx_c}). Same panels, same solve.</para>
+///
 /// <para><b>Matrices.</b> Column k of Maxwell C: conductor k at 1 V, others at 0 →
 /// panel charges → per-conductor totals. C_air repeats the solve on an all-air stackup
 /// of identical geometry (its image series collapses to primary + ground image — gated).
@@ -99,13 +114,24 @@ public static class RlgcExtractor
         var panels = BuildPanels(section.Traces, panelsPerTrace);
 
         // Dielectric solve (complex ε carries tanδ) and the air solve for L.
-        var images = StaticImages(section.Stackup, section.MetalInterface);
-        var cComplex = SolveCapacitance(panels, n, images);
-
         var airLayers = section.Stackup.Layers
             .Select(l => new LayeredStackup.Layer(1.0, 0.0, l.ThicknessMeters)).ToArray();
-        var airImages = StaticImages(new LayeredStackup(airLayers), section.MetalInterface);
-        var cAirComplex = SolveCapacitance(panels, n, airImages);
+        var airStackup = new LayeredStackup(airLayers);
+        Complex[,] cComplex, cAirComplex;
+        if (section.TopGround || section.Stackup.Layers.Count > 1)
+        {
+            cComplex = SolveCapacitance(panels, n, SpectralMoments(
+                panels, section.Stackup, section.MetalInterface, section.TopGround));
+            cAirComplex = SolveCapacitance(panels, n, SpectralMoments(
+                panels, airStackup, section.MetalInterface, section.TopGround));
+        }
+        else
+        {
+            cComplex = SolveCapacitance(panels, n,
+                ImageMoments(panels, StaticImages(section.Stackup, section.MetalInterface)));
+            cAirComplex = SolveCapacitance(panels, n,
+                ImageMoments(panels, StaticImages(airStackup, section.MetalInterface)));
+        }
 
         var c = new double[n, n];
         var cLoss = new double[n, n];
@@ -143,6 +169,10 @@ public static class RlgcExtractor
             "All conductors are coplanar at one stackup interface; broadside coupling "
                 + "across layers is out of scope by construction.",
         };
+        if (section.TopGround)
+            assumptions.Add("The conductors lie between TWO infinite reference planes (stripline): "
+                + "the static kernel is the two-ground spectral Green's function over the "
+                + "dielectric layers on each side; both planes are lossless returns.");
         return new RlgcResult(n, c, cLoss, cAir, inductance, rDc, rSkin, assumptions);
     }
 
@@ -222,9 +252,8 @@ public static class RlgcExtractor
         return panels;
     }
 
-    /// <summary>The Maxwell capacitance matrix: Galerkin BEM with unit-potential drives.
-    /// One factorization serves all N right-hand sides.</summary>
-    private static Complex[,] SolveCapacitance(List<Panel> panels, int conductors,
+    /// <summary>The Galerkin potential matrix from the image series (open-top stacks).</summary>
+    private static ComplexDenseMatrix ImageMoments(List<Panel> panels,
         IReadOnlyList<MultiLayerImages.Image> images)
     {
         int m = panels.Count;
@@ -241,7 +270,163 @@ public static class RlgcExtractor
                 matrix[a, b] = value;
                 matrix[b, a] = value;
             }
+        return matrix;
+    }
 
+    /// <summary>Decay exponent at which the two-ground remainder integral is cut: the
+    /// integrand falls like e^{−2k·h_min}, so 2k·h_min = 36 leaves e^{−36} ≈ 2e−16.</summary>
+    private const double SpectralCutExponent = 36;
+
+    /// <summary>Gauss–Legendre points per π of the fastest oscillation k·(section span).</summary>
+    private const int SpectralPointsPerPanel = 6;
+
+    /// <summary>
+    /// The Galerkin potential matrix from the spectral kernel — see the class remarks.
+    /// <paramref name="stackup"/> lists the layers ground-up; those up to
+    /// <paramref name="metalInterface"/> lie below the conductors and end on the PEC
+    /// ground, the rest lie above and end on a second PEC (<paramref name="topGround"/>)
+    /// or on the open half-space. Deterministic at any degree of parallelism: every entry
+    /// is its own sequential sum over the k nodes.
+    /// </summary>
+    private static ComplexDenseMatrix SpectralMoments(List<Panel> panels,
+        LayeredStackup stackup, int metalInterface, bool topGround)
+    {
+        int m = panels.Count;
+        var layers = stackup.Layers;
+        var below = layers[metalInterface];
+        var above = metalInterface + 1 < layers.Count ? layers[metalInterface + 1] : null;
+        Complex epsSum = below.ComplexPermittivity + (above?.ComplexPermittivity ?? Complex.One);
+        // The remainder decays like e^{−2k·h} of the thinnest layer touching the metal
+        // (an open half-space directly above contributes none).
+        double hMin = Math.Min(below.ThicknessMeters, above?.ThicknessMeters ?? double.MaxValue);
+        double d = 2 * hMin;                                      // regularizing depth
+
+        // k nodes: [0, kMax] in panels no longer than π / span (and no fewer than 48).
+        double span = panels.Max(p => p.End) - panels.Min(p => p.Start);
+        double kMax = SpectralCutExponent / (2 * hMin);
+        int kPanels = Math.Max(48, (int)Math.Ceiling(kMax * span / Math.PI));
+        var (unitNodes, unitWeights) = GaussLegendre.Rule(SpectralPointsPerPanel, 0, 1);
+        int nk = kPanels * SpectralPointsPerPanel;
+        var weightRe = new double[nk];
+        var weightIm = new double[nk];
+        var kNodes = new double[nk];
+        double dk = kMax / kPanels;
+        for (int q = 0; q < kPanels; q++)
+            for (int g = 0; g < SpectralPointsPerPanel; g++)
+            {
+                int j = q * SpectralPointsPerPanel + g;
+                double k = (q + unitNodes[g]) * dk;
+                kNodes[j] = k;
+                // Remainder D(k) = G̃(k) − (1 − e^{−kd}) / (ε₀·k·(ε↓+ε↑)), in 1/ε₀ units.
+                Complex green = 1.0 / (AdmittanceDown(layers, metalInterface, k)
+                                       + AdmittanceUp(layers, metalInterface, k, topGround));
+                double x = k * d;                                 // 1 − e^{−x} without cancellation
+                double oneMinusExp = x < 1e-5 ? x * (1 - x / 2 + x * x / 6) : 1 - Math.Exp(-x);
+                Complex remainder = green - oneMinusExp / k / epsSum;
+                Complex weighted = remainder * (unitWeights[g] * dk / (Math.PI * Epsilon0));
+                weightRe[j] = weighted.Real;
+                weightIm[j] = weighted.Imaginary;
+            }
+
+        // Panel transforms A_a(k) = w·sinc(kw/2)·e^{ik·x_c}, as cos/sin rows over k.
+        var cos = new double[m][];
+        var sin = new double[m][];
+        Parallel.For(0, m, a =>
+        {
+            double width = panels[a].Width, center = 0.5 * (panels[a].Start + panels[a].End);
+            var c = new double[nk];
+            var s = new double[nk];
+            for (int j = 0; j < nk; j++)
+            {
+                double half = 0.5 * kNodes[j] * width;
+                double amplitude = width * (half < 1e-8 ? 1 - half * half / 6 : Math.Sin(half) / half);
+                c[j] = amplitude * Math.Cos(kNodes[j] * center);
+                s[j] = amplitude * Math.Sin(kNodes[j] * center);
+            }
+            cos[a] = c;
+            sin[a] = s;
+        });
+
+        var matrix = new ComplexDenseMatrix(m, m);
+        var rows = new Complex[m][];
+        Complex singularScale = 1.0 / (Math.PI * Epsilon0 * epsSum);
+        Parallel.For(0, m, a =>
+        {
+            var row = new Complex[m];
+            double[] ca = cos[a], sa = sin[a];
+            for (int b = a; b < m; b++)
+            {
+                double[] cb = cos[b], sb = sin[b];
+                double re = 0, im = 0;
+                for (int j = 0; j < nk; j++)
+                {
+                    double t = ca[j] * cb[j] + sa[j] * sb[j];     // Re(A_a·conj(A_b))
+                    re += weightRe[j] * t;
+                    im += weightIm[j] * t;
+                }
+                row[b] = new Complex(re, im)
+                    + singularScale * (LogMoment(panels[a], panels[b], d)
+                                       - LogMoment(panels[a], panels[b], 0));
+            }
+            rows[a] = row;
+        });
+        for (int a = 0; a < m; a++)
+            for (int b = a; b < m; b++)
+            {
+                matrix[a, b] = rows[a][b];
+                matrix[b, a] = rows[a][b];
+            }
+        return matrix;
+    }
+
+    /// <summary>
+    /// Electrostatic input admittance (per ε₀) at spatial frequency k, looking DOWN from
+    /// interface <paramref name="metalInterface"/>: ε·k·coth(kh) for layer 0 on the PEC,
+    /// then Y ← ε·k·(Y + ε·k·tanh(kh)) / (ε·k + Y·tanh(kh)) through each layer up to the metal.
+    /// </summary>
+    private static Complex AdmittanceDown(IReadOnlyList<LayeredStackup.Layer> layers,
+        int metalInterface, double k)
+    {
+        Complex y = layers[0].ComplexPermittivity * k / Math.Tanh(k * layers[0].ThicknessMeters);
+        for (int i = 1; i <= metalInterface; i++)
+            y = Through(layers[i], y, k);
+        return y;
+    }
+
+    /// <summary>The same looking UP: the layers above the metal, ending on a PEC
+    /// (<paramref name="topGround"/>) or on the open half-space, whose admittance is k.</summary>
+    private static Complex AdmittanceUp(IReadOnlyList<LayeredStackup.Layer> layers,
+        int metalInterface, double k, bool topGround)
+    {
+        int i = layers.Count - 1;
+        Complex y;
+        if (topGround)
+        {
+            y = layers[i].ComplexPermittivity * k / Math.Tanh(k * layers[i].ThicknessMeters);
+            i--;
+        }
+        else
+        {
+            y = k;
+        }
+        for (; i > metalInterface; i--)
+            y = Through(layers[i], y, k);
+        return y;
+    }
+
+    private static Complex Through(LayeredStackup.Layer layer, Complex load, double k)
+    {
+        Complex ek = layer.ComplexPermittivity * k;
+        double t = Math.Tanh(k * layer.ThicknessMeters);
+        return ek * (load + ek * t) / (ek + load * t);
+    }
+
+    /// <summary>The Maxwell capacitance matrix: Galerkin BEM with unit-potential drives.
+    /// One factorization serves all N right-hand sides.</summary>
+    private static Complex[,] SolveCapacitance(List<Panel> panels, int conductors,
+        ComplexDenseMatrix matrix)
+    {
+        int m = panels.Count;
         var lu = ComplexLu.Factor(matrix);
         var result = new Complex[conductors, conductors];
         for (int k = 0; k < conductors; k++)

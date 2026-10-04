@@ -193,6 +193,11 @@ public static class ProximityExtractor
         if (minFrequencyHz <= 0 || maxFrequencyHz <= minFrequencyHz)
             throw new ArgumentException("Need 0 < minFrequency < maxFrequency.", nameof(minFrequencyHz));
         if (points < 2) throw new ArgumentOutOfRangeException(nameof(points), "At least 2 samples.");
+        if (section.TopGround)
+            throw new NotSupportedException(
+                "The proximity-effect filament solve models ONE return plane; this section lies "
+                + "between two (stripline), and the upper plane's return current would be missing. "
+                + "Turn Proximity effect off for an inner-layer section.");
 
         int n = section.Traces.Count;
         double metalZ = section.Stackup.InterfaceHeights()[section.MetalInterface];
