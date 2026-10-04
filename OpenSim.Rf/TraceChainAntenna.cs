@@ -44,4 +44,100 @@ public static class TraceChainAntenna
         }
         return wires;
     }
+
+    /// <summary>
+    /// The WHOLE net as wires, branches included — the RF counterpart of
+    /// <see cref="FromChain"/>. A pad-to-pad path with its side branches pruned is exact for
+    /// a DC or low-frequency current (a dead-end branch carries none), and wrong for an
+    /// antenna: an open stub carries a standing wave, loads the structure, and radiates. An
+    /// inverted-F reduced to the path between its two farthest pads has lost its radiating
+    /// arm.
+    ///
+    /// <para>Every graph segment becomes one wire between its two JUNCTION positions (the
+    /// graph's own clustering, so wires that meet share a point exactly). If the net's
+    /// centerlines fall into several disconnected pieces, one is kept — the piece nearest
+    /// <paramref name="keepNear"/> when given, else the longest — and the rest is reported,
+    /// never silently dropped.</para>
+    /// </summary>
+    public static TraceGraphAntenna FromGraph(TraceGraphResult graph, Vector3D? keepNear = null)
+    {
+        if (graph.Segments is null || graph.Ends is null || graph.Junctions is null)
+            throw new ArgumentException(
+                graph.FailureReason ?? "The trace graph is empty.", nameof(graph));
+        int count = graph.Segments.Count;
+        if (count == 0)
+            throw new ArgumentException("The trace graph is empty.", nameof(graph));
+
+        // Connected pieces over the junctions.
+        var parent = new int[graph.Junctions.Count];
+        for (int i = 0; i < parent.Length; i++) parent[i] = i;
+        int Find(int j)
+        {
+            while (parent[j] != j) j = parent[j] = parent[parent[j]];
+            return j;
+        }
+        foreach (var (a, b) in graph.Ends) parent[Find(a)] = Find(b);
+
+        var lengthOf = new Dictionary<int, double>();
+        var nearestOf = new Dictionary<int, double>();
+        for (int i = 0; i < count; i++)
+        {
+            int piece = Find(graph.Ends[i].Start);
+            var a = graph.Junctions[graph.Ends[i].Start].Position;
+            var b = graph.Junctions[graph.Ends[i].End].Position;
+            lengthOf[piece] = lengthOf.GetValueOrDefault(piece) + (b - a).Length;
+            if (keepNear is { } near)
+            {
+                double distance = Math.Min((a - near).Length, (b - near).Length);
+                nearestOf[piece] = Math.Min(nearestOf.GetValueOrDefault(piece, double.MaxValue), distance);
+            }
+        }
+        int kept = keepNear is null
+            ? lengthOf.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).First().Key
+            : nearestOf.OrderBy(kv => kv.Value).ThenBy(kv => kv.Key).First().Key;
+
+        var wires = new List<WireSegment>(count);
+        var degree = new Dictionary<int, int>();
+        int droppedSegments = 0;
+        double droppedLength = 0;
+        for (int i = 0; i < count; i++)
+        {
+            var (ja, jb) = graph.Ends[i];
+            var a = graph.Junctions[ja].Position;
+            var b = graph.Junctions[jb].Position;
+            double length = (b - a).Length;
+            if (Find(ja) != kept)
+            {
+                droppedSegments++;
+                droppedLength += length;
+                continue;
+            }
+            if (length <= 0) continue;
+            var segment = graph.Segments[i];
+            double radius = segment.Profile == SegmentProfile.Bar
+                ? segment.Width / 4
+                : segment.Width / 2;
+            wires.Add(new WireSegment(a, b, radius));
+            degree[ja] = degree.GetValueOrDefault(ja) + 1;
+            degree[jb] = degree.GetValueOrDefault(jb) + 1;
+        }
+        if (wires.Count == 0)
+            throw new ArgumentException("The trace graph has no segment of positive length.", nameof(graph));
+
+        return new TraceGraphAntenna(wires,
+            BranchNodes: degree.Count(kv => kv.Value >= 3),
+            OpenEnds: degree.Count(kv => kv.Value == 1),
+            DroppedPieces: lengthOf.Count - 1,
+            DroppedSegments: droppedSegments,
+            DroppedLengthMeters: droppedLength);
+    }
 }
+
+/// <summary>A net's whole trace graph as antenna wires (<see cref="TraceChainAntenna.FromGraph"/>),
+/// with what the topology was and what, if anything, was left out.</summary>
+/// <param name="BranchNodes">Nodes where three or more wires meet.</param>
+/// <param name="OpenEnds">Free wire ends (stub tips and the route's own ends).</param>
+/// <param name="DroppedPieces">Disconnected pieces of the net that were NOT modelled.</param>
+public sealed record TraceGraphAntenna(
+    IReadOnlyList<WireSegment> Wires, int BranchNodes, int OpenEnds,
+    int DroppedPieces, int DroppedSegments, double DroppedLengthMeters);

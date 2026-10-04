@@ -38,6 +38,46 @@ public static class FarFieldEvaluator
             direction => RadiationVector(wire, solution, k, direction));
     }
 
+    /// <summary>Whether a (θ, φ) grid resolves the pattern of a source of the given extent, as
+    /// a sentence to show the user, or null when it does. The intensity of a source inside a
+    /// sphere of diameter D is band-limited to spherical-harmonic degree k·D, so the Gauss rule
+    /// in cos θ integrates the power exactly while its node count is at least k·D/2 and the
+    /// uniform φ rule while its count exceeds k·D — both about 10 λ for the default 32 × 64.
+    /// Beyond that the power is under-integrated and the peak is read between lobes. Over a
+    /// ground plane the extent must include the image, and the hemisphere's θ nodes count
+    /// double (the pattern is even about the plane).</summary>
+    public static string? GridWarning(double extentMeters, double frequencyHz,
+        int thetaCount = 32, int phiCount = 64, bool hemisphere = false)
+    {
+        double kD = 2 * Math.PI * frequencyHz / RfConstants.SpeedOfLight * extentMeters;
+        int thetaEffective = hemisphere ? 2 * thetaCount : thetaCount;
+        if (kD / 2 <= thetaEffective && kD <= phiCount) return null;
+        double wavelengths = extentMeters * frequencyHz / RfConstants.SpeedOfLight;
+        return $"The structure spans {wavelengths:g3} wavelengths; the {thetaCount} × {phiCount} " +
+               "pattern grid resolves about " +
+               $"{Math.Min(2.0 * thetaEffective, phiCount) / (2 * Math.PI):g3}. Radiated power and " +
+               "peak directivity are under-resolved (narrow lobes fall between samples).";
+    }
+
+    /// <summary>The largest distance between any two wire nodes, images included — the extent
+    /// <see cref="GridWarning"/> wants.</summary>
+    public static double Extent(WireStructure wire)
+    {
+        var points = new List<Vector3D>(wire.Nodes);
+        if (wire.Ground is { } ground)
+            foreach (var node in wire.Nodes)
+                points.Add(ThinWireMomSolver.Mirror(node, ground.SurfaceZ));
+        double minX = double.MaxValue, minY = double.MaxValue, minZ = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue, maxZ = double.MinValue;
+        foreach (var p in points)
+        {
+            minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+            minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y);
+            minZ = Math.Min(minZ, p.Z); maxZ = Math.Max(maxZ, p.Z);
+        }
+        return new Vector3D(maxX - minX, maxY - minY, maxZ - minZ).Length;
+    }
+
     /// <summary>The (θ, φ) grid + intensity + power + directivity machinery, shared by
     /// the wire and surface evaluators (one radiation-vector callback each).
     /// Gauss–Legendre in u = cosθ carries the sphere weights exactly. Over a ground

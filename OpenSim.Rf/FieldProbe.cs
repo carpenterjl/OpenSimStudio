@@ -80,9 +80,17 @@ public static class FieldProbe
                 Complex charge = (startCurrent - endCurrent) / (Complex.ImaginaryOne * omega * length);
 
                 // Points near the element see 1/R³ variation on the scale of their
-                // distance: resolve it with panels instead of hoping.
+                // distance: resolve it with panels no longer than 2.5× the (reduced)
+                // distance. Four fixed panels did that only down to a tenth of the element
+                // length; at a hundredth the field came out between 0.33× and 2.1× of the
+                // integral's true value, and samples on the axis of a wire are routine.
                 double distance = DistanceToSegment(point, start, tangent, length);
-                int panels = distance < 2 * length ? 4 : 1;
+                int panels = 1;
+                if (distance < 2 * length)
+                {
+                    double reduced = Math.Sqrt(distance * distance + c * c);
+                    panels = (int)Math.Clamp(Math.Ceiling(length / (2.5 * reduced)), 4, MaxPanels);
+                }
 
                 for (int panel = 0; panel < panels; panel++)
                 {
@@ -166,6 +174,38 @@ public static class FieldProbe
         {
             H = hFields, HMagnitude = hMagnitudes, HSnapshot = hSnapshots
         };
+    }
+
+    private const int MaxPanels = 512;
+
+    /// <summary>For each point, whether it lies within <paramref name="radii"/> wire radii of
+    /// some element's axis (image elements included). The reduced kernel keeps the field finite
+    /// there, but what it returns on or inside the conductor is a model value on the scale of
+    /// the surface field, not a field anyone could measure — a reported peak should not be
+    /// taken from such samples.</summary>
+    public static bool[] NearWire(WireStructure wire, IReadOnlyList<Vector3D> points,
+        double radii = 3.0)
+    {
+        var near = new bool[points.Count];
+        for (int p = 0; p < points.Count; p++)
+            for (int e = 0; e < wire.ElementCount && !near[p]; e++)
+            {
+                var start = wire.ElementStart(e);
+                double length = wire.ElementLength(e);
+                var tangent = wire.ElementDirection(e);
+                double limit = radii * wire.ElementRadii[e];
+                if (DistanceToSegment(points[p], start, tangent, length) < limit)
+                    near[p] = true;
+                else if (wire.Ground is { } ground)
+                {
+                    var imageStart = ThinWireMomSolver.Mirror(wire.ElementEnd(e), ground.SurfaceZ);
+                    var imageEnd = ThinWireMomSolver.Mirror(start, ground.SurfaceZ);
+                    if (DistanceToSegment(points[p], imageStart, (imageEnd - imageStart) / length,
+                            length) < limit)
+                        near[p] = true;
+                }
+            }
+        return near;
     }
 
     private static double DistanceToSegment(Vector3D point, Vector3D start, Vector3D direction,

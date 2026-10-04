@@ -445,10 +445,23 @@ public partial class AntennaViewModel : ObservableObject
 
             WirePoints = BuildWireOverlay(wire);
             GroundPlaneModel = BuildGroundOverlay(wire);
-            double peak = map.Magnitude.Concat(slice.Magnitude).Max();
+            // The reported peak leaves out samples within three radii of a wire's axis: on or
+            // inside the conductor the reduced kernel returns a model value, not a field.
+            const double nearRadii = 3.0;
+            var allPoints = points.Concat(slicePoints).ToList();
+            var allMagnitudes = map.Magnitude.Concat(slice.Magnitude).ToList();
+            var onWire = FieldProbe.NearWire(wire, allPoints, nearRadii);
+            int excluded = onWire.Count(v => v);
+            double peak = excluded == allPoints.Count
+                ? double.NaN
+                : allMagnitudes.Where((_, i) => !onWire[i]).Max();
             FieldResult = $"Near field at {FrequencyMHz:g4} MHz: peak |E| = {peak:g4} V/m " +
                           $"(1 V feed, {n}³ grid + mid-plane slice; arrows are the t = 0 snapshot, " +
-                          "color is log₁₀|E| over 3 decades)";
+                          "color is log₁₀|E| over 3 decades" +
+                          (excluded > 0
+                              ? $"; {excluded} sample(s) within {nearRadii:g2} radii of a wire are " +
+                                "drawn but left out of the peak)"
+                              : ")");
             _log.Append($"Antenna: {FieldResult}");
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
@@ -489,6 +502,10 @@ public partial class AntennaViewModel : ObservableObject
                           $"{pattern.TotalRadiatedPowerWatts:g4} W (1 V feed), " +
                           $"D_max = {pattern.MaxDirectivity:g4} ({dbi:g3} dBi); " +
                           "lobe radius ∝ radiation intensity";
+            if (FarFieldEvaluator.GridWarning(FarFieldEvaluator.Extent(wire), FrequencyMHz * 1e6,
+                    pattern.ThetaRadians.Count, pattern.PhiRadians.Count,
+                    hemisphere: wire.Ground is not null) is { } gridWarning)
+                FieldResult += $". Warning: {gridWarning}";
             _log.Append($"Antenna: {FieldResult}");
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }
@@ -824,6 +841,7 @@ public partial class AntennaViewModel : ObservableObject
         feedBasis = 0;
         warnings = Array.Empty<string>();
         failure = null;
+        _netAntennaNotes.Clear();
 
         var ground = ActiveGround();
         double groundZ = ground?.SurfaceZ ?? 0;
@@ -900,8 +918,12 @@ public partial class AntennaViewModel : ObservableObject
             return false;
         }
         wire = grid.Structure;
-        warnings = grid.Warnings;
         feedBasis = wire.NearestBasis(feedHint);
+        var all = new List<string>(_netAntennaNotes);
+        all.AddRange(grid.Warnings);
+        all.AddRange(WireModelChecks.ThinWire(wire, maxFrequency));
+        if (WireModelChecks.FeedAtJunction(wire, feedBasis) is { } atJunction) all.Add(atJunction);
+        warnings = all;
         return true;
     }
 
@@ -933,31 +955,55 @@ public partial class AntennaViewModel : ObservableObject
 
         var traces = NetTraceExtractor.ForNet(_board, net);
         var options = _options();
-        var terminals = NetTraceExtractor.FarthestPadTerminals(_board, net);
-        var chain = TraceChainBuilder.Build(traces, net.StitchingVias, options, net.Islands,
-            includeLayers: null, terminals);
-        if (chain.Chain is null && terminals is not null)
-            chain = TraceChainBuilder.Build(traces, net.StitchingVias, options, net.Islands);
-        if (chain.Chain is null)
+        // The WHOLE net, branches included. The path between the two farthest pads with its
+        // side branches pruned is right for a DC current and wrong for an antenna: an open
+        // stub carries a standing wave, and an inverted-F loses its radiating arm.
+        var graph = TraceChainBuilder.BuildGraph(traces, net.StitchingVias, options, net.Islands);
+        if (graph.Segments is null)
         {
-            failure = chain.FailureReason;
+            failure = graph.FailureReason;
             return false;
         }
 
-        wires = TraceChainAntenna.FromChain(chain.Chain);
-        // Feed at the selected source pad when one is picked; otherwise mid-chain (a
-        // delta gap at an open end sees I ≈ 0 and is meaningless).
-        if (_electrodes.SelectedSource is { } pad)
+        Vector3D? padPoint = null;
+        if (_electrodes.SelectedSource is { } pad && graph.Junctions is { Count: > 0 } junctions)
         {
-            double z = 0.5 * (wires.Min(w => Math.Min(w.A.Z, w.B.Z)) + wires.Max(w => Math.Max(w.A.Z, w.B.Z)));
-            feedHint = new Vector3D(pad.Center.X, pad.Center.Y, z);
+            double z = 0.5 * (junctions.Min(j => j.Position.Z) + junctions.Max(j => j.Position.Z));
+            padPoint = new Vector3D(pad.Center.X, pad.Center.Y, z);
+        }
+        TraceGraphAntenna antenna;
+        try { antenna = TraceChainAntenna.FromGraph(graph, padPoint); }
+        catch (ArgumentException ex)
+        {
+            failure = ex.Message;
+            return false;
+        }
+        wires = antenna.Wires;
+        _netAntennaNotes.Add($"Net modelled whole: {wires.Count} wire segment(s), "
+            + $"{antenna.BranchNodes} branch node(s), {antenna.OpenEnds} open end(s).");
+        if (antenna.DroppedPieces > 0)
+            _netAntennaNotes.Add($"Warning: {antenna.DroppedPieces} disconnected piece(s) of the net "
+                + $"({antenna.DroppedLengthMeters * 1e3:g3} mm of trace) are NOT in the model — only "
+                + "one connected piece can be solved"
+                + (padPoint is null ? " (the longest was kept)." : " (the one at the source pad was kept)."));
+
+        // Feed at the selected source pad when one is picked; otherwise the middle of the
+        // longest wire (a delta gap at an open end sees I ≈ 0 and is meaningless).
+        if (padPoint is { } point)
+        {
+            feedHint = point;
         }
         else
         {
-            feedHint = wires[wires.Count / 2].A;
+            var longest = wires.OrderByDescending(w => w.Length).First();
+            feedHint = (longest.A + longest.B) / 2;
         }
         return true;
     }
+
+    /// <summary>What the net-mode build has to say about the model it made; cleared at the start
+    /// of every discretization and appended to its warnings.</summary>
+    private readonly List<string> _netAntennaNotes = new();
 
     /// <summary>The solver's assumption list, adjusted for an active ground plane: the
     /// free-space line is replaced by the image-theory statement (both at once would

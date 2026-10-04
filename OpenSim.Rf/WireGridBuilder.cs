@@ -209,6 +209,7 @@ public static class WireGridBuilder
         var nodes = new List<Vector3D>();
         var radii = new List<double>();
         bool tooShortForKernel = false;
+        double longestElement = 0;
         int runCount = orderedRadii.Count;
         for (int e = 0; e < runCount; e++)
         {
@@ -221,6 +222,7 @@ public static class WireGridBuilder
             int kernelCap = Math.Max(1, (int)Math.Floor(length / (MinElementRadiusRatio * radius)));
             pieces = Math.Min(pieces, kernelCap);
             if (length / pieces < MinElementRadiusRatio * radius) tooShortForKernel = true;
+            longestElement = Math.Max(longestElement, length / pieces);
 
             nodes.Add(a);
             for (int p = 1; p < pieces; p++)
@@ -235,6 +237,7 @@ public static class WireGridBuilder
         if (tooShortForKernel)
             warnings.Add("Some elements are shorter than twice their wire radius; the thin-wire " +
                          "kernel loses accuracy there (typical for very short, wide traces).");
+        AddCeilingWarning(warnings, longestElement, maxElementLength);
 
         int basisCount = isLoop
             ? nodes.Count
@@ -394,6 +397,7 @@ public static class WireGridBuilder
 
         var warnings = new List<string>();
         bool tooShortForKernel = false;
+        double longestElement = 0;
         var usedEdge = new bool[edges.Length];
 
         foreach (int s in special)
@@ -436,6 +440,7 @@ public static class WireGridBuilder
                     int kernelCap = Math.Max(1, (int)Math.Floor(length / (MinElementRadiusRatio * radius)));
                     pieces = Math.Min(pieces, kernelCap);
                     if (length / pieces < MinElementRadiusRatio * radius) tooShortForKernel = true;
+                    longestElement = Math.Max(longestElement, length / pieces);
                     for (int p = 1; p < pieces; p++)
                     {
                         splitPoints.Add(a + (b - a) * ((double)p / pieces));
@@ -515,6 +520,7 @@ public static class WireGridBuilder
         if (tooShortForKernel)
             warnings.Add("Some elements are shorter than twice their wire radius; the thin-wire " +
                          "kernel loses accuracy there (typical for very short, wide traces).");
+        AddCeilingWarning(warnings, longestElement, maxElementLength);
         if (halves.Count < 1)
             return WireGridResult.Failure(
                 "the discretized structure has no interior nodes — it is too short relative to " +
@@ -529,6 +535,20 @@ public static class WireGridBuilder
         {
             Warnings = warnings
         };
+    }
+
+    /// <summary>The two-radius floor wins over the element-length ceiling, so on a wide
+    /// conductor the ceiling the caller asked for (λ/10 by custom) is not met. That used to
+    /// pass in silence: a 3 mm trace at 24 GHz came out with elements of λ/8 to λ/4.</summary>
+    private static void AddCeilingWarning(List<string> warnings, double longestElement,
+        double maxElementLength)
+    {
+        if (longestElement <= maxElementLength * (1 + 1e-9)) return;
+        warnings.Add(
+            $"The longest element is {longestElement / maxElementLength:g3}× the requested maximum " +
+            $"({longestElement * 1e3:g3} mm against {maxElementLength * 1e3:g3} mm): splitting further " +
+            "would make elements shorter than twice the wire radius. The conductor is too wide for " +
+            "a thin-wire model at this frequency — the current is under-resolved along its length.");
     }
 
     /// <summary>Merges consecutive runs whose accumulated turn stays under
