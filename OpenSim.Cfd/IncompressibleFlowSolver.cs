@@ -387,6 +387,30 @@ public sealed class IncompressibleFlowSolver
         for (int n = 0; n < _tN; n++) _tSolution[n] = value;
     }
 
+    /// <summary>A copy of the fluid temperature field, to come back to with
+    /// <see cref="RestoreTemperature"/> — what lets a caller repeat one
+    /// <see cref="AdvanceEnergy"/> interval with different wall temperatures.</summary>
+    public double[] SaveTemperature()
+    {
+        if (_thermal is null)
+            throw new InvalidOperationException(
+                "This solver carries no energy equation; there is no temperature to save.");
+        return (double[])_t.Clone();
+    }
+
+    /// <summary>Puts back a field taken with <see cref="SaveTemperature"/>.</summary>
+    public void RestoreTemperature(double[] saved)
+    {
+        if (_thermal is null)
+            throw new InvalidOperationException(
+                "This solver carries no energy equation; there is no temperature to restore.");
+        if (saved.Length != _t.Length)
+            throw new ArgumentException(
+                $"Expected a saved field of {_t.Length} cells, got {saved.Length}.", nameof(saved));
+        Array.Copy(saved, _t, _t.Length);
+        for (int n = 0; n < _tN; n++) _tSolution[n] = _t[_tCells[n]];
+    }
+
     /// <summary>
     /// Marches the fluid energy equation over REAL time on the frozen velocity field:
     /// the fluid half of a time-accurate conjugate transient. Advection is explicit
@@ -468,7 +492,9 @@ public sealed class IncompressibleFlowSolver
                 // interval changes nothing, and marching it anyway would cost thousands of
                 // solves per solid step. Stopping there is exact to the same tolerance the
                 // steady march converges to, not an approximation.
-                if (MaxTemperatureChange() / scale >= _settings.SteadyTolerance) continue;
+                // Per transit, not per sub-step — the same reading as the steady march.
+                if (MaxTemperatureChange() / scale * Math.Max(transit / _dt, 1.0)
+                    >= _settings.SteadyTolerance) continue;
                 settled = true;
                 break;
             }
@@ -608,8 +634,14 @@ public sealed class IncompressibleFlowSolver
         if (_thermal is not null && marchEnergy)
             AdvanceTemperature(ct);
 
-        // March residual: largest velocity change this step relative to the field scale,
-        // combined with the temperature change relative to the imposed span.
+        // March residual: the largest velocity change relative to the field scale, combined
+        // with the temperature change relative to the imposed span — each expressed PER
+        // FLOW TIME, not per step. A mode relaxing with time constant τ moves by Δt/τ of
+        // what is left each step, so a per-step change below the tolerance only says the
+        // remaining error is below tolerance·τ/Δt: on a fine grid, where Δt shrinks with
+        // the cell and τ does not, a slow mode passed while still far from steady. Scaled
+        // by (flow time)/Δt the test reads "what is left changes by less than the
+        // tolerance over one flow time" whatever the cell size.
         double scale = Math.Max(MaxAbsFaceSpeed(), Math.Max(ReferenceSpeed(), 1e-30));
         double maxDelta = 0;
         foreach (var comp in _components)
@@ -621,7 +653,7 @@ public sealed class IncompressibleFlowSolver
                 if (d > maxDelta) maxDelta = d;
             }
         }
-        double residual = maxDelta / scale;
+        double residual = maxDelta / scale * FlowTime(scale, _nu) / _dt;
         if (_thermal is not null && marchEnergy)
         {
             double maxDeltaT = 0;
@@ -631,9 +663,22 @@ public sealed class IncompressibleFlowSolver
                 double d = Math.Abs(_t[c] - _tPrev[c]);
                 if (d > maxDeltaT) maxDeltaT = d;
             }
-            residual = Math.Max(residual, maxDeltaT / _tScale);
+            residual = Math.Max(residual, maxDeltaT / _tScale * FlowTime(scale, _alpha) / _dt);
         }
         return residual;
+    }
+
+    /// <summary>
+    /// The time one field needs to cross the domain: the quicker of being carried (L/U)
+    /// and diffusing (L²/diffusivity) over the longest extent L. The march residual is a
+    /// change per this time (see <see cref="Step"/>); never less than one step.
+    /// </summary>
+    private double FlowTime(double speed, double diffusivity)
+    {
+        double length = _h * Math.Max(_grid.Nx, Math.Max(_grid.Ny, _grid.Nz));
+        double carried = length / Math.Max(speed, 1e-30);
+        double diffused = length * length / Math.Max(diffusivity, 1e-30);
+        return Math.Max(Math.Min(carried, diffused), _dt);
     }
 
     // ================================================================ energy equation

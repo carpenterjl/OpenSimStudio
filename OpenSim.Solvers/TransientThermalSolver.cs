@@ -131,7 +131,10 @@ public sealed class TransientThermalSolver : ISolver
         if (filmSchedule is not null)
         {
             log.Add("Prescribed film schedule: the film is re-evaluated every time step " +
-                    "(time-accurate conjugate coupling), so the step matrix is refolded per step.");
+                    "(time-accurate conjugate coupling), so the step matrix is refolded per step" +
+                    (input.PrescribedFilmStepAccepted is null
+                        ? "."
+                        : ", and each step is repeated until the schedule's owner accepts it."));
         }
         else if (prescribedFilm is not null)
         {
@@ -182,6 +185,7 @@ public sealed class TransientThermalSolver : ISolver
         var fullRhs = new double[mesh.NodeCount];
         long totalIterations = 0;
         long nonlinearIterations = 0;
+        long couplingIterations = 0;
 
         for (int n = 1; n <= steps; n++)
         {
@@ -240,6 +244,16 @@ public sealed class TransientThermalSolver : ISolver
                 totalIterations += iterations.Iterations;
                 var next = stepSystem.Expand(free);
 
+                if (filmSchedule is not null && input.PrescribedFilmStepAccepted is { } accepted)
+                {
+                    // Implicit coupling owned by the schedule's author: the step is solved
+                    // again, from the same start state, until the film it was given agrees
+                    // with the temperatures it produced.
+                    iterate = next;
+                    couplingIterations++;
+                    if (accepted(n, next)) break;
+                    continue;
+                }
                 if (environment is null)
                 {
                     iterate = next;
@@ -266,6 +280,9 @@ public sealed class TransientThermalSolver : ISolver
         double endTime = steps * dt;
         log.Add($"Backward Euler: {steps} steps of Δt = {dt:g4} s to t = {endTime:g4} s " +
                 $"({totalIterations} CG iterations total); {frames.Count} frames stored.");
+        if (couplingIterations > 0)
+            log.Add($"Film schedule: {couplingIterations} coupled solves over {steps} steps " +
+                    $"({(double)couplingIterations / steps:F1} per step).");
         if (environment is not null)
         {
             log.Add($"Environment: {nonlinearIterations} nonlinear iterations over {steps} steps " +

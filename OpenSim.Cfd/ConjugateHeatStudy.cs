@@ -14,29 +14,53 @@ namespace OpenSim.Cfd;
 /// <see cref="IncompressibleFlowSolver"/>; a monolithic solid+fluid system was rejected
 /// (it would destroy the reduce-once SPD structure and mix discretizations).
 /// <para>
-/// Steady: an outer loop exchanges solid surface temperatures (under-relaxed at ½ —
-/// the plain handoff can ring when the film is strong) against the fluid's wall film
-/// until the wall temperatures settle; radiation to ambient, when the environment asks
-/// for it, joins the film per iteration through the factored coefficient, so the
-/// converged state satisfies the exact nonlinear exchange.
+/// Steady: an outer loop exchanges solid surface temperatures against the fluid's wall
+/// film. The film's reference is the fluid cell NEXT to the wall, which follows the wall
+/// itself, so the plain handoff closes only h_eff/g of the gap per pass (h_eff the real
+/// film, g = 2k_f/h the half-cell conductance): a few percent on a grid that resolves
+/// the boundary layer. The handoff is therefore Anderson-accelerated
+/// (<see cref="AndersonMixer"/>), and the loop stops on two things together — the size of
+/// the accelerated step, which estimates the remaining error, and the heat imbalance
+/// between what the solid gives the film and what the fluid was told the walls give.
+/// Radiation to ambient, when the environment asks for it, joins the film per iteration
+/// through the factored coefficient evaluated per triangle.
 /// </para>
 /// <para>
 /// Transient: FROZEN-MOMENTUM mode, a stated v1 decision — the velocity field is solved
 /// once (isothermal, at the initial state) and held, while the fluid ENERGY equation
-/// marches in lockstep with the solid and hands it a fresh film every step (explicit
-/// exchange, first order in the step). Honest when the flow settles much faster than the
+/// marches in lockstep with the solid. The exchange is IMPLICIT within each step: the
+/// fluid interval is repeated with the wall temperatures the solid step produced until
+/// the two agree, so the step is backward Euler for the coupled pair. (Handing the solid
+/// a film built from the start-of-step wall instead made it behave as if its heat
+/// capacity were C + g·A·Δt — a third too slow for an FR4 board on 1 mm cells at 10 s
+/// steps, and worse on a finer grid.) Honest when the flow settles much faster than the
 /// solid warms (t_flow = L/U ≪ τ_thermal, checked and logged); a momentum field that
 /// follows the changing buoyancy is a named deferral.
 /// </para>
 /// </summary>
 public static class ConjugateHeatStudy
 {
-    /// <summary>Outer-loop cap; a conjugate exchange that has not settled by then is
-    /// oscillating, and under-relaxation or a coarser coupling is the fix.</summary>
+    /// <summary>Outer-loop cap; an accelerated conjugate exchange that has not settled by
+    /// then is not converging at all.</summary>
     public const int MaxOuterIterations = 30;
 
-    /// <summary>Under-relaxation of the wall-temperature handoff.</summary>
+    /// <summary>Under-relaxation of the FIRST steady wall-temperature handoff, before the
+    /// acceleration has any history (the plain handoff can ring when the film is strong).</summary>
     public const double Relaxation = 0.5;
+
+    /// <summary>How many past handoffs the acceleration combines.</summary>
+    public const int MixingDepth = 4;
+
+    /// <summary>Steady stop: the heat the solid hands the film and the heat the fluid was
+    /// told the walls give must agree to this fraction of the exchange.</summary>
+    public const double FluxTolerance = 5e-3;
+
+    /// <summary>Transient stop, per step: the wall temperatures of the coupled step are
+    /// found to this fraction of how far the step moved them.</summary>
+    public const double StepCouplingTolerance = 2e-3;
+
+    /// <summary>Cap on coupled solves of one transient step.</summary>
+    public const int MaxStepIterations = 30;
 
     /// <summary>Everything a conjugate solve produces: the solid-side results (the
     /// standard output every results consumer knows), the resolved flow field for the
@@ -82,18 +106,14 @@ public static class ConjugateHeatStudy
         //      the ENVIRONMENT fluid + factored radiation). When the CFD resolves the
         //      surroundings themselves this stays null and only radiation joins the film,
         //      which is the pre-existing path, byte for byte.
-        EnvironmentBoundaryModel? surroundings = null;
+        //      It is built AFTER the voxelization, because which faces the flow wets is a
+        //      property of the GEOMETRIC FACE, not of the triangle: a wall face is mapped
+        //      to the nearest triangle centroid, so on a face meshed finer than the grid
+        //      some triangles receive no wall face at all. Read per triangle, those took
+        //      the outside-air film inside a water passage, and the bore's area entered
+        //      the outside panels' lengths.
         if (!cfd.ResolvesSurroundings)
-        {
-            var probe = solidInput with { Environment = environment };
-            EnvironmentBoundaryModel.ValidateMaterials(probe);
-            surroundings = EnvironmentBoundaryModel.Build(probe, log);
-            log.Add(surroundings is null
-                ? "Surroundings: every exterior face is claimed or wetted — the correlation " +
-                  "film adds nothing."
-                : $"Surroundings: {environment.Describe()} on every triangle the flow does not " +
-                  "wet (the CFD film wins wherever it is defined).");
-        }
+            EnvironmentBoundaryModel.ValidateMaterials(solidInput with { Environment = environment });
 
         // ---- Voxelize.
         progress?.Report(new SolverProgress("Voxelizing the fluid domain", 0.02));
@@ -102,6 +122,19 @@ public static class ConjugateHeatStudy
         var domain = Voxelizer.Voxelize(mesh, nodeBases, resolved, maxDegreeOfParallelism,
             cancellationToken);
         log.AddRange(domain.Notes);
+
+        EnvironmentBoundaryModel? surroundings = null;
+        if (!cfd.ResolvesSurroundings)
+        {
+            var wettedFaces = WettedFaceIds(domain, mesh);
+            surroundings = EnvironmentBoundaryModel.Build(
+                solidInput with { Environment = environment }, log, wettedFaces);
+            log.Add(surroundings is null
+                ? "Surroundings: every exterior face is claimed or wetted — the correlation " +
+                  "film adds nothing."
+                : $"Surroundings: {environment.Describe()} on every geometric face the flow does " +
+                  $"not wet ({wettedFaces.Count} wetted face(s) belong to the CFD film alone).");
+        }
 
         // ---- Fluid solver (kept alive across outer iterations: the previous flow is the
         //      warm start for the next, which is most of the outer loop's speed).
@@ -155,8 +188,12 @@ public static class ConjugateHeatStudy
             // inlet-time state. So the fluid energy equation marches in lockstep with the
             // solid: each solid step advances the fluid by the same interval on the frozen
             // velocities, then hands the solid the film that fluid state implies. The
-            // exchange is EXPLICIT (the fluid sees the solid at the step start), first
-            // order in the step — the same order as the backward-Euler solid march.
+            // exchange is IMPLICIT: the first pass of a step shows the fluid the wall at
+            // the step start; the solid's answer then corrects the wall the fluid is
+            // shown, the fluid interval is repeated from its saved start state, and so on
+            // until the wall the fluid saw is the wall the solid produced. What is left is
+            // the backward-Euler error of the coupled pair, first order in the step with
+            // the PHYSICAL constant h_eff·A/C — not g·A/C, which grows as the grid refines.
             var settings = solidInput.TransientThermal!;
             progress?.Report(new SolverProgress("Solving the flow field", 0.1));
             // Isothermal: at t = 0 the fluid is uniform, so the buoyancy force is exactly
@@ -179,20 +216,20 @@ public static class ConjugateHeatStudy
             var outletTrace = new List<string>();
             int quasiSteadySteps = 0;
 
-            SurfaceFilmModel Schedule(int step, double time, IReadOnlyList<double> nodal)
+            // State of the step being coupled.
+            int coupledStep = 0;
+            int stepPasses = 0;
+            long totalPasses = 0;
+            int worstPasses = 0;
+            bool marchSettled = false;
+            double[]? fluidAtStepStart = null;
+            var wallAtStepStart = new double[wallT.Length];
+            var solidWall = new double[wallT.Length];
+            var mismatch = new double[wallT.Length];
+            var mixer = new AndersonMixer(MixingDepth, 1.0);
+
+            void TraceOutlet(double time)
             {
-                if (step > 0)
-                {
-                    for (int idx = 0; idx < wallT.Length; idx++)
-                    {
-                        var wallTri = mesh.BoundaryTriangles[domain.WallFaces[idx].BoundaryTriangle];
-                        wallT[idx] = (nodal[wallTri.A] + nodal[wallTri.B] + nodal[wallTri.C]) / 3.0;
-                    }
-                    var march = flowSolver.AdvanceEnergy(stepSeconds, wallT, cancellationToken);
-                    subSteps += march.Steps;
-                    if (march.Settled) quasiSteadySteps++;
-                    latestFlow = flowSolver.Snapshot(steadyFlow.Steps, steadyFlow.Residual);
-                }
                 // The outlet temperature is what a heat-exchanger study reports, and it is
                 // a TIME SERIES here — one line per step, so the arrival of the front is
                 // visible in the log rather than only in the final frame.
@@ -201,19 +238,92 @@ public static class ConjugateHeatStudy
                 if (port is not null)
                     outletTrace.Add($"  t = {time,8:F3} s: outlet mixing-cup T = " +
                                     $"{port.MixedTemperature:F2} K");
+            }
+
+            SurfaceFilmModel Schedule(int step, double time, IReadOnlyList<double> nodal)
+            {
+                if (step == 0)
+                {
+                    TraceOutlet(time);
+                }
+                else
+                {
+                    if (step != coupledStep)
+                    {
+                        // First pass of a new step: the fluid is shown the wall as the last
+                        // step left it, and its own state is kept to come back to.
+                        coupledStep = step;
+                        stepPasses = 0;
+                        mixer.Reset();
+                        fluidAtStepStart = flowSolver.SaveTemperature();
+                        WallTemperatures(mesh, domain, nodal, wallT);
+                        Array.Copy(wallT, wallAtStepStart, wallT.Length);
+                    }
+                    else
+                    {
+                        // A repeat: same interval, from the same fluid state, with the wall
+                        // temperatures StepAccepted corrected.
+                        flowSolver.RestoreTemperature(fluidAtStepStart!);
+                    }
+                    var march = flowSolver.AdvanceEnergy(stepSeconds, wallT, cancellationToken);
+                    subSteps += march.Steps;
+                    marchSettled = march.Settled;
+                    latestFlow = flowSolver.Snapshot(steadyFlow.Steps, steadyFlow.Residual);
+                }
 
                 return BuildFilm(domain, latestFlow, fluid.ThermalConductivity, mesh, ambient,
                     claimed, environment, solidInput, nodeBases, TriangleMeans(mesh, nodal),
                     surroundings, nodal);
             }
 
+            bool StepAccepted(int step, IReadOnlyList<double> nodal)
+            {
+                stepPasses++;
+                totalPasses++;
+                WallTemperatures(mesh, domain, nodal, solidWall);
+                double moved = 0;
+                for (int idx = 0; idx < wallT.Length; idx++)
+                {
+                    mismatch[idx] = solidWall[idx] - wallT[idx];
+                    moved = Math.Max(moved, Math.Abs(solidWall[idx] - wallAtStepStart[idx]));
+                }
+                // The accelerated step estimates how far the wall the fluid saw still is
+                // from the coupled answer; the bare mismatch under-reads that by 1/(1 − ρ).
+                var next = mixer.Next(wallT, mismatch);
+                double correction = 0;
+                for (int idx = 0; idx < wallT.Length; idx++)
+                    correction = Math.Max(correction, Math.Abs(next[idx] - wallT[idx]));
+
+                if (correction <= Math.Max(1e-5, StepCouplingTolerance * moved))
+                {
+                    worstPasses = Math.Max(worstPasses, stepPasses);
+                    if (marchSettled) quasiSteadySteps++;
+                    TraceOutlet(step * stepSeconds);
+                    return true;
+                }
+                if (stepPasses >= MaxStepIterations)
+                    throw new InvalidOperationException(
+                        $"Time step {step}: the fluid and the solid did not agree on the wall " +
+                        $"temperatures after {stepPasses} coupled solves (still {correction:G3} K " +
+                        "apart). Reduce the time step.");
+                Array.Copy(next, wallT, wallT.Length);
+                return false;
+            }
+
             progress?.Report(new SolverProgress("Coupled transient march", 0.3));
             var thermal = new TransientThermalSolver().Solve(
-                solidInput with { PrescribedFilmSchedule = Schedule }, progress, cancellationToken);
+                solidInput with
+                {
+                    PrescribedFilmSchedule = Schedule,
+                    PrescribedFilmStepAccepted = StepAccepted
+                }, progress, cancellationToken);
             if (surroundings is not null) log.AddRange(surroundings.DrainNotes());
             log.Add($"Conjugate transient: the fluid energy equation marched {subSteps:N0} CFL " +
-                    "sub-steps on the frozen velocity field, one film handed to the solid per " +
-                    "solid time step (explicit partitioned exchange, first order in the step).");
+                    "sub-steps on the frozen velocity field. The exchange is implicit: each " +
+                    "solid step was repeated with the fluid until the wall temperatures agreed " +
+                    $"to {StepCouplingTolerance:P1} of the step's change ({totalPasses} coupled " +
+                    $"solves in all, at most {worstPasses} in one step); the march is first " +
+                    "order in the time step (backward Euler).");
             if (quasiSteadySteps > 0)
                 log.Add($"The fluid reached its steady state inside {quasiSteadySteps} of the solid " +
                         "steps (the step is long against the fluid residence time), so those steps " +
@@ -227,6 +337,9 @@ public static class ConjugateHeatStudy
         SolveOutput? solidOutput = null;
         FlowSolution? lastFlow = null;
         double change = double.PositiveInfinity;
+        double imbalance = double.PositiveInfinity;
+        var steadyMixer = new AndersonMixer(MixingDepth, Relaxation);
+        var handoff = new double[wallT.Length];
         int outer = 0;
         while (true)
         {
@@ -252,29 +365,45 @@ public static class ConjugateHeatStudy
             var nodalT = ((Core.Results.NodalScalarField)solidOutput.Fields
                 .First(f => f.Name == "Temperature")).Values;
 
-            // Under-relaxed wall-temperature handoff, and the outer convergence test.
-            change = 0;
-            foreach (var (wf, idx) in domain.WallFaces.Select((w, i) => (w, i)))
+            // The handoff and the outer convergence test. The mismatch is what the solid
+            // produced against what the fluid was shown; every wall face carries the same
+            // conductance g·h², so the heat imbalance between the two legs is the summed
+            // mismatch against the summed wall-to-cell difference.
+            double mismatchSum = 0, exchangeSum = 0, mismatchMax = 0;
+            for (int idx = 0; idx < wallT.Length; idx++)
             {
+                var wf = domain.WallFaces[idx];
                 var tri = mesh.BoundaryTriangles[wf.BoundaryTriangle];
                 double solidT = (nodalT[tri.A] + nodalT[tri.B] + nodalT[tri.C]) / 3.0;
-                double next = wallT[idx] + Relaxation * (solidT - wallT[idx]);
-                change = Math.Max(change, Math.Abs(next - wallT[idx]));
-                wallT[idx] = next;
+                handoff[idx] = solidT - wallT[idx];
+                mismatchSum += Math.Abs(handoff[idx]);
+                mismatchMax = Math.Max(mismatchMax, Math.Abs(handoff[idx]));
+                exchangeSum += Math.Abs(solidT - flow.Temperature![wf.FluidCell]);
             }
+            imbalance = mismatchMax < 1e-9 || !(exchangeSum > 0) ? 0 : mismatchSum / exchangeSum;
+
+            // The accelerated step estimates the remaining error (the plain mismatch
+            // under-reads it by g/h_eff, which is how the loop used to stop 2–10 % low).
+            var next = steadyMixer.Next(wallT, handoff);
+            change = 0;
+            for (int idx = 0; idx < wallT.Length; idx++)
+                change = Math.Max(change, Math.Abs(next[idx] - wallT[idx]));
 
             double threshold = Math.Max(0.01, 1e-3 * MaxExcursion(wallT, ambient));
-            if (outer >= 2 && change < threshold) break;
+            if (outer >= 2 && change < threshold && imbalance < FluxTolerance) break;
             if (outer >= MaxOuterIterations)
                 throw new InvalidOperationException(
                     $"The conjugate exchange did not settle: after {outer} outer iterations the " +
-                    $"wall temperatures still move by {change:G3} K. This usually means a strong " +
+                    $"wall temperatures still move by {change:G3} K and the solid and fluid " +
+                    $"heat rates differ by {imbalance:P2}. This usually means a strong " +
                     "film against a weak conduction path — refine the CFD grid or check the " +
                     "solid's conductivity and contacts.");
+            Array.Copy(next, wallT, wallT.Length);
         }
 
         log.Add($"Conjugate exchange settled in {outer} outer iterations " +
-                $"(last wall-temperature change {change:G3} K, relaxation {Relaxation}).");
+                $"(last wall-temperature correction {change:G3} K; the solid and fluid heat " +
+                $"rates agree to {imbalance:P2}; Anderson-accelerated handoff, depth {MixingDepth}).");
         if (surroundings is not null) log.AddRange(surroundings.DrainNotes());
         return Finish(solidOutput!, lastFlow!, domain, cfd, fluid, log);
     }
@@ -298,10 +427,12 @@ public static class ConjugateHeatStudy
 
         if (surroundings is not null)
         {
-            // Composition rule: the CFD film wins per TRIANGLE wherever it is defined
-            // (that is the resolved answer), and the correlation film carries the rest.
-            // NaN already means "not wetted" on one side and "user-claimed" on the other,
-            // so the merge needs no extra bookkeeping.
+            // Composition rule: the CFD film wins wherever it is defined (that is the
+            // resolved answer), and the correlation film carries the rest. The
+            // surroundings model was built without the wetted GEOMETRIC faces, so a
+            // triangle of a passage wall that no wall face mapped to stays NaN on both
+            // sides — it exchanges through its neighbours — and NaN already means
+            // "user-claimed" as well, so the merge needs no extra bookkeeping.
             var outsideFilm = surroundings.Evaluate(nodalTemperature);
             var h = film.TriangleFilmCoefficient.ToArray();
             var tRef = film.TriangleReferenceTemperature!.ToArray();
@@ -445,6 +576,43 @@ public static class ConjugateHeatStudy
             result[t] = (nodal[tri.A] + nodal[tri.B] + nodal[tri.C]) / 3.0;
         }
         return result;
+    }
+
+    /// <summary>The geometric faces the resolved flow wets: those whose mapped wall faces
+    /// cover at least half the face's own area. (The staircase covers a wetted face
+    /// entirely, however fine its triangles; a stray wall face that found its nearest
+    /// centroid across an edge — the end face around a bore's mouth — covers a sliver and
+    /// does not make that face a wetted one.)</summary>
+    internal static IReadOnlySet<int> WettedFaceIds(VoxelizedDomain domain, FeMesh mesh)
+    {
+        double faceArea = domain.Grid.H * domain.Grid.H;
+        var covered = new Dictionary<int, double>();
+        foreach (var wf in domain.WallFaces)
+        {
+            int id = mesh.BoundaryTriangles[wf.BoundaryTriangle].FaceId;
+            covered[id] = covered.GetValueOrDefault(id) + faceArea;
+        }
+        var area = new Dictionary<int, double>();
+        foreach (var tri in mesh.BoundaryTriangles)
+            if (covered.ContainsKey(tri.FaceId))
+                area[tri.FaceId] = area.GetValueOrDefault(tri.FaceId)
+                                   + WallFluxExtractor.TriangleArea(mesh, tri);
+        var faces = new HashSet<int>();
+        foreach (var (id, wet) in covered)
+            if (wet >= 0.5 * area[id]) faces.Add(id);
+        return faces;
+    }
+
+    /// <summary>The solid surface temperature each wall face sees: the mean of its
+    /// boundary triangle's nodes.</summary>
+    private static void WallTemperatures(FeMesh mesh, VoxelizedDomain domain,
+        IReadOnlyList<double> nodal, double[] target)
+    {
+        for (int idx = 0; idx < target.Length; idx++)
+        {
+            var tri = mesh.BoundaryTriangles[domain.WallFaces[idx].BoundaryTriangle];
+            target[idx] = (nodal[tri.A] + nodal[tri.B] + nodal[tri.C]) / 3.0;
+        }
     }
 
     /// <summary>Per-boundary-triangle mean of a nodal field.</summary>

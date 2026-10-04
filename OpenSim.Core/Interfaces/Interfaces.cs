@@ -84,7 +84,8 @@ public sealed record SolveInput
 
     /// <summary>
     /// A film that CHANGES with time: (step index, time [s], the solid nodal temperature
-    /// at the START of that step) -> the film for that step,
+    /// at the START of that step — or, on a repeat asked for through
+    /// <see cref="PrescribedFilmStepAccepted"/>, the step's last result) -> the film for that step,
     /// used by the transient solver in place of the fixed <see cref="PrescribedFilm"/>.
     /// This is what makes a conjugate transient time-accurate on the fluid side: a
     /// thermal front travelling down a channel moves the local reference temperature
@@ -101,6 +102,16 @@ public sealed record SolveInput
     /// solver pulls it once to label the t = 0 frame.</remarks>
     public Func<int, double, IReadOnlyList<double>, SurfaceFilmModel>? PrescribedFilmSchedule
     { get; init; }
+
+    /// <summary>
+    /// Lets the owner of a <see cref="PrescribedFilmSchedule"/> couple IMPLICITLY within a
+    /// time step: (step index, the nodal temperature that step just produced) -> whether
+    /// the step is accepted. On false the transient solver pulls the schedule again for
+    /// the SAME step, passing the rejected result as the temperature argument, and solves
+    /// the step again from the same start state. Null accepts every step after one solve
+    /// (the explicit exchange), which is the path as it was.
+    /// </summary>
+    public Func<int, IReadOnlyList<double>, bool>? PrescribedFilmStepAccepted { get; init; }
 
     /// <summary>Settings for a modal analysis. Null (the default mode count applies)
     /// or ignored outside the modal solver.</summary>

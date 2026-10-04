@@ -162,8 +162,10 @@ public sealed record CfdSettings
     /// separate internal circuit - see <see cref="FluidName"/>.</summary>
     public bool ResolvesSurroundings => FluidName is null && CustomFluid is null;
 
-    /// <summary>Steady-state convergence: relative change of the velocity field per
-    /// pseudo-time step below which the flow is converged.</summary>
+    /// <summary>Steady-state convergence: relative change of the velocity (and
+    /// temperature) field per FLOW TIME — the time to cross the domain, by the stream or
+    /// by diffusion, whichever is quicker — below which the flow is converged. Not per
+    /// pseudo-time step: that reading let slow modes pass on fine grids.</summary>
     public double SteadyTolerance { get; init; } = 1e-5;
 
     /// <summary>Cap on pseudo-time steps for the steady march (typed failure past it,

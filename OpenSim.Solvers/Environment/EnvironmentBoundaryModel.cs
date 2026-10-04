@@ -93,7 +93,11 @@ public sealed class EnvironmentBoundaryModel
     /// null model means the solver takes its ordinary linear path, which is what makes
     /// "the user specified everything by hand" bitwise identical to having no environment.
     /// </summary>
-    public static EnvironmentBoundaryModel? Build(SolveInput input, List<string> log)
+    /// <param name="resolvedFaceIds">Geometric faces whose exchange something else
+    /// resolves — the passage walls of an internal CFD circuit. They take no part in the
+    /// environment: no panel, no film, and no share in any panel's area or lengths.</param>
+    public static EnvironmentBoundaryModel? Build(SolveInput input, List<string> log,
+        IReadOnlySet<int>? resolvedFaceIds = null)
     {
         var environment = input.Environment;
         if (environment is null) return null;
@@ -103,6 +107,8 @@ public sealed class EnvironmentBoundaryModel
         foreach (var bc in input.BoundaryConditions)
             if (bc is FixedTemperature or HeatFlux or Convection)
                 claimed.UnionWith(bc.FaceIds);
+        int userClaimed = claimed.Count;
+        if (resolvedFaceIds is not null) claimed.UnionWith(resolvedFaceIds);
 
         var adjacency = BoundaryAdjacency.Build(mesh);
         var exposed = ContactInterface.ExposedFractions(mesh.BoundaryTriangles.Count,
@@ -154,6 +160,9 @@ public sealed class EnvironmentBoundaryModel
         if (panels.Count == 0) return null;
 
         LogAssumptions(environment, panels, claimed, log);
+        if (claimed.Count > userClaimed)
+            log.Add($"  {claimed.Count - userClaimed} of those face(s) are wetted by the resolved " +
+                    "flow and take no part in the environment.");
         if (buriedArea > 0)
             log.Add($"  {buriedArea:g4} m² of skin lies inside body-to-body contacts and takes no " +
                     "convection or radiation (it exchanges heat through the contact only).");
