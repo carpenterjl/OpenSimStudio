@@ -560,11 +560,12 @@ public partial class SignalIntegrityViewModel : ObservableObject
             var (eye, peakXtalk) = await Task.Run(() =>
             {
                 var sources = new double[LineCount][];
-                sources[driven] = BuildPattern(type, rise, seed: 1);
+                var (victimWave, victimBits) = BuildPattern(type, rise, seed: 1);
+                sources[driven] = victimWave;
                 if (aggressors)
                     for (int i = 0; i < LineCount; i++)
                         if (i != driven)
-                            sources[i] = BuildPattern(type, rise, seed: (uint)(1000 + i));
+                            sources[i] = BuildPattern(type, rise, seed: (uint)(1000 + i)).Wave;
                 var transient = TransientLink.SolvePeriodic(
                     network, terminations, sources, dt);
 
@@ -579,14 +580,12 @@ public partial class SignalIntegrityViewModel : ObservableObject
                         network, terminations, quietSources, dt);
                     xtalk = coupled.FarVoltages[driven].Max(Math.Abs);
                 }
-                return (EyeDiagram.Fold(transient.FarVoltages[driven], SamplesPerUi, dt), xtalk);
+                return (EyeDiagram.Fold(transient.FarVoltages[driven], SamplesPerUi, dt,
+                    victimBits), xtalk);
             });
 
             EyeImage = RenderEye(eye);
-            EyeResult = $"Eye at {BitRateGbps:g3} Gb/s ({type}): height = {eye.EyeHeight:g3} V, "
-                + $"width = {eye.EyeWidthSeconds * 1e12:g3} ps "
-                + $"({eye.EyeWidthSeconds / eye.UnitIntervalSeconds:P0} of UI), "
-                + $"jitter p-p = {eye.JitterPeakToPeakSeconds * 1e12:g3} ps"
+            EyeResult = $"Eye at {BitRateGbps:g3} Gb/s ({type}): {EyeMetrics(eye)}"
                 + (aggressors ? $"; aggressor crosstalk peak = {peakXtalk * 1e3:g3} mV" : "");
             ShowAssumptions(rlgc);
             _log.Append($"SI: {EyeResult}");
@@ -610,12 +609,17 @@ public partial class SignalIntegrityViewModel : ObservableObject
             : IbisCorner == "Max" ? OpenSim.Rf.Si.Ibis.IbisCornerSelection.Max
             : OpenSim.Rf.Si.Ibis.IbisCornerSelection.Typ;
         double dt = 1.0 / (BitRateGbps * 1e9 * SamplesPerUi);
-        var bits = IbisBits(SignalType);
+        var bits = IbisBits(SignalType, seed: 1);
         int lines = network.ConductorCount;
-        // Line 0 carries the pattern; any further coupled lines are aggressors driven by the
-        // same buffer on decorrelated data (or held quiet when the aggressor toggle is off).
-        var aggressorBits = AggressorsEnabled ? IbisBits(SignalType).Reverse().ToArray()
-                                         : new bool[bits.Length];
+        // The line picked as "Driven line" carries the pattern and is the one whose eye is
+        // shown; every other coupled line is an aggressor driven by the same buffer on its own
+        // decorrelated data (or held quiet when the aggressor toggle is off).
+        int driven = Math.Clamp(DrivenLine - 1, 0, lines - 1);
+        bool aggressorsOn = AggressorsEnabled;
+        string? signalType = SignalType;
+        // One warm-up period is enough once the period is longer than the channel's memory
+        // (the FIR is at most 8192 taps); short patterns keep the customary four.
+        int warmup = bits.Length * SamplesPerUi > 8192 ? 1 : 4;
         var (eye, note, switchingSource, switchingWarnings) = await Task.Run(() =>
         {
             var near = new INonlinearDriver[lines];
@@ -624,10 +628,12 @@ public partial class SignalIntegrityViewModel : ObservableObject
             IReadOnlyList<string> warns = Array.Empty<string>();
             for (int i = 0; i < lines; i++)
             {
-                var pattern = i == 0 ? bits : aggressorBits;
+                var pattern = i == driven ? bits
+                    : aggressorsOn ? IbisBits(signalType, seed: (uint)(1000 + i))
+                    : new bool[bits.Length];
                 near[i] = IbisDriver.FromBits(model, corner, pattern, SamplesPerUi, dt,
                     out string src, out var w);
-                if (i == 0) { source = src; warns = w; }
+                if (i == driven) { source = src; warns = w; }
                 // The receiver: the buffer's own protection clamps when asked for, else the
                 // plain R∥C load. Clamps only matter where the waveform leaves the rails.
                 far[i] = UseReceiverClamps
@@ -635,18 +641,16 @@ public partial class SignalIntegrityViewModel : ObservableObject
                     : new LinearLoadElement(LoadOhms, LoadPicofarads * 1e-12);
             }
             var result = NonlinearLink.SolveNPort(network, near, far,
-                bits.Length * SamplesPerUi, dt);
-            var folded = EyeDiagram.Fold(result.FarVolts[0], SamplesPerUi, dt);
+                bits.Length * SamplesPerUi, dt, warmupPeriods: warmup);
+            var folded = EyeDiagram.Fold(result.FarVolts[driven], SamplesPerUi, dt, bits);
             return (folded, $"channel FIR {result.ChannelMemorySamples} taps, "
                 + $"tail {result.TailEnergyFraction:e1}"
-                + (lines > 1 ? $", {lines} coupled line(s)" : ""), source, warns);
+                + (lines > 1 ? $", line {driven + 1} of {lines} coupled" : ""), source, warns);
         });
         foreach (var w in switchingWarnings) _log.Append($"SI: IBIS — {w}");
         EyeImage = RenderEye(eye);
         EyeResult = $"IBIS eye ({model.Name}, {IbisCorner}) at {BitRateGbps:g3} Gb/s: "
-            + $"height = {eye.EyeHeight:g3} V, width = {eye.EyeWidthSeconds * 1e12:g3} ps "
-            + $"({eye.EyeWidthSeconds / eye.UnitIntervalSeconds:P0} of UI), "
-            + $"jitter p-p = {eye.JitterPeakToPeakSeconds * 1e12:g3} ps ({note})";
+            + $"{EyeMetrics(eye)} ({note})";
         SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
             + " Nonlinear IBIS driver (V-I tables, C_comp backward-Euler) into "
             + (lines > 1
@@ -661,21 +665,31 @@ public partial class SignalIntegrityViewModel : ObservableObject
         _log.Append($"SI: {EyeResult}");
     }
 
-    private static bool[] IbisBits(string? type)
+    /// <summary>The eye's numbers as text. The height is measured against the transmitted
+    /// bits, so it can be zero or negative; that is a closed eye and is said so.</summary>
+    private static string EyeMetrics(EyeDiagram eye) =>
+        eye.IsClosed
+            ? $"CLOSED — the lowest received one is {-eye.EyeHeight * 1e3:g3} mV below the highest "
+              + "received zero at the best sampling phase; "
+              + $"jitter p-p = {eye.JitterPeakToPeakSeconds * 1e12:g3} ps"
+            : $"height = {eye.EyeHeight:g3} V, width = {eye.EyeWidthSeconds * 1e12:g3} ps "
+              + $"({eye.EyeWidthSeconds / eye.UnitIntervalSeconds:P0} of UI), "
+              + $"jitter p-p = {eye.JitterPeakToPeakSeconds * 1e12:g3} ps";
+
+    /// <summary>The bit pattern for the chosen signal type. The clock is 64 alternating bits; a
+    /// different seed gives it the opposite phase rather than a different sequence.</summary>
+    private static bool[] IbisBits(string? type, uint seed)
     {
-        if (type == ClockPattern) return Enumerable.Range(0, 64).Select(i => i % 2 == 0).ToArray();
+        if (type == ClockPattern)
+            return Enumerable.Range(0, 64).Select(i => (i + seed) % 2 == 1).ToArray();
         int order = type == Prbs9 ? 9 : type == Prbs11 ? 11 : 7;
-        return PrbsGenerator.Generate(order, (1 << order) - 1, seed: 1);
+        return PrbsGenerator.Generate(order, (1 << order) - 1, seed);
     }
 
-    private double[] BuildPattern(string? type, double rise, uint seed)
+    private (double[] Wave, bool[] Bits) BuildPattern(string? type, double rise, uint seed)
     {
-        double amplitude = AmplitudeVolts;
-        if (type == ClockPattern)
-            return SourceWaveform.Clock(64, SamplesPerUi, rise, amplitude, 0);
-        int order = type == Prbs9 ? 9 : type == Prbs11 ? 11 : 7;
-        var bits = PrbsGenerator.Generate(order, (1 << order) - 1, seed);
-        return SourceWaveform.Trapezoid(bits, SamplesPerUi, rise, amplitude, 0);
+        var bits = IbisBits(type, seed);
+        return (SourceWaveform.Trapezoid(bits, SamplesPerUi, rise, AmplitudeVolts, 0), bits);
     }
 
     /// <summary>The eye persistence bitmap: density → a dark-to-hot ramp with log

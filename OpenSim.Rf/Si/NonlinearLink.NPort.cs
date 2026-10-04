@@ -71,11 +71,10 @@ public static partial class NonlinearLink
         // ---- Channel reduction: matrix FIR z[k] from the reference-terminated impedance. ----
         // The same channel-FFT length the single-line path uses: long enough that the
         // channel's impulse response has decayed well inside it at every practical length.
+        // It bounds the channel's MEMORY, not the pattern: the time stepping below convolves
+        // with the truncated FIR and runs for as many samples as the pattern has, so a period
+        // longer than the FFT (PRBS-9 and PRBS-11 at 32 samples per UI) is an ordinary case.
         const int fft = 8192;
-        if (periodSamples > fft)
-            throw new ArgumentOutOfRangeException(nameof(periodSamples),
-                $"The pattern period ({periodSamples} samples) exceeds the {fft}-point channel "
-                + "FFT; shorten the pattern or reduce the samples per UI.");
         var spectra = new Complex[ports * ports][];
         for (int e = 0; e < spectra.Length; e++) spectra[e] = new Complex[fft];
 

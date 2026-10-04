@@ -3,10 +3,17 @@ namespace OpenSim.Rf.Si;
 /// <summary>
 /// An eye diagram folded from one period of a periodic waveform (SI Stage S5): traces
 /// of 2 UI starting at every unit interval, a density map for rendering, and the three
-/// classic metrics measured on the folded traces themselves — eye height (vertical
-/// opening at the sampling phase), eye width (UI minus the peak-to-peak crossing
-/// jitter), and the crossing jitter. The threshold is the waveform mid-level; the
-/// sampling phase sits half a UI after the mean crossing.
+/// classic metrics — eye height (vertical opening at the sampling phase), eye width (UI
+/// minus the peak-to-peak crossing jitter), and the crossing jitter.
+///
+/// <para><b>Which samples are ones.</b> The height is the lowest received ONE minus the
+/// highest received ZERO, and what makes a sample a one is the bit that was SENT, not the
+/// level that arrived. Sorting samples by their received level against a threshold (the
+/// earlier rule, still what the overload without bits does) measures the gap around the
+/// threshold, which is positive by construction: a channel whose isolated one reaches 0.45
+/// and whose isolated zero only falls to 0.55 was reported as a 0.10 V opening when it is a
+/// 0.10 V overlap. With the transmitted bits the height is allowed to go negative, and a
+/// non-positive height is a CLOSED eye.</para>
 /// </summary>
 public sealed record EyeDiagram(
     int SamplesPerUi,
@@ -18,9 +25,46 @@ public sealed record EyeDiagram(
     double Low,
     double High)
 {
-    /// <summary>Folds a periodic waveform of whole unit intervals into an eye.</summary>
+    /// <summary>True when the height was measured against the transmitted bits. False for the
+    /// level-classified overload, whose height cannot be zero or negative and so cannot show
+    /// a closed eye.</summary>
+    public bool ClassifiedByTransmittedBits { get; init; }
+
+    /// <summary>The eye is closed: at the best sampling phase some received zero is at or above
+    /// some received one. Only meaningful when <see cref="ClassifiedByTransmittedBits"/>.</summary>
+    public bool IsClosed => ClassifiedByTransmittedBits && EyeHeight <= 0;
+
+    /// <summary>The channel latency found by correlating the received waveform against the
+    /// transmitted bits (modulo the pattern period).</summary>
+    public double LatencySeconds { get; init; }
+
+    /// <summary>Where in the received unit interval the height was taken, as a fraction of a
+    /// UI from the start of the received bit.</summary>
+    public double SamplingPhaseUi { get; init; }
+
+    /// <summary>Threshold crossings found in the period.</summary>
+    public int CrossingCount { get; init; }
+
+    /// <summary>Folds a periodic waveform of whole unit intervals into an eye, classifying
+    /// samples by their RECEIVED level. Kept for waveforms whose transmitted bits are not
+    /// known; it cannot report a closed eye (see the class remarks).</summary>
     public static EyeDiagram Fold(IReadOnlyList<double> periodicWaveform, int samplesPerUi,
-        double sampleIntervalSeconds)
+        double sampleIntervalSeconds) =>
+        FoldCore(periodicWaveform, samplesPerUi, sampleIntervalSeconds, null);
+
+    /// <summary>Folds a periodic waveform into an eye and measures it against the bits that
+    /// were transmitted (one per unit interval, in order, the pattern the waveform is one
+    /// period of). The channel's delay is found by correlation, so the waveform need not be
+    /// aligned to the bits.</summary>
+    public static EyeDiagram Fold(IReadOnlyList<double> periodicWaveform, int samplesPerUi,
+        double sampleIntervalSeconds, IReadOnlyList<bool> transmittedBits)
+    {
+        ArgumentNullException.ThrowIfNull(transmittedBits);
+        return FoldCore(periodicWaveform, samplesPerUi, sampleIntervalSeconds, transmittedBits);
+    }
+
+    private static EyeDiagram FoldCore(IReadOnlyList<double> periodicWaveform, int samplesPerUi,
+        double sampleIntervalSeconds, IReadOnlyList<bool>? transmittedBits)
     {
         if (samplesPerUi < 4)
             throw new ArgumentOutOfRangeException(nameof(samplesPerUi),
@@ -32,6 +76,10 @@ public sealed record EyeDiagram(
         int bits = periodicWaveform.Count / samplesPerUi;
         if (bits < 2)
             throw new ArgumentException("At least two unit intervals are required.");
+        if (transmittedBits is not null && transmittedBits.Count != bits)
+            throw new ArgumentException(
+                $"The waveform holds {bits} unit intervals but {transmittedBits.Count} transmitted "
+                + "bits were given; they must be the same pattern.", nameof(transmittedBits));
 
         int total = periodicWaveform.Count;
         double ui = samplesPerUi * sampleIntervalSeconds;
@@ -57,13 +105,16 @@ public sealed record EyeDiagram(
 
         // Threshold crossings as phases in [0, UI), interpolated between samples, then
         // centered on their circular mean — the crossing cluster of a real eye wraps
-        // the phase origin, so a plain min/max spread would misread it.
+        // the phase origin, so a plain min/max spread would misread it. A pair counts when
+        // the waveform is below the threshold at one sample and at or above it at the other
+        // (half-open), so a sample landing EXACTLY on the threshold is one crossing, not
+        // none: the strict test used before dropped both pairs around such a sample.
         var phases = new List<double>();
         for (int n = 0; n < total; n++)
         {
             double a = periodicWaveform[n] - threshold;
             double b = periodicWaveform[(n + 1) % total] - threshold;
-            if (a == 0 || a * b >= 0) continue;
+            if ((a < 0) == (b < 0)) continue;
             double crossing = (n + a / (a - b)) % samplesPerUi;
             phases.Add(crossing / samplesPerUi);        // fraction of a UI
         }
@@ -91,6 +142,10 @@ public sealed record EyeDiagram(
         }
         double eyeWidth = Math.Max(0, ui - jitterPp);
 
+        if (transmittedBits is not null)
+            return MeasureAgainstBits(periodicWaveform, samplesPerUi, sampleIntervalSeconds,
+                transmittedBits, traces, low, high, eyeWidth, jitterPp, phases.Count);
+
         // Eye height at the sampling phase (mean crossing + UI/2): the vertical gap
         // between the lowest "high" trace and the highest "low" trace there.
         double samplingPhase = (meanPhase + 0.5) % 1.0;
@@ -107,7 +162,89 @@ public sealed record EyeDiagram(
             ? high - low
             : Math.Max(0, minTop - maxBottom);
 
-        return new EyeDiagram(samplesPerUi, ui, traces, eyeHeight, eyeWidth, jitterPp, low, high);
+        return new EyeDiagram(samplesPerUi, ui, traces, eyeHeight, eyeWidth, jitterPp, low, high)
+        {
+            SamplingPhaseUi = samplingPhase, CrossingCount = phases.Count
+        };
+    }
+
+    /// <summary>Height by transmitted bit. The latency is the circular shift that best lines
+    /// the received waveform up with the transmitted pattern (an integrate-and-dump correlation
+    /// over every bit shift and every sample offset); the height is then taken at the sampling
+    /// offset within the received bit where it is largest, which is what a receiver's clock
+    /// recovery would settle on.</summary>
+    private static EyeDiagram MeasureAgainstBits(IReadOnlyList<double> wave, int samplesPerUi,
+        double dt, IReadOnlyList<bool> sent, List<double[]> traces, double low, double high,
+        double eyeWidth, double jitterPp, int crossings)
+    {
+        int bits = sent.Count, total = wave.Count;
+        double ui = samplesPerUi * dt;
+
+        int ones = 0;
+        foreach (bool bit in sent) if (bit) ones++;
+        if (ones == 0 || ones == bits)
+            // One polarity only: there is no eye to close; report the swing, as before.
+            return new EyeDiagram(samplesPerUi, ui, traces, high - low, eyeWidth, jitterPp, low, high)
+            {
+                ClassifiedByTransmittedBits = true, CrossingCount = crossings
+            };
+
+        double mean = 0;
+        foreach (var v in wave) mean += v;
+        mean /= total;
+
+        // S[offset][b] = Σ of the samples of the UI that starts at b·spu + offset.
+        // Running sum over the wrapped waveform makes each one O(1).
+        var prefix = new double[2 * total + 1];
+        for (int i = 0; i < 2 * total; i++) prefix[i + 1] = prefix[i] + (wave[i % total] - mean);
+
+        double best = double.MinValue;
+        int bestShift = 0, bestOffset = 0;
+        var window = new double[bits];
+        for (int offset = 0; offset < samplesPerUi; offset++)
+        {
+            for (int b = 0; b < bits; b++)
+            {
+                int start = b * samplesPerUi + offset;
+                window[b] = prefix[start + samplesPerUi] - prefix[start];
+            }
+            for (int shift = 0; shift < bits; shift++)
+            {
+                double correlation = 0;
+                for (int b = 0; b < bits; b++)
+                {
+                    int received = b + shift;
+                    if (received >= bits) received -= bits;
+                    correlation += sent[b] ? window[received] : -window[received];
+                }
+                if (correlation > best)
+                    (best, bestShift, bestOffset) = (correlation, shift, offset);
+            }
+        }
+        int latency = bestShift * samplesPerUi + bestOffset;
+
+        double height = double.MinValue;
+        int bestPhase = 0;
+        for (int phase = 0; phase < samplesPerUi; phase++)
+        {
+            double minOne = double.MaxValue, maxZero = double.MinValue;
+            for (int b = 0; b < bits; b++)
+            {
+                double v = wave[(b * samplesPerUi + latency + phase) % total];
+                if (sent[b]) minOne = Math.Min(minOne, v);
+                else maxZero = Math.Max(maxZero, v);
+            }
+            if (minOne - maxZero > height) (height, bestPhase) = (minOne - maxZero, phase);
+        }
+
+        return new EyeDiagram(samplesPerUi, ui, traces, height,
+            height > 0 ? eyeWidth : 0, jitterPp, low, high)
+        {
+            ClassifiedByTransmittedBits = true,
+            LatencySeconds = latency * dt,
+            SamplingPhaseUi = (double)bestPhase / samplesPerUi,
+            CrossingCount = crossings
+        };
     }
 
     /// <summary>The eye as a column-major density map (width 2·SamplesPerUi bins,
