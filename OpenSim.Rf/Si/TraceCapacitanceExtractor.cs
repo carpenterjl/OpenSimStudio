@@ -109,6 +109,7 @@ public static class TraceCapacitanceExtractor
 
         // One 1-conductor BEM solve per distinct cross-section — independent, so the
         // Stage G recipe applies: parallel solves into ordered slots, sequential compose.
+        var boardStackup = BoardCoupledExtractor.StackupOf(board, options);
         var groups = new TraceCapacitanceGroup[groupKeys.Count];
         try
         {
@@ -116,7 +117,7 @@ public static class TraceCapacitanceExtractor
             {
                 var (layer, width) = groupKeys[i];
                 var section = new CoupledLineCrossSection(substrates[layer].Stackup, 0,
-                    new[] { new TraceCrossSection(0, width, options.CopperThicknessMeters,
+                    new[] { new TraceCrossSection(0, width, boardStackup.CopperThicknessOf(layer),
                         options.ConductivitySiemensPerMeter) });
                 var rlgc = RlgcExtractor.Extract(section);
                 groups[i] = new TraceCapacitanceGroup(layer, width, groupLength[(layer, width)],

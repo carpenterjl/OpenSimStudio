@@ -64,9 +64,29 @@ public static class GerberLayerClassifier
     private static BoardLayer Sided(string file, GerberLayerType type, string[] fields) =>
         new(file, type, 0, fields.Any(f => f.Equals("Top", StringComparison.OrdinalIgnoreCase)));
 
-    /// <summary>Filename-keyword fallback for files without a FileFunction attribute.</summary>
+    /// <summary>
+    /// The copper order the filename fallback gives a bottom layer: a placeholder meaning
+    /// "last", not a layer count. <see cref="PcbBoardReader"/> renumbers a set that used
+    /// the fallback to contiguous 1..N, so this value never reaches the stackup.
+    /// </summary>
+    public const int BottomByName = 99;
+
+    /// <summary>Filename fallback for files without a FileFunction attribute: the Protel
+    /// extension when it names the layer by itself, else keywords in the name. An inner
+    /// layer named only by extension (.g1, .gp1) gets copper order 0 — its position in
+    /// the stack is not in the name, and the reader says so when it places it.</summary>
     public static BoardLayer ClassifyByName(string fileName)
     {
+        string ext = Path.GetExtension(fileName).ToLowerInvariant();
+        switch (ext)
+        {
+            case ".gtl": return new BoardLayer(fileName, GerberLayerType.CopperSignal, 1, true);
+            case ".gbl": return new BoardLayer(fileName, GerberLayerType.CopperSignal, BottomByName, false);
+        }
+        if (IsInnerExtension(ext, out bool plane))
+            return new BoardLayer(fileName,
+                plane ? GerberLayerType.CopperPlane : GerberLayerType.CopperSignal, 0, false);
+
         string n = Path.GetFileNameWithoutExtension(fileName).ToLowerInvariant();
         bool top = n.Contains("top") || n.EndsWith("_t") || n.Contains("_l1");
         if (n.Contains("profile") || n.Contains("outline") || n.Contains("edge") || n.Contains("boardoutline"))
@@ -79,8 +99,20 @@ public static class GerberLayerClassifier
         if (n.Contains("silk") || n.Contains("legend")) return new BoardLayer(fileName, GerberLayerType.Legend, 0, top);
         if (n.Contains("plane")) return new BoardLayer(fileName, GerberLayerType.CopperPlane, 0, top);
         if (n.Contains("copper") || n.Contains("signal") || n.Contains("gtl") || n.Contains("gbl"))
-            return new BoardLayer(fileName, GerberLayerType.CopperSignal, top ? 1 : 99, top);
+            return new BoardLayer(fileName, GerberLayerType.CopperSignal, top ? 1 : BottomByName, top);
         return new BoardLayer(fileName, GerberLayerType.Unknown, 0, top);
+    }
+
+    /// <summary>Protel inner-layer extensions: <c>.g1 … .g30</c> (mid signal layers) and
+    /// <c>.gp1 … .gp16</c> (internal planes).</summary>
+    public static bool IsInnerExtension(string extension, out bool plane)
+    {
+        plane = false;
+        string e = extension.ToLowerInvariant();
+        if (!e.StartsWith(".g", StringComparison.Ordinal) || e.Length < 3) return false;
+        string digits = e[2..];
+        if (digits.StartsWith('p')) { plane = true; digits = digits[1..]; }
+        return digits.Length is > 0 and <= 2 && digits.All(char.IsDigit);
     }
 
     private static string? ExtractFileFunction(string header)

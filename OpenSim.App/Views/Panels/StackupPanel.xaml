@@ -5,9 +5,9 @@
         <StackPanel>
             <UniformGrid Columns="2">
                 <Label Content="Copper [m]"/>
-                <TextBox Text="{Binding Pcb.PcbCopperThickness}" ToolTip="Default 35 µm (1 oz); used when a layer has no override"/>
+                <TextBox Text="{Binding Pcb.PcbCopperThickness}" ToolTip="Sets every layer's copper thickness (1 oz = 35 µm); edit a layer row below to override one layer"/>
                 <Label Content="Board [m]"/>
-                <TextBox Text="{Binding Pcb.PcbBoardThickness}" ToolTip="Default 1.6 mm; used only with a board outline"/>
+                <TextBox Text="{Binding Pcb.PcbBoardThickness}" ToolTip="Default 1.6 mm; split evenly across the dielectric gaps when a board without a stackup is imported. After import the gap rows below are the stackup."/>
                 <Label Content="Via wall [µm]"/>
                 <TextBox Text="{Binding Pcb.ViaPlatingMicrons}"
                          ToolTip="Plated via barrel wall thickness; the drilled bore stays open (IPC Class 2 ≈ 25 µm)"/>
@@ -34,11 +34,11 @@
                         <DockPanel Margin="0,1">
                             <Label Content="{Binding Label}" DockPanel.Dock="Left" Width="60"/>
                             <TextBox DockPanel.Dock="Right" Width="46" Text="{Binding LossTangent}"
-                                     ToolTip="Loss tangent tanδ (RF layered-media Green's function; FR4 ≈ 0.02)"/>
+                                     ToolTip="Loss tangent tanδ (used by the SI, trace-capacitance and antenna solves; FR4 ≈ 0.02)"/>
                             <TextBox DockPanel.Dock="Right" Width="40" Margin="0,0,3,0" Text="{Binding RelativePermittivity}"
-                                     ToolTip="Relative permittivity εr (RF layered-media Green's function; FR4 ≈ 4.4)"/>
+                                     ToolTip="Relative permittivity εr (used by the SI, trace-capacitance and antenna solves; FR4 ≈ 4.4)"/>
                             <TextBox Margin="0,0,3,0" Text="{Binding ThicknessMicrons}"
-                                     ToolTip="Dielectric thickness = the via-barrel height between these layers"/>
+                                     ToolTip="Dielectric thickness = the via-barrel height between these layers, and the substrate height for the SI, trace-capacitance and antenna solves"/>
                         </DockPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

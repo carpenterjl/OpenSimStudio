@@ -265,7 +265,9 @@ public partial class AntennaViewModel : ObservableObject
             SubstrateEpsR = 4.4; // FR4 — the board material the rest of the app assumes
             SubstrateTanD = 0.02;
             _log.Append("Antenna: substrate seeded from the board (FR4 εr 4.4, tanδ 0.02, "
-                + $"thickness {HeightAboveGroundMm:g3} mm) — edit in the panel; εr = 1 restores the air/PEC path.");
+                + $"thickness {HeightAboveGroundMm:g3} mm) — edit in the panel; εr = 1 restores the air/PEC path. "
+                + "A board island is solved over the PCB stackup panel's gaps down to the nearest plane under it; "
+                + "these fields then only switch the substrate on and set the mesh density.");
         }
     }
 
@@ -1250,12 +1252,25 @@ public partial class AntennaViewModel : ObservableObject
                     _boardStackupNotes = null;
                     if (_board is { } boardForStackup)
                     {
+                        // The stackup panel's stackup (the object the mesher, PEEC chain and
+                        // SI extractors read), and the net's own footprint so the ground is
+                        // the nearest plane under it rather than always the bottom layer.
+                        var boardStackup = _options?.Invoke().Stackup
+                            ?? OpenSim.Pcb.Import.BoardStackup.FromBoard(boardForStackup,
+                                HeightAboveGroundMm * 1e-3, SubstrateEpsR, Math.Max(SubstrateTanD, 0));
                         if (OpenSim.Rf.Layered.BoardAntennaStackup.TryResolve(
-                                boardForStackup, choice.Island.LayerOrder,
-                                SubstrateEpsR, Math.Max(SubstrateTanD, 0),
-                                HeightAboveGroundMm * 1e-3, out var resolved, out var stackFailure))
+                                boardForStackup, choice.Island.LayerOrder, boardStackup,
+                                choice.Island.Shape, out var resolved, out var stackFailure))
                         {
-                            if (!resolved!.IsSingleSlabTop)
+                            if (resolved!.IsSingleSlabTop)
+                            {
+                                // Same single-slab solver path as before, but over the gap the
+                                // board stackup resolved to — not the panel's seed scalars.
+                                var slab = resolved.Stackup.Layers[0];
+                                substrate = new OpenSim.Rf.Layered.SubstrateStackup(
+                                    slab.RelativePermittivity, slab.LossTangent, slab.ThicknessMeters);
+                            }
+                            else
                                 layered = new LayeredSpec(resolved.Stackup, resolved.SourceInterface);
                             _boardStackupNotes = resolved.Assumptions;
                         }

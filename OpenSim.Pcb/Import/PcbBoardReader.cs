@@ -56,10 +56,15 @@ public sealed class PcbBoardReader
         // Copper layers are mutually independent: parse + polygonize in parallel, then
         // assemble strictly in layer order so island ids, pads, centerlines and warning
         // lines come out bitwise-identical to a sequential run.
-        var copperLayers = layers
-            .Where(l => l.Type is GerberLayerType.CopperSignal or GerberLayerType.CopperPlane)
-            .OrderBy(l => l.CopperOrder == 0 ? int.MaxValue : l.CopperOrder)
-            .ToList();
+        var (copperLayers, copperOrders) = OrderCopperLayers(layers, warnings);
+        // The board's layer list reports the order each copper layer was GIVEN, so the
+        // stackup panel, the plane picker and the islands all name a layer the same way.
+        for (int k = 0; k < layers.Count; k++)
+        {
+            int at = copperLayers.IndexOf(layers[k]);
+            if (at >= 0) layers[k] = layers[k] with { CopperOrder = copperOrders[at] };
+        }
+        copperLayers = copperLayers.Select((l, k) => l with { CopperOrder = copperOrders[k] }).ToList();
         var results = new LayerResult[copperLayers.Count];
         stageTimer.Restart();
         try
@@ -69,7 +74,7 @@ public sealed class PcbBoardReader
                 i =>
                 {
                     var layer = copperLayers[i];
-                    int layerOrder = layer.CopperOrder > 0 ? layer.CopperOrder : i + 1;
+                    int layerOrder = layer.CopperOrder;
                     try
                     {
                         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -171,6 +176,50 @@ public sealed class PcbBoardReader
             Warnings = warnings,
             TraceCenterlines = centerlines
         };
+    }
+
+    /// <summary>
+    /// Copper layers top to bottom with the order each is given. A set whose every copper
+    /// file declares its position (X2 <c>Copper,L&lt;n&gt;</c>) keeps the declared numbers.
+    /// A set that needed the filename fallback has no numbers to keep — the fallback only
+    /// knows "top", "bottom" (<see cref="GerberLayerClassifier.BottomByName"/>) and
+    /// "somewhere inside" — so it is numbered 1..N in stack order. Without this a
+    /// top/bottom pair came out as layers 1 and 99, and the stackup z model filled the
+    /// range between them with 97 layers that do not exist.
+    /// </summary>
+    private static (List<BoardLayer> Layers, List<int> Orders) OrderCopperLayers(
+        IReadOnlyList<BoardLayer> layers, List<string> warnings)
+    {
+        var copper = layers
+            .Where(l => l.Type is GerberLayerType.CopperSignal or GerberLayerType.CopperPlane)
+            .ToList();
+        bool byName = copper.Any(l => l.CopperOrder is 0 or GerberLayerClassifier.BottomByName);
+        if (!byName)
+        {
+            var declared = copper.OrderBy(l => l.CopperOrder).ToList();
+            return (declared, declared.Select(l => l.CopperOrder).ToList());
+        }
+
+        // Stack order: declared/top first, layers of unknown position next (file order),
+        // a bottom layer last.
+        static int Rank(BoardLayer l) =>
+            l.CopperOrder == GerberLayerClassifier.BottomByName ? 2 : l.CopperOrder == 0 ? 1 : 0;
+        var ordered = copper
+            .Select((l, index) => (Layer: l, Index: index))
+            .OrderBy(x => Rank(x.Layer))
+            .ThenBy(x => Rank(x.Layer) == 0 ? x.Layer.CopperOrder : 0)
+            .ThenBy(x => x.Index)
+            .Select(x => x.Layer)
+            .ToList();
+        var orders = Enumerable.Range(1, ordered.Count).ToList();
+        warnings.Add("Copper layer order taken from file names (no %TF.FileFunction on every copper " +
+                     "file): " + string.Join(", ", ordered.Select((l, k) => $"L{orders[k]} = {l.FileName}")) + ".");
+        var unplaced = ordered.Where(l => l.CopperOrder == 0).Select(l => l.FileName).ToList();
+        if (unplaced.Count > 0)
+            warnings.Add("The position of " + string.Join(", ", unplaced) + " in the stack is not stated " +
+                         "by the file name; placed between the top and bottom layers in file order — " +
+                         "check the layer order before trusting any multi-layer result.");
+        return (ordered, orders);
     }
 
     /// <summary>

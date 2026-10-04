@@ -244,6 +244,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
             var extraction = await Task.Run(() => BoardCoupledExtractor.Extract(_board, selected,
                 new BoardCoupledOptions
                 {
+                    // The stackup panel's stackup: this layer's copper and its gap's
+                    // thickness, εr and tanδ — the object the mesher and PEEC chain read.
+                    Stackup = options.Stackup,
                     CopperThicknessMeters = options.CopperThickness,
                 }));
             if (extraction.FailureReason is not null)
@@ -300,9 +303,11 @@ public partial class SignalIntegrityViewModel : ObservableObject
         try
         {
             var board = _board;
+            var panel = _meshOptions();
             var options = new BoardCoupledOptions
             {
-                CopperThicknessMeters = _meshOptions().CopperThickness,
+                Stackup = panel.Stackup,
+                CopperThicknessMeters = panel.CopperThickness,
             };
             var results = await Task.Run(() => selected
                 .Select(net => (Net: net, Result: TraceCapacitanceExtractor.Extract(board, net, options)))
@@ -359,6 +364,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
             var meshOptions = _meshOptions();
             var options = new BoardCoupledOptions
             {
+                Stackup = meshOptions.Stackup,
                 CopperThicknessMeters = meshOptions.CopperThickness,
             };
             var report = await Task.Run(() =>

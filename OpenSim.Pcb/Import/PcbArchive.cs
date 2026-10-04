@@ -48,6 +48,6 @@ public static class PcbArchive
         string ext = Path.GetExtension(name).ToLowerInvariant();
         // Altium aperture library (.apr / .APR_LIB) and macro files are not layers.
         if (name.EndsWith(".APR_LIB", StringComparison.OrdinalIgnoreCase)) return false;
-        return Extensions.Contains(ext);
+        return Extensions.Contains(ext) || GerberLayerClassifier.IsInnerExtension(ext, out _);
     }
 }

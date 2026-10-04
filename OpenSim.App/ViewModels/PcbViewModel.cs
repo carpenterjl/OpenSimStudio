@@ -186,7 +186,25 @@ public partial class PcbViewModel : ObservableObject
     }
 
     partial void OnShowCopperPreviewChanged(bool value) => RefreshCopperPreview();
-    partial void OnPcbCopperThicknessChanged(double value) => InvalidateLayerZ();
+    /// <summary>
+    /// The copper box sets EVERY layer. Each layer row carries its own thickness and the
+    /// mesher, the chain builder and the SI extractors read the rows, so a value that
+    /// stayed in the box changed nothing (2 oz typed here used to leave a 1 oz mesh).
+    /// A row edited afterwards overrides its own layer.
+    /// </summary>
+    partial void OnPcbCopperThicknessChanged(double value)
+    {
+        if (value > 0)
+        {
+            _applyingBulkLayers = true;
+            try
+            {
+                foreach (var filter in LayerFilters) filter.ThicknessMicrons = value * 1e6;
+            }
+            finally { _applyingBulkLayers = false; }
+        }
+        InvalidateLayerZ();
+    }
     partial void OnPcbBoardThicknessChanged(double value) => InvalidateLayerZ();
 
     partial void OnSelectedNetRowChanged(NetRow? value) => SelectedNet = value?.Net;
@@ -395,15 +413,22 @@ public partial class PcbViewModel : ObservableObject
             .Where(l => l.CopperOrder > 0)
             .GroupBy(l => l.CopperOrder)
             .ToDictionary(g => g.Key, g => g.First().FileName);
-        var orders = board.Islands.Select(i => i.LayerOrder).Distinct().OrderBy(o => o).ToList();
+        // Every copper layer of the board gets a row, including one with no copper on it:
+        // it still occupies its place in the stack, and without rows for it and its gaps
+        // the z model would fall back to a whole-board-thick default gap there.
+        var orders = board.Islands.Select(i => i.LayerOrder)
+            .Concat(layerNames.Keys)
+            .Distinct().OrderBy(o => o).ToList();
         foreach (var order in orders)
         {
             // IPC-2581 names its layers and declares per-layer copper thickness; Gerber
-            // has neither, so fall back to "L{n}" and the 35 µm default.
+            // has neither, so fall back to "L{n}" and the copper box's value.
             var filter = new LayerFilter(order, board.Stackup is null
                 ? null : layerNames.GetValueOrDefault(order));
             if (board.Stackup is not null && order - 1 < board.Stackup.CopperLayerThicknesses.Count)
                 filter.ThicknessMicrons = board.Stackup.CopperLayerThicknesses[order - 1] * 1e6;
+            else if (PcbCopperThickness > 0)
+                filter.ThicknessMicrons = PcbCopperThickness * 1e6;
             filter.PropertyChanged += OnLayerFilterChanged;
             LayerFilters.Add(filter);
         }
@@ -624,15 +649,19 @@ public partial class PcbViewModel : ObservableObject
         };
     }
 
-    /// <summary>The mesh options the net mesher, the copper preview, and the inductance
-    /// chain builder all share — one stackup z model, so where copper is drawn, meshed,
-    /// and composed for PEEC is the same place.</summary>
+    /// <summary>The options every board analysis shares — the net mesher, the copper
+    /// preview, the inductance chain builder, and (through
+    /// <see cref="NetMeshOptions.Stackup"/>) the SI, capacitance and antenna paths. One
+    /// stackup: where copper is drawn, meshed and composed for PEEC is the same place,
+    /// over the same dielectric the transmission-line and antenna solves use.</summary>
     private NetMeshOptions BuildNetMeshOptions() => new()
     {
         TargetEdgeLength = _meshing.TargetEdgeLength,
         CopperThickness = PcbCopperThickness,
         LayerThickness = LayerFilters.ToDictionary(f => f.LayerOrder, f => f.ThicknessMeters),
         DielectricGapThickness = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.ThicknessMeters),
+        DielectricGapPermittivity = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.RelativePermittivity),
+        DielectricGapLossTangent = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.LossTangent),
         DefaultDielectricThickness = PcbBoardThickness,
         ViaPlatingThickness = ViaPlatingMicrons * 1e-6
     };

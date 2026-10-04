@@ -35,6 +35,27 @@ public sealed record NetMeshOptions
     /// </summary>
     public double ViaPlatingThickness { get; init; } = 25e-6;
 
+    /// <summary>Per-gap relative permittivity (upper copper layer order → εr); gaps not
+    /// listed are FR4 (4.4). Does not move a node — carried here so that the SI,
+    /// capacitance and antenna paths read the same stackup the mesh is built from.</summary>
+    public IReadOnlyDictionary<int, double>? DielectricGapPermittivity { get; init; }
+
+    /// <summary>Per-gap loss tangent (upper copper layer order → tanδ); gaps not listed
+    /// are FR4 (0.02).</summary>
+    public IReadOnlyDictionary<int, double>? DielectricGapLossTangent { get; init; }
+
+    /// <summary>The stackup these options describe, as the one object every board
+    /// analysis reads (see <see cref="BoardStackup"/>).</summary>
+    public BoardStackup Stackup => new()
+    {
+        DefaultCopperThickness = CopperThickness,
+        LayerThickness = LayerThickness,
+        DefaultGapThickness = DefaultDielectricThickness,
+        GapThickness = DielectricGapThickness,
+        GapPermittivity = DielectricGapPermittivity,
+        GapLossTangent = DielectricGapLossTangent,
+        Source = "from the stackup settings"
+    };
 }
 
 /// <summary>
@@ -411,10 +432,10 @@ public sealed class NetMesher
     }
 
     private static double CopperThickness(NetMeshOptions o, int layer) =>
-        o.LayerThickness?.GetValueOrDefault(layer) is > 0 and var t ? t : o.CopperThickness;
+        o.Stackup.CopperThicknessOf(layer);
 
     private static double DielectricThickness(NetMeshOptions o, int upperLayer) =>
-        o.DielectricGapThickness?.GetValueOrDefault(upperLayer) is > 0 and var t ? t : o.DefaultDielectricThickness;
+        o.Stackup.GapThicknessOf(upperLayer);
 
     /// <summary>
     /// A plated via barrel's copper cross-section: an annulus whose inner ring is the open

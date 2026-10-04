@@ -9,7 +9,17 @@ namespace OpenSim.Rf.Si;
 /// dielectric fallbacks used when the board carries no per-gap stackup data.</summary>
 public sealed record BoardCoupledOptions
 {
-    /// <summary>Copper thickness of the traces [m] (sets R only — the C/L solve is
+    /// <summary>
+    /// The stackup to extract over: the trace layer's own copper thickness and the
+    /// adjacent gap's thickness, εr and tanδ. The application passes the stackup panel's
+    /// (<see cref="NetMeshOptions.Stackup"/>), the same object the mesher and the
+    /// inductance chain read. Null ⇒ the board file's stackup, completed with
+    /// <see cref="CopperThicknessMeters"/> and the Default* values below.
+    /// </summary>
+    public BoardStackup? Stackup { get; init; }
+
+    /// <summary>Copper thickness of the traces [m] when no <see cref="Stackup"/> is given
+    /// and the board file lists none for the layer (sets R only — the C/L solve is
     /// zero-thickness). Default 35 µm (1 oz).</summary>
     public double CopperThicknessMeters { get; init; } = 35e-6;
 
@@ -175,10 +185,11 @@ public static class BoardCoupledExtractor
                 $"no dielectric gap is adjacent to the trace layer L{layer} — a microstrip "
                 + "cross-section needs a reference plane above or below the traces.");
 
+        double copperThickness = StackupOf(board, options).CopperThicknessOf(layer);
         var traces = new TraceCrossSection[runs.Length];
         for (int i = 0; i < runs.Length; i++)
             traces[i] = new TraceCrossSection(offset[i], runs[i].Width,
-                options.CopperThicknessMeters, options.ConductivitySiemensPerMeter);
+                copperThickness, options.ConductivitySiemensPerMeter);
 
         CoupledLineCrossSection section;
         try { section = new CoupledLineCrossSection(substrate, 0, traces); }
@@ -298,42 +309,40 @@ public static class BoardCoupledExtractor
         return l > 0 ? v * (1.0 / l) : new Point2(1, 0);
     }
 
-    /// <summary>The single-slab substrate beneath (or above) the trace layer, from the board's
-    /// per-gap stackup data when present, else the option defaults. Returns null when the trace
-    /// layer has no adjacent dielectric gap (a one-layer board has no reference plane).
+    /// <summary>The stackup an extraction runs over: the one it was handed, else the board
+    /// file's completed with the option defaults. Internal — the capacitance extractor and
+    /// the DC sweep resolve it through this one function.</summary>
+    internal static BoardStackup StackupOf(PcbBoard board, BoardCoupledOptions options) =>
+        options.Stackup ?? BoardStackup.FromBoard(board, options.DefaultBoardThicknessMeters,
+            options.DefaultEpsR, options.DefaultTanD, options.CopperThicknessMeters);
+
+    /// <summary>The single-slab substrate beneath (or above) the trace layer, read from
+    /// <see cref="StackupOf"/>. Returns null when the trace layer has no adjacent dielectric
+    /// gap (a one-layer board has no reference plane).
     /// Internal — <see cref="TraceCapacitanceExtractor"/> shares this exact gap-below-then-above
     /// rule; a second implementation would drift.</summary>
     internal static LayeredStackup? ResolveSubstrate(PcbBoard board, int layer,
         BoardCoupledOptions options, out string note)
     {
-        var stackup = board.Stackup;
-        int numGaps = stackup is not null && stackup.DielectricGapThicknesses.Count > 0
-            ? stackup.DielectricGapThicknesses.Count
+        var file = board.Stackup;
+        int numGaps = file is not null && file.DielectricGapThicknesses.Count > 0
+            ? file.DielectricGapThicknesses.Count
             : Math.Max(0, MaxCopperOrder(board) - 1);
 
-        // Gap index i sits between copper orders i+1 and i+2. Prefer the gap BELOW the
-        // trace layer (index layer-1); fall back to the gap above (index layer-2).
-        int gapIndex = -1;
+        // Gap k sits between copper orders k and k+1. Prefer the gap BELOW the trace
+        // layer (k = layer); fall back to the gap above (k = layer − 1).
+        int gap;
         bool below = false;
-        if (layer - 1 >= 0 && layer - 1 < numGaps) { gapIndex = layer - 1; below = true; }
-        else if (layer - 2 >= 0 && layer - 2 < numGaps) { gapIndex = layer - 2; }
-        if (gapIndex < 0) { note = ""; return null; }
+        if (layer >= 1 && layer <= numGaps) { gap = layer; below = true; }
+        else if (layer - 1 >= 1 && layer - 1 <= numGaps) { gap = layer - 1; }
+        else { note = ""; return null; }
 
-        double h = options.DefaultBoardThicknessMeters / Math.Max(1, numGaps);
-        double epsR = options.DefaultEpsR, tanD = options.DefaultTanD;
-        bool fromFile = false;
-        if (stackup is not null)
-        {
-            if (gapIndex < stackup.DielectricGapThicknesses.Count)
-            { h = stackup.DielectricGapThicknesses[gapIndex]; fromFile = true; }
-            if (gapIndex < stackup.DielectricGapPermittivities.Count)
-                epsR = stackup.DielectricGapPermittivities[gapIndex];
-            if (gapIndex < stackup.DielectricGapLossTangents.Count)
-                tanD = stackup.DielectricGapLossTangents[gapIndex];
-        }
+        var stackup = StackupOf(board, options);
+        double h = stackup.GapThicknessOf(gap);
+        double epsR = stackup.PermittivityOf(gap), tanD = stackup.LossTangentOf(gap);
 
         note = $"Substrate = the dielectric gap {(below ? "below" : "above")} trace layer L{layer} "
-            + $"({(fromFile ? "from the board stackup" : "default")}: εr {epsR:g3}, tanδ {tanD:g3}, "
+            + $"({stackup.Source}: εr {epsR:g3}, tanδ {tanD:g3}, "
             + $"h {h * 1e3:g3} mm); the reference plane is the adjacent copper layer, and coupling "
             + "to any other layer is out of scope by construction.";
         return new LayeredStackup(new[] { new LayeredStackup.Layer(epsR, tanD, h) });
