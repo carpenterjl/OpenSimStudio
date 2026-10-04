@@ -67,10 +67,13 @@ A slower correct answer always beats a faster wrong one. Concretely:
 
 - **Correctness is gated by analytical regression benchmarks**, not just unit tests:
   cantilever deflection vs. Timoshenko theory, Fourier slab transients, half-wave dipole
-  impedance bands, the Balanis microstrip-patch resonance and cavity edge resistance,
-  and antenna **energy-conservation gates** (radiated + surface-wave power must equal
-  ½·Re(V·I*)). Failing solvers fail loudly — the platform never returns a
-  plausible-looking garbage number.
+  impedance bands, the microstrip-patch resonance (within an 8 % window of the Balanis
+  transmission-line estimate) and its edge resistance (inside a 150–320 Ω band around the
+  cavity model — plausibility bands, not precision gates), and antenna
+  **energy-conservation gates** (radiated + surface-wave power against ½·Re(V·I*); the
+  probe-fed patch on a substrate reads 4 % over, a known open item that the result line
+  reports). Failing solvers fail loudly — the
+  platform is built never to return a plausible-looking garbage number.
 - **First-party numerics stay transparent.** The CSR sparse matrix + Jacobi-preconditioned
   conjugate gradient, the COCG complex solver, the Bowyer–Watson tet mesher (symbolic
   infinite vertex, CGAL-style), and the subspace eigensolver are core IP, documented,

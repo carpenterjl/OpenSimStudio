@@ -136,8 +136,10 @@ public static class TraceCapacitanceExtractor
         foreach (var g in groups) traceFarads += g.TotalFarads;
 
         // Pads: parallel-plate ε₀εr·A/h to each reference plane of the pad's layer (in
-        // series through the gaps in between). No fringing — a stated lower bound (fringing
-        // only adds). Pads on a layer with no plane under them are counted and NAMED, never
+        // series through the gaps in between). An ESTIMATE, not a bound: no fringing (which
+        // would add), and the trace term already counts the centerline length that runs to
+        // each pad's centre (which the pad's own area counts again).
+        // Pads on a layer with no plane under them are counted and NAMED, never
         // silently dropped (the Gerber warn-not-silent rule).
         double padFarads = 0;
         int padCount = 0, padsSkipped = 0;
@@ -170,7 +172,8 @@ public static class TraceCapacitanceExtractor
                 + "shielding by neighbours is not modeled and the number is the isolated-net "
                 + "capacitance to those planes.",
             $"Pads add parallel-plate ε₀εr·A/h terms to each plane ({padCount} pads) — no "
-                + "fringing, a stated lower bound for the pad contribution.",
+                + "fringing, and overlapping the trace length that already runs to each pad's "
+                + "centre: an estimate of the pad contribution, not a bound.",
         };
         if (duplicatesDropped > 0)
             assumptions.Add($"{duplicatesDropped} coincident duplicate draw(s) collapsed "

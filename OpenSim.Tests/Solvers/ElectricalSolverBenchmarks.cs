@@ -141,7 +141,8 @@ public class ElectricalSolverBenchmarks
         Assert.Equal(avgTip * amps, TotalDissipatedPower(mesh, output), avgTip * amps * 1e-2);
 
         // A current-driven test must still report resistance in the summary
-        // (R = P/I², exact for a two-terminal DC network) so the UI's
+        // (R = P/I² for a current entering at uniform density — the terminal resistance
+        // here, where the bar's end face is naturally uniform) so the UI's
         // current-excitation mode reads the same keys as the voltage mode.
         double analyticR = analyticV / amps;
         Assert.NotNull(output.Summary);

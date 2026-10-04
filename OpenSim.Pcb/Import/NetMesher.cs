@@ -62,7 +62,7 @@ public sealed record NetMeshOptions
 /// Meshes one selected copper net into a solvable <see cref="Body"/>. A net is a small,
 /// connected conductor (unlike a whole layer), so it meshes quickly. A single-layer net is
 /// extruded copper-only. A via-stitched multi-layer net keeps every layer at its true z and
-/// connects them with solid copper via barrels (one shared 2D triangulation extruded through
+/// connects them with plated via barrels — annular copper, the bore left open (one shared 2D triangulation extruded through
 /// the stackup, so the copper on adjacent layers and the barrels between them share nodes and
 /// current flows across layers) — layers are never collapsed onto one plane.
 /// </summary>

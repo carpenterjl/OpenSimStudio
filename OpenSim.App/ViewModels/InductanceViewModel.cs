@@ -118,7 +118,11 @@ public partial class InductanceViewModel : ObservableObject
         try
         {
             var report = new MutualCouplingAnalyzer().Analyze(chainA.Chain, chainB.Chain);
-            MutualResult = $"M = {report.MutualHenries * 1e9:g4} nH    k = {report.CouplingK:g4}";
+            // The sign of M follows the direction each chain happens to be traversed in
+            // (its start is a matter of ordering, not of current), so only the size is shown.
+            MutualResult = $"|M| = {Math.Abs(report.MutualHenries) * 1e9:g4} nH    " +
+                           $"|k| = {Math.Abs(report.CouplingK):g4}    (sign depends on which way " +
+                           "each net is traversed)";
             InductanceAssumptions = "Assumptions: " + string.Join(" ", report.Assumptions);
             _log.Append($"Inductance: M({a.Label}, {b.Label}): {MutualResult}");
         }

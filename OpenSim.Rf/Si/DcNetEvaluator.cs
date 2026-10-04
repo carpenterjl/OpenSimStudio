@@ -94,7 +94,7 @@ public static class DcNetEvaluator
                 + "pins as equipotential attachment points, corners/necks unmodeled, no skin effect "
                 + "(the FE field solve remains the per-net precision tool)",
             "capacitance: the net alone over an infinite reference plane — traces Σ C′(width, gap)·length "
-                + "+ pad plates ε₀εr·A/h (no fringing on pads, a stated lower bound); other nets absent",
+                + "+ pad plates ε₀εr·A/h (no fringing on pads, overlapping the trace under them: an estimate, not a bound); other nets absent",
             "time constant: lumped RC screen τ = R(pin pair) × C(whole net) — not a distributed/Elmore delay",
             "part name is the file's Component part (footprint package as fallback) when present",
             $"conductivity {options.ConductivitySiemensPerMeter:g3} S/m, copper thickness from the stackup",

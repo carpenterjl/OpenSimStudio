@@ -4,8 +4,9 @@ namespace OpenSim.Pcb.Inductance;
 /// Partial inductances of straight conductors (PEEC building blocks). Rectangular bars
 /// use one finite-section kernel for every parallel pair, the bar with itself included
 /// (<see cref="BarBarMutual"/>: Hoer &amp; Love's uniform-current solution); round wires
-/// and tubes use the exact filament integral at their self-GMD. All lengths in meters,
-/// results in henries.
+/// and tubes use the filament integral at their self-GMD — the slender-conductor form,
+/// whose end error is second order in radius/length and is NOT negligible for a via
+/// barrel a few radii long. All lengths in meters, results in henries.
 ///
 /// Assumptions (stated so results are not mistaken for a full-wave solve): DC / uniform
 /// current distribution, no skin or proximity effect, non-magnetic media (µ = µ₀), and
@@ -53,10 +54,12 @@ public static class PartialInductance
 
     /// <summary>
     /// Partial self-inductance of a straight round wire with uniform (DC) current:
-    /// the exact self-GMD evaluation L = (µ₀/2π)·l·[asinh(l/g) − √(1+(g/l)²) + g/l] with
+    /// the self-GMD evaluation L = (µ₀/2π)·l·[asinh(l/g) − √(1+(g/l)²) + g/l] with
     /// g = r·e^(−¼). Asymptotically (µ₀/2π)·l·[ln(2l/r) − ¾] for l ≫ r, but — unlike the
     /// log form — stays positive for ANY aspect ratio, so stubby segments cannot poison
-    /// a chain sum with a negative self-term.
+    /// a chain sum with a negative self-term. It is the two-filament formula at the
+    /// cross-section's geometric mean distance: right to first order in r/l, with a
+    /// second-order end error.
     /// </summary>
     public static double RoundWireSelfInductance(double length, double radius)
     {
@@ -70,7 +73,9 @@ public static class PartialInductance
     /// barrel: the bore is empty and the current flows in the shell, whose self-GMD is
     /// exactly the radius. L = (µ₀/2π)·l·[asinh(l/r) − √(1+(r/l)²) + r/l], asymptotically
     /// (µ₀/2π)·l·[ln(2l/r) − 1]; positive for any aspect ratio (adjacent-layer vias are
-    /// genuinely stubbier than the log asymptote tolerates).
+    /// genuinely stubbier than the log asymptote tolerates). The same slender-conductor
+    /// form as the round wire: for a barrel with l/r of 1 to 10 its end error is several
+    /// percent, so a via's inductance here is an estimate.
     /// </summary>
     public static double RoundTubeSelfInductance(double length, double radius)
     {
@@ -80,7 +85,8 @@ public static class PartialInductance
     }
 
     /// <summary>Self-inductance as the filament pair integral at the self-GMD ρ — the
-    /// full-overlap parallel-filament form, exact for the given GMD.</summary>
+    /// full-overlap parallel-filament closed form evaluated at ρ. (Replacing a
+    /// cross-section by its GMD is itself the slender approximation.)</summary>
     private static double SelfFromGmd(double length, double gmd)
     {
         double l = length, g = gmd;

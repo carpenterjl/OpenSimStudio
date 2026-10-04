@@ -19,8 +19,9 @@ public sealed record InductanceReport(
 /// PARALLEL rectangular bars — side-by-side, stacked, collinear, staggered — take the
 /// same finite-section kernel as the bar self terms (<see cref="PartialInductance.BarBarMutual"/>),
 /// so a straight run composes to one value however it is subdivided. Every other pair
-/// (oblique bars, round wires, via barrels) is the exact straight-filament Neumann
-/// solution (<see cref="FilamentMutual"/>). For an OPEN chain the result is the chain's
+/// (oblique bars, round wires, via barrels) is the straight-filament Neumann solution
+/// between centre lines (<see cref="FilamentMutual"/>) — exact for filaments, an
+/// approximation for conductors that are not slender. For an OPEN chain the result is the chain's
 /// PARTIAL inductance (no return conductor); a physical loop value needs the return
 /// composed in explicitly.
 /// </summary>
@@ -31,7 +32,9 @@ public sealed class LoopComposer
     internal const string MutualModelAssumption =
         "Parallel rectangular bars (self, side-by-side, stacked, collinear) use the exact " +
         "uniform-current finite-section kernel (Hoer–Love); non-parallel pairs and round " +
-        "profiles use the exact straight-filament Neumann solution (Grover).";
+        "profiles use the straight-filament Neumann solution (Grover) between centre lines " +
+        "or at the self-GMD, which is an estimate for conductors that are not slender — " +
+        "a via barrel a few radii long is good to several percent.";
 
     /// <summary>The remaining approximation of the bar model.</summary>
     internal const string BendAssumption =

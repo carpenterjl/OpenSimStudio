@@ -10,12 +10,15 @@ public sealed record TransientResult(
     double[][] FarVoltages);
 
 /// <summary>
-/// The SI time-domain engine (Stage S5): EXACT periodic steady state through the
+/// The SI time-domain engine (Stage S5): the periodic steady state through the
 /// pattern's discrete spectrum. The source waveforms are periodic by construction
 /// (see <see cref="OpenSim.Core.Signals.SourceWaveform"/>), so multiplying their FFT by
-/// the network's frequency response at the EXACT bin frequencies and inverting IS the
-/// answer — circular convolution is the periodic convolution, with no windowing or
-/// truncation approximations anywhere. Bins are independent MTL solves and run in
+/// the network's frequency response at the bin frequencies and inverting IS the
+/// periodic response — circular convolution is the periodic convolution, with no
+/// windowing or truncation in the TRANSFORM. That is a statement about this step only:
+/// the answer is as good as the network handed in, whose line model (thickness, loss,
+/// dispersion — see <see cref="RlgcModel"/>) carries its own approximations, and the
+/// source is the band-limited interpolation of its samples. Bins are independent MTL solves and run in
 /// parallel into ordered slots (the Stage G recipe — bitwise-deterministic at any
 /// thread count); the spectrum is mirrored conjugate-symmetric so the output is real.
 /// </summary>

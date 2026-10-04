@@ -73,7 +73,11 @@ public sealed class PlaneReturnComposer
             "Infinite perfect-conductor return plane; the return current flows entirely in the plane.",
             $"Image conductors mirrored at the plane surface z = {planeSurfaceZ * 1e3:g4} mm " +
             "(the copper face toward the chain).",
-            "DC / uniform current distribution (no skin or proximity effect).",
+            "DC / uniform current distribution in the conductors (no skin or proximity effect). " +
+            "Taken together with the perfect return plane this is a high-frequency return path " +
+            "under a low-frequency current distribution: read it as the loop inductance above " +
+            "the frequency where the plane carries the return and below the trace's own " +
+            "skin-depth crossover.",
             LoopComposer.MutualModelAssumption,
             LoopComposer.BendAssumption
         };

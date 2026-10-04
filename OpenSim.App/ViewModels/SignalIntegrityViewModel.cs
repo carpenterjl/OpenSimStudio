@@ -361,8 +361,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
         catch (Exception ex) { TraceCapResult = $"Not computable: {ex.Message}"; }
     }
 
-    /// <summary>The board-wide DC screen: EVERY net with ≥2 pads (fewer is an import
-    /// artifact — skipped and counted) gets its pad-pair resistances from the nodal
+    /// <summary>The board-wide DC screen: every net with at least two COMPONENT PINS
+    /// (pads that carry a component reference — an IPC-2581 import; a Gerber board has
+    /// none, so every net is skipped and counted) gets its pin-pair resistances from the nodal
     /// network on the trace graph (branches AND parallel paths — the case the inductance
     /// chain refuses), the net's total C to the reference plane, and the lumped
     /// τ = R·C screen, written to a CSV report via a save dialog. Non-conforming nets
@@ -645,7 +646,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
             + "the channel reduction; edges on the continuous timeline) into "
             + (lines > 1
                 ? $"the {lines}-line coupled channel (matrix FIR, all lines solved together). "
-                : "the single-line channel FIR. ")
+                : "the one-line channel (the same N-port engine, with one line). ")
             + $"Switching profile: {switchingSource}. "
             + (UseReceiverClamps
                 ? "Receiver = the buffer's own GND/POWER protection clamps (nonlinear) plus the "
