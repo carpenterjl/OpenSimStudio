@@ -107,6 +107,11 @@ public partial class SignalIntegrityViewModel : ObservableObject
     /// editable but are ignored while it holds.</summary>
     [ObservableProperty] private bool _useBoardNets;
 
+    /// <summary>Drive the first selected net from its other end: exchanges the network's
+    /// near and far ends at the next extraction (the result line states where the near
+    /// end is).</summary>
+    [ObservableProperty] private bool _swapBoardEnds;
+
     /// <summary>The importable board nets, each with a selection toggle (pick 2+ parallel
     /// signal nets, then Extract).</summary>
     public ObservableCollection<SiNetSelection> BoardNets { get; } = new();
@@ -171,9 +176,15 @@ public partial class SignalIntegrityViewModel : ObservableObject
     {
         if (UseBoardNets && _boardExtraction is
             { Rlgc: { } rlgcBoard, Network: { } networkBoard, CrossSection: { } sectionBoard })
-            return ProximityEffect
-                ? Build(sectionBoard, _boardExtraction.CoupledLengthMeters)
-                : (rlgcBoard, networkBoard);
+        {
+            if (!ProximityEffect) return (rlgcBoard, networkBoard);
+            // The SAME cascade (every coupled stretch and every lead), each section with
+            // the proximity providers — not one rebuilt section that drops the leads.
+            var perSection = new Dictionary<CoupledLineCrossSection, RlgcResult>(
+                ReferenceEqualityComparer.Instance);
+            var network = _boardExtraction.BuildNetwork(s => perSection[s] = ExtractRlgc(s));
+            return (perSection[sectionBoard], network);
+        }
         return Build(BuildCrossSection(), LineLengthMm * 1e-3);
     }
 
@@ -181,6 +192,12 @@ public partial class SignalIntegrityViewModel : ObservableObject
     /// Stage S8 proximity-effect R(f)/L(f) providers (a filament solve over the band the eye
     /// uses). Off ⇒ the v1 scalar-R model, bit-for-bit.</summary>
     private (RlgcResult, MtlNetwork) Build(CoupledLineCrossSection section, double lengthMeters)
+    {
+        var rlgc = ExtractRlgc(section);
+        return (rlgc, new MtlNetwork(new[] { new MtlSection(rlgc, lengthMeters) }));
+    }
+
+    private RlgcResult ExtractRlgc(CoupledLineCrossSection section)
     {
         var rlgc = RlgcExtractor.Extract(section);
         if (ProximityEffect)
@@ -193,7 +210,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                 InternalInductanceHenriesPerMeter = prox.InternalInductance,
             };
         }
-        return (rlgc, new MtlNetwork(new[] { new MtlSection(rlgc, lengthMeters) }));
+        return rlgc;
     }
 
     private LineTermination[] Terminations()
@@ -248,6 +265,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                     // thickness, εr and tanδ — the object the mesher and PEEC chain read.
                     Stackup = options.Stackup,
                     CopperThicknessMeters = options.CopperThickness,
+                    SwapEnds = SwapBoardEnds,
                 }));
             if (extraction.FailureReason is not null)
             {
@@ -265,8 +283,12 @@ public partial class SignalIntegrityViewModel : ObservableObject
             var widths = string.Join(", ",
                 extraction.CrossSection.Traces.Select(t => $"{t.WidthMeters * 1e3:g3}"));
             BoardExtractionResult =
-                $"{LineCount} coupled conductors, section = {extraction.CoupledLengthMeters * 1e3:g4} mm, "
-                + $"widths [{widths}] mm — RLGC/S-params/eye now use the board geometry.";
+                $"{LineCount} coupled conductors, coupled length = {extraction.CoupledLengthMeters * 1e3:g4} mm "
+                + $"in {extraction.Sections.Count(s => s.Coupled is not null)} section(s), routed lengths ["
+                + string.Join(", ", extraction.RoutedLengthsMeters.Select(l => $"{l * 1e3:g4}"))
+                + $"] mm, widths [{widths}] mm, near end of {selected[0].Label} at ("
+                + $"{extraction.NearEnds[0].X * 1e3:g4}, {extraction.NearEnds[0].Y * 1e3:g4}) mm"
+                + " — RLGC/S-params/eye now use the board geometry.";
             ShowAssumptions(extraction.Rlgc!);
             SiAssumptions = "Assumptions: " + string.Join(" ", extraction.Assumptions);
             _log.Append($"SI board extraction — {BoardExtractionResult}");

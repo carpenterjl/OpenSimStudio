@@ -78,6 +78,10 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+                    <CheckBox Content="Swap near/far ends (drive from the other end)"
+                              IsChecked="{Binding SignalIntegrity.SwapBoardEnds}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"
+                              ToolTip="The near end is where the first selected net's route starts; tick to drive from its other end. Applies at the next extraction — the result line states the near-end position."/>
                     <Button x:Name="SiBoardExtractButton" Content="Extract coupled section from nets"
                             Command="{Binding SignalIntegrity.ExtractFromBoardNetsCommand}"
                             Margin="0,3,0,0"/>
