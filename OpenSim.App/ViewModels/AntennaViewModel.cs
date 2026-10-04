@@ -1507,7 +1507,10 @@ public partial class AntennaViewModel : ObservableObject
             FieldResult = $"Near field at {FrequencyMHz:g4} MHz: peak |E| = {peak:g4} V/m " +
                           $"(1 V feed, {n}³ grid" +
                           (substrate is null ? "" : $", εr = {substrate.RelativePermittivity:g3} layered kernels") +
-                          "; arrows are the t = 0 snapshot; the sheet is colored by log₁₀|J|)";
+                          "; arrows are the t = 0 snapshot; the sheet is colored by log₁₀|J|)" +
+                          (probe is null ? "" : " The map is the field of the patch sheet currents only: " +
+                              "the coaxial probe's own vertical current is NOT included, so the field " +
+                              "within a few substrate thicknesses of the probe is incomplete.");
             _log.Append($"Antenna: {FieldResult}");
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }

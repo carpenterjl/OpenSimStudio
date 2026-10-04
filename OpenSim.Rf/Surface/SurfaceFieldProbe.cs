@@ -55,13 +55,25 @@ public static class SurfaceFieldProbe
             {
                 double diameter = Math.Max((vb - va).Length,
                     Math.Max((vc - vb).Length, (va - vc).Length));
-                double epsilon = diameter / 50;
+                // Kernel regularization: diameter/50 for a point ON the triangle's plane (so
+                // on-metal points return a surface-scale value, not NaN), fading to
+                // diameter/5000 once the point stands a tenth of a diameter off the plane.
+                // E is the small difference of −jωA and −∇Φ close to the metal; the full
+                // diameter/50 at a point 0.3 diameters up cost 0.8 % of |E| there.
+                var mappedA = mapPosition(va);
+                var planeNormal = Vector3D.Cross(mapPosition(vb) - mappedA, mapPosition(vc) - mappedA);
+                double offPlane = planeNormal.Length > 0
+                    ? Math.Abs(Vector3D.Dot(point - mappedA, planeNormal)) / planeNormal.Length
+                    : 0;
+                double epsilon = diameter / 50 * Math.Clamp(1 - 10 * offPlane / diameter, 0.01, 1);
 
-                // Constant surface charge from div J (independent of position).
+                // Constant surface charge from continuity, σ = −div J/(jω) (independent of
+                // position). The minus is the physics: without it the scalar-potential
+                // part of E comes out reversed.
                 Complex charge = Complex.Zero;
                 foreach (var (basis, sign, _) in supports)
                     charge += solution.EdgeCurrents[basis] * (sign * surface.Edges[basis].Length / area);
-                charge *= chargeSign / (Complex.ImaginaryOne * omega);
+                charge *= -chargeSign / (Complex.ImaginaryOne * omega);
 
                 var centroid = (va + vb + vc) / 3;
                 bool near = (point - mapPosition(centroid)).Length < 2 * diameter;

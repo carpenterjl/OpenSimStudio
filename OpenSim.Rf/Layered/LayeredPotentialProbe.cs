@@ -50,7 +50,7 @@ internal static class LayeredPotentialProbe
             Complex charge = Complex.Zero;
             foreach (var (basis, sign, _) in supports)
                 charge += sign * surface.Edges[basis].Length / area * solution.EdgeCurrents[basis];
-            charge /= Complex.ImaginaryOne * omega;
+            charge /= -(Complex.ImaginaryOne * omega);   // continuity: q = −div J/(jω)
 
             // Analytic statics: the c₀/ρ primary AND the c₁/R_2d image (via the
             // shifted observation point — same relative geometry as shifting the
@@ -99,7 +99,7 @@ internal static class LayeredPotentialProbe
             Complex charge = Complex.Zero;
             foreach (var (basis, sign, _) in supports)
                 charge += sign * surface.Edges[basis].Length / area * solution.EdgeCurrents[basis];
-            charge /= Complex.ImaginaryOne * omega;
+            charge /= -(Complex.ImaginaryOne * omega);   // continuity: q = −div J/(jω)
 
             // Static primary: analytic ∫dS′/ρ (in-plane point ⇒ ρ = R).
             var (i0, _, _) = TrianglePotentials.Integrals(va, vb, vc, point);

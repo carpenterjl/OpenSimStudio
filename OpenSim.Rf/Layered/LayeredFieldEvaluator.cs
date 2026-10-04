@@ -204,7 +204,7 @@ public static class LayeredFieldEvaluator
             Complex charge = Complex.Zero;
             foreach (var (basis, sign, _) in supports)
                 charge += solution.EdgeCurrents[basis] * (sign * surface.Edges[basis].Length / area);
-            charge /= Complex.ImaginaryOne * omega;
+            charge /= -(Complex.ImaginaryOne * omega);   // continuity: q = −div J/(jω)
 
             bool near = (point - surface.TriangleCentroids[t]).Length < 2 * diameter;
             var panels = near
