@@ -1885,10 +1885,11 @@ public partial class AntennaViewModel : ObservableObject
             if (substrate is not null && inputPower > 0)
             {
                 // The Stage C power ledger, shown to the user: what the surface wave
-                // takes is real power the pattern never sees.
-                FieldResult += $"; surface wave P_sw = {surfaceWavePower:g3} W " +
-                               $"({surfaceWavePower / inputPower:P0} of input; " +
-                               $"P_rad + P_sw = {(pattern.TotalRadiatedPowerWatts + surfaceWavePower) / inputPower:P1} of input)";
+                // takes is real power the pattern never sees, and on a lossy substrate the
+                // rest is dielectric loss — named, with the efficiency and gain it implies.
+                FieldResult += "; " + OpenSim.Rf.Layered.PowerLedger.Describe(inputPower,
+                    pattern.TotalRadiatedPowerWatts, surfaceWavePower,
+                    substrate.LossTangent, pattern.MaxDirectivity);
             }
             _log.Append($"Antenna: {FieldResult}");
         }

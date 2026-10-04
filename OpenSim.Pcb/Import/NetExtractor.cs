@@ -53,6 +53,7 @@ public static class NetExtractor
             var connectLayers = new List<int>();
             foreach (var (layer, layerPads) in padsByLayer)
             {
+                if (!via.Reaches(layer)) continue;                              // blind/buried: not this deep
                 if (!HasAnnularRing(layerPads, via)) continue;                  // concentric pad required
                 int island = IslandContaining(via.Position, islandsByLayer, bounds, islands, layer);
                 if (island >= 0) { connect.Add(island); connectLayers.Add(layer); }
@@ -61,6 +62,7 @@ public static class NetExtractor
             {
                 foreach (int layer in negativeLayers)
                 {
+                    if (!via.Reaches(layer)) continue;
                     int island = IslandContaining(via.Position, islandsByLayer, bounds, islands, layer);
                     if (island >= 0) { connect.Add(island); connectLayers.Add(layer); }
                 }

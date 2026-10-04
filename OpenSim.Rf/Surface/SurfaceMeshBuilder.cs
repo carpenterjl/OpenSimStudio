@@ -70,17 +70,30 @@ public static class SurfaceMeshBuilder
         int Index(int i, int j) => j * (m + 1) + i;
 
         // A probe feed needs its (x, y) to BE a mesh vertex (the attachment fan is
-        // vertex-anchored) — move the nearest grid vertex onto it exactly.
+        // vertex-anchored) — move the nearest INTERIOR grid vertex onto it exactly. Never a
+        // rim vertex: moving one notches the plate's outline, and the fan needs a full ring
+        // of triangles around the probe.
+        var warnings = new List<string>();
         if (snapVertex is { } snap)
         {
-            int nearest = 0;
+            if (!(Math.Abs(snap.X) < width / 2 && Math.Abs(snap.Y) < length / 2))
+                return SurfaceGridResult.Failure(
+                    $"the probe at ({snap.X * 1e3:g4}, {snap.Y * 1e3:g4}) mm is not inside the " +
+                    $"{width * 1e3:g4} × {length * 1e3:g4} mm plate");
+            if (m < 2)
+                return SurfaceGridResult.Failure(
+                    "the plate is one element wide and has no interior vertex for a probe — " +
+                    "lower the element size");
+            int nearest = -1;
             double best = double.MaxValue;
-            for (int v = 0; v < vertices.Count; v++)
-            {
-                double dx = vertices[v].X - snap.X, dy = vertices[v].Y - snap.Y;
-                double dist = dx * dx + dy * dy;
-                if (dist < best) { best = dist; nearest = v; }
-            }
+            for (int j = 1; j < n; j++)
+                for (int i = 1; i < m; i++)
+                {
+                    int v = Index(i, j);
+                    double dx = vertices[v].X - snap.X, dy = vertices[v].Y - snap.Y;
+                    double dist = dx * dx + dy * dy;
+                    if (dist < best) { best = dist; nearest = v; }
+                }
             vertices[nearest] = new Vector3D(snap.X, snap.Y, z);
         }
 
@@ -123,8 +136,26 @@ public static class SurfaceMeshBuilder
         if (portBases.Count == 0)
             return SurfaceGridResult.Failure("no interior port edges exist — the plate is too coarse");
 
-        return SurfaceGridResult.Success(structure,
+        if (snapVertex is not null)
+        {
+            // The snap distorts the triangles around the moved vertex; a probe close to the
+            // rim squeezes them against it.
+            int slivers = 0;
+            foreach (var (a, b, c) in triangles)
+                if (MinAngleDegrees(new Point2(vertices[a].X, vertices[a].Y),
+                        new Point2(vertices[b].X, vertices[b].Y),
+                        new Point2(vertices[c].X, vertices[c].Y)) < MinAngleWarningDegrees)
+                    slivers++;
+            if (slivers > 0)
+                warnings.Add($"Moving a mesh vertex onto the probe left {slivers} triangle(s) with a " +
+                             $"minimum angle below {MinAngleWarningDegrees}° — the probe is within a " +
+                             "fraction of an element of the plate's edge or of a mesh line; expect " +
+                             "reduced accuracy there, or use a finer mesh.");
+        }
+
+        var result = SurfaceGridResult.Success(structure,
             new SurfacePort(portBases, new Vector3D(0, 1, 0)));
+        return warnings.Count > 0 ? result with { Warnings = warnings } : result;
     }
 
     public static SurfaceGridResult BuildPatchOverGround(double width, double length,

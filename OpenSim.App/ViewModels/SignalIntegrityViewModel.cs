@@ -426,23 +426,11 @@ public partial class SignalIntegrityViewModel : ObservableObject
         try
         {
             var (rlgc, _) = await Task.Run(BuildNetwork);
-            double c = rlgc.CapacitanceFaradsPerMeter[0, 0];
-            double cAir = rlgc.AirCapacitanceFaradsPerMeter[0, 0];
-            double z0 = 1 / (299792458.0 * Math.Sqrt(c * cAir));
-            string text = $"C11 = {c * 1e12:g4} pF/m, L11 = "
-                + $"{rlgc.InductanceHenriesPerMeter[0, 0] * 1e9:g4} nH/m, "
-                + $"Z0 = {z0:g4} Ω, ε_eff = {c / cAir:g4}, "
-                + $"R_dc = {rlgc.ResistanceDcOhmsPerMeter[0]:g4} Ω/m";
-            if (LineCount > 1)
-            {
-                double cm = rlgc.CapacitanceFaradsPerMeter[0, 1];
-                double ce = c + cm, co = c - cm;
-                double ceAir = cAir + rlgc.AirCapacitanceFaradsPerMeter[0, 1];
-                double coAir = cAir - rlgc.AirCapacitanceFaradsPerMeter[0, 1];
-                text += $"; coupling C12/C11 = {cm / c:P1}, "
-                    + $"Z0e = {1 / (299792458.0 * Math.Sqrt(ce * ceAir)):g4} Ω, "
-                    + $"Z0o = {1 / (299792458.0 * Math.Sqrt(co * coAir)):g4} Ω";
-            }
+            // Impedances from L and C together: Z0 for one line; even, odd, differential
+            // and common for a symmetric pair; the characteristic impedance matrix
+            // otherwise (the "Z0e/Z0o" of lines 1 and 2 mean nothing for three lines or
+            // for two unequal ones).
+            string text = LineReadout.Describe(rlgc);
             RlgcResult = text;
             ShowAssumptions(rlgc);
             _log.Append($"SI: RLGC extracted — {text}");
@@ -460,15 +448,16 @@ public partial class SignalIntegrityViewModel : ObservableObject
             var (rlgc, network) = BuildNetwork();
             var (text, freqs, matrices) = await Task.Run(() =>
             {
-                // A linear sweep to 2× Nyquist — the band an eye at this bit rate uses.
-                const int points = 40;
-                var frequencies = new double[points];
+                // DC to 2× Nyquist — the band an eye at this bit rate uses — on a uniform
+                // grid fine enough for the line's delay (at most π/8 of phase per point).
+                // The DC point is taken at 1 Hz when the network cannot be evaluated at 0.
+                double delay = network.TotalLengthMeters * Math.Sqrt(
+                    rlgc.InductanceHenriesPerMeter[0, 0] * rlgc.CapacitanceFaradsPerMeter[0, 0]);
+                var frequencies = LineReadout.ExportFrequencies(2 * nyquist, delay);
+                int points = frequencies.Length;
                 var scattering = new Complex[points][,];
                 for (int k = 0; k < points; k++)
-                {
-                    frequencies[k] = (k + 1) * 2 * nyquist / points;
-                    scattering[k] = network.Scattering(frequencies[k]);
-                }
+                    scattering[k] = network.Scattering(Math.Max(frequencies[k], 1.0));
                 var s = network.Scattering(nyquist);
                 int n = network.ConductorCount;
                 int driven = Math.Clamp(DrivenLine - 1, 0, n - 1);
@@ -493,7 +482,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
             };
             if (dialog.ShowDialog() == true)
             {
-                File.WriteAllText(dialog.FileName, TouchstoneWriter.Write(freqs, matrices));
+                File.WriteAllText(dialog.FileName, TouchstoneWriter.Write(freqs, matrices,
+                    portNames: LineReadout.PortNames(network.ConductorCount)));
                 text += $"; exported {Path.GetFileName(dialog.FileName)} ({freqs.Length} points)";
             }
             SParamResult = text;

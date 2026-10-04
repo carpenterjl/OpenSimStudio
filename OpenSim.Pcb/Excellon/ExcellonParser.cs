@@ -20,10 +20,11 @@ public sealed class DrillFile
 
 /// <summary>
 /// Parser for the Excellon v1 subset KiCad-style tools emit: M48 header with
-/// INCH/METRIC and Tn C&lt;dia&gt; tool definitions, then Tn selects, X/Y hits, and
-/// single-line G85 slots ('X..Y..G85X..Y..'), all with explicit decimal points.
-/// Multi-line slot forms and repeats (Rn) fail loudly — a silently missing hole
-/// would corrupt the copper image.
+/// INCH/METRIC and Tn C&lt;dia&gt; tool definitions, then Tn selects, X/Y hits,
+/// single-line G85 slots ('X..Y..G85X..Y..') and rout-mode slots (G00 move, M15 plunge,
+/// G01 linear routs, M16 retract), all with explicit decimal points.
+/// Multi-line G85 forms, repeats (Rn) and rout ARCS (G02/G03) fail loudly — a silently
+/// missing hole would corrupt the copper image.
 /// </summary>
 public sealed class ExcellonParser
 {
@@ -38,6 +39,9 @@ public sealed class ExcellonParser
         double unitScale = 0;
         int currentTool = -1;
         bool inHeader = false;
+        // Rout mode: where the tool is, and whether it is in the board.
+        Point2 routAt = default;
+        bool plunged = false;
 
         foreach (var raw in content.Split('\n'))
         {
@@ -49,7 +53,35 @@ public sealed class ExcellonParser
             if (line is "M30" or "M00") break;
             if (line.StartsWith("INCH", StringComparison.Ordinal)) { unitScale = 0.0254; continue; }
             if (line.StartsWith("METRIC", StringComparison.Ordinal)) { unitScale = 1e-3; continue; }
-            if (line is "G90" or "G05" or "FMAT,2" or "M71" or "M72") continue;
+            if (line is "G90" or "FMAT,2" or "M71" or "M72") continue;
+            if (line == "G05") { plunged = false; continue; }                // back to drill mode
+            if (line == "M15") { plunged = true; continue; }                 // tool down
+            if (line is "M16" or "M17") { plunged = false; continue; }       // tool up
+
+            if (line.StartsWith("G00", StringComparison.Ordinal)
+                || line.StartsWith("G01", StringComparison.Ordinal))
+            {
+                // Rout mode. G00 positions the tool; G01 cuts a straight slot from where
+                // it stands, at the tool diameter, while the tool is down.
+                string coordinates = line[3..];
+                if (coordinates.Length == 0) continue;
+                if (currentTool < 0)
+                    throw new InvalidDataException($"Rout move '{line}' before any tool selection.");
+                if (!coordinates.Contains('.'))
+                    throw new InvalidDataException(
+                        $"Rout coordinate '{line}' has no decimal point; zero-suppressed integer " +
+                        "coordinates are not supported — export with decimal coordinates.");
+                var target = ParseXy(coordinates, unitScale, routAt);
+                if (line[2] == '1' && plunged)
+                    slots.Add(new DrillSlot(routAt, target, tools[currentTool]));
+                if (line[2] == '0') plunged = false;
+                routAt = target;
+                continue;
+            }
+            if (line.StartsWith("G02", StringComparison.Ordinal)
+                || line.StartsWith("G03", StringComparison.Ordinal))
+                throw new InvalidDataException(
+                    $"Rout arc '{line}' is not supported — only straight routed slots (G01) are.");
 
             if (line.Contains("G85"))
             {

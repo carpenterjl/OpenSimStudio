@@ -29,7 +29,15 @@ public sealed record CopperIsland(
 }
 
 /// <summary>A drilled hole. Plated holes electrically bridge the copper layers they pass through.</summary>
-public sealed record Via(Point2 Position, double Diameter, bool Plated);
+/// <param name="FromLayer">First copper layer the hole reaches, for a blind or buried
+/// drill; 0 with <paramref name="ToLayer"/> 0 = through the whole board.</param>
+/// <param name="ToLayer">Last copper layer the hole reaches.</param>
+public sealed record Via(Point2 Position, double Diameter, bool Plated, int FromLayer = 0, int ToLayer = 0)
+{
+    /// <summary>Whether the hole passes through copper layer <paramref name="layerOrder"/>.</summary>
+    public bool Reaches(int layerOrder) =>
+        FromLayer <= 0 || ToLayer <= 0 || (layerOrder >= FromLayer && layerOrder <= ToLayer);
+}
 
 /// <summary>
 /// A plated via that actually stitches a net's islands together (it has a concentric

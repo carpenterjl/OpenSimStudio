@@ -50,8 +50,11 @@ public partial class InductanceViewModel : ObservableObject
         _board = board;
         _options = meshOptions;
         foreach (var net in board.Nets) Nets.Add(net);
-        foreach (var layer in board.Layers.OrderBy(l => l.CopperOrder))
-            PlaneLayers.Add(layer.CopperOrder);
+        // Copper layers only: board.Layers also lists drills, masks, legend and the
+        // outline, which all carry order 0 — and "L0" then produced a loop inductance
+        // over a plane that does not exist.
+        foreach (int order in board.Islands.Select(i => i.LayerOrder).Distinct().OrderBy(o => o))
+            PlaneLayers.Add(order);
         if (PlaneLayers.Count > 0) PlaneLayer = PlaneLayers[^1];
     }
 

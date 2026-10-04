@@ -135,18 +135,29 @@ public sealed class PcbBoardReader
                              "minus the drawn clearances; a via joins it where its centre lies in that copper.");
         }
 
-        // Vias from drill layers (plated = PTH, non-plated = NPTH by FileFunction).
+        // Vias from drill layers. Plated or not, and the layer span of a blind or buried
+        // drill, come from the file's FileFunction attribute; only a file without one is
+        // judged by its name.
         // Routed slots are NOT vias: a via is a circular plated bore, and plated-slot
         // layer stitching is not modeled — say so rather than misrepresent connectivity.
         stageTimer.Restart();
         var vias = new List<Via>();
         foreach (var drill in layers.Where(l => l.Type == GerberLayerType.Drill))
         {
-            bool plated = !drill.FileName.Contains("NPTH", StringComparison.OrdinalIgnoreCase)
-                          && !drill.FileName.Contains("NonPlated", StringComparison.OrdinalIgnoreCase);
+            var (plated, fromLayer, toLayer, fromAttribute) =
+                GerberLayerClassifier.DrillFunction(drill.FileName, byName[drill.FileName]);
+            if (!fromAttribute)
+                warnings.Add($"Layer {drill.FileName}: no FileFunction attribute — holes taken as " +
+                             $"{(plated ? "plated" : "non-plated")} from the file name, through the whole board.");
+            else if (fromLayer > 0)
+                warnings.Add($"Layer {drill.FileName}: {(plated ? "plated" : "non-plated")} holes " +
+                             $"between copper layers {fromLayer} and {toLayer} only.");
             var features = DrillExtractor.Extract(byName[drill.FileName]);
             foreach (var h in features.Holes)
-                vias.Add(new Via(h.Center, h.Diameter, plated));
+                vias.Add(new Via(h.Center, h.Diameter, plated, fromLayer, toLayer));
+            if (features.Warnings is not null)
+                foreach (string w in features.Warnings)
+                    warnings.Add($"Layer {drill.FileName}: {w}");
             if (features.Slots.Count > 0)
                 warnings.Add($"Layer {drill.FileName}: {features.Slots.Count} slot(s) parsed; slots are " +
                              "subtracted from the board domain but do not stitch copper layers.");

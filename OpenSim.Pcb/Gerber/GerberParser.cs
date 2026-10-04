@@ -322,10 +322,8 @@ public sealed partial class GerberParser
             case "G01": state.Mode = Interpolation.Linear; return;
             case "G02": state.Mode = Interpolation.Clockwise; return;
             case "G03": state.Mode = Interpolation.CounterClockwise; return;
-            case "G74":
-                state.Warnings.Add("Single-quadrant arc mode (G74) is deprecated; arcs assume G75 semantics.");
-                return;
-            case "G75": return;                                              // multi-quadrant: the supported mode
+            case "G74": state.SingleQuadrant = true; return;                  // deprecated, still emitted
+            case "G75": state.SingleQuadrant = false; return;                 // multi-quadrant
             case "G36":
                 state.FlushDraw();
                 state.InRegion = true;
@@ -426,7 +424,8 @@ public sealed partial class GerberParser
             case 1:                                                          // draw / arc
                 var segment = state.Mode == Interpolation.Linear
                     ? new[] { to }
-                    : TessellateArc(from, to, arcOffset, state.Mode == Interpolation.Clockwise);
+                    : TessellateArc(from, to, arcOffset, state.Mode == Interpolation.Clockwise,
+                        state.SingleQuadrant);
                 if (state.InRegion)
                 {
                     if (state.CurrentContour.Count == 0)
@@ -445,15 +444,24 @@ public sealed partial class GerberParser
     }
 
     /// <summary>
-    /// Multi-quadrant (G75) arc from <paramref name="from"/> to <paramref name="to"/>
-    /// around from+offset, tessellated at the configured chord tolerance. Identical
-    /// endpoints trace a full circle, per the G75 convention.
+    /// Arc from <paramref name="from"/> to <paramref name="to"/>, tessellated at the
+    /// configured chord tolerance. Multi-quadrant (G75): the centre is from+offset and
+    /// identical endpoints trace a full circle. Single-quadrant (G74): the I/J offsets are
+    /// UNSIGNED distances and the arc spans at most 90°, so the centre is whichever of the
+    /// four sign choices puts both endpoints on one circle with such a sweep; identical
+    /// endpoints are a zero-length arc. (Read as G75, a G74 arc has its centre on the
+    /// wrong side in three quadrants out of four.)
     /// </summary>
-    private Point2[] TessellateArc(Point2 from, Point2 to, Point2? offset, bool clockwise)
+    private Point2[] TessellateArc(Point2 from, Point2 to, Point2? offset, bool clockwise,
+        bool singleQuadrant = false)
     {
         if (offset is null)
             throw new InvalidDataException("Arc draw (G02/G03) requires I/J center offsets.");
-        var center = from + offset.Value;
+        if (singleQuadrant && to == from)
+            return new[] { to };
+        var center = singleQuadrant
+            ? SingleQuadrantCenter(from, to, offset.Value, clockwise)
+            : from + offset.Value;
         double radius = (from - center).Length;
         if (radius <= 0)
             return new[] { to };
@@ -476,6 +484,33 @@ public sealed partial class GerberParser
         return points;
     }
 
+    /// <summary>The centre of a single-quadrant arc: of the four candidates
+    /// from + (±|I|, ±|J|), the one whose directed sweep is at most 90° and whose two
+    /// radii agree best.</summary>
+    private static Point2 SingleQuadrantCenter(Point2 from, Point2 to, Point2 offset, bool clockwise)
+    {
+        double i = Math.Abs(offset.X), j = Math.Abs(offset.Y);
+        Point2? best = null;
+        double bestError = double.PositiveInfinity;
+        foreach (double sx in new[] { 1.0, -1.0 })
+            foreach (double sy in new[] { 1.0, -1.0 })
+            {
+                var c = from + new Point2(sx * i, sy * j);
+                double a0 = Math.Atan2(from.Y - c.Y, from.X - c.X);
+                double a1 = Math.Atan2(to.Y - c.Y, to.X - c.X);
+                double sweep = clockwise ? a0 - a1 : a1 - a0;
+                sweep = (sweep % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+                if (sweep > Math.PI / 2 + 1e-6) continue;
+                double error = Math.Abs((from - c).Length - (to - c).Length);
+                if (error >= bestError) continue;
+                bestError = error;
+                best = c;
+            }
+        return best ?? throw new InvalidDataException(
+            "Single-quadrant (G74) arc: no centre at the given I/J distances gives a sweep of " +
+            "90° or less between its endpoints.");
+    }
+
     // ---------------- Parse state ----------------
 
     private sealed class ParseState
@@ -489,6 +524,7 @@ public sealed partial class GerberParser
         public bool InRegion;
         public bool Ended;
         public bool Negative;                                                // %TF.FilePolarity,Negative
+        public bool SingleQuadrant;                                          // G74 in force
 
         public readonly Dictionary<int, Aperture> Apertures = new();
         public readonly List<GerberOp> Ops = new();

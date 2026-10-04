@@ -154,6 +154,10 @@ public sealed class MtlNetwork
 
     public int ConductorCount { get; }
 
+    /// <summary>End-to-end length of the cascade [m], along the longest line of each
+    /// section.</summary>
+    public double TotalLengthMeters => _sections.Sum(s => s.LongestLengthMeters);
+
     /// <summary>The 2N×2N chain (ABCD) matrix of the whole cascade at one frequency:
     /// [V_near; I_near] = T·[V_far; I_far].</summary>
     public ComplexDenseMatrix ChainMatrix(double frequencyHz)

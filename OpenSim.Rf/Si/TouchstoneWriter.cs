@@ -12,8 +12,12 @@ namespace OpenSim.Rf.Si;
 /// </summary>
 public static class TouchstoneWriter
 {
+    /// <param name="portNames">What each port is, in port order — written as comment
+    /// lines so a reader of the file does not have to guess the port map. Null writes
+    /// none.</param>
     public static string Write(IReadOnlyList<double> frequenciesHz,
-        IReadOnlyList<Complex[,]> scattering, double referenceOhms = 50)
+        IReadOnlyList<Complex[,]> scattering, double referenceOhms = 50,
+        IReadOnlyList<string>? portNames = null)
     {
         if (frequenciesHz.Count != scattering.Count)
             throw new ArgumentException("One S matrix per frequency point is required.");
@@ -26,6 +30,13 @@ public static class TouchstoneWriter
 
         var text = new StringBuilder();
         text.AppendLine($"! OpenSim Studio {n}-port S-parameters (SI track)");
+        if (portNames is not null)
+        {
+            if (portNames.Count != n)
+                throw new ArgumentException($"Expected {n} port names, got {portNames.Count}.");
+            for (int k = 0; k < n; k++)
+                text.AppendLine($"! Port {k + 1}: {portNames[k]}");
+        }
         text.AppendLine(string.Create(CultureInfo.InvariantCulture,
             $"# HZ S RI R {referenceOhms:G}"));
 

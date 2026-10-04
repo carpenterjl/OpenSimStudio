@@ -61,6 +61,34 @@ public static class GerberLayerClassifier
         return ClassifyByName(fileName);
     }
 
+    /// <summary>
+    /// What a drill file says about its holes: plated or not, and — for blind and buried
+    /// drills — the copper layers the holes run between. Read from the FileFunction
+    /// attribute, <c>Plated,1,2,PTH</c> / <c>NonPlated,1,4,NPTH</c>, in a Gerber header or in
+    /// an Excellon <c>; #@! TF.FileFunction,…</c> comment. Only a file with no such
+    /// attribute is judged by its name. A span of (0, 0) means through the whole board.
+    /// </summary>
+    public static (bool Plated, int FromLayer, int ToLayer, bool FromAttribute) DrillFunction(
+        string fileName, string headerText)
+    {
+        string? ff = ExtractFileFunction(headerText);
+        if (ff is not null)
+        {
+            var fields = ff.Split(',', StringSplitOptions.TrimEntries);
+            string kind = fields[0].ToLowerInvariant();
+            if (kind is "plated" or "nonplated")
+            {
+                int from = fields.Length > 1 && int.TryParse(fields[1], out int a) ? a : 0;
+                int to = fields.Length > 2 && int.TryParse(fields[2], out int b) ? b : 0;
+                if (from <= 0 || to <= 0) from = to = 0;
+                return (kind == "plated", Math.Min(from, to), Math.Max(from, to), true);
+            }
+        }
+        bool plated = !fileName.Contains("NPTH", StringComparison.OrdinalIgnoreCase)
+                      && !fileName.Contains("NonPlated", StringComparison.OrdinalIgnoreCase);
+        return (plated, 0, 0, false);
+    }
+
     private static BoardLayer Sided(string file, GerberLayerType type, string[] fields) =>
         new(file, type, 0, fields.Any(f => f.Equals("Top", StringComparison.OrdinalIgnoreCase)));
 
@@ -119,9 +147,18 @@ public static class GerberLayerClassifier
     {
         const string tag = "%TF.FileFunction,";
         int i = header.IndexOf(tag, StringComparison.Ordinal);
+        if (i >= 0)
+        {
+            i += tag.Length;
+            int end = header.IndexOf("*%", i, StringComparison.Ordinal);
+            return end < 0 ? null : header[i..end];
+        }
+        // Excellon carries the same attribute in a structured comment line.
+        const string comment = "#@! TF.FileFunction,";
+        i = header.IndexOf(comment, StringComparison.Ordinal);
         if (i < 0) return null;
-        i += tag.Length;
-        int end = header.IndexOf("*%", i, StringComparison.Ordinal);
-        return end < 0 ? null : header[i..end];
+        i += comment.Length;
+        int eol = header.IndexOfAny(new[] { '\r', '\n' }, i);
+        return (eol < 0 ? header[i..] : header[i..eol]).Trim();
     }
 }
