@@ -234,7 +234,14 @@ public class EnvironmentThermalBenchmarks
             forced, EnvironmentBoundaryModel.QuiescentNusseltFloor * state.ThermalConductivity / Side);
         double horizontal = ConvectionCorrelations.BlendMixedConvection(
             forced, EnvironmentBoundaryModel.QuiescentNusseltFloor * state.ThermalConductivity / (Side / 4));
-        double conductance = Side * Side * (4 * vertical + 2 * horizontal);
+        // The two faces standing across the stream (windward and leeward) take the
+        // cross-flow plate average over their 40 mm extent instead of the parallel-plate
+        // result; the other two vertical faces and the top and bottom run along the flow.
+        double acrossFlow = ConvectionCorrelations.BlendMixedConvection(
+            ConvectionCorrelations.ForcedNormalPlate(reynolds, state.Prandtl)
+                * state.ThermalConductivity / Side,
+            EnvironmentBoundaryModel.QuiescentNusseltFloor * state.ThermalConductivity / Side);
+        double conductance = Side * Side * (2 * vertical + 2 * acrossFlow + 2 * horizontal);
 
         double capacity = material.Density * material.SpecificHeat!.Value * Volume;
         double exact = Ambient + (Initial - Ambient) * Math.Exp(-conductance * duration / capacity);
@@ -546,19 +553,86 @@ public class EnvironmentThermalBenchmarks
     }
 
     [Fact]
-    public void FlowLength_IsTheStreamwiseRunOfTheBodyOnEveryPanel()
+    public void FlowLength_FollowsHowEachFaceStandsToTheFlow()
     {
-        // Including the face that squarely faces the flow, whose own projected extent is
-        // zero — using that would report no forced convection exactly where it is strongest.
+        // Flow along +x over a 100 mm long box. The four faces the stream runs along take
+        // their own 100 mm streamwise run; the two faces standing across it are windward
+        // and leeward, with their extent across the flow (4A/P = the 40 mm side) as length.
         var mesh = StructuredBoxMesh.Build(0, 0.1, 0, Side, 0, Side, 2, 2, 2);
         var environment = new EnvironmentSettings
         {
             Medium = MediumKind.MovingFluid, AmbientTemperature = Ambient,
             CustomFluid = TestFluid(1.0 / 350), FlowVelocity = new Vector3D(3, 0, 0)
         };
-        var panels = EnvironmentBoundaryModel.Build(Input(mesh, environment), new List<string>())!.Panels;
+        var panels = EnvironmentBoundaryModel.Build(Input(mesh, environment), new List<string>())!
+            .Panels.ToDictionary(p => p.FaceId);
 
-        Assert.All(panels, p => Assert.Equal(0.1, p.FlowLength, 12));
+        foreach (int face in new[] { StructuredBoxMesh.FaceYMin, StructuredBoxMesh.FaceYMax,
+                     StructuredBoxMesh.FaceZMin, StructuredBoxMesh.FaceZMax })
+        {
+            Assert.Equal(PanelFlowRegime.Parallel, panels[face].FlowRegime);
+            Assert.Equal(0.1, panels[face].FlowLength, 12);
+        }
+        Assert.Equal(PanelFlowRegime.Windward, panels[StructuredBoxMesh.FaceXMin].FlowRegime);
+        Assert.Equal(PanelFlowRegime.Leeward, panels[StructuredBoxMesh.FaceXMax].FlowRegime);
+        Assert.Equal(Side, panels[StructuredBoxMesh.FaceXMin].FlowLength, 12);
+        Assert.Equal(Side, panels[StructuredBoxMesh.FaceXMax].FlowLength, 12);
+    }
+
+    /// <summary>Film coefficient on one face of a 100 × 100 mm board of the given thickness
+    /// in a 2 m/s stream of the test gas (ν = 1.5e-5 m²/s, Pr = 0.696), no gravity.</summary>
+    private static double BoardFaceCoefficient(double thickness, Vector3D flow, int faceId,
+        out List<string> log)
+    {
+        var mesh = StructuredBoxMesh.Build(0, 0.1, 0, 0.1, 0, thickness, 4, 4, 1);
+        var environment = new EnvironmentSettings
+        {
+            Medium = MediumKind.MovingFluid, AmbientTemperature = Ambient,
+            CustomFluid = TestFluid(1.0 / 350), FlowVelocity = flow,
+            Gravity = new Vector3D(0, 0, 0), IncludeRadiation = false
+        };
+        log = new List<string>();
+        var model = EnvironmentBoundaryModel.Build(Input(mesh, environment), log)!;
+        var film = model.Evaluate(Enumerable.Repeat(Ambient + 30, mesh.NodeCount).ToArray());
+        int triangle = mesh.BoundaryTriangles.Select((t, i) => (t, i)).First(x => x.t.FaceId == faceId).i;
+        return film.TriangleFilmCoefficient[triangle];
+    }
+
+    [Fact]
+    public void BoardBroadsideToTheFlow_TakesTheNormalPlateCorrelation()
+    {
+        // Air blown AT the broad face of a 1.6 mm board. The published cross-flow plate
+        // average (Incropera Table 7.3): Nu = 0.228·Re^0.731·Pr^⅓ on the 100 mm extent.
+        // Re = 2·0.1/1.5e-5 = 13 333, so h ≈ 53 W/m²K. The old model ran the
+        // parallel-plate result over the 1.6 mm thickness and returned about 135.
+        double reynolds = 2.0 * 0.1 / 1.5e-5;
+        double prandtl = 1.8e-5 * 1005 / 0.026;
+        double published = 0.228 * Math.Pow(reynolds, 0.731) * Math.Cbrt(prandtl) * 0.026 / 0.1;
+
+        var flow = new Vector3D(0, 0, 2);
+        double windward = BoardFaceCoefficient(1.6e-3, flow, StructuredBoxMesh.FaceZMin, out var log);
+        double leeward = BoardFaceCoefficient(1.6e-3, flow, StructuredBoxMesh.FaceZMax, out _);
+        Assert.InRange(windward, 0.75 * published, 1.25 * published);
+        Assert.InRange(leeward, 0.75 * published, 1.25 * published);
+        Assert.Contains(log, line => line.Contains("facing the flow"));
+        Assert.Contains(log, line => line.Contains("in the wake"));
+        Assert.Contains(log, line => line.Contains("0.228"));
+
+        // And it is a property of the face, not of the board's thickness.
+        double thinner = BoardFaceCoefficient(0.8e-3, flow, StructuredBoxMesh.FaceZMin, out _);
+        Assert.InRange(thinner / windward, 0.8, 1.2);
+    }
+
+    [Fact]
+    public void BoardEdgeOnToTheFlow_KeepsTheParallelPlateResult()
+    {
+        // The same board with the stream along its broad faces: 0.664·Re^½·Pr^⅓ over the
+        // 100 mm run, as before.
+        double reynolds = 2.0 * 0.1 / 1.5e-5;
+        double prandtl = 1.8e-5 * 1005 / 0.026;
+        double published = 0.664 * Math.Sqrt(reynolds) * Math.Cbrt(prandtl) * 0.026 / 0.1;
+        double broad = BoardFaceCoefficient(1.6e-3, new Vector3D(2, 0, 0), StructuredBoxMesh.FaceZMax, out _);
+        Assert.InRange(broad, 0.99 * published, 1.01 * published);
     }
 
     [Fact]

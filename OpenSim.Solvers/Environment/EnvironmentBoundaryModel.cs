@@ -40,6 +40,10 @@ public sealed class EnvironmentBoundaryModel
     private const double FlatnessSpreadDegrees = 15.0;
     private const double HorizontalConeDegrees = 45.0;
 
+    /// <summary>A flat panel whose normal lies within this angle of the flow axis stands
+    /// normal to the flow (windward or leeward); beyond it the flow runs along the panel.</summary>
+    private const double NormalFlowConeDegrees = 45.0;
+
     private readonly FeMesh _mesh;
     private readonly EnvironmentSettings _environment;
     private readonly FluidProperties? _fluid;
@@ -135,7 +139,8 @@ public sealed class EnvironmentBoundaryModel
         var panels = new List<SurfacePanel>(byFace.Count);
         foreach (var (faceId, triangles) in byFace)
         {
-            var panel = BuildPanel(input, adjacency, exposed, faceId, triangles, up, flowExtents);
+            var panel = BuildPanel(input, adjacency, exposed, faceId, triangles, up,
+                flowDirection, flowExtents);
             // A face of zero area exchanges nothing, and dividing by it would put a NaN into
             // the matrix instead of saying so.
             if (!(panel.Area > 0))
@@ -251,9 +256,21 @@ public sealed class EnvironmentBoundaryModel
         if (speed <= 0 || panel.FlowLength <= 0) return naturalCoefficient;
 
         double reynolds = ConvectionCorrelations.Reynolds(state, speed, panel.FlowLength);
-        NoteBand(ConvectionCorrelations.FlatPlateBand, reynolds);
-        double forcedCoefficient = ConvectionCorrelations.ForcedFlatPlate(reynolds, prandtl)
-                                   * state.ThermalConductivity / panel.FlowLength;
+        double forcedNusselt;
+        if (panel.FlowRegime is PanelFlowRegime.Windward or PanelFlowRegime.Leeward)
+        {
+            // A face standing across the stream has no boundary layer running along it;
+            // the parallel-plate result over the body's thickness would be several times
+            // too high. The cross-flow plate average serves both its faces.
+            NoteBand(ConvectionCorrelations.NormalPlateBand, reynolds);
+            forcedNusselt = ConvectionCorrelations.ForcedNormalPlate(reynolds, prandtl);
+        }
+        else
+        {
+            NoteBand(ConvectionCorrelations.FlatPlateBand, reynolds);
+            forcedNusselt = ConvectionCorrelations.ForcedFlatPlate(reynolds, prandtl);
+        }
+        double forcedCoefficient = forcedNusselt * state.ThermalConductivity / panel.FlowLength;
         return ConvectionCorrelations.BlendMixedConvection(forcedCoefficient, naturalCoefficient);
     }
 
@@ -282,8 +299,8 @@ public sealed class EnvironmentBoundaryModel
         return new Vector3D(0, 0, 1);
     }
 
-    /// <summary>Streamwise extent of each region's bounding box [m] — the flat-plate run
-    /// length every panel of that body shares.</summary>
+    /// <summary>Streamwise extent of each region's bounding box [m] — the run length a
+    /// curved panel of that body takes (and the fallback for a degenerate flat one).</summary>
     private static Dictionary<int, double> RegionFlowExtents(FeMesh mesh,
         BoundaryAdjacency adjacency, Vector3D flowDirection)
     {
@@ -314,7 +331,7 @@ public sealed class EnvironmentBoundaryModel
 
     private static SurfacePanel BuildPanel(SolveInput input, BoundaryAdjacency adjacency,
         double[] exposed, int faceId, List<int> triangles, Vector3D up,
-        Dictionary<int, double> flowExtents)
+        Vector3D flowDirection, Dictionary<int, double> flowExtents)
     {
         var mesh = input.Mesh;
         double area = 0;
@@ -359,6 +376,35 @@ public sealed class EnvironmentBoundaryModel
         int region = adjacency.Regions[triangles[0]];
         var material = input.RegionMaterials?.GetValueOrDefault(region) ?? input.Material;
 
+        // How the panel stands to the stream decides the forced correlation and its length.
+        var regime = PanelFlowRegime.None;
+        double flowLength = 0;
+        if (flowDirection.Length > 0)
+        {
+            double bodyRun = flowExtents.GetValueOrDefault(region);
+            if (shape == PanelShape.CurvedSurface)
+            {
+                regime = PanelFlowRegime.BodyRun;
+                flowLength = bodyRun;
+            }
+            else
+            {
+                double along = Vector3D.Dot(meanNormal, flowDirection);
+                if (Math.Abs(along) < Math.Cos(NormalFlowConeDegrees * Math.PI / 180.0))
+                {
+                    regime = PanelFlowRegime.Parallel;
+                    flowLength = VerticalExtent(mesh, triangles, flowDirection);   // streamwise run
+                    if (!(flowLength > 0)) flowLength = bodyRun;
+                }
+                else
+                {
+                    regime = along < 0 ? PanelFlowRegime.Windward : PanelFlowRegime.Leeward;
+                    flowLength = 4 * AreaOverPerimeter(mesh, triangles, area);
+                    if (!(flowLength > 0)) flowLength = Math.Sqrt(area);
+                }
+            }
+        }
+
         return new SurfacePanel
         {
             FaceId = faceId,
@@ -368,7 +414,8 @@ public sealed class EnvironmentBoundaryModel
             NormalSpreadDegrees = spreadDegrees,
             Shape = shape,
             CharacteristicLength = length,
-            FlowLength = flowExtents.GetValueOrDefault(region),
+            FlowLength = flowLength,
+            FlowRegime = regime,
             Emissivity = input.Environment!.IncludeRadiation ? material.Emissivity ?? 0 : 0,
             Region = region,
             MaterialName = material.Name
@@ -435,7 +482,7 @@ public sealed class EnvironmentBoundaryModel
             foreach (var panel in panels)
                 log.Add($"  face {panel.FaceId}: {Describe(panel.Shape)}, {panel.Area:g4} m², " +
                         $"L = {panel.CharacteristicLength:g4} m" +
-                        (panel.FlowLength > 0 ? $", flow run {panel.FlowLength:g4} m" : "") +
+                        DescribeFlow(panel) +
                         (environment.IncludeRadiation
                             ? $", ε = {panel.Emissivity:g3} ({panel.MaterialName})"
                             : ""));
@@ -444,10 +491,30 @@ public sealed class EnvironmentBoundaryModel
                 log.Add($"  {group.Count()} face(s) as {Describe(group.Key)}, " +
                         $"{group.Sum(p => p.Area):g4} m².");
 
+        if (panels.Any(p => p.FlowRegime is PanelFlowRegime.Windward or PanelFlowRegime.Leeward))
+            log.Add($"  {panels.Count(p => p.FlowRegime == PanelFlowRegime.Windward)} face(s) face into the " +
+                    $"flow and {panels.Count(p => p.FlowRegime == PanelFlowRegime.Leeward)} lie in its wake: " +
+                    "both take the cross-flow plate average Nu = 0.228·Re^0.731·Pr^⅓ over the face's " +
+                    "extent across the flow (the stagnation face runs above this average and the " +
+                    "wake face below it); the other flat faces take the parallel-flow plate result " +
+                    "over their own streamwise run.");
+        if (panels.Any(p => p.FlowRegime == PanelFlowRegime.BodyRun))
+            log.Add("  Curved faces in the flow use the parallel-flow plate result over the body's " +
+                    "streamwise extent — a stated approximation.");
+
         if (panels.Any(p => p.Shape == PanelShape.CurvedSurface))
             log.Add("  Curved faces use the vertical-plate correlation over their vertical " +
                     "extent — a stated approximation; cylinder correlations are not auto-selected.");
     }
+
+    private static string DescribeFlow(SurfacePanel panel) => panel.FlowRegime switch
+    {
+        PanelFlowRegime.Parallel => $", flow along it, run {panel.FlowLength:g4} m",
+        PanelFlowRegime.Windward => $", facing the flow, extent {panel.FlowLength:g4} m",
+        PanelFlowRegime.Leeward => $", in the wake, extent {panel.FlowLength:g4} m",
+        PanelFlowRegime.BodyRun => $", curved, body flow run {panel.FlowLength:g4} m",
+        _ => ""
+    };
 
     private static string Describe(PanelShape shape) => shape switch
     {

@@ -21,6 +21,29 @@ public enum PanelShape
     CurvedSurface
 }
 
+/// <summary>How a panel stands to the forced stream — which forced correlation it takes.</summary>
+public enum PanelFlowRegime
+{
+    /// <summary>No forced flow.</summary>
+    None,
+
+    /// <summary>The stream runs along the panel: the flat-plate correlation over the
+    /// panel's own streamwise run.</summary>
+    Parallel,
+
+    /// <summary>The panel faces into the stream (within 45° of head-on): the
+    /// normal-plate correlation over the panel's extent across the flow.</summary>
+    Windward,
+
+    /// <summary>The panel faces away from the stream, in the wake: the same whole-plate
+    /// normal-flow average as the windward face.</summary>
+    Leeward,
+
+    /// <summary>A curved panel with no single orientation: the flat-plate correlation
+    /// over the streamwise run of the body — a stated approximation.</summary>
+    BodyRun
+}
+
 /// <summary>
 /// One geometric face of the model, exposed to the environment.
 /// <para>
@@ -56,11 +79,14 @@ public sealed record SurfacePanel
     /// gravity, or the area-over-perimeter of a horizontal one.</summary>
     public required double CharacteristicLength { get; init; }
 
-    /// <summary>Forced-convection length scale [m]: the streamwise extent of the BODY this
-    /// panel belongs to. The body's run is what the boundary layer develops over; a panel's
-    /// own projected extent would be zero for the face that squarely faces the flow, which
-    /// would report no forced convection exactly where it is strongest.</summary>
+    /// <summary>Forced-convection length scale [m], by <see cref="PanelFlowRegime"/>: the
+    /// panel's own streamwise run when the flow is along it; its extent across the flow
+    /// (4·area/perimeter — the side of a square, the diameter of a disc) when it stands
+    /// normal to the flow; the body's streamwise extent for a curved panel.</summary>
     public required double FlowLength { get; init; }
+
+    /// <summary>How the panel stands to the forced stream.</summary>
+    public PanelFlowRegime FlowRegime { get; init; }
 
     /// <summary>Surface emissivity taken from the material of the body this panel belongs
     /// to; zero when radiation is switched off.</summary>

@@ -133,6 +133,15 @@ public static class ConvectionCorrelations
             ? 0.664 * Math.Sqrt(reynolds)
             : 0.037 * Math.Pow(reynolds, 0.8) - MixedPlateConstant) * Math.Cbrt(prandtl);
 
+    /// <summary>
+    /// A flat plate standing NORMAL to the stream: Nu_D = 0.228·Re_D^0.731·Pr^⅓, the
+    /// Hilpert-form fit for a plate in cross flow (Incropera Table 7.3, "vertical plate").
+    /// D is the plate's extent across the flow. It is an average over the whole plate —
+    /// the stagnation face runs above it and the wake face below.
+    /// </summary>
+    public static double ForcedNormalPlate(double reynolds, double prandtl) =>
+        0.228 * Math.Pow(reynolds, 0.731) * Math.Cbrt(prandtl);
+
     /// <summary>The LOCAL laminar Nusselt number 0.332·Re_x^½·Pr^⅓ at the same station.
     /// Because the laminar film coefficient falls as x^(−½), the average over 0…x is
     /// exactly twice the local value — an identity the tests use as a sharp gate.</summary>
@@ -198,6 +207,10 @@ public static class ConvectionCorrelations
     /// <summary>Fitted range of <see cref="ForcedFlatPlate"/>.</summary>
     public static readonly ValidityBand FlatPlateBand =
         new("Flat plate in parallel flow", "Re", 0, 1e8);
+
+    /// <summary>Fitted range of <see cref="ForcedNormalPlate"/>.</summary>
+    public static readonly ValidityBand NormalPlateBand =
+        new("Plate normal to the flow", "Re", 4e3, 1.5e4);
 
     /// <summary>Fitted range of <see cref="ForcedCylinderCrossflow"/> (in Re·Pr).</summary>
     public static readonly ValidityBand CylinderCrossflowBand =
