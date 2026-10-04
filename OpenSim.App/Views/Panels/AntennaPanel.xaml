@@ -99,7 +99,17 @@
                 <TextBox x:Name="SweepFMaxBox" Text="{Binding Antenna.SweepFMaxMHz}"/>
                 <Label Content="Sweep points"/>
                 <TextBox x:Name="SweepPointsBox" Text="{Binding Antenna.SweepPoints}"/>
+                <Label Content="Mesh: elements per λ"/>
+                <TextBox x:Name="MeshCellsBox" Text="{Binding Antenna.MeshCellsPerWavelength}"
+                         ToolTip="Surface mesh density: elements per (dielectric) wavelength at the highest frequency in play. A plate also gets at least 10 elements along its longer side."/>
+                <Label Content="Patch gap from edge [mm]"/>
+                <TextBox x:Name="PatchGapOffsetBox" Text="{Binding Antenna.PatchGapOffsetMm}"
+                         ToolTip="Edge-fed patch only: where the series-gap port cuts the patch, measured from the edge. 0 = one eighth of the patch length."/>
             </UniformGrid>
+            <CheckBox Content="Mesh convergence check (re-solve 1.5× finer)"
+                      IsChecked="{Binding Antenna.CheckMeshConvergence}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
+                      ToolTip="After a surface solve, solve once more at f on a mesh 1.5× finer and report the change in Zin."/>
             <Button x:Name="SolveAntennaButton" Content="Solve antenna (Zin sweep)"
                     Command="{Binding Antenna.SolveAntennaCommand}"/>
             <TextBlock Text="{Binding Antenna.AntennaResult}" TextWrapping="Wrap"

@@ -176,6 +176,19 @@ public partial class AntennaViewModel : ObservableObject
     [ObservableProperty] private double _sweepFMaxMHz = 1000;
     [ObservableProperty] private int _sweepPoints = 7;
 
+    /// <summary>Surface mesh density: elements per (dielectric) wavelength at the highest
+    /// frequency in play. 10 is the long-standing default; a resonant dimension also gets
+    /// at least 10 elements whatever the wavelength.</summary>
+    [ObservableProperty] private double _meshCellsPerWavelength = 10;
+
+    /// <summary>After a surface solve, solve once more at the display frequency on a mesh
+    /// 1.5× finer and report how far Zin moved.</summary>
+    [ObservableProperty] private bool _checkMeshConvergence = true;
+
+    /// <summary>Edge-fed patch: distance of the series gap from the patch edge [mm]. 0 ⇒
+    /// one eighth of the patch length. A physical position, so it does not move with the mesh.</summary>
+    [ObservableProperty] private double _patchGapOffsetMm;
+
     /// <summary>Near-field sample grid resolution per axis (n³ arrows).</summary>
     [ObservableProperty] private int _gridResolution = 9;
 
@@ -1023,7 +1036,7 @@ public partial class AntennaViewModel : ObservableObject
     private bool TryDiscretizeSurface(out OpenSim.Rf.Surface.SurfaceStructure surface,
         out OpenSim.Rf.Surface.SurfacePort port, out IReadOnlyList<string> warnings,
         out string? failure, out OpenSim.Rf.Layered.SubstrateStackup? substrate,
-        out OpenSim.Rf.Surface.ProbeFeed? probe, out LayeredSpec? layered)
+        out OpenSim.Rf.Surface.ProbeFeed? probe, out LayeredSpec? layered, double refine = 1)
     {
         surface = null!;
         port = null!;
@@ -1045,6 +1058,17 @@ public partial class AntennaViewModel : ObservableObject
                            / (UseSubstrate ? Math.Sqrt(SubstrateEpsR) : 1.0);
         double groundZ = GroundZMm * 1e-3;
 
+        // Element size: the user's elements per wavelength, and never fewer than 10 along
+        // the plate's longer (resonant) dimension. `refine` scales both for the
+        // convergence pass.
+        double cells = Math.Max(MeshCellsPerWavelength, 4) * refine;
+        double wavelengthElement = lambdaMin / cells;
+        double plateElement = PlateWidthMm > 0 && PlateLengthMm > 0
+            ? Math.Min(wavelengthElement, Math.Max(PlateWidthMm, PlateLengthMm) * 1e-3 / (10 * refine))
+            : wavelengthElement;
+        // The edge-fed patch's series gap, at a physical distance from the edge.
+        double gapOffset = PatchGapOffsetMm > 0 ? PatchGapOffsetMm * 1e-3 : PlateLengthMm * 1e-3 / 8;
+
         OpenSim.Rf.Surface.SurfaceGridResult grid;
         switch (SourceMode)
         {
@@ -1065,7 +1089,7 @@ public partial class AntennaViewModel : ObservableObject
                 var ground = UseGroundPlane && !UseSubstrate ? new GroundPlane(groundZ) : null;
                 double z = UseGroundPlane ? groundZ + HeightAboveGroundMm * 1e-3 : 0;
                 grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
-                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10, z, 0.5, ground);
+                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement, z, 0.5, ground);
                 if (UseSubstrate)
                     substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                         SubstrateEpsR, Math.Max(SubstrateTanD, 0), HeightAboveGroundMm * 1e-3);
@@ -1080,16 +1104,17 @@ public partial class AntennaViewModel : ObservableObject
                 if (UseSubstrate)
                 {
                     grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
-                        PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10,
-                        z: groundZ + PatchHeightMm * 1e-3, portFraction: 0);
+                        PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
+                        z: groundZ + PatchHeightMm * 1e-3, portOffset: gapOffset);
                     substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                         SubstrateEpsR, Math.Max(SubstrateTanD, 0), PatchHeightMm * 1e-3);
                 }
                 else
                 {
-                    grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildPatchOverGround(
-                        PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, PatchHeightMm * 1e-3,
-                        groundZ, lambdaMin / 10);
+                    grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
+                        PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
+                        z: groundZ + PatchHeightMm * 1e-3,
+                        ground: new GroundPlane(groundZ), portOffset: gapOffset);
                 }
                 break;
 
@@ -1117,7 +1142,7 @@ public partial class AntennaViewModel : ObservableObject
                     return false;
                 }
                 grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
-                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10,
+                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
                     z: groundZ + PatchHeightMm * 1e-3, portFraction: 0, snapVertex: (px, py));
                 substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                     Math.Max(SubstrateEpsR, 1.0), Math.Max(SubstrateTanD, 0), PatchHeightMm * 1e-3);
@@ -1147,8 +1172,8 @@ public partial class AntennaViewModel : ObservableObject
                 // ignores it; the buried source height lives in the interior kernel table).
                 double hSub = PatchHeightMm * 1e-3;
                 grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
-                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10,
-                    z: groundZ + hSub, portFraction: 0);
+                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
+                    z: groundZ + hSub, portOffset: gapOffset);
                 substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                     SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSub);
                 layered = new LayeredSpec(
@@ -1198,7 +1223,7 @@ public partial class AntennaViewModel : ObservableObject
                 }
                 double hSubProbe = PatchHeightMm * 1e-3;
                 grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
-                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, lambdaMin / 10,
+                    PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
                     z: groundZ + hSubProbe, portFraction: 0, snapVertex: (pcx, pcy));
                 substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                     SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSubProbe);
@@ -1225,7 +1250,7 @@ public partial class AntennaViewModel : ObservableObject
                 double diagonal = Math.Sqrt((maxX - minX) * (maxX - minX) + (maxY - minY) * (maxY - minY));
                 // Boards are usually far smaller than λ: the element size must resolve
                 // the ISLAND, not just the wavelength.
-                double element = Math.Min(lambdaMin / 10, diagonal / 8);
+                double element = Math.Min(wavelengthElement, diagonal / (8 * refine));
                 var ground = UseGroundPlane && !UseSubstrate ? new GroundPlane(groundZ) : null;
                 double z = UseGroundPlane ? groundZ + HeightAboveGroundMm * 1e-3 : 0;
                 if (UseSubstrate && HeightAboveGroundMm <= 0)
@@ -1353,6 +1378,39 @@ public partial class AntennaViewModel : ObservableObject
             foreach (var point in sweep) ZinSweep.Add(point);
             SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, display, ColormapKind.Viridis);
             GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
+
+            // Two-pass mesh check: the same model on a mesh 1.5× finer, at the display
+            // frequency. The change in Zin is the evidence the density is (or is not) enough.
+            string meshCheck = "";
+            if (CheckMeshConvergence)
+            {
+                // The finer mesh is built here (it reads panel state); only the solve runs off-thread.
+                if (!TryDiscretizeSurface(out var fineSurface, out var finePort, out _,
+                        out string? fineFailure, out var fineSubstrate, out var fineProbe,
+                        out var fineLayered, refine: 1.5))
+                    meshCheck = $" Mesh check not run: the finer mesh could not be built ({fineFailure}).";
+                else
+                    meshCheck = await Task.Run(() =>
+                    {
+                        try
+                        {
+                            var fine = SolveSurfacePoint(new OpenSim.Rf.Surface.SurfaceMomSolver(),
+                                fineSurface, finePort, frequency, fineSubstrate, fineProbe, fineLayered,
+                                new List<string>());
+                            return " " + OpenSim.Rf.Surface.MeshConvergence.Describe(
+                                display.InputImpedance, surface.BasisCount,
+                                fine.InputImpedance, fineSurface.BasisCount);
+                        }
+                        catch (Exception ex) { return $" Mesh check not run: {ex.Message}"; }
+                    });
+            }
+            string portLabel = probe is not null ? ""
+                : SourceMode == PatchMode || SourceMode == CoveredPatchMode
+                    ? $" Port: a series gap across the full patch width, "
+                      + $"{(PatchGapOffsetMm > 0 ? PatchGapOffsetMm : PlateLengthMm / 8):g3} mm in from the edge. "
+                      + "Zin is the impedance in series at that cut — NOT the ground-referenced edge or "
+                      + "inset-feed impedance; use the probe-fed patch for a ground-referenced figure."
+                    : "";
             AntennaResult = $"Zin = {display.InputImpedance.Real:g4} " +
                             $"{(display.InputImpedance.Imaginary >= 0 ? "+" : "−")} " +
                             $"j{Math.Abs(display.InputImpedance.Imaginary):g4} Ω at {FrequencyMHz:g4} MHz " +
@@ -1369,7 +1427,8 @@ public partial class AntennaViewModel : ObservableObject
                     : layered is null
                         ? OpenSim.Rf.Surface.SurfaceMomSolver.ProbeFedAssumptions
                         : OpenSim.Rf.Surface.SurfaceMomSolver.MultiLayerProbeFedAssumptions)
-                + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
+                + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "")
+                + portLabel + meshCheck;
             // A slow sweep names its own bottleneck: the layered path rebuilds the
             // kernel table per frequency point (a table IS one (f, stackup) pair).
             foreach (string line in timing) _log.Append(line);

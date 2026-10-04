@@ -15,7 +15,10 @@ namespace OpenSim.Rf.Surface;
 ///    edge length, an interior lattice, then <see cref="Cdt2D"/> with boundary
 ///    constraints; triangle containment is tested against the JITTERED ring (the
 ///    triangulation's own coordinates — the STEP tessellator lesson), and the port is
-///    the single interior edge nearest the feed hint.
+///    a FULL-WIDTH cut through the feed hint: the chain of interior edges that crosses
+///    the conductor from one boundary to the other, driven together. (A single interior
+///    edge is shorted by the sheet around its two ends on any conductor more than one
+///    element wide.)
 /// The unknown cap mirrors the wire builder (dense LU is O(N³)); sliver triangles are
 /// WARNED about, never silently accepted.
 /// </summary>
@@ -27,8 +30,15 @@ public static class SurfaceMeshBuilder
     public static SurfaceGridResult BuildRectangularPlate(double width, double length,
         double maxEdgeLength, double z = 0, double portFraction = 0.5,
         GroundPlane? ground = null, int maxUnknowns = 2000,
-        (double X, double Y)? snapVertex = null)
+        (double X, double Y)? snapVertex = null, double? portOffset = null)
     {
+        // portOffset: the port row's PHYSICAL distance from the −length/2 edge [m]. A vertex
+        // row is placed exactly there, so the gap does not move when the mesh changes
+        // (portFraction rounds to the nearest mesh row and does).
+        if (portOffset is { } requested && !(requested > 0 && requested < length))
+            return SurfaceGridResult.Failure(
+                $"the port offset {requested:g4} m must lie strictly inside the plate length {length:g4} m");
+
         if (width <= 0 || length <= 0 || maxEdgeLength <= 0)
             return SurfaceGridResult.Failure("the plate needs positive width, length, and element size");
         if (ground is not null && z <= ground.SurfaceZ)
@@ -38,12 +48,25 @@ public static class SurfaceMeshBuilder
         int m = Math.Max(1, (int)Math.Ceiling(width / maxEdgeLength));
         int n = Math.Max(2, (int)Math.Ceiling(length / maxEdgeLength));
         int portRow = Math.Clamp((int)Math.Round(portFraction * n), 1, n - 1);
+        var rowY = new double[0];
+        if (portOffset is { } offset)
+        {
+            // Rows below and above the port are spaced uniformly on their own side.
+            int below = Math.Max(1, (int)Math.Ceiling(offset / maxEdgeLength - 1e-9));
+            int above = Math.Max(1, (int)Math.Ceiling((length - offset) / maxEdgeLength - 1e-9));
+            n = below + above;
+            portRow = below;
+            rowY = new double[n + 1];
+            for (int j = 0; j <= below; j++) rowY[j] = -length / 2 + offset * j / below;
+            for (int j = 1; j <= above; j++) rowY[below + j] = -length / 2 + offset + (length - offset) * j / above;
+        }
 
         var vertices = new List<Vector3D>((m + 1) * (n + 1));
         for (int j = 0; j <= n; j++)
             for (int i = 0; i <= m; i++)
                 vertices.Add(new Vector3D(
-                    -width / 2 + width * i / m, -length / 2 + length * j / n, z));
+                    -width / 2 + width * i / m,
+                    rowY.Length > 0 ? rowY[j] : -length / 2 + length * j / n, z));
         int Index(int i, int j) => j * (m + 1) + i;
 
         // A probe feed needs its (x, y) to BE a mesh vertex (the attachment fan is
@@ -117,10 +140,14 @@ public static class SurfaceMeshBuilder
     }
 
     /// <summary>Meshes a planar polygon (e.g. a PCB copper island, meters) at height
-    /// <paramref name="z"/>. The port is the single interior edge nearest
-    /// <paramref name="feedHint"/> (the island centroid when null).</summary>
+    /// <paramref name="z"/>. The port is a full-width cut through
+    /// <paramref name="feedHint"/> (the island centroid when null): the conductor's
+    /// narrowest cross-section through that point, every interior edge on it driven
+    /// together. <paramref name="singleEdgePort"/> restores the old single-edge port
+    /// (kept for comparison; it is not a physical terminal pair on a wide conductor).</summary>
     public static SurfaceGridResult BuildFromPolygon(Polygon2 shape, double maxEdgeLength,
-        double z, Point2? feedHint = null, GroundPlane? ground = null, int maxUnknowns = 2000)
+        double z, Point2? feedHint = null, GroundPlane? ground = null, int maxUnknowns = 2000,
+        bool singleEdgePort = false)
     {
         if (maxEdgeLength <= 0)
             return SurfaceGridResult.Failure("the element size must be positive");
@@ -230,9 +257,106 @@ public static class SurfaceMeshBuilder
         var portEdge = structure.Edges[portBasis];
         var crossing = structure.TriangleCentroids[portEdge.MinusTriangle]
                      - structure.TriangleCentroids[portEdge.PlusTriangle];
+        if (singleEdgePort)
+            return SurfaceGridResult.Success(structure,
+                new SurfacePort(new[] { portBasis }, crossing.Normalized())) with
+            { Warnings = warnings };
+
+        // The cut passes through the hint when it lies on the copper, otherwise through
+        // the nearest interior edge's midpoint.
+        var through = hint;
+        if (!inside.Contains(through))
+        {
+            var mid = (structure.Vertices[portEdge.V1] + structure.Vertices[portEdge.V2]) / 2;
+            through = new Point2(mid.X, mid.Y);
+        }
+        var boundary = new List<(Point2 A, Point2 B)>();
+        foreach (var ring in jitteredRings)
+            for (int i = 0; i < ring.Count; i++)
+                boundary.Add((ring[i], ring[(i + 1) % ring.Count]));
+
+        var cut = FullWidthCut(structure, boundary, through, maxEdgeLength);
+        if (cut is null)
+        {
+            warnings.Add("No full-width cut could be placed through the feed point; the port is a " +
+                         "single mesh edge, which the surrounding sheet short-circuits — treat Zin " +
+                         "as unreliable.");
+            return SurfaceGridResult.Success(structure,
+                new SurfacePort(new[] { portBasis }, crossing.Normalized())) with
+            { Warnings = warnings };
+        }
+        warnings.Add($"Port: a series gap across the conductor's full width at the feed point " +
+                     $"({cut.Value.Width * 1e3:g3} mm wide, {cut.Value.Bases.Count} mesh edge(s) driven " +
+                     "together). Zin is the impedance seen in series at that cut, not a " +
+                     "ground-referenced impedance.");
         return SurfaceGridResult.Success(structure,
-            new SurfacePort(new[] { portBasis }, crossing.Normalized())) with
+            new SurfacePort(cut.Value.Bases, cut.Value.Direction)) with
         { Warnings = warnings };
+    }
+
+    /// <summary>
+    /// The conductor's narrowest straight cross-section through <paramref name="through"/>
+    /// and the interior edges that lie on it: those whose two triangles have their
+    /// centroids on opposite sides of the cut line, between the two boundary crossings.
+    /// Together they separate the copper on one side of the cut from the other, so a
+    /// voltage across them is a true series gap.
+    /// </summary>
+    private static (List<int> Bases, Vector3D Direction, double Width)? FullWidthCut(
+        SurfaceStructure structure, List<(Point2 A, Point2 B)> boundary, Point2 through,
+        double element)
+    {
+        double bestWidth = double.MaxValue, bestLo = 0, bestHi = 0;
+        Point2 bestAlong = default;
+        const int steps = 36;                                   // every 5°
+        for (int s = 0; s < steps; s++)
+        {
+            double angle = Math.PI * s / steps;
+            var along = new Point2(Math.Cos(angle), Math.Sin(angle));
+            double lo = double.NegativeInfinity, hi = double.PositiveInfinity;
+            foreach (var (a, b) in boundary)
+            {
+                // Solve through + t·along = a + u·(b − a).
+                double ex = b.X - a.X, ey = b.Y - a.Y;
+                double det = along.X * (-ey) - along.Y * (-ex);
+                if (Math.Abs(det) < 1e-18) continue;
+                double rx = a.X - through.X, ry = a.Y - through.Y;
+                double t = (rx * (-ey) - ry * (-ex)) / det;
+                double u = (along.X * ry - along.Y * rx) / det;
+                if (u < 0 || u > 1) continue;
+                if (t >= 0 && t < hi) hi = t;
+                if (t < 0 && t > lo) lo = t;
+            }
+            if (double.IsInfinity(lo) || double.IsInfinity(hi)) continue;
+            if (hi - lo < bestWidth - 1e-12)
+            {
+                bestWidth = hi - lo;
+                bestLo = lo;
+                bestHi = hi;
+                bestAlong = along;
+            }
+        }
+        if (bestWidth == double.MaxValue) return null;
+
+        var normal = new Point2(-bestAlong.Y, bestAlong.X);
+        double Side(Vector3D p) => (p.X - through.X) * normal.X + (p.Y - through.Y) * normal.Y;
+        double Along(Vector3D p) => (p.X - through.X) * bestAlong.X + (p.Y - through.Y) * bestAlong.Y;
+
+        var bases = new List<int>();
+        for (int e = 0; e < structure.Edges.Count; e++)
+        {
+            var edge = structure.Edges[e];
+            if (edge.PlusTriangle < 0 || edge.MinusTriangle < 0) continue;
+            double plus = Side(structure.TriangleCentroids[edge.PlusTriangle]);
+            double minus = Side(structure.TriangleCentroids[edge.MinusTriangle]);
+            if ((plus > 0) == (minus > 0)) continue;
+            var mid = (structure.Vertices[edge.V1] + structure.Vertices[edge.V2]) / 2;
+            double t = Along(mid);
+            if (t < bestLo - element / 2 || t > bestHi + element / 2) continue;
+            if (Math.Abs(Side(mid)) > element) continue;
+            bases.Add(e);
+        }
+        if (bases.Count == 0) return null;
+        return (bases, new Vector3D(normal.X, normal.Y, 0), bestWidth);
     }
 
     private static List<Point2> ResampleRing(IReadOnlyList<Point2> ring, double maxEdgeLength)
