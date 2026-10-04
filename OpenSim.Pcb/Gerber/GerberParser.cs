@@ -516,10 +516,22 @@ public sealed partial class GerberParser
             PendingDraw.Clear();
         }
 
+        /// <summary>
+        /// Contour orientation carries no meaning in Gerber — a contour fills its
+        /// interior whichever way it was drawn — but the image booleans are NonZero
+        /// winding sums, where a clockwise ring would cancel every counter-clockwise
+        /// flash or stroke it overlaps. Contours therefore leave the parser
+        /// counter-clockwise (a cut-in contour keeps its hole: reversing the whole
+        /// ring reverses the cut-in loop with it).
+        /// </summary>
         public void CloseContour()
         {
             if (CurrentContour.Count >= 3)
-                RegionContours.Add(CurrentContour.ToList());
+            {
+                var contour = CurrentContour.ToList();
+                if (Polygon2.RingArea(contour) < 0) contour.Reverse();
+                RegionContours.Add(contour);
+            }
             CurrentContour.Clear();
         }
 

@@ -150,8 +150,12 @@ public sealed class LayerImageBuilder
                 break;
 
             case RegionOp region:
+                // Winding is enforced, not trusted (as for every ring that feeds a
+                // NonZero boolean): a clockwise contour would carry −1 and erase the
+                // flashes and strokes it overlaps. The parser already orients them;
+                // this covers a RegionOp from any other source.
                 foreach (var contour in region.Contours)
-                    yield return contour;
+                    yield return Polygon2.RingArea(contour) >= 0 ? contour : contour.Reverse().ToList();
                 break;
 
             case DrawOp draw:
