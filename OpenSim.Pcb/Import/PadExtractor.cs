@@ -29,7 +29,10 @@ public static class PadExtractor
             double size = ApertureSize(flash.Aperture);
             if (size <= 0 || size > PadSizeMax) continue;
             var shape = new Polygon2(ApertureShapes.Outline(flash.Aperture, flash.Position, ChordTolerance));
-            pads.Add(new CopperPad(layerOrder, flash.Position, shape, size));
+            pads.Add(new CopperPad(layerOrder, flash.Position, shape, size)
+            {
+                ComponentRef = flash.ComponentRef, Pin = flash.Pin, NetName = flash.Net
+            });
         }
         return pads;
     }

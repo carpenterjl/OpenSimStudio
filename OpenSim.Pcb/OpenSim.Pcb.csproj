@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenSim.Core\OpenSim.Core.csproj" />
     <ProjectReference Include="..\OpenSim.Geometry\OpenSim.Geometry.csproj" />
+    <ProjectReference Include="..\OpenSim.Solvers\OpenSim.Solvers.csproj" />
   </ItemGroup>
 
   <ItemGroup>

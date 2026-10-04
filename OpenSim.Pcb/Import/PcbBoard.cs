@@ -55,12 +55,18 @@ public sealed record ViaBridge(Via Via, IReadOnlyList<int> Layers);
 /// </summary>
 public sealed record CopperPad(int LayerOrder, Point2 Center, Polygon2 Shape, double Size)
 {
-    /// <summary>The component refdes this pad belongs to (IPC-2581 PinRef); null when the
-    /// source format doesn't say (Gerber discards %TO object attributes).</summary>
+    /// <summary>The component refdes this pad belongs to (IPC-2581 PinRef, or the Gerber
+    /// X2 object attribute %TO.P); null when the source doesn't say (a Gerber file
+    /// without X2 attributes, a via landing).</summary>
     public string? ComponentRef { get; init; }
 
-    /// <summary>The component pin number/name (IPC-2581 PinRef); null when unknown.</summary>
+    /// <summary>The component pin number/name (IPC-2581 PinRef, Gerber %TO.P); null when
+    /// unknown.</summary>
     public string? Pin { get; init; }
+
+    /// <summary>The net name the source attaches to this pad (Gerber %TO.N); null when
+    /// it carries none. The copper decides connectivity — this only names it.</summary>
+    public string? NetName { get; init; }
 
     /// <summary>The owning component's part name (falling back to its footprint package
     /// name), resolved from the IPC-2581 Component element; null when unknown.</summary>
@@ -78,8 +84,8 @@ public sealed record CopperNet(int Id, IReadOnlyList<CopperIsland> Islands)
     public IReadOnlyList<ViaBridge> StitchingVias { get; init; } = Array.Empty<ViaBridge>();
 
     /// <summary>
-    /// The design's net name when the source format carries one (IPC-2581); null for
-    /// formats without netlists (Gerber), where the synthesized "Net {Id}" is used.
+    /// The design's net name when the source carries one (IPC-2581, or Gerber X2
+    /// %TO.N attributes); null otherwise, where the synthesized "Net {Id}" is used.
     /// </summary>
     public string? Name { get; init; }
 

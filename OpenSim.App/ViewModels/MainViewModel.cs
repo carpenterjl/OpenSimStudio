@@ -35,7 +35,8 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(ProjectSession session, ILogService log, GeometryViewModel geometry,
         MaterialsViewModel materials, MeshingViewModel meshing, BoundaryConditionsViewModel conditions,
         ScopeSelectionViewModel scopeSelection,
-        PcbViewModel pcb, ElectrodesViewModel electrodes, InductanceViewModel inductance,
+        PcbViewModel pcb, ElectrodesViewModel electrodes, PowerRailViewModel rail,
+        InductanceViewModel inductance,
         AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, SolveViewModel solve,
         ResultsViewModel results, SceneViewModel scene, BodiesViewModel bodies,
         EnvironmentViewModel environment, ColormapViewModel colormap,
@@ -53,6 +54,7 @@ public partial class MainViewModel : ObservableObject
         ScopeSelection = scopeSelection;
         Pcb = pcb;
         Electrodes = electrodes;
+        Rail = rail;
         Inductance = inductance;
         Antenna = antenna;
         SignalIntegrity = signalIntegrity;
@@ -93,6 +95,9 @@ public partial class MainViewModel : ObservableObject
     public ScopeSelectionViewModel ScopeSelection { get; }
     public PcbViewModel Pcb { get; }
     public ElectrodesViewModel Electrodes { get; }
+
+    /// <summary>Rail-level DC power integrity on the meshed net.</summary>
+    public PowerRailViewModel Rail { get; }
     public InductanceViewModel Inductance { get; }
     public AntennaViewModel Antenna { get; }
     public SignalIntegrityViewModel SignalIntegrity { get; }

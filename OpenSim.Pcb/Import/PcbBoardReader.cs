@@ -21,7 +21,8 @@ public sealed class PcbBoardReader
     /// <summary>Everything one copper layer contributes, computed independently per
     /// layer and stitched back in file order so ids and warnings stay deterministic.</summary>
     private sealed record LayerResult(int LayerOrder, LayerImage Image,
-        IReadOnlyList<CopperPad> Pads, List<TraceCenterline> Centerlines, bool Negative,
+        IReadOnlyList<CopperPad> Pads, List<TraceCenterline> Centerlines, List<NetLabel> Labels,
+        bool Negative,
         long ParseMs, long ImageMs, long ExtractMs, int OpCount, int PolarityFlips);
 
     public PcbBoard Read(string archivePath)
@@ -92,7 +93,8 @@ public sealed class PcbBoardReader
                         // not retained.
                         var lines = Inductance.TraceSegmenter.Centerlines(doc, layerOrder).ToList();
                         long extractMs = sw.ElapsedMilliseconds;
-                        results[i] = new LayerResult(layerOrder, image, layerPads, lines, doc.IsNegative,
+                        results[i] = new LayerResult(layerOrder, image, layerPads, lines,
+                            NetNamer.Labels(doc, layerOrder), doc.IsNegative,
                             parseMs, imageMs, extractMs, doc.Ops.Count, CountPolarityFlips(doc));
                     }
                     catch (Exception ex)
@@ -117,6 +119,7 @@ public sealed class PcbBoardReader
         var islands = new List<CopperIsland>();
         var pads = new List<CopperPad>();
         var centerlines = new List<TraceCenterline>();
+        var labels = new List<NetLabel>();
         long layersSumMs = 0;
         for (int i = 0; i < results.Length; i++)
         {
@@ -126,6 +129,7 @@ public sealed class PcbBoardReader
                 islands.Add(new CopperIsland(islands.Count, r.LayerOrder, layer.FileName, polygon));
             pads.AddRange(r.Pads);
             centerlines.AddRange(r.Centerlines);
+            labels.AddRange(r.Labels);
             layersSumMs += r.ParseMs + r.ImageMs + r.ExtractMs;
             warnings.Add($"Layer {layer.FileName}: {r.Image.Polygons.Count} copper islands, {r.Pads.Count} pads " +
                          $"(parse {r.ParseMs} ms, copper image {r.ImageMs} ms over {r.OpCount} ops / " +
@@ -168,9 +172,14 @@ public sealed class PcbBoardReader
         stageTimer.Restart();
         var nets = NetExtractor.Extract(islands, vias, pads,
             results.Where(r => r.Negative).Select(r => r.LayerOrder).Distinct().ToList());
+        // Names come last: the copper decides what is connected, the X2 attributes only
+        // say what the design calls it.
+        var named = pads.Count(p => p.ComponentRef is not null);
+        nets = NetNamer.Apply(nets, labels, warnings);
         long netsMs = stageTimer.ElapsedMilliseconds;
         warnings.Add($"Extracted {nets.Count} copper nets from {islands.Count} islands " +
-                     $"({vias.Count(v => v.Plated)} plated vias, {pads.Count} pads).");
+                     $"({vias.Count(v => v.Plated)} plated vias, {pads.Count} pads" +
+                     (named > 0 ? $", {named} of them component pins by X2 attribute" : "") + ").");
         warnings.Add($"Import timing: outline {outlineMs} ms, copper layers {layersWallMs} ms wall " +
                      $"({layersSumMs} ms summed over {results.Length} parallel layers), " +
                      $"drills {drillsMs} ms, net extraction {netsMs} ms, " +

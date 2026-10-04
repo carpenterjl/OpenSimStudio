@@ -57,6 +57,7 @@ public partial class App : Application
         services.AddSingleton<ScopeSelectionViewModel>();
         services.AddSingleton<ResultsViewModel>();
         services.AddSingleton<ElectrodesViewModel>();
+        services.AddSingleton<PowerRailViewModel>();
         services.AddSingleton<InductanceViewModel>();
         services.AddSingleton<AntennaViewModel>();
         services.AddSingleton<SignalIntegrityViewModel>();

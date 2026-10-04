@@ -24,6 +24,7 @@ public partial class PcbViewModel : ObservableObject
     private readonly ILogService _log;
     private readonly MeshingViewModel _meshing;
     private readonly ElectrodesViewModel _electrodes;
+    private readonly PowerRailViewModel _rail;
     private readonly MaterialsViewModel _materials;
     private readonly InductanceViewModel _inductance;
     private readonly AntennaViewModel _antenna;
@@ -31,8 +32,9 @@ public partial class PcbViewModel : ObservableObject
 
     public PcbViewModel(ProjectSession session, ILogService log, MeshingViewModel meshing,
         ElectrodesViewModel electrodes, MaterialsViewModel materials, InductanceViewModel inductance,
-        AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity)
+        AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, PowerRailViewModel rail)
     {
+        _rail = rail;
         _session = session;
         _log = log;
         _meshing = meshing;
@@ -596,6 +598,7 @@ public partial class PcbViewModel : ObservableObject
             ShowCopperPreview = false;
 
             _electrodes.LoadPads(result.Pads);
+            _rail.Load(result, net);
             LoadTraceChainFor(net);
             if (_session.SelectedAnalysis.Kind == AnalysisType.Static)
             {

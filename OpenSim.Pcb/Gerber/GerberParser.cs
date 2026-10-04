@@ -17,8 +17,10 @@ public sealed record GerberParseOptions
 /// AD (C/R/O with optional holes, polygon P, %AM% macros with expressions — evaluated
 /// at AD time), G01/G02/G03 with G75 arcs, D01/D02/D03, regions G36/G37, polarity
 /// LPD/LPC, step-repeat %SR% (replayed at block close), comments, and M02. Attributes
-/// (TF/TA/TO/TD) are metadata, except <c>TF.FilePolarity</c>, which is reported on the
-/// document; anything genuinely unknown fails loudly. All coordinates
+/// (TF/TA/TO/TD) never change the image. Two kinds are kept: <c>TF.FilePolarity</c>, on
+/// the document, and the X2 object attributes <c>TO.N</c>, <c>TO.P</c> and <c>TO.C</c>
+/// (net, component pin, component), on every object created while they are in force.
+/// Anything genuinely unknown fails loudly. All coordinates
 /// are converted to meters.
 /// </summary>
 public sealed partial class GerberParser
@@ -153,6 +155,9 @@ public sealed partial class GerberParser
             if (first.StartsWith("TF.FilePolarity,", StringComparison.Ordinal))
                 state.Negative = first["TF.FilePolarity,".Length..]
                     .Equals("Negative", StringComparison.OrdinalIgnoreCase);
+            else if (first.StartsWith("TO", StringComparison.Ordinal)
+                     || first.StartsWith("TD", StringComparison.Ordinal))
+                ParseObjectAttribute(first, state);
         }
         else if (first.StartsWith("LN", StringComparison.Ordinal) || first.StartsWith("IP", StringComparison.Ordinal))
         {
@@ -164,6 +169,58 @@ public sealed partial class GerberParser
         {
             throw new InvalidDataException($"Unknown extended command '%{first}*%'.");
         }
+    }
+
+    /// <summary>
+    /// X2 object attributes: the net (<c>.N</c>), component pin (<c>.P</c>) and component
+    /// (<c>.C</c>) that every object created from here on belongs to, until changed or
+    /// deleted (<c>%TD*%</c>). They never change the image; they are what lets a Gerber
+    /// net carry its name and a pad its refdes and pin. A pending draw is closed first, so
+    /// a polyline never spans two nets.
+    /// </summary>
+    private static void ParseObjectAttribute(string statement, ParseState state)
+    {
+        state.FlushDraw();
+        if (statement.StartsWith("TD", StringComparison.Ordinal))
+        {
+            // %TD*% deletes every attribute; %TD.N*% the named one.
+            string name = statement[2..];
+            if (name.Length == 0 || name == ".N") state.ObjectNet = null;
+            if (name.Length == 0 || name is ".P" or ".C")
+            {
+                state.ObjectComponent = null;
+                state.ObjectPin = null;
+            }
+            return;
+        }
+
+        var fields = statement[2..].Split(',');
+        string Field(int i) => i < fields.Length ? UnescapeAttribute(fields[i]) : "";
+        switch (fields[0])
+        {
+            case ".N":
+                // An empty name is "not connected"; N/C is the reserved name for a single
+                // unconnected pad. Neither names a net.
+                string net = Field(1);
+                state.ObjectNet = net.Length == 0 || net == "N/C" ? null : net;
+                break;
+            case ".P":
+                state.ObjectComponent = Field(1).Length > 0 ? Field(1) : null;
+                state.ObjectPin = Field(2).Length > 0 ? Field(2) : null;
+                break;
+            case ".C":
+                state.ObjectComponent = Field(1).Length > 0 ? Field(1) : null;
+                state.ObjectPin = null;
+                break;
+        }
+    }
+
+    /// <summary>Attribute values escape characters outside the plain set as \uXXXX.</summary>
+    private static string UnescapeAttribute(string value)
+    {
+        if (!value.Contains('\\')) return value;
+        return UnicodeEscapeRegex().Replace(value,
+            m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
     }
 
     private void ParseApertureDefinition(string statement, ParseState state)
@@ -417,7 +474,10 @@ public sealed partial class GerberParser
                 if (state.InRegion)
                     throw new InvalidDataException("D03 flash inside a G36 region is not allowed.");
                 state.FlushDraw();
-                state.Ops.Add(new FlashOp(to, state.RequireAperture(), state.Polarity));
+                state.Ops.Add(new FlashOp(to, state.RequireAperture(), state.Polarity)
+                {
+                    Net = state.ObjectNet, ComponentRef = state.ObjectComponent, Pin = state.ObjectPin
+                });
                 state.Current = to;
                 return;
 
@@ -525,6 +585,7 @@ public sealed partial class GerberParser
         public bool Ended;
         public bool Negative;                                                // %TF.FilePolarity,Negative
         public bool SingleQuadrant;                                          // G74 in force
+        public string? ObjectNet, ObjectComponent, ObjectPin;                // %TO.N / .P / .C in force
 
         public readonly Dictionary<int, Aperture> Apertures = new();
         public readonly List<GerberOp> Ops = new();
@@ -556,7 +617,7 @@ public sealed partial class GerberParser
         public void FlushDraw()
         {
             if (PendingDraw.Count >= 2)
-                Ops.Add(new DrawOp(PendingDraw.ToList(), RequireAperture(), Polarity));
+                Ops.Add(new DrawOp(PendingDraw.ToList(), RequireAperture(), Polarity) { Net = ObjectNet });
             PendingDraw.Clear();
         }
 
@@ -583,7 +644,7 @@ public sealed partial class GerberParser
         {
             CloseContour();
             if (RegionContours.Count > 0)
-                Ops.Add(new RegionOp(RegionContours.ToList(), Polarity));
+                Ops.Add(new RegionOp(RegionContours.ToList(), Polarity) { Net = ObjectNet });
             RegionContours.Clear();
             InRegion = false;
         }
@@ -597,4 +658,7 @@ public sealed partial class GerberParser
 
     [GeneratedRegex(@"^X(\d+)Y(\d+)I([\d.+-]+)J([\d.+-]+)$")]
     private static partial Regex StepRepeatRegex();
+
+    [GeneratedRegex(@"\\u([0-9A-Fa-f]{4})")]
+    private static partial Regex UnicodeEscapeRegex();
 }

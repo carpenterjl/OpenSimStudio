@@ -48,7 +48,21 @@ public sealed record MacroAperture(int Code, string MacroName,
 public sealed record UnsupportedAperture(int Code, string Kind, double ApproximateDiameter) : Aperture(Code);
 
 /// <summary>One image operation, in file order (order matters for polarity).</summary>
-public abstract record GerberOp(GerberPolarity Polarity);
+public abstract record GerberOp(GerberPolarity Polarity)
+{
+    /// <summary>The net this object belongs to, from the X2 object attribute
+    /// <c>%TO.N,…*%</c> in force when it was created; null when the file carries none
+    /// (or declares the object unconnected).</summary>
+    public string? Net { get; init; }
+
+    /// <summary>The component reference designator from <c>%TO.P,refdes,pin*%</c> (or
+    /// <c>%TO.C,refdes*%</c>); null when the file carries none.</summary>
+    public string? ComponentRef { get; init; }
+
+    /// <summary>The component pin number from <c>%TO.P,refdes,pin*%</c>; null when the
+    /// file carries none.</summary>
+    public string? Pin { get; init; }
+}
 
 /// <summary>
 /// A stroked polyline (D01 draws chained while the aperture and polarity stay the same;

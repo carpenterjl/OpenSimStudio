@@ -362,8 +362,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
     }
 
     /// <summary>The board-wide DC screen: every net with at least two COMPONENT PINS
-    /// (pads that carry a component reference — an IPC-2581 import; a Gerber board has
-    /// none, so every net is skipped and counted) gets its pin-pair resistances from the nodal
+    /// (pads that carry a component reference — an IPC-2581 import, or Gerber files with
+    /// X2 %TO.P attributes; a Gerber set without them has none, so every net is skipped and
+    /// counted) gets its pin-pair resistances from the nodal
     /// network on the trace graph (branches AND parallel paths — the case the inductance
     /// chain refuses), the net's total C to the reference plane, and the lumped
     /// τ = R·C screen, written to a CSV report via a save dialog. Non-conforming nets

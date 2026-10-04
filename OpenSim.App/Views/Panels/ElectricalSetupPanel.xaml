@@ -120,6 +120,59 @@
             <TextBlock Text="{Binding Inductance.InductanceAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
 
+            <!-- Step 6: rail-level DC (several sources and loads on the meshed net) -->
+            <TextBlock Text="6. Power rail (IR drop)" FontWeight="Bold" Margin="0,8,0,2"/>
+            <TextBlock Text="Give pads of the meshed net a role. Source: volts and output resistance [mΩ]. Load: amperes. Pads of one component with the same role are one terminal."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="RailPadList" ItemsSource="{Binding Rail.Pads}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="78"/>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding Roles}" SelectedItem="{Binding Role}"/>
+                                <TextBox Grid.Column="2" Text="{Binding Value}"
+                                         ToolTip="Source: volts. Load: amperes."/>
+                                <TextBox Grid.Column="3" Text="{Binding OutputMilliohms}"
+                                         ToolTip="Source output resistance [mΩ]; not used on a load."/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <UniformGrid Columns="2" Margin="0,4,0,0">
+                <Label Content="Nominal [V] (0 = source)"/>
+                <TextBox Text="{Binding Rail.NominalVolts}"/>
+                <Label Content="Drop limit [%]"/>
+                <TextBox Text="{Binding Rail.DropLimitPercent}"/>
+                <Label Content="Density limit [A/mm²]"/>
+                <TextBox Text="{Binding Rail.CurrentDensityLimit}"
+                         ToolTip="Copper above this is listed as a neck-down. 0 = list the densest spot only."/>
+                <Label Content="Via limit [A]"/>
+                <TextBox Text="{Binding Rail.ViaCurrentLimit}" ToolTip="0 = not checked."/>
+                <Label Content="Copper σ [S/m]"/>
+                <TextBox Text="{Binding Rail.CopperConductivity}"/>
+            </UniformGrid>
+            <Button x:Name="SolveRailButton" Content="Solve rail" Command="{Binding Rail.SolveRailCommand}"/>
+            <TextBlock Text="{Binding Rail.RailResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
+            <ItemsControl ItemsSource="{Binding Rail.ResultLines}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding Rail.RailAssumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+
         </StackPanel>
     </GroupBox>
 </UserControl>

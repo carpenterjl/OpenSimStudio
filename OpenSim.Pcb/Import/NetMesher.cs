@@ -71,11 +71,33 @@ public sealed class NetMesher
     /// <summary>A selectable pad electrode on the meshed net: its tagged face id, centre, and layer.</summary>
     public sealed record PadElectrode(int FaceId, Point2 Center, int LayerOrder)
     {
-        /// <summary>Human label for the electrode picker, e.g. "L1 pad (12.4, 3.20) mm".</summary>
-        public string Label => $"L{LayerOrder} pad ({Center.X * 1e3:g3}, {Center.Y * 1e3:g3}) mm";
+        /// <summary>The component this pad belongs to, when the source says (IPC-2581
+        /// PinRef, Gerber X2 %TO.P); null for a via landing or an unattributed flash.</summary>
+        public string? ComponentRef { get; init; }
+
+        /// <summary>The component pin; null when unknown.</summary>
+        public string? Pin { get; init; }
+
+        /// <summary>Human label for the electrode picker: "U1.3 — L1 (12.4, 3.20) mm" for a
+        /// component pin, "L1 pad (12.4, 3.20) mm" otherwise.</summary>
+        public string Label => ComponentRef is null
+            ? $"L{LayerOrder} pad ({Center.X * 1e3:g3}, {Center.Y * 1e3:g3}) mm"
+            : $"{ComponentRef}{(Pin is null ? "" : "." + Pin)} — L{LayerOrder} " +
+              $"({Center.X * 1e3:g3}, {Center.Y * 1e3:g3}) mm";
     }
 
-    public sealed record Result(Body Body, IReadOnlyList<PadElectrode> Pads, IReadOnlyList<string> Warnings);
+    public sealed record Result(Body Body, IReadOnlyList<PadElectrode> Pads, IReadOnlyList<string> Warnings)
+    {
+        /// <summary>z extent of every copper layer the mesh spans (layer order → metres),
+        /// so a consumer can say which layer an element is on without rebuilding the
+        /// stackup model.</summary>
+        public IReadOnlyDictionary<int, (double zLo, double zHi)> LayerZ { get; init; } =
+            new Dictionary<int, (double zLo, double zHi)>();
+
+        /// <summary>The plated wall thickness the via barrels were meshed with [m] (the
+        /// option, after the meshable minimum was applied).</summary>
+        public double ViaPlating { get; init; }
+    }
 
     public Result MeshNet(CopperNet net, IReadOnlyList<CopperPad>? boardPads = null, NetMeshOptions? options = null)
     {
@@ -124,7 +146,10 @@ public sealed class NetMesher
         var body = BuildBody(net, mesh, options);
         warnings.Add($"Net {net.Id}: {mesh.ElementCount} elements, {electrodes.Count} pad electrodes, " +
                      $"{edge * 1e3:g3} mm edge (single layer L{layer}).");
-        return new Result(body, electrodes, warnings);
+        return new Result(body, electrodes, warnings)
+        {
+            LayerZ = new Dictionary<int, (double zLo, double zHi)> { [layer] = (0, thickness) }
+        };
     }
 
     // ---------------- Multi layer + via barrels ----------------
@@ -261,7 +286,7 @@ public sealed class NetMesher
         if (bridges.Count == 0)
             warnings.Add($"Net {net.Id} spans layers L{string.Join("+", layers)} but has no annular-ring via bridges; " +
                          "layers are meshed at their true z but stay electrically separate (no barrel).");
-        return new Result(body, electrodes, warnings);
+        return new Result(body, electrodes, warnings) { LayerZ = layerZ, ViaPlating = plating };
     }
 
     // ---------------- Shared helpers ----------------
@@ -390,7 +415,10 @@ public sealed class NetMesher
         {
             int faceId = PcbMeshGenerator.PadFaceBase + k;
             if (tagged.Contains(faceId))
-                electrodes.Add(new PadElectrode(faceId, netPads[k].Center, netPads[k].LayerOrder));
+                electrodes.Add(new PadElectrode(faceId, netPads[k].Center, netPads[k].LayerOrder)
+                {
+                    ComponentRef = netPads[k].ComponentRef, Pin = netPads[k].Pin
+                });
         }
         return electrodes;
     }
@@ -442,11 +470,22 @@ public sealed class NetMesher
     /// bore (radius = finished hole radius) and whose wall is the plating thickness. Both
     /// rings share the same vertex count and angles so the wall triangulates into clean,
     /// radially aligned strips.
+    /// <para>
+    /// The rings are regular n-gons of the SAME AREA as the circles they stand for, not
+    /// inscribed in them. An inscribed 13-gon — what a 0.3 mm via gets at this chord
+    /// tolerance — has 3.8 % less area than its circle, and the wall between two of them
+    /// 3.8 % less copper, which is 4 % too much barrel resistance on exactly the small
+    /// vias a rail depends on. Scaling both radii by √(2π / (n·sin(2π/n))) makes the wall's
+    /// cross-section π(r_o² − r_i²) exactly; the vertices move out by under 2 % of the radius.
+    /// </para>
     /// </summary>
     private static Polygon2 Barrel(Point2 c, double boreRadius, double plating)
     {
         double rOut = boreRadius + plating;
         int n = ApertureShapes.SegmentCount(rOut, ChordTolerance);
+        double equalArea = Math.Sqrt(2 * Math.PI / (n * Math.Sin(2 * Math.PI / n)));
+        rOut *= equalArea;
+        boreRadius *= equalArea;
         var outer = new Point2[n];
         var bore = new Point2[n];
         for (int i = 0; i < n; i++)

@@ -34,10 +34,10 @@ public sealed record DcNetReport(
 
 /// <summary>
 /// The "Evaluate DC nets" sweep. Only measurements that START AND END AT A COMPONENT are
-/// reported: each reported pad must trace back to a package/pin (an IPC-2581 PinRef), so
-/// via landing pads and Gerber flashes — which carry no component identity — never
-/// terminate a row. This makes the report an IPC-2581-specific feature: a Gerber board
-/// (no PinRef anywhere) yields no rows, every net skipped.
+/// reported: each reported pad must trace back to a package/pin (an IPC-2581 PinRef, or a
+/// Gerber X2 %TO.P attribute), so via landing pads and unattributed flashes — which carry
+/// no component identity — never terminate a row. A Gerber set without X2 pin attributes
+/// therefore yields no rows, every net skipped.
 ///
 /// For every net with at least two COMPONENT PINS (fewer is skipped and counted), it
 /// computes the DC resistance between every unordered pin pair by the
@@ -88,8 +88,8 @@ public static class DcNetEvaluator
         var assumptions = new List<string>
         {
             "scope: only pairs whose BOTH pads are component pins (IPC-2581 PinRef → refdes.pin) "
-                + "are reported — via landings and Gerber flashes carry no component identity, so a "
-                + "Gerber board yields no rows and every net is skipped",
+                + "are reported — via landings and unattributed flashes carry no component identity, so a "
+                + "Gerber set without X2 pin attributes (%TO.P) yields no rows and every net is skipped",
             "resistance: DC nodal network on trace centerlines — R = ρℓ/A per segment, "
                 + "pins as equipotential attachment points, corners/necks unmodeled, no skin effect "
                 + "(the FE field solve remains the per-net precision tool)",
@@ -112,9 +112,9 @@ public static class DcNetEvaluator
         {
             var pads = NetTraceExtractor.PadsForNet(board, net);
             // Only component pins are measured: a reported endpoint must trace back to a
-            // package/pin (IPC-2581 PinRef). Via landing pads and Gerber flashes have no
+            // package/pin (IPC-2581 PinRef, Gerber %TO.P). Via landing pads and unattributed flashes have no
             // component identity, so a net with fewer than two component pins produces no
-            // rows — skipped and counted (Gerber boards land entirely here, by design).
+            // rows — skipped and counted (Gerber sets without X2 attributes land entirely here).
             var pins = pads.Where(p => p.ComponentRef is not null).ToList();
             if (pins.Count < 2)
                 return (new List<DcNetRow>(), 0, Skipped: true, null);
