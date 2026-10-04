@@ -20,6 +20,9 @@ public static class PadExtractor
     public static IReadOnlyList<CopperPad> Extract(GerberDocument document, int layerOrder)
     {
         var pads = new List<CopperPad>();
+        // A negative file's flashes are antipads and thermal reliefs — absences of
+        // copper. Counting one as a pad would stitch the via it isolates.
+        if (document.IsNegative) return pads;
         foreach (var op in document.Ops)
         {
             if (op is not FlashOp { Polarity: GerberPolarity.Dark } flash) continue;

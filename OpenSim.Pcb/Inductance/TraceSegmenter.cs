@@ -50,6 +50,7 @@ public sealed class TraceSegmenter
 
     private static void Visit(GerberDocument document, Action<Point2, Point2, double> emit)
     {
+        if (document.IsNegative) return;                       // draws are clearances, not traces
         foreach (var op in document.Ops)
         {
             if (op is not DrawOp draw) continue;

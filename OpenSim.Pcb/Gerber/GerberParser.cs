@@ -17,7 +17,8 @@ public sealed record GerberParseOptions
 /// AD (C/R/O with optional holes, polygon P, %AM% macros with expressions — evaluated
 /// at AD time), G01/G02/G03 with G75 arcs, D01/D02/D03, regions G36/G37, polarity
 /// LPD/LPC, step-repeat %SR% (replayed at block close), comments, and M02. Attributes
-/// (TF/TA/TO/TD) are metadata; anything genuinely unknown fails loudly. All coordinates
+/// (TF/TA/TO/TD) are metadata, except <c>TF.FilePolarity</c>, which is reported on the
+/// document; anything genuinely unknown fails loudly. All coordinates
 /// are converted to meters.
 /// </summary>
 public sealed partial class GerberParser
@@ -48,7 +49,8 @@ public sealed partial class GerberParser
         {
             Apertures = state.Apertures,
             Ops = state.Ops,
-            Warnings = state.Warnings
+            Warnings = state.Warnings,
+            IsNegative = state.Negative
         };
     }
 
@@ -145,7 +147,12 @@ public sealed partial class GerberParser
         else if (first.StartsWith("TF", StringComparison.Ordinal) || first.StartsWith("TA", StringComparison.Ordinal)
                  || first.StartsWith("TO", StringComparison.Ordinal) || first.StartsWith("TD", StringComparison.Ordinal))
         {
-            // File/aperture/object attributes carry metadata only, never image content.
+            // File/aperture/object attributes carry metadata only, never image content
+            // — with one exception: a file declared negative draws where copper is
+            // REMOVED, so its image is the complement of the drawing within the board.
+            if (first.StartsWith("TF.FilePolarity,", StringComparison.Ordinal))
+                state.Negative = first["TF.FilePolarity,".Length..]
+                    .Equals("Negative", StringComparison.OrdinalIgnoreCase);
         }
         else if (first.StartsWith("LN", StringComparison.Ordinal) || first.StartsWith("IP", StringComparison.Ordinal))
         {
@@ -481,6 +488,7 @@ public sealed partial class GerberParser
         public Point2 Current;
         public bool InRegion;
         public bool Ended;
+        public bool Negative;                                                // %TF.FilePolarity,Negative
 
         public readonly Dictionary<int, Aperture> Apertures = new();
         public readonly List<GerberOp> Ops = new();

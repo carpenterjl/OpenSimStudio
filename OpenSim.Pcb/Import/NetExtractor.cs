@@ -11,11 +11,18 @@ namespace OpenSim.Pcb.Import;
 /// connection has a pad flash on each connected layer, whereas a signal via merely passing
 /// through a plane has an antipad (no pad) and must not merge the signal net into the plane.
 /// Requiring a pad is what stops the whole board collapsing into one giant net.
+/// <para>
+/// A NEGATIVE plane layer has no pad flashes at all — its file draws only clearances —
+/// so the rule there is the copper itself: a via whose centre lies in the plane's
+/// copper is connected (direct connect, or the centre and spokes of a thermal relief);
+/// one whose centre lies in a clearance (antipad) is not.
+/// </para>
 /// </summary>
 public static class NetExtractor
 {
     public static IReadOnlyList<CopperNet> Extract(
-        IReadOnlyList<CopperIsland> islands, IReadOnlyList<Via> vias, IReadOnlyList<CopperPad> pads)
+        IReadOnlyList<CopperIsland> islands, IReadOnlyList<Via> vias, IReadOnlyList<CopperPad> pads,
+        IReadOnlyCollection<int>? negativeLayers = null)
     {
         var parent = Enumerable.Range(0, islands.Count).ToArray();
         int Find(int x)
@@ -49,6 +56,14 @@ public static class NetExtractor
                 if (!HasAnnularRing(layerPads, via)) continue;                  // concentric pad required
                 int island = IslandContaining(via.Position, islandsByLayer, bounds, islands, layer);
                 if (island >= 0) { connect.Add(island); connectLayers.Add(layer); }
+            }
+            if (negativeLayers is not null)
+            {
+                foreach (int layer in negativeLayers)
+                {
+                    int island = IslandContaining(via.Position, islandsByLayer, bounds, islands, layer);
+                    if (island >= 0) { connect.Add(island); connectLayers.Add(layer); }
+                }
             }
             for (int k = 1; k < connect.Count; k++)
                 Union(connect[0], connect[k]);

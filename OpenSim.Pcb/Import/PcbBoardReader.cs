@@ -21,7 +21,7 @@ public sealed class PcbBoardReader
     /// <summary>Everything one copper layer contributes, computed independently per
     /// layer and stitched back in file order so ids and warnings stay deterministic.</summary>
     private sealed record LayerResult(int LayerOrder, LayerImage Image,
-        IReadOnlyList<CopperPad> Pads, List<TraceCenterline> Centerlines,
+        IReadOnlyList<CopperPad> Pads, List<TraceCenterline> Centerlines, bool Negative,
         long ParseMs, long ImageMs, long ExtractMs, int OpCount, int PolarityFlips);
 
     public PcbBoard Read(string archivePath)
@@ -77,6 +77,8 @@ public sealed class PcbBoardReader
                         long parseMs = sw.ElapsedMilliseconds;
                         sw.Restart();
                         var image = new LayerImageBuilder(_ops).Build(doc);
+                        if (doc.IsNegative)
+                            image = InvertWithinOutline(image, outlineTask.Result);
                         long imageMs = sw.ElapsedMilliseconds;
                         sw.Restart();
                         var layerPads = PadExtractor.Extract(doc, layerOrder);
@@ -85,7 +87,7 @@ public sealed class PcbBoardReader
                         // not retained.
                         var lines = Inductance.TraceSegmenter.Centerlines(doc, layerOrder).ToList();
                         long extractMs = sw.ElapsedMilliseconds;
-                        results[i] = new LayerResult(layerOrder, image, layerPads, lines,
+                        results[i] = new LayerResult(layerOrder, image, layerPads, lines, doc.IsNegative,
                             parseMs, imageMs, extractMs, doc.Ops.Count, CountPolarityFlips(doc));
                     }
                     catch (Exception ex)
@@ -123,6 +125,9 @@ public sealed class PcbBoardReader
             warnings.Add($"Layer {layer.FileName}: {r.Image.Polygons.Count} copper islands, {r.Pads.Count} pads " +
                          $"(parse {r.ParseMs} ms, copper image {r.ImageMs} ms over {r.OpCount} ops / " +
                          $"{r.PolarityFlips} polarity flips, pads+centerlines {r.ExtractMs} ms).");
+            if (r.Negative)
+                warnings.Add($"Layer {layer.FileName}: negative-polarity plane — copper is the board outline " +
+                             "minus the drawn clearances; a via joins it where its centre lies in that copper.");
         }
 
         // Vias from drill layers (plated = PTH, non-plated = NPTH by FileFunction).
@@ -145,7 +150,8 @@ public sealed class PcbBoardReader
         long drillsMs = stageTimer.ElapsedMilliseconds;
 
         stageTimer.Restart();
-        var nets = NetExtractor.Extract(islands, vias, pads);
+        var nets = NetExtractor.Extract(islands, vias, pads,
+            results.Where(r => r.Negative).Select(r => r.LayerOrder).Distinct().ToList());
         long netsMs = stageTimer.ElapsedMilliseconds;
         warnings.Add($"Extracted {nets.Count} copper nets from {islands.Count} islands " +
                      $"({vias.Count(v => v.Plated)} plated vias, {pads.Count} pads).");
@@ -164,6 +170,25 @@ public sealed class PcbBoardReader
             Layers = layers,
             Warnings = warnings,
             TraceCenterlines = centerlines
+        };
+    }
+
+    /// <summary>
+    /// The copper of a negative-polarity file: the filled board outline minus what the
+    /// file drew. There is no other statement of where the plane ends, so a negative
+    /// layer without an outline is refused rather than imaged as its clearances.
+    /// </summary>
+    private LayerImage InvertWithinOutline(LayerImage drawn, IReadOnlyList<Polygon2> outline)
+    {
+        if (outline.Count == 0)
+            throw new InvalidOperationException(
+                "the file is a negative-polarity plane (%TF.FilePolarity,Negative), whose copper is the " +
+                "board outline minus the drawing, and the set has no usable board outline (Profile) layer.");
+        var copper = _ops.Difference(outline, drawn.Polygons.SelectMany(Polygon2.OrientedRings)).ToList();
+        return new LayerImage
+        {
+            Polygons = LayerImageBuilder.CanonicalOrder(copper),
+            Warnings = drawn.Warnings
         };
     }
 

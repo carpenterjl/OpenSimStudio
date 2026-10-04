@@ -119,7 +119,7 @@ public sealed class LayerImageBuilder
     /// makes it independent of how the booleans were staged (batching, suffix
     /// composition, parallelism) — only the geometry itself determines the order.
     /// </summary>
-    private static List<Polygon2> CanonicalOrder(List<Polygon2> polygons)
+    internal static List<Polygon2> CanonicalOrder(List<Polygon2> polygons)
     {
         static (double MinX, double MinY, int Count, double Area) KeyOf(IReadOnlyList<Point2> ring)
         {

@@ -71,4 +71,11 @@ public sealed class GerberDocument
     public required IReadOnlyDictionary<int, Aperture> Apertures { get; init; }
     public required IReadOnlyList<GerberOp> Ops { get; init; }
     public required IReadOnlyList<string> Warnings { get; init; }
+
+    /// <summary>
+    /// The file declares <c>%TF.FilePolarity,Negative*%</c>: its ops draw where material
+    /// is ABSENT (a plane's antipads and thermal reliefs). The copper is the board
+    /// outline minus the image of <see cref="Ops"/>; no op is a pad or a trace.
+    /// </summary>
+    public bool IsNegative { get; init; }
 }
