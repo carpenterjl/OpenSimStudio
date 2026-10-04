@@ -345,7 +345,7 @@ public partial class SolveViewModel : ObservableObject
         if (environment.Medium == MediumKind.Vacuum)
         {
             _log.Append("Validation: a vacuum has no fluid to resolve — use 'Heat flow in an " +
-                        "environment', whose radiation-only exchange is exact.");
+                        "environment', which solves radiation-only exchange.");
             _session.StatusText = "Validation failed";
             return;
         }

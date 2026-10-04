@@ -90,7 +90,7 @@ public static class ConjugateHeatStudy
         if (environment.Medium == MediumKind.Vacuum)
             throw new InvalidOperationException(
                 "A vacuum has no fluid to resolve — use the Stage 1 environment solve, " +
-                "which handles radiation-only exchange exactly.");
+                "which handles radiation-only exchange.");
 
         var log = new List<string>();
         var mesh = solidInput.Mesh;

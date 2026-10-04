@@ -292,9 +292,16 @@ public class EnvironmentThermalBenchmarks
     public void ConvergedIterate_SatisfiesTheExactNonlinearEquations()
     {
         // The fixed point is not an approximation of the nonlinear problem, it IS its
-        // solution: re-assembling A and b from the coefficients evaluated AT the converged
+        // solution: re-assembling A and b from the film evaluated AT the converged
         // temperature must leave A·T − b at the linear solver's residual, with no
         // linearization error underneath. Assembled here independently of the solver.
+        //
+        // The film is the one the solver iterates with since Fix 18 — radiation as its
+        // Newton tangent about each triangle's temperature, with the per-triangle
+        // reference that keeps the flux — so the load uses each triangle's reference.
+        // (The factored film gives every triangle the same total flux at this state; the
+        // two differ only in how a triangle shares it among its nodes, at second order in
+        // the temperature variation across the triangle.)
         var mesh = Cube();
         var material = Lump();
         var environment = new EnvironmentSettings
@@ -305,7 +312,8 @@ public class EnvironmentThermalBenchmarks
         var input = Input(mesh, environment, material, source: source);
 
         var temperature = Temperatures(new HeatConductionSolver().Solve(input));
-        var film = EnvironmentBoundaryModel.Build(input, new List<string>())!.Evaluate(temperature);
+        var film = EnvironmentBoundaryModel.Build(input, new List<string>())!
+            .Evaluate(temperature, tangent: true);
 
         var builder = new SparseMatrixBuilder(mesh.NodeCount, mesh.NodeCount);
         var conduction = new ScalarDiffusionAssembler(mesh, _ => 400).AssembleStiffness();
@@ -324,7 +332,8 @@ public class EnvironmentThermalBenchmarks
             var triangle = mesh.BoundaryTriangles[t];
             double h = film.TriangleFilmCoefficient[t];
             ScalarDiffusionAssembler.AddRobinSurface(builder, mesh, triangle, h);
-            double share = h * Ambient * ScalarDiffusionAssembler.SurfaceArea(mesh, triangle) / 3;
+            double share = h * film.ReferenceTemperatureOf(t)
+                           * ScalarDiffusionAssembler.SurfaceArea(mesh, triangle) / 3;
             loads[triangle.A] += share;
             loads[triangle.B] += share;
             loads[triangle.C] += share;

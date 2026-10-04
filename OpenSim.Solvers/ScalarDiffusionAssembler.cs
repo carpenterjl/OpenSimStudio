@@ -131,6 +131,31 @@ public sealed class ScalarDiffusionAssembler
     }
 
     /// <summary>
+    /// Assembles the LUMPED mass (capacity) matrix: the row sums of the consistent one on
+    /// the diagonal, c·V/4 per element node. Same total capacity, no coupling between
+    /// nodes.
+    /// </summary>
+    public CsrMatrix AssembleLumpedMass(Func<int, double> massCoefficient,
+        CancellationToken cancellationToken = default)
+    {
+        var diagonal = new double[DofCount];
+        for (int el = 0; el < _mesh.ElementCount; el++)
+        {
+            if ((el & 1023) == 0)
+                cancellationToken.ThrowIfCancellationRequested();
+            double cv4 = massCoefficient(el) * _mesh.ElementVolume(el) / 4.0;
+            var e = _mesh.Elements[el];
+            diagonal[e.N0] += cv4;
+            diagonal[e.N1] += cv4;
+            diagonal[e.N2] += cv4;
+            diagonal[e.N3] += cv4;
+        }
+        var builder = new SparseMatrixBuilder(DofCount, DofCount);
+        for (int i = 0; i < diagonal.Length; i++) builder.Add(i, i, diagonal[i]);
+        return builder.Build();
+    }
+
+    /// <summary>
     /// Scatters one Robin surface term h·∫NᵢNⱼdA into a matrix under construction. The
     /// consistent surface mass matrix of a linear triangle is analytic: A/12·(1+δᵢⱼ).
     /// <para>

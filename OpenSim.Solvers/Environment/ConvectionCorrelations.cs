@@ -176,10 +176,12 @@ public static class ConvectionCorrelations
     /// <para>
     /// This is the FACTORED form of the Stefan–Boltzmann law, not a linearization about
     /// some operating point: h_r·(T_s − T_a) ≡ εσ(T_s⁴ − T_a⁴) is an algebraic identity at
-    /// every temperature. So a Picard iteration that recomputes h_r from the current
-    /// surface temperature and converges is solving the EXACT nonlinear radiation problem,
-    /// with zero linearization error left over — which is why the solvers lag this
-    /// coefficient rather than forming a Newton tangent.
+    /// every temperature — so it is the film as it IS at a given surface temperature, and
+    /// an iteration that recomputes it and converges has no linearization error left over.
+    /// The conjugate study iterates with it; the environment solvers iterate with the
+    /// Newton tangent instead (the lagged factored form diverges above T_s = 1.84·T_a) and
+    /// report this one. Either way the law holds at the temperature the coefficient was
+    /// evaluated at: one per boundary triangle, not one per face.
     /// </para>
     /// Small-body-in-large-surroundings is assumed (the body sees only the ambient, never
     /// itself): inter-body view factors are a named deferred feature.

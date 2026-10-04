@@ -8,10 +8,13 @@ namespace OpenSim.Solvers;
 
 /// <summary>
 /// Transient heat conduction over TET4 elements: ρc_p·∂T/∂t = ∇·(k∇T) + q, integrated
-/// with backward Euler. BE is unconditionally stable AND monotone — a step change (the
-/// dominant use case) never produces the non-physical temperature oscillations
-/// Crank–Nicolson shows on stiff modes at practical step sizes; its O(Δt) truncation is
-/// controlled by the step size instead. Each step solves the SPD system
+/// with backward Euler. BE is unconditionally stable and damps every mode — a step change
+/// (the dominant use case) never produces the ringing Crank–Nicolson shows on stiff modes
+/// at practical step sizes; its O(Δt) truncation is controlled by the step size instead.
+/// It is MONOTONE only with a suitable capacity matrix: with the consistent one a step
+/// below about h²/(6α) makes the node next to a heated one move the wrong way first, so
+/// the capacity is lumped there (<see cref="ThermalCapacity"/>, automatic by default and
+/// logged). Each step solves the SPD system
 /// (M/Δt + K)·Tⁿ = (M/Δt)·Tⁿ⁻¹ + f with the shared Jacobi-CG, reduced once and
 /// warm-started from the previous step. No Dirichlet/Robin condition is required:
 /// M/Δt regularizes the matrix, so a purely adiabatic heating ramp is well-posed.
@@ -102,11 +105,30 @@ public sealed class TransientThermalSolver : ISolver
                 robin.Add(new ScalarDiffusionAssembler.RobinTerm(t, convection.Coefficient));
         // Contacts enter the conduction matrix only: an interface exchanges heat, it stores none.
         var conduction = assembler.AssembleStiffness(robin, input.ThermalContacts, cancellationToken);
-        var mass = assembler.AssembleMass(el =>
+        Func<int, double> capacity = el =>
         {
             var m = input.MaterialOf(el);
             return m.Density * m.SpecificHeat!.Value;
-        }, cancellationToken);
+        };
+        // Which capacity matrix: the consistent one is not monotone below Δt ≈ h²/(6α).
+        var (monotoneStep, tightest) = MonotoneTimeStep(input);
+        bool belowBound = dt < monotoneStep;
+        bool lumped = settings.Capacity == ThermalCapacity.Lumped
+                      || (settings.Capacity == ThermalCapacity.Automatic && belowBound);
+        var mass = lumped
+            ? assembler.AssembleLumpedMass(capacity, cancellationToken)
+            : assembler.AssembleMass(capacity, cancellationToken);
+        if (lumped && settings.Capacity == ThermalCapacity.Automatic)
+            log.Add($"Heat capacity: LUMPED. The time step {dt:g3} s is below {monotoneStep:g3} s " +
+                    $"(h²/6α of the {tightest}), where the consistent capacity matrix lets a node " +
+                    "next to a heated one move the wrong way first.");
+        else if (lumped)
+            log.Add("Heat capacity: lumped (as set).");
+        else if (belowBound)
+            log.Add($"WARNING: heat capacity is the consistent matrix (as set) and the time step " +
+                    $"{dt:g3} s is below {monotoneStep:g3} s (h²/6α of the {tightest}): nodal " +
+                    "temperatures next to a sudden change can overshoot their bounds by about 1 % " +
+                    "of the change. Use the lumped capacity or a longer step.");
 
         // System matrix of one backward-Euler step: A = M/Δt + K (SPD; the capacity term
         // regularizes it even without any Dirichlet/Robin condition).
@@ -223,7 +245,7 @@ public sealed class TransientThermalSolver : ISolver
                 }
                 else
                 {
-                    film = environment.Evaluate(iterate);
+                    film = environment.Evaluate(iterate, tangent: true);
                     updatable!.Apply(film);
                     stepSystem = updatable.System;
                     var stepLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, film);
@@ -273,7 +295,13 @@ public sealed class TransientThermalSolver : ISolver
             temperature_ = iterate;
 
             if (n % stride == 0 || n == steps)
+            {
+                // The film shown is the film as it IS at this state (the step was solved
+                // with radiation's Newton tangent, a different pair of numbers for the
+                // same exchange).
+                if (environment is not null) film = environment.Evaluate(temperature_);
                 frames.Add(MakeFrame(n * dt, temperature_, mesh, assembler, input, film));
+            }
             progress?.Report(new SolverProgress($"Time step {n}/{steps}", 0.05 + 0.95 * n / steps));
         }
 
@@ -311,6 +339,30 @@ public sealed class TransientThermalSolver : ISolver
                 ["End time (s)"] = endTime
             }
         };
+    }
+
+    /// <summary>
+    /// The step below which backward Euler with the CONSISTENT capacity matrix stops being
+    /// monotone: the largest h²/(6α) over the elements, with h the edge of the regular
+    /// tetrahedron of the element's volume. (In one dimension the bound is exact: the
+    /// off-diagonal of M/Δt + K is ρc·h/(6Δt) − k/h.) Also names the element that sets it.
+    /// </summary>
+    internal static (double Step, string Element) MonotoneTimeStep(SolveInput input)
+    {
+        var mesh = input.Mesh;
+        double worst = 0;
+        string name = "mesh";
+        for (int e = 0; e < mesh.ElementCount; e++)
+        {
+            var m = input.MaterialOf(e);
+            double alpha = m.ThermalConductivity!.Value / (m.Density * m.SpecificHeat!.Value);
+            double h = Math.Cbrt(6 * Math.Sqrt(2) * Math.Abs(mesh.ElementVolume(e)));
+            double bound = h * h / (6 * alpha);
+            if (bound <= worst) continue;
+            worst = bound;
+            name = $"{h * 1e3:g3} mm elements of '{m.Name}'";
+        }
+        return (worst, name);
     }
 
     /// <summary>Step count and frame stride for the given settings (shared by Validate

@@ -170,14 +170,31 @@ public sealed class EnvironmentBoundaryModel
     }
 
     /// <summary>
-    /// The film model at the given nodal temperature field: one coefficient per panel
-    /// (convection from the correlations at the panel's mean surface temperature, plus the
-    /// factored radiation coefficient), NaN on every triangle the user claimed.
+    /// The film model at the given nodal temperature field, NaN on every triangle the
+    /// user claimed. Convection is one coefficient per panel, from the correlations at the
+    /// panel's mean surface temperature — a correlation is a statement about a whole
+    /// plate. Radiation is evaluated PER TRIANGLE at the triangle's own temperature: it is
+    /// a local law, and at the panel mean a 400 K spot on a 320 K board radiated a third
+    /// too little.
     /// </summary>
-    public SurfaceFilmModel Evaluate(IReadOnlyList<double> nodalTemperature)
+    /// <param name="tangent">False: the factored coefficient εσ(T_s+T_a)(T_s²+T_a²) toward
+    /// the ambient — the film as it IS at this temperature, for display and for whoever
+    /// iterates outside. True: the Newton linearization of εσ(T⁴ − T_a⁴) about the
+    /// triangle's temperature, coefficient 4εσT_s³ toward a per-triangle reference chosen
+    /// so the flux at T_s is unchanged — the film to SOLVE with. Both describe the same
+    /// exchange at the temperature they are evaluated at, so a converged iteration
+    /// satisfies the same nonlinear equations either way; the lagged factored form
+    /// diverges once the surface is hotter than 1.84× the ambient, the tangent does not.</param>
+    public SurfaceFilmModel Evaluate(IReadOnlyList<double> nodalTemperature, bool tangent = false)
     {
         var coefficients = new double[_mesh.BoundaryTriangles.Count];
         Array.Fill(coefficients, double.NaN);
+        double[]? references = null;
+        if (tangent)
+        {
+            references = new double[coefficients.Length];
+            Array.Fill(references, _environment.AmbientTemperature);
+        }
 
         double ambient = _environment.AmbientTemperature;
         double gravity = _environment.Gravity.Length;
@@ -199,19 +216,45 @@ public sealed class EnvironmentBoundaryModel
                 h += ConvectionCoefficient(panel, state, surface - ambient, gravity, speed);
             }
 
-            if (_environment.IncludeRadiation && panel.Emissivity > 0)
-                h += ConvectionCorrelations.RadiativeFilmCoefficient(panel.Emissivity, surface, ambient);
+            bool radiates = _environment.IncludeRadiation && panel.Emissivity > 0;
 
             // A triangle partly inside a joint exchanges over its exposed part only; the
             // Robin term integrates h over the whole triangle, so the fraction scales h.
             foreach (int t in panel.TriangleIndices)
-                coefficients[t] = h * _exposed[t];
+            {
+                double total = h;
+                if (radiates)
+                {
+                    var bt = _mesh.BoundaryTriangles[t];
+                    double local = Math.Max(1.0, (nodalTemperature[bt.A] + nodalTemperature[bt.B]
+                                                  + nodalTemperature[bt.C]) / 3.0);
+                    if (!tangent)
+                    {
+                        total += ConvectionCorrelations.RadiativeFilmCoefficient(
+                            panel.Emissivity, local, ambient);
+                    }
+                    else
+                    {
+                        // q = εσ(T⁴ − T_a⁴) ≈ q(T_s) + 4εσT_s³·(T − T_s) = h_N·(T − T_N),
+                        // T_N = T_s − (T_s⁴ − T_a⁴)/(4T_s³); joined to the convection toward
+                        // the ambient as two conductances in parallel.
+                        double cube = local * local * local;
+                        double newton = 4 * panel.Emissivity * ConvectionCorrelations.StefanBoltzmann * cube;
+                        double newtonReference = local
+                            - (cube * local - ambient * ambient * ambient * ambient) / (4 * cube);
+                        total = h + newton;
+                        references![t] = (h * ambient + newton * newtonReference) / total;
+                    }
+                }
+                coefficients[t] = total * _exposed[t];
+            }
         }
 
         return new SurfaceFilmModel
         {
             TriangleFilmCoefficient = coefficients,
             ReferenceTemperature = ambient,
+            TriangleReferenceTemperature = references,
             Origin = "Stage 1 correlations — " + _environment.Describe()
         };
     }

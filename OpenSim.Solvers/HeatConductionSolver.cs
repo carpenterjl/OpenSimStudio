@@ -14,10 +14,13 @@ namespace OpenSim.Solvers;
 /// <para>
 /// With an <see cref="SolveInput.Environment"/> the surface exchange becomes a function of
 /// the surface temperature (correlations for convection, εσ(T⁴−T_a⁴) for radiation), so the
-/// problem is nonlinear and is solved by lagged-coefficient fixed-point iteration: assemble
-/// with the film coefficients of the previous iterate, solve, repeat. Because the radiation
-/// coefficient is the FACTORED one rather than a tangent, the converged iterate satisfies
-/// the exact nonlinear equations, not a linearization of them.
+/// problem is nonlinear and is solved by fixed-point iteration: assemble with the film of
+/// the previous iterate, solve, repeat. The convection coefficient is lagged; radiation
+/// enters as its Newton tangent about the previous iterate, per boundary triangle. The
+/// converged iterate therefore satisfies εσ(T⁴−T_a⁴) with T the mean of each triangle —
+/// the radiation law at the mesh's resolution, not at one temperature per face — and the
+/// convection correlations at each face's mean temperature, which is what they are
+/// written for.
 /// </para>
 /// </summary>
 public sealed class HeatConductionSolver : ISolver
@@ -272,10 +275,18 @@ public sealed class HeatConductionSolver : ISolver
     }
 
     /// <summary>
-    /// The lagged-coefficient fixed-point loop: evaluate the film coefficients at the
-    /// current temperature, solve the linear system they define, repeat. Every iterate's
-    /// matrix is the conduction matrix plus a positive surface mass term, so it stays SPD
-    /// and the shared Jacobi-CG applies throughout.
+    /// The fixed-point loop: evaluate the film at the current temperature, solve the
+    /// linear system it defines, repeat. Every iterate's matrix is the conduction matrix
+    /// plus a positive surface mass term, so it stays SPD and the shared Jacobi-CG applies
+    /// throughout.
+    /// <para>
+    /// Radiation is taken as its Newton tangent. With the factored coefficient lagged
+    /// instead, the map's slope at a radiation-dominated fixed point is
+    /// −(T−T_a)·h_r′/h_r, which passes −1 at T_s = 1.84·T_a (552 K in a 300 K room):
+    /// above that the iteration oscillated with growing amplitude and a well-posed
+    /// problem was reported as not settling. Newton on the convex T⁴ comes down onto the
+    /// solution from above and stays there.
+    /// </para>
     /// </summary>
     private static (double[] Temperature, SurfaceFilmModel Film) SolveWithEnvironment(
         SolveInput input, EnvironmentBoundaryModel environment, CsrMatrix conduction,
@@ -305,7 +316,7 @@ public sealed class HeatConductionSolver : ISolver
         {
             cancellationToken.ThrowIfCancellationRequested();
             iteration++;
-            film = environment.Evaluate(temperature);
+            film = environment.Evaluate(temperature, tangent: true);
             updatable.Apply(film);
 
             var rhs = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
@@ -338,6 +349,8 @@ public sealed class HeatConductionSolver : ISolver
                     "the heat sources, the emissivity, and that the bodies touch what they should.");
         }
 
+        // What is reported and displayed is the film as it IS at the converged state.
+        film = environment.Evaluate(temperature);
         log.Add($"Environment: converged in {iteration} nonlinear iterations " +
                 $"(last change {change:g3} K, {totalIterations} CG iterations total).");
         var (minFilm, maxFilm) = film.CoefficientRange();
