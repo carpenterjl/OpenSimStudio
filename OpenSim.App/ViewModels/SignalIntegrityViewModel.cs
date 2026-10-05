@@ -174,6 +174,47 @@ public partial class SignalIntegrityViewModel : ObservableObject
         }
     }
 
+    [ObservableProperty] private string _capacitanceMatrixResult = "";
+
+    /// <summary>Net-to-net capacitance matrix of the selected nets.</summary>
+    [RelayCommand]
+    private async Task ComputeCapacitanceMatrix()
+    {
+        if (_board is null || _meshOptions is null)
+        {
+            CapacitanceMatrixResult = "Import a board first (PCB panel).";
+            return;
+        }
+        var selected = BoardNets.Where(n => n.IsSelected).Select(n => n.Net).ToList();
+        if (selected.Count == 0)
+        {
+            CapacitanceMatrixResult = "Select at least one net.";
+            return;
+        }
+        CapacitanceMatrixResult = "Computing…";
+        try
+        {
+            var board = _board;
+            var stackup = _meshOptions().Stackup;
+            var matrix = await Task.Run(() => OpenSim.Rf.Extraction.NetCapacitance.Extract(board, selected, stackup));
+            var lines = new List<string>();
+            for (int i = 0; i < matrix.Nets.Count; i++)
+            {
+                lines.Add($"{matrix.Nets[i]}: {matrix.Farads[i, i] * 1e12:g4} pF in all, {matrix.ToPlanes(i) * 1e12:g4} pF to the planes");
+                for (int j = i + 1; j < matrix.Nets.Count; j++)
+                    if (matrix.Between(i, j) > 0)
+                        lines.Add($"  to {matrix.Nets[j]}: {matrix.Between(i, j) * 1e12:g4} pF");
+            }
+            CapacitanceMatrixResult = string.Join(Environment.NewLine, lines)
+                + Environment.NewLine + string.Join(" ", matrix.Assumptions);
+            foreach (string line in lines) _log.Append("SI capacitance matrix: " + line.Trim());
+        }
+        catch (Exception ex)
+        {
+            CapacitanceMatrixResult = "Not computable: " + ex.Message;
+        }
+    }
+
     /// <summary>Whole-board crosstalk scan: every two nets running side by side, ranked.</summary>
     [RelayCommand]
     private async Task ScanBoardCrosstalk()

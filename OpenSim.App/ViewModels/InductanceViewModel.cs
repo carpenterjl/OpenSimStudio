@@ -79,6 +79,10 @@ public partial class InductanceViewModel : ObservableObject
         MutualResult = "";
         LoopResult = "";
         InductanceAssumptions = "";
+        AcResult = "";
+        AcAssumptions = "";
+        HasAcResult = false;
+        _acSolved = null;
     }
 
     [RelayCommand]

@@ -34,7 +34,7 @@ public sealed record CrosstalkScanOptions
 /// <summary>One stretch geometry two nets share: same layer, widths and gap.</summary>
 public sealed record CrosstalkRun(int Layer, double WidthAMeters, double WidthBMeters, double EdgeGapMeters,
     double LengthMeters, double NearEndCoupling, double FarEndCouplingSecondsPerMeter,
-    double DelaySecondsPerMeter);
+    double DelaySecondsPerMeter, double MutualCapacitanceFaradsPerMeter = 0);
 
 /// <summary>Two nets that run side by side, with what couples between them.</summary>
 public sealed record CrosstalkPair
@@ -214,6 +214,7 @@ public static class CrosstalkScan
         };
         var stackup = BoardCoupledExtractor.StackupOf(board, coupled);
         var solved = new Dictionary<string, (double Near, double Far, double Delay)>();
+        var mutualCapacitance = new Dictionary<string, double>();
         var result = new List<CrosstalkPair>();
         foreach (var pair in candidates.Take(options.MaxSolvedPairs))
         {
@@ -240,9 +241,10 @@ public static class CrosstalkScan
                     }, substrate.TopGround);
                     var rlgc = RlgcExtractor.Extract(section, Model);
                     solved[key] = k = Coefficients(rlgc);
+                    mutualCapacitance[key] = -rlgc.CapacitanceFaradsPerMeter[0, 1];
                 }
                 runs.Add(new CrosstalkRun(group.Layer, group.WidthA, group.WidthB, group.Gap, group.Length,
-                    k.Near, k.Far, k.Delay));
+                    k.Near, k.Far, k.Delay, mutualCapacitance[key]));
             }
 
             var longest = pair.Groups.Values.MaxBy(g => g.LongestPiece)!;

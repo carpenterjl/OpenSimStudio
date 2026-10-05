@@ -120,6 +120,30 @@
             <TextBlock Text="{Binding Inductance.InductanceAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
 
+            <TextBlock Text="R and L against frequency (skin and proximity effect)" FontWeight="Bold" Margin="0,6,0,2"/>
+            <TextBlock Text="Filament solve of the same path. A loop returns through the second net, or — with 'Return: plane layer' — through the copper of that layer, meshed around the path."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <UniformGrid Columns="2">
+                <Label Content="Path"/>
+                <ComboBox x:Name="AcPathCombo" ItemsSource="{Binding Inductance.AcPaths}"
+                          SelectedItem="{Binding Inductance.AcPath}"/>
+                <Label Content="Frequencies [MHz]"/>
+                <TextBox x:Name="AcFrequenciesBox" Text="{Binding Inductance.AcFrequenciesMhz}"/>
+            </UniformGrid>
+            <Button x:Name="ComputeAcButton" Content="Solve R(f) and L(f)"
+                    Command="{Binding Inductance.ComputeFrequencyDependentCommand}"/>
+            <TextBlock Text="{Binding Inductance.AcResult}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <UniformGrid Columns="2" Margin="0,3,0,0">
+                <Button Content="Save SPICE subcircuit" Command="{Binding Inductance.ExportSpiceCommand}"
+                        IsEnabled="{Binding Inductance.HasAcResult}"
+                        ToolTip="R, L and their coupling as solved at the highest frequency in the list."/>
+                <Button Content="Save Touchstone" Command="{Binding Inductance.ExportTouchstoneCommand}"
+                        IsEnabled="{Binding Inductance.HasAcResult}" Margin="2,0,0,0"/>
+            </UniformGrid>
+            <TextBlock Text="{Binding Inductance.AcAssumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+
             <!-- Step 6: rail-level DC (several sources and loads on the meshed net) -->
             <TextBlock Text="6. Power rail (IR drop)" FontWeight="Bold" Margin="0,8,0,2"/>
             <TextBlock Text="Give pads of the meshed net a role. Source: volts and output resistance [mΩ]. Load: amperes. Pads of one component with the same role are one terminal."

@@ -145,6 +145,12 @@
                             ToolTip="Capacitance of each selected net to its reference plane: Σ C′(width, gap) × routed centerline length + parallel-plate pad terms, over the stackup dielectric (2D BEM). Bends and branches count; one net is enough."/>
                     <TextBlock Text="{Binding SignalIntegrity.TraceCapResult}" TextWrapping="Wrap"
                                FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                    <Button x:Name="SiCapacitanceMatrixButton" Content="Net-to-net capacitance matrix"
+                            Command="{Binding SignalIntegrity.ComputeCapacitanceMatrixCommand}"
+                            Margin="0,3,0,0"
+                            ToolTip="For the selected nets: each net's capacitance to its planes, and between every two that run side by side on a layer (2D field solve per cross-section × length)."/>
+                    <TextBlock Text="{Binding SignalIntegrity.CapacitanceMatrixResult}" TextWrapping="Wrap"
+                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                     <Button x:Name="SiDcNetsButton" Content="Evaluate DC nets (R, C, τ → CSV)"
                             Command="{Binding SignalIntegrity.EvaluateDcNetsCommand}"
                             Margin="0,3,0,0"
