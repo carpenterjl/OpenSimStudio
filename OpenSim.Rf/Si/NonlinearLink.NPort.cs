@@ -66,9 +66,24 @@ public static partial class NonlinearLink
     public static NonlinearNPortResult SolveNPort(
         MtlNetwork network, IReadOnlyList<INonlinearDriver> near, IReadOnlyList<INonlinearDriver> far,
         int periodSamples, double dt, int warmupPeriods = 4, double tailEnergyBound = 1e-6,
+        double referenceSiemens = 1 / 50.0, int? maxDegreeOfParallelism = null) =>
+        SolveNPort(network.ConductorCount, network.TransferImpedance, near, far, periodSamples, dt,
+            warmupPeriods, tailEnergyBound, referenceSiemens, maxDegreeOfParallelism);
+
+    /// <summary>
+    /// The same engine on any channel that can give its reference-terminated transfer impedance
+    /// (frequency [Hz], reference conductance [S]) → 2N×2N, ports 0..N−1 near and N..2N−1 far —
+    /// a measured or imported channel as well as a line model. The function is called at every
+    /// bin from DC to the Nyquist frequency 1/(2·dt) and must be defined over that whole range.
+    /// </summary>
+    public static NonlinearNPortResult SolveNPort(
+        int lineCount, Func<double, double, Complex[,]> transferImpedance,
+        IReadOnlyList<INonlinearDriver> near, IReadOnlyList<INonlinearDriver> far,
+        int periodSamples, double dt, int warmupPeriods = 4, double tailEnergyBound = 1e-6,
         double referenceSiemens = 1 / 50.0, int? maxDegreeOfParallelism = null)
     {
-        int n = network.ConductorCount;
+        int n = lineCount;
+        if (n < 1) throw new ArgumentOutOfRangeException(nameof(lineCount));
         if (near.Count != n || far.Count != n)
             throw new ArgumentException(
                 $"This channel has {n} conductor(s); supply one near and one far element per "
@@ -107,7 +122,7 @@ public static partial class NonlinearLink
                 new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 }, m =>
                 {
                     double f = m / (fft * dt);
-                    var z = network.TransferImpedance(f, referenceSiemens);
+                    var z = transferImpedance(f, referenceSiemens);
                     var flat = new Complex[ports * ports];
                     if (anyCapacitance && m > 0)
                     {

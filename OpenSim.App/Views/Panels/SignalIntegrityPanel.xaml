@@ -315,5 +315,68 @@
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
         </StackPanel>
     </GroupBox>
+    <GroupBox Header="Channel from a Touchstone file" DataContext="{Binding SignalIntegrity.Channel}">
+        <StackPanel>
+            <TextBlock Text="A measured channel, or one from another tool: mixed-mode S-parameters, a TDR impedance profile, and an eye between resistive terminations. IBIS-AMI, COM and statistical BER are not here; export Touchstone to the tools that do them."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <Button x:Name="ChannelLoadButton" Content="Load Touchstone file (.sNp)" Command="{Binding LoadCommand}"/>
+            <ItemsControl ItemsSource="{Binding SummaryLines}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <StackPanel IsEnabled="{Binding HasChannel}">
+                <UniformGrid Columns="2" Margin="0,3,0,0">
+                    <Label Content="Port order"/>
+                    <ComboBox ItemsSource="{Binding PortOrders}" SelectedItem="{Binding SelectedPortOrder}"/>
+                    <Label Content="Driven port"/>
+                    <TextBox Text="{Binding DrivenPort}" ToolTip="Single-ended runs and TDR: the file's port number."/>
+                    <Label Content="Receiver port"/>
+                    <TextBox Text="{Binding ReceiverPort}"/>
+                </UniformGrid>
+                <CheckBox Content="Differential (the two pairs of a four-port)" IsChecked="{Binding Differential}"
+                          IsEnabled="{Binding IsFourPort}" Margin="0,2,0,0"/>
+
+                <UniformGrid Columns="2" Margin="0,4,0,0">
+                    <Button Content="Mixed-mode S" Command="{Binding ShowMixedModeCommand}" IsEnabled="{Binding IsFourPort}"/>
+                    <Button Content="Save mixed-mode (.s4p)" Command="{Binding SaveMixedModeCommand}"
+                            IsEnabled="{Binding IsFourPort}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <TextBlock Text="{Binding MixedModeResult}" TextWrapping="Wrap" FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                <Image Source="{Binding MixedModePlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
+
+                <UniformGrid Columns="2" Margin="0,4,0,0">
+                    <Label Content="TDR edge [ps] (0 = fastest)"/>
+                    <TextBox Text="{Binding TdrRisePs}" ToolTip="10–90 % rise time. 0 takes the fastest edge the file's last frequency supports."/>
+                </UniformGrid>
+                <Button Content="TDR impedance profile" Command="{Binding RunTdrCommand}"/>
+                <TextBlock Text="{Binding TdrResult}" TextWrapping="Wrap" FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                <Image Source="{Binding TdrPlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
+
+                <UniformGrid Columns="2" Margin="0,4,0,0">
+                    <Label Content="Bit rate [Gb/s]"/>
+                    <TextBox Text="{Binding BitRateGbps}"/>
+                    <Label Content="Edge [% of bit]"/>
+                    <TextBox Text="{Binding RisePercent}"/>
+                    <Label Content="PRBS order"/>
+                    <TextBox Text="{Binding PrbsOrder}"/>
+                    <Label Content="Swing [V]"/>
+                    <TextBox Text="{Binding SwingVolts}" ToolTip="Single-ended: 0 to this. Differential: ± this between the legs."/>
+                    <Label Content="Source [Ω per leg]"/>
+                    <TextBox Text="{Binding SourceOhms}"/>
+                    <Label Content="Load [Ω per leg]"/>
+                    <TextBox Text="{Binding LoadOhms}"/>
+                </UniformGrid>
+                <Button Content="Eye" Command="{Binding RunEyeCommand}"/>
+                <TextBlock Text="{Binding EyeResult}" TextWrapping="Wrap" FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                <Image Source="{Binding EyeImage}" MaxHeight="180" Margin="0,4,0,0" Stretch="Uniform"/>
+            </StackPanel>
+        </StackPanel>
+    </GroupBox>
     </StackPanel>
 </UserControl>

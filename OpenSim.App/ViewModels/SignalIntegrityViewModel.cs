@@ -40,6 +40,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
     {
         _log = log;
         Pdn = new PdnViewModel(log);
+        Channel = new ChannelViewModel(log);
     }
 
     /// <summary>The stackup and impedance calculator shown above the wizard.</summary>
@@ -47,6 +48,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     /// <summary>PDN impedance against frequency, shown below the wizard.</summary>
     public PdnViewModel Pdn { get; }
+
+    /// <summary>A channel read from Touchstone: mixed mode, TDR, eye.</summary>
+    public ChannelViewModel Channel { get; }
 
     // ------------------------------------------------------------------
     // Wizard geometry: N identical coupled microstrips on the substrate.
@@ -819,7 +823,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     /// <summary>The eye persistence bitmap: density → a dark-to-hot ramp with log
     /// compression (single hits stay visible next to the piled-up plateaus).</summary>
-    private static ImageSource RenderEye(EyeDiagram eye)
+    internal static ImageSource RenderEye(EyeDiagram eye)
     {
         const int heightBins = 128;
         var map = eye.DensityMap(heightBins);
