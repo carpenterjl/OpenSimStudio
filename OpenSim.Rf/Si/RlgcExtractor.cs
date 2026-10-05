@@ -418,8 +418,11 @@ public static class RlgcExtractor
                 ? "Conductor loss by the incremental-inductance rule on this extraction's own L: "
                   + "strips (both faces and edges) and reference plane"
                   + (section.TopGround ? "s" : "") + " together, as a full N×N R(f) with its internal "
-                  + "inductance, joined to R_dc by Z = √(R_dc² + 2jK²f). Smooth copper: surface "
-                  + "roughness is NOT modelled and adds loss above a few GHz."
+                  + "inductance, joined to R_dc by Z = √(R_dc² + 2jK²f). "
+                  + (model.Roughness is { } rough
+                      ? $"Surface roughness: {rough.Describe()}, one value on every metal surface, "
+                        + "as a real multiplier on the frequency-dependent part of the series impedance."
+                      : "Smooth copper: surface roughness is NOT modelled and adds loss above a few GHz.")
                 : "R = max(R_dc, R_s(f)/2w) per conductor: forward resistance only, the return "
                   + "plane is lossless.",
             model.WidebandDielectric
@@ -450,10 +453,38 @@ public static class RlgcExtractor
         };
         if (skinMatrix is null) return result;
         var conductors = new ConductorImpedance(rDc, skinMatrix);
+        if (model.Roughness is not { } roughness)
+            return result with
+            {
+                ResistanceMatrixOhmsPerMeter = conductors.Resistance,
+                InternalInductanceHenriesPerMeter = conductors.InternalInductance,
+            };
+
+        // Rough copper: the part of the series impedance that depends on frequency is the
+        // surface's, and that part is multiplied.
+        double sigma = stripSigma;
         return result with
         {
-            ResistanceMatrixOhmsPerMeter = conductors.Resistance,
-            InternalInductanceHenriesPerMeter = conductors.InternalInductance,
+            ResistanceMatrixOhmsPerMeter = f =>
+            {
+                var r = conductors.Resistance(f);
+                double k = roughness.Factor(f, sigma);
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < n; j++)
+                    {
+                        double dc = i == j ? rDc[i] : 0;
+                        r[i, j] = dc + k * (r[i, j] - dc);
+                    }
+                return r;
+            },
+            InternalInductanceHenriesPerMeter = f =>
+            {
+                var l = conductors.InternalInductance(f);
+                double k = roughness.Factor(f, sigma);
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < n; j++) l[i, j] *= k;
+                return l;
+            },
         };
     }
 

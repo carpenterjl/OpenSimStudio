@@ -2,6 +2,55 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!-- Moved verbatim out of ElectricalSetupPanel when SI became its own workspace (design screens 13-14); bindings go through the shell DataContext unchanged. -->
+    <StackPanel>
+    <GroupBox Header="Stackup and impedance calculator" DataContext="{Binding SignalIntegrity.Calculator}">
+        <StackPanel>
+            <TextBlock Text="One trace or an edge-coupled pair, over one plane or between two, with optional coplanar grounds: Z0, Z_diff, delay and loss from the same 2D field solve the board extraction uses."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <UniformGrid Columns="4">
+                <Label Content="Structure"/>
+                <ComboBox x:Name="ZcStructureCombo" ItemsSource="{Binding Structures}" SelectedItem="{Binding Structure}"/>
+                <Label Content="Frequency [GHz]"/>
+                <TextBox x:Name="ZcFrequencyBox" Text="{Binding FrequencyGhz}"/>
+                <Label Content="Width base / top [mm]"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="ZcWidthBox" Text="{Binding WidthMm}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding TopWidthMm}" Margin="2,0,0,0"
+                             ToolTip="Width at the top of an etched trace; 0 = rectangular"/>
+                </UniformGrid>
+                <Label Content="Copper [µm] / rough [µm]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding CopperThicknessUm}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding RoughnessUm}" Margin="2,0,0,0"
+                             ToolTip="RMS surface roughness (Hammerstad); 0 = smooth copper"/>
+                </UniformGrid>
+                <Label Content="Below: h [mm] / εr / tanδ"/>
+                <UniformGrid Columns="3">
+                    <TextBox x:Name="ZcHeightBox" Text="{Binding HeightMm}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding EpsR}" Margin="1,0"/>
+                    <TextBox Text="{Binding TanD}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Above: h [mm] / εr / tanδ"
+                       ToolTip="The layer over the trace: a cover layer, or the dielectric up to the upper plane of a stripline. Not used by a plain microstrip."/>
+                <UniformGrid Columns="3">
+                    <TextBox Text="{Binding UpperHeightMm}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding UpperEpsR}" Margin="1,0"/>
+                    <TextBox Text="{Binding UpperTanD}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <CheckBox x:Name="ZcPairCheck" Content="Differential pair, gap [mm]" IsChecked="{Binding IsPair}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
+                <TextBox Text="{Binding PairGapMm}"/>
+                <CheckBox x:Name="ZcCoplanarCheck" Content="Coplanar ground, gap [mm]" IsChecked="{Binding HasCoplanarGround}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
+                <TextBox Text="{Binding CoplanarGapMm}"/>
+            </UniformGrid>
+            <Button x:Name="ZcCalculateButton" Content="Calculate impedance" Command="{Binding CalculateCommand}" Margin="0,4,0,0"/>
+            <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+        </StackPanel>
+    </GroupBox>
     <GroupBox Header="Signal integrity (coupled lines)">
         <StackPanel>
             <!-- Step 7: signal integrity (SI track) — coupled microstrip wizard →
@@ -154,4 +203,5 @@
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
         </StackPanel>
     </GroupBox>
+    </StackPanel>
 </UserControl>

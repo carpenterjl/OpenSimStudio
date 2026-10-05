@@ -34,6 +34,11 @@ public sealed record RlgcModel
     /// <summary>Conductivity of the reference plane(s) [S/m]; copper by default.</summary>
     public double PlaneConductivitySiemensPerMeter { get; init; } = 5.8e7;
 
+    /// <summary>Copper surface roughness, applied to every metal surface alike. Null is smooth
+    /// copper. It acts on the surface-impedance loss, so it needs
+    /// <see cref="SurfaceImpedance"/>.</summary>
+    public SurfaceRoughness? Roughness { get; init; }
+
     public static RlgcModel Board { get; } = new();
 
     public static RlgcModel Kernel { get; } = new()

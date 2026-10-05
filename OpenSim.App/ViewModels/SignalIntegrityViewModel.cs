@@ -38,6 +38,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     public SignalIntegrityViewModel(ILogService log) => _log = log;
 
+    /// <summary>The stackup and impedance calculator shown above the wizard.</summary>
+    public ImpedanceCalculatorViewModel Calculator { get; } = new();
+
     // ------------------------------------------------------------------
     // Wizard geometry: N identical coupled microstrips on the substrate.
     // ------------------------------------------------------------------
