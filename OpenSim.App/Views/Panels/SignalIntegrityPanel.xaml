@@ -151,6 +151,21 @@
                             ToolTip="Board-wide DC screen over EVERY net with 2+ pads: resistance between each pad pair (nodal network on the trace graph — branches and parallel paths solve exactly), the net's total C to the reference plane, and the lumped time constant τ = R·C, saved as a CSV report. Nets that can't be priced appear as typed note rows."/>
                     <TextBlock Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
                                FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                    <Button x:Name="SiLayoutCheckButton" Content="Check layout rules (whole board)"
+                            Command="{Binding SignalIntegrity.CheckLayoutRulesCommand}"
+                            Margin="0,3,0,0"
+                            ToolTip="Geometric checks, no field solve: traces over a split, slot or edge of their reference plane; layer changes with no stitching via or capacitor near the via; via stubs; traces close to the board edge. Uses the stackup panel's thicknesses."/>
+                    <TextBlock Text="{Binding SignalIntegrity.LayoutCheckResult}" TextWrapping="Wrap"
+                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                    <UniformGrid Columns="2" Margin="0,3,0,0">
+                        <Button x:Name="SiCrosstalkScanButton" Content="Scan board crosstalk"
+                                Command="{Binding SignalIntegrity.ScanBoardCrosstalkCommand}"
+                                ToolTip="Every two nets with traces running side by side on a layer, ranked by near-end and far-end crosstalk for the given edge (2D field solve per distinct cross-section)."/>
+                        <TextBox x:Name="SiScanRiseBox" Text="{Binding SignalIntegrity.ScanRiseTimeNs}" Margin="2,0,0,0"
+                                 ToolTip="Aggressor rise time [ns]"/>
+                    </UniformGrid>
+                    <TextBlock Text="{Binding SignalIntegrity.CrosstalkScanResult}" TextWrapping="Wrap"
+                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                 </StackPanel>
             </Border>
 

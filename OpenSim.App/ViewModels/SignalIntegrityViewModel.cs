@@ -122,7 +122,86 @@ public partial class SignalIntegrityViewModel : ObservableObject
     [ObservableProperty] private string _boardExtractionResult = "";
     [ObservableProperty] private string _traceCapResult = "";
     [ObservableProperty] private string _dcNetsResult = "";
+    [ObservableProperty] private string _layoutCheckResult = "";
+    [ObservableProperty] private string _crosstalkScanResult = "";
+    /// <summary>Aggressor edge for the board crosstalk scan [ns].</summary>
+    [ObservableProperty] private double _scanRiseTimeNs = 0.5;
     [ObservableProperty] private bool _hasBoard;
+
+    /// <summary>How many findings or pairs the panel lists; the log gets all of them.</summary>
+    private const int ListedLines = 12;
+
+    /// <summary>Geometric layout checks over the whole board: plane gaps under traces,
+    /// reference changes without a return path, via stubs, traces at the board edge.</summary>
+    [RelayCommand]
+    private async Task CheckLayoutRules()
+    {
+        if (_board is null || _meshOptions is null)
+        {
+            LayoutCheckResult = "Import a board first (PCB panel).";
+            return;
+        }
+        LayoutCheckResult = "Checking…";
+        try
+        {
+            var board = _board;
+            var stackup = _meshOptions().Stackup;
+            var report = await Task.Run(() => OpenSim.Rf.Si.Layout.LayoutRuleChecker.Check(board,
+                new OpenSim.Rf.Si.Layout.LayoutCheckOptions { Stackup = stackup }));
+            var kinds = Enum.GetValues<OpenSim.Rf.Si.Layout.LayoutFindingKind>()
+                .Select(k => $"{report.Count(k)} {k}");
+            string head = report.Findings.Count == 0
+                ? "No findings."
+                : $"{report.Findings.Count} finding(s): {string.Join(", ", kinds)}.";
+            var lines = report.Findings.Take(ListedLines).Select(f => $"[{f.Severity}] {f.Message}").ToList();
+            if (report.Findings.Count > ListedLines)
+                lines.Add($"… and {report.Findings.Count - ListedLines} more in the log.");
+            LayoutCheckResult = string.Join(Environment.NewLine,
+                new[] { head }.Concat(lines).Concat(report.Notes));
+            _log.Append($"SI layout checks: {head}");
+            foreach (var f in report.Findings) _log.Append($"  [{f.Severity}] {f.Message}");
+        }
+        catch (Exception ex)
+        {
+            LayoutCheckResult = "Layout check failed: " + ex.Message;
+        }
+    }
+
+    /// <summary>Whole-board crosstalk scan: every two nets running side by side, ranked.</summary>
+    [RelayCommand]
+    private async Task ScanBoardCrosstalk()
+    {
+        if (_board is null || _meshOptions is null)
+        {
+            CrosstalkScanResult = "Import a board first (PCB panel).";
+            return;
+        }
+        CrosstalkScanResult = "Scanning…";
+        try
+        {
+            var board = _board;
+            var options = new OpenSim.Rf.Si.Layout.CrosstalkScanOptions
+            {
+                Stackup = _meshOptions().Stackup,
+                RiseTimeSeconds = ScanRiseTimeNs * 1e-9
+            };
+            var report = await Task.Run(() => OpenSim.Rf.Si.Layout.CrosstalkScan.Run(board, options));
+            string head = report.Pairs.Count == 0
+                ? "No two nets run side by side within the scan's limits."
+                : $"{report.Pairs.Count} coupled pair(s), worst first:";
+            var lines = report.Pairs.Take(ListedLines).Select(p => p.Describe()).ToList();
+            if (report.Pairs.Count > ListedLines)
+                lines.Add($"… and {report.Pairs.Count - ListedLines} more in the log.");
+            CrosstalkScanResult = string.Join(Environment.NewLine,
+                new[] { head }.Concat(lines).Concat(report.Notes));
+            _log.Append($"SI crosstalk scan: {head}");
+            foreach (var p in report.Pairs) _log.Append("  " + p.Describe());
+        }
+        catch (Exception ex)
+        {
+            CrosstalkScanResult = "Crosstalk scan failed: " + ex.Message;
+        }
+    }
 
     private PcbBoard? _board;
     private string? _boardFileName;
@@ -145,6 +224,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
         HasBoard = board.Nets.Count > 0;
         BoardExtractionResult = "";
         DcNetsResult = "";
+        LayoutCheckResult = "";
+        CrosstalkScanResult = "";
     }
 
     [ObservableProperty] private string _rlgcResult = "";
