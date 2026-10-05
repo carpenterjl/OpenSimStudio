@@ -735,6 +735,7 @@ public partial class PcbViewModel : ObservableObject
     {
         if (_board is null && NetRows.Count == 0 && LayerFilters.Count == 0) return;
         _board = null;
+        ClearThermalParts();
         _inductance.Clear();
         _antenna.Clear();
         _session.IsPcbMode = false;

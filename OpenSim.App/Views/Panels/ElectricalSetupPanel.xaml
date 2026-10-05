@@ -200,6 +200,64 @@
             <TextBlock Text="{Binding Rail.RailAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
 
+            <!-- Step 7: junction temperatures of the board's parts (two-resistor models on the whole board) -->
+            <TextBlock Text="7. Component temperatures" FontWeight="Bold" Margin="0,8,0,2"/>
+            <TextBlock Text="Per part: power [W], θJC and θJB [K/W] from the datasheet, contact size [mm], heatsink [K/W] (0 = bare case). Parts at 0 W are left out. The whole board is meshed with its copper; the Thermal workspace's environment cools it."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <UniformGrid Columns="2">
+                <Button Content="Parts from the board" Command="{Binding Pcb.ListThermalPartsCommand}"
+                        ToolTip="Component names on the pads: IPC-2581, or Gerber with X2 attributes."/>
+                <Button Content="Load placement file" Command="{Binding Pcb.LoadPlacementFileCommand}" Margin="2,0,0,0"
+                        ToolTip="Pick-and-place table with designator, X, Y, rotation and side columns."/>
+            </UniformGrid>
+            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Pcb.ThermalParts}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="36"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                                <TextBox Grid.Column="1" Text="{Binding PowerWatts}" ToolTip="Power [W]"/>
+                                <TextBox Grid.Column="2" Text="{Binding ThetaJc}" ToolTip="θJC, junction to case top [K/W]"/>
+                                <TextBox Grid.Column="3" Text="{Binding ThetaJb}" ToolTip="θJB, junction to board [K/W]"/>
+                                <TextBox Grid.Column="4" Text="{Binding WidthMm}" ToolTip="Contact width along x [mm]"/>
+                                <TextBox Grid.Column="5" Text="{Binding HeightMm}" ToolTip="Contact height along y [mm]"/>
+                                <TextBox Grid.Column="6" Text="{Binding HeatsinkKelvinPerWatt}"
+                                         ToolTip="Case top to ambient through a heatsink [K/W]; 0 = bare case top in air."/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <UniformGrid Columns="2" Margin="0,4,0,0">
+                <Label Content="Case-top film [W/(m²·K)]"/>
+                <TextBox Text="{Binding Pcb.CaseFilmCoefficient}"
+                         ToolTip="Convection and radiation together on a bare case top. A setting, not computed."/>
+                <Label Content="Board element [mm] (0 = auto)"/>
+                <TextBox Text="{Binding Pcb.ThermalEdgeMm}"/>
+            </UniformGrid>
+            <Button Content="Solve component temperatures" Command="{Binding Pcb.SolveComponentTemperaturesCommand}"/>
+            <TextBlock Text="{Binding Pcb.ComponentResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
+            <ItemsControl ItemsSource="{Binding Pcb.ComponentResultLines}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding Pcb.ComponentAssumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+
         </StackPanel>
     </GroupBox>
 </UserControl>
