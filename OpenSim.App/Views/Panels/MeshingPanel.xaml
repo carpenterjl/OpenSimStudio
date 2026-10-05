@@ -57,6 +57,15 @@
             <StackPanel Visibility="{Binding Session.IsPcbMode, Converter={StaticResource BoolToVis}}">
                 <TextBlock Text="{Binding Pcb.SelectedNet.Label, FallbackValue='No net selected — pick one in the PCB nets list or click copper in the view.'}"
                            TextWrapping="Wrap" Margin="0,2,0,2"/>
+                <CheckBox x:Name="MeshWithLaminateCheck" Content="Include the laminate (for electro-thermal)"
+                          IsChecked="{Binding Pcb.MeshWithLaminate}"
+                          Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"
+                          ToolTip="Meshes the dielectric under and around the net as a second region, conformal with the copper. Only this net's copper is included."/>
+                <DockPanel Visibility="{Binding Pcb.MeshWithLaminate, Converter={StaticResource BoolToVis}}">
+                    <Label Content="Laminate margin [mm]" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding Pcb.LaminateMarginMm}" Margin="4,0,0,0"
+                             ToolTip="Laminate is meshed within this distance of the net. 0 = the whole board (a large mesh at a trace's resolution)."/>
+                </DockPanel>
                 <Button Content="Mesh selected net" Command="{Binding Pcb.MeshSelectedNetCommand}"/>
             </StackPanel>
 

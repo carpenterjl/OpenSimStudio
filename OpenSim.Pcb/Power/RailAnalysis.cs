@@ -157,6 +157,19 @@ public static class RailAnalysis
         IReadOnlyList<double>? elementConductivity = null, CancellationToken cancellationToken = default)
     {
         var fe = mesh.Body.Mesh ?? throw new InvalidOperationException("The net has no mesh.");
+        var terminals = Terminals(mesh, setup);
+        var sigma = elementConductivity ?? UniformConductivity(fe, setup.CopperConductivity);
+        // Region ids double as material groups: nodal averages never cross copper/laminate.
+        var solution = TerminalConductionSolver.Solve(fe, sigma, terminals,
+            fe.ElementRegionIds, cancellationToken);
+        return Report(mesh, net, setup, solution, sigma, temperatureCorrected: elementConductivity is not null);
+    }
+
+    /// <summary>The setup as solver terminals — sources first, then loads, in setup order —
+    /// after checking it.</summary>
+    public static IReadOnlyList<ConductionTerminal> Terminals(NetMesher.Result mesh, RailSetup setup)
+    {
+        if (mesh.Body.Mesh is null) throw new InvalidOperationException("The net has no mesh.");
         if (setup.Sources.Count == 0)
             throw new InvalidOperationException("A rail needs at least one source.");
         if (setup.Sinks.Count == 0)
@@ -169,7 +182,6 @@ public static class RailAnalysis
                     $"Load '{sink.Name}': the current must be zero or positive (a load draws current; " +
                     "something that supplies is a source).");
 
-        var sigma = elementConductivity ?? UniformConductivity(fe, setup.CopperConductivity);
         var terminals = new List<ConductionTerminal>();
         foreach (var source in setup.Sources)
             terminals.Add(new ConductionTerminal
@@ -186,11 +198,18 @@ public static class RailAnalysis
                 FaceIds = Faces(mesh, sink.Name, sink.Pads),
                 LoadCurrent = sink.Amps
             });
+        return terminals;
+    }
 
-        // Region ids double as material groups: nodal averages never cross copper/laminate.
-        var solution = TerminalConductionSolver.Solve(fe, sigma, terminals,
-            fe.ElementRegionIds, cancellationToken);
-
+    /// <summary>
+    /// Reads a terminal solve of this setup (terminals as <see cref="Terminals"/> orders
+    /// them) back in the board's terms.
+    /// </summary>
+    /// <param name="sigma">The σ per element the solve used.</param>
+    public static RailReport Report(NetMesher.Result mesh, CopperNet net, RailSetup setup,
+        TerminalConductionResult solution, IReadOnlyList<double> sigma, bool temperatureCorrected)
+    {
+        var fe = mesh.Body.Mesh ?? throw new InvalidOperationException("The net has no mesh.");
         double nominal = setup.NominalVolts > 0 ? setup.NominalVolts : setup.Sources.Max(s => s.Volts);
         var sources = new List<RailSourceResult>();
         for (int i = 0; i < setup.Sources.Count; i++)
@@ -228,7 +247,7 @@ public static class RailAnalysis
                 "a fraction of an element — refine the mesh when a span between pads is only a few elements long",
             "DC conduction in this net's copper only — the return path's drop is a second run on the " +
                 "ground net and adds to what the load sees",
-            elementConductivity is null
+            !temperatureCorrected
                 ? $"uniform copper conductivity {setup.CopperConductivity:g4} S/m (no self-heating); " +
                   "copper thickness from the stackup"
                 : "conductivity per element as supplied (temperature-corrected); copper thickness from the stackup",
@@ -440,7 +459,7 @@ public static class RailAnalysis
     }
 
     /// <summary>The copper layer a height belongs to, or the gap between two (a barrel).</summary>
-    private static string Where(NetMesher.Result mesh, double z)
+    internal static string Where(NetMesher.Result mesh, double z)
     {
         foreach (var (layer, (zLo, zHi)) in mesh.LayerZ)
             if (z >= zLo && z <= zHi) return $"L{layer}";

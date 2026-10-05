@@ -24,8 +24,35 @@ public sealed record Material
     /// <summary>Specific heat capacity c_p [J/(kg·K)].</summary>
     public double? SpecificHeat { get; init; }
 
-    /// <summary>Electrical conductivity σ [S/m].</summary>
+    /// <summary>Electrical conductivity σ [S/m], at
+    /// <see cref="ResistivityReferenceTemperature"/> when a temperature coefficient is set.</summary>
     public double? ElectricalConductivity { get; init; }
+
+    /// <summary>
+    /// Temperature coefficient of resistivity α [1/K]: ρ(T) = ρ_ref·(1 + α·(T − T_ref)),
+    /// the linear law that holds for metals around room temperature (copper: 0.00393 /K
+    /// about 20 °C, so a 50 K rise is 20 % more resistance). Null means the conductivity
+    /// is taken as constant — which is what every solve that does not ask for
+    /// <see cref="ElectricalConductivityAt"/> assumes anyway.
+    /// </summary>
+    public double? ResistivityTemperatureCoefficient { get; init; }
+
+    /// <summary>The temperature [K] at which <see cref="ElectricalConductivity"/> holds.</summary>
+    public double ResistivityReferenceTemperature { get; init; } = 293.15;
+
+    /// <summary>
+    /// σ at a temperature [K], by the linear resistivity law; the constant
+    /// <see cref="ElectricalConductivity"/> when no coefficient is set. The resistivity
+    /// factor is floored at 1 % so a negative coefficient extrapolated far outside its
+    /// range cannot produce a negative or infinite conductivity.
+    /// </summary>
+    public double ElectricalConductivityAt(double kelvin)
+    {
+        double reference = ElectricalConductivity
+            ?? throw new InvalidOperationException($"Material '{Name}' has no electrical conductivity.");
+        if (ResistivityTemperatureCoefficient is not { } alpha) return reference;
+        return reference / Math.Max(0.01, 1 + alpha * (kelvin - ResistivityReferenceTemperature));
+    }
 
     /// <summary>Relative permittivity ε_r [-].</summary>
     public double? RelativePermittivity { get; init; }

@@ -194,6 +194,7 @@ public sealed class MaterialLibrary
         {
             Name = "Copper (annealed)", YoungsModulus = 110e9, PoissonRatio = 0.34, Density = 8960,
             ThermalConductivity = 401, SpecificHeat = 385, ElectricalConductivity = 5.96e7,
+            ResistivityTemperatureCoefficient = 0.00393,
             Emissivity = 0.15,
             YieldStrength = 70e6, UltimateTensileStrength = 220e6,
             Color = "#C87533", IsBuiltIn = true

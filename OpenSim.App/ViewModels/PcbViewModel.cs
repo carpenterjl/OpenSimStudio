@@ -59,6 +59,13 @@ public partial class PcbViewModel : ObservableObject
     [ObservableProperty] private CopperNet? _selectedNet;
     [ObservableProperty] private string _boardInfo = "No board imported";
 
+    /// <summary>Mesh the selected net together with the laminate around it (a second
+    /// region, conformal with the copper) — the body an electro-thermal solve needs.</summary>
+    [ObservableProperty] private bool _meshWithLaminate;
+
+    /// <summary>Laminate is meshed within this distance of the net [mm]; 0 = whole board.</summary>
+    [ObservableProperty] private double _laminateMarginMm = 10;
+
     // PCB stackup (meters)
     [ObservableProperty] private double _pcbCopperThickness = 35e-6;
     [ObservableProperty] private double _pcbBoardThickness = 1.6e-3;
@@ -588,7 +595,18 @@ public partial class PcbViewModel : ObservableObject
         _session.StatusText = $"Meshing {net.Label}…";
         try
         {
-            var result = await Task.Run(() => new NetMesher().MeshNet(net, boardPads, options));
+            // With the laminate: the whole stack under the net, as a second region.
+            BoardBodyOptions? boardBody = MeshWithLaminate && _board is { } source
+                ? new BoardBodyOptions
+                {
+                    Outline = source.Outline,
+                    CopperLayerCount = source.Islands.Count == 0 ? 1 : source.Islands.Max(i => i.LayerOrder),
+                    Margin = Math.Max(0, LaminateMarginMm) * 1e-3
+                }
+                : null;
+            var result = await Task.Run(() => boardBody is null
+                ? new NetMesher().MeshNet(net, boardPads, options)
+                : new NetMesher().MeshNetOnBoard(net, boardPads, options, boardBody));
             foreach (var w in result.Warnings) _log.Append($"Net: {w}");
 
             LoadImportedBody(result.Body, BuildStackupSettings());

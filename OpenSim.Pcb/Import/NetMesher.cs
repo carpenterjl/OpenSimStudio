@@ -58,6 +58,30 @@ public sealed record NetMeshOptions
     };
 }
 
+/// <summary>The board around a net, for <see cref="NetMesher.MeshNetOnBoard"/>.</summary>
+public sealed record BoardBodyOptions
+{
+    /// <summary>The filled board outline.</summary>
+    public required IReadOnlyList<Polygon2> Outline { get; init; }
+
+    /// <summary>Number of copper layers of the BOARD (the laminate spans all of them,
+    /// whichever the net is on).</summary>
+    public required int CopperLayerCount { get; init; }
+
+    /// <summary>
+    /// Laminate is meshed only within this distance of the net's bounding box [m]; 0 meshes
+    /// the whole board. The planar mesh has one element size, set by the copper, so the
+    /// whole board at a trace's resolution is a large mesh; in bare FR4 heat spreads only
+    /// a few board thicknesses from a trace, which is what the default keeps.
+    /// </summary>
+    public double Margin { get; init; } = 10e-3;
+
+    /// <summary>Element layers through each dielectric gap.</summary>
+    public int GapSubdivisions { get; init; } = 3;
+
+    public string DielectricMaterialName { get; init; } = "FR4 (PCB laminate)";
+}
+
 /// <summary>
 /// Meshes one selected copper net into a solvable <see cref="Body"/>. A net is a small,
 /// connected conductor (unlike a whole layer), so it meshes quickly. A single-layer net is
@@ -123,6 +147,47 @@ public sealed class NetMesher
         }
     }
 
+    /// <summary>
+    /// Meshes the net TOGETHER WITH THE LAMINATE around it: the same copper, layer by layer
+    /// with its via barrels, plus the dielectric between the board's copper layers as a
+    /// second region, conformal with the copper (shared nodes, so heat crosses the
+    /// interface without a contact model). This is the body an electro-thermal solve needs —
+    /// the copper alone has nowhere to put its heat but its own surface.
+    /// <para>
+    /// The laminate fills every gap between copper layers, and the copper-free part of
+    /// every INNER layer (prepreg flows around inner copper). Outer layers carry copper
+    /// only. Only this net's copper is in the mesh: other nets and planes, which spread
+    /// heat on a real board, are not, so the temperature rise it gives is an upper bound.
+    /// </para>
+    /// <para>
+    /// Pads are electrodes where they are exposed: top-layer pads on their upper face,
+    /// bottom-layer pads on their lower face. Inner-layer pads are buried and are not.
+    /// </para>
+    /// </summary>
+    public Result MeshNetOnBoard(CopperNet net, IReadOnlyList<CopperPad>? boardPads,
+        NetMeshOptions? options, BoardBodyOptions board)
+    {
+        options ??= new NetMeshOptions();
+        boardPads ??= Array.Empty<CopperPad>();
+        if (board.Outline.Count == 0)
+            throw new InvalidOperationException(
+                "The board has no outline, so there is no laminate to mesh. Import a set with a " +
+                "Profile layer, or mesh the net without the board.");
+        if (board.GapSubdivisions < 1)
+            throw new InvalidOperationException("The laminate needs at least one element layer per gap.");
+        var warnings = new List<string>();
+        try
+        {
+            return MeshMultiLayer(net, boardPads, options, warnings, board);
+        }
+        catch (ConstraintRecoveryException ex)
+        {
+            throw new InvalidOperationException(
+                $"The net could not be meshed together with the board ({ex.Message}). Try a different " +
+                "edge length, or a laminate margin that does not graze the copper.", ex);
+        }
+    }
+
     // ---------------- Single layer ----------------
 
     private static Result MeshSingleLayer(CopperNet net, int layer, IReadOnlyList<CopperPad> boardPads,
@@ -155,10 +220,19 @@ public sealed class NetMesher
     // ---------------- Multi layer + via barrels ----------------
 
     private static Result MeshMultiLayer(CopperNet net, IReadOnlyList<CopperPad> boardPads,
-        NetMeshOptions options, List<string> warnings)
+        NetMeshOptions options, List<string> warnings, BoardBodyOptions? board = null)
     {
-        var layers = net.Layers;                 // sorted ascending, ≥ 2 entries
+        var layers = net.Layers;                 // sorted ascending, ≥ 2 entries (≥ 1 with a board)
         int minL = layers[0], maxL = layers[^1];
+        // With the board the stack is the WHOLE board, not just the layers the net is on:
+        // the laminate under a top-layer trace reaches the bottom of the board. A board
+        // with one copper layer still has laminate under it, which the gap below layer 1
+        // stands for.
+        if (board is not null)
+        {
+            minL = Math.Min(minL, 1);
+            maxL = Math.Max(maxL, Math.Max(board.CopperLayerCount, 2));
+        }
 
         // 1. Copper footprint per layer, CLEANED here — before the arrangement booleans —
         //    at the tolerance the planar mesher would use. The mesher's own per-polygon
@@ -212,7 +286,39 @@ public sealed class NetMesher
         //    boundary imprinted as constraint edges, no triangle straddles one, so the
         //    per-layer centroid classification below is exact. (Straddling triangles were
         //    the "extra geometry" at bends, loops, and vias.) Shared nodes keep it conformal.
-        var allRings = layers.SelectMany(L => layerPolys[L]).Concat(barrels)
+        // 2c. The laminate footprint: the board outline (optionally only a window around the
+        //     net), less every barrel — wall and bore. The barrel's own outer ring is the
+        //     clip, for the reason given in 2b.
+        IReadOnlyList<Polygon2> laminate = Array.Empty<Polygon2>();
+        if (board is not null)
+        {
+            var region = PolygonCleaner.Clean(board.Outline, cleanTol).ToList();
+            if (board.Margin > 0)
+            {
+                var (x0, y0, x1, y1) = Bounds(layers.SelectMany(L => layerPolys[L]).ToList());
+                double m = board.Margin;
+                var window = new[]
+                {
+                    new Point2(x0 - m, y0 - m), new Point2(x1 + m, y0 - m),
+                    new Point2(x1 + m, y1 + m), new Point2(x0 - m, y1 + m)
+                };
+                double whole = region.Sum(p => p.Area());
+                region = Ops.Intersect(region, new[] { (IReadOnlyList<Point2>)window }).ToList();
+                double kept = region.Sum(p => p.Area());
+                if (kept < whole * 0.999)
+                    warnings.Add($"Net {net.Id}: laminate meshed within {m * 1e3:g3} mm of the net's copper " +
+                                 $"({kept * 1e6:g4} of {whole * 1e6:g4} mm² of board). The cut edges are treated " +
+                                 "as board edges; heat that would spread beyond them cannot.");
+            }
+            if (barrels.Count > 0)
+                region = Ops.Difference(region, barrels.Select(b => b.Outer)).ToList();
+            if (region.Count == 0)
+                throw new InvalidOperationException(
+                    "No laminate lies under this net: the board outline does not reach it.");
+            laminate = region;
+        }
+
+        var allRings = layers.SelectMany(L => layerPolys[L]).Concat(barrels).Concat(laminate)
             .SelectMany(Polygon2.OrientedRings).ToList();
         var domain = Ops.Union(allRings);
         WarnIfLarge(domain, net, warnings);
@@ -221,6 +327,8 @@ public sealed class NetMesher
         foreach (var group in layers.Select(L => (IReadOnlyList<Polygon2>)layerPolys[L])
                      .Concat(barrels.Select(b => (IReadOnlyList<Polygon2>)new[] { b })))
             faces = SplitFaces(faces, group);
+        if (laminate.Count > 0)
+            faces = SplitFaces(faces, laminate);
         // Boolean outputs sharing a boundary can disagree by a snap-rounding unit at
         // grazing tangencies (crossing chains a nanometre deep, unrecoverable as CDT
         // constraints) — weld + imprint restores a conformal face set.
@@ -237,9 +345,14 @@ public sealed class NetMesher
 
         var trisOnLayer = layers.ToDictionary(L => L, L => TrianglesIn(layerPolys[L], centroid));
         var trisInBridge = barrels.Select(b => TrianglesIn(new[] { b }, centroid)).ToList();
+        var trisInLaminate = laminate.Count > 0 ? TrianglesIn(laminate, centroid) : new List<int>();
 
         // 6. Slabs: one per copper layer (its copper + any barrel passing through it) and one
-        //    per dielectric gap (only the barrels bridging it). All copper.
+        //    per dielectric gap (only the barrels bridging it) — copper. With the board, the
+        //    laminate as well: the copper-free part of every inner layer, and every gap, the
+        //    gaps cut into several element layers so heat spreading under a trace is not
+        //    asked of one linear element. A barrel is cut at the same heights, or its wall
+        //    would not share nodes with the laminate around it.
         var slabs = new List<PcbMeshGenerator.ExtrudeSlab>();
         for (int L = minL; L <= maxL; L++)
         {
@@ -248,23 +361,43 @@ public sealed class NetMesher
             for (int v = 0; v < bridges.Count; v++)
                 if (bridgeSpan[v].Min <= L && L <= bridgeSpan[v].Max)
                     set.UnionWith(trisInBridge[v]);
-            if (set.Count == 0) continue;
             var (zLo, zHi) = layerZ[L];
-            slabs.Add(new PcbMeshGenerator.ExtrudeSlab(zLo, zHi, set.ToList(), PcbStackup.CopperRegion));
+            if (set.Count > 0)
+                slabs.Add(new PcbMeshGenerator.ExtrudeSlab(zLo, zHi, set.ToList(), PcbStackup.CopperRegion));
+            if (board is not null && L > minL && L < maxL)
+            {
+                var fill = trisInLaminate.Where(t => !set.Contains(t)).ToList();
+                if (fill.Count > 0)
+                    slabs.Add(new PcbMeshGenerator.ExtrudeSlab(zLo, zHi, fill, PcbStackup.DielectricRegion));
+            }
         }
+        int cuts = board?.GapSubdivisions ?? 1;
         for (int g = minL; g < maxL; g++)
         {
             var set = new HashSet<int>();
             for (int v = 0; v < bridges.Count; v++)
                 if (bridgeSpan[v].Min <= g && bridgeSpan[v].Max >= g + 1)
                     set.UnionWith(trisInBridge[v]);
-            if (set.Count == 0) continue;
             var (zLo, zHi) = gapZ[g];
-            slabs.Add(new PcbMeshGenerator.ExtrudeSlab(zLo, zHi, set.ToList(), PcbStackup.CopperRegion));
+            var barrelTriangles = set.ToList();
+            var fill = trisInLaminate.Where(t => !set.Contains(t)).ToList();
+            for (int k = 0; k < cuts; k++)
+            {
+                // End levels are the gap's own z values exactly, so the nodes there are the
+                // ones the copper layers above and below already created.
+                double z0 = k == 0 ? zLo : zLo + (zHi - zLo) * k / cuts;
+                double z1 = k == cuts - 1 ? zHi : zLo + (zHi - zLo) * (k + 1) / cuts;
+                if (barrelTriangles.Count > 0)
+                    slabs.Add(new PcbMeshGenerator.ExtrudeSlab(z0, z1, barrelTriangles, PcbStackup.CopperRegion));
+                if (fill.Count > 0)
+                    slabs.Add(new PcbMeshGenerator.ExtrudeSlab(z0, z1, fill, PcbStackup.DielectricRegion));
+            }
         }
 
         // 7. Pads on any spanned layer, tagged on that layer's top surface (each copper slab is
         //    surrounded by air except at the barrels, so both faces are boundary — top is enough).
+        //    With the board the bottom layer's upper face is against laminate: its pads are
+        //    exposed on their lower face.
         var netPads = new List<CopperPad>();
         var padFaces = new List<PcbMeshGenerator.PadFace>();
         foreach (var pad in boardPads)
@@ -273,17 +406,31 @@ public sealed class NetMesher
             if (!padLookupPolys.TryGetValue(pad.LayerOrder, out var polys)) continue;
             if (!polys.Any(poly => PlanarMesher.ContainsPoint(new[] { poly }, pad.Center))) continue;
             netPads.Add(pad);
-            padFaces.Add(new PcbMeshGenerator.PadFace(pad.Shape, layerZ[pad.LayerOrder].zHi, TopFacing: true));
+            padFaces.Add(board is not null && pad.LayerOrder == maxL
+                ? new PcbMeshGenerator.PadFace(pad.Shape, layerZ[pad.LayerOrder].zLo, TopFacing: false)
+                : new PcbMeshGenerator.PadFace(pad.Shape, layerZ[pad.LayerOrder].zHi, TopFacing: true));
         }
 
         var mesh = new PcbMeshGenerator().GenerateLayered(planar, slabs, padFaces);
         var electrodes = CollectElectrodes(mesh, netPads);
         var body = BuildBody(net, mesh, options);
+        if (board is not null)
+        {
+            body.RegionMaterialNames = new Dictionary<int, string>
+            {
+                [PcbStackup.CopperRegion] = options.CopperMaterialName,
+                [PcbStackup.DielectricRegion] = board.DielectricMaterialName
+            };
+            int laminateElements = mesh.ElementRegionIds!.Count(r => r == PcbStackup.DielectricRegion);
+            warnings.Add($"Net {net.Id}: meshed with the board — {laminateElements} laminate elements in " +
+                         $"{maxL - minL} gap(s) of {cuts} element layer(s) each; only this net's copper is in " +
+                         "the mesh (no other nets or planes).");
+        }
 
         warnings.Add($"Net {net.Id}: {mesh.ElementCount} elements across layers L{string.Join("+", layers)}, " +
                      $"{bridges.Count} annular via barrel(s) ({plating * 1e6:g3} µm wall), " +
                      $"{electrodes.Count} pad electrodes, {edge * 1e3:g3} mm edge.");
-        if (bridges.Count == 0)
+        if (bridges.Count == 0 && layers.Count > 1)
             warnings.Add($"Net {net.Id} spans layers L{string.Join("+", layers)} but has no annular-ring via bridges; " +
                          "layers are meshed at their true z but stay electrically separate (no barrel).");
         return new Result(body, electrodes, warnings) { LayerZ = layerZ, ViaPlating = plating };
@@ -496,6 +643,18 @@ public sealed class NetMesher
             bore[n - 1 - i] = new Point2(c.X + boreRadius * cos, c.Y + boreRadius * sin);   // CW hole
         }
         return new Polygon2(outer, new[] { (IReadOnlyList<Point2>)bore });
+    }
+
+    private static (double MinX, double MinY, double MaxX, double MaxY) Bounds(IReadOnlyList<Polygon2> polygons)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+        foreach (var poly in polygons)
+            foreach (var p in poly.Outer)
+            {
+                minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+                minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y);
+            }
+        return (minX, minY, maxX, maxY);
     }
 
     private static double AutoEdge(IReadOnlyList<Polygon2> polygons)

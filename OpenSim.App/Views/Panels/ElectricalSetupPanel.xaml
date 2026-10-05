@@ -161,6 +161,9 @@
                 <TextBox Text="{Binding Rail.CopperConductivity}"/>
             </UniformGrid>
             <Button x:Name="SolveRailButton" Content="Solve rail" Command="{Binding Rail.SolveRailCommand}"/>
+            <Button x:Name="SolveRailThermalButton" Content="Solve rail with self-heating"
+                    Command="{Binding Rail.SolveRailThermalCommand}"
+                    ToolTip="Copper loss heats the board, the environment (Thermal workspace) cools it, copper resistivity follows temperature. Mesh the net with the laminate first."/>
             <TextBlock Text="{Binding Rail.RailResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
             <ItemsControl ItemsSource="{Binding Rail.ResultLines}" Margin="0,2,0,0">

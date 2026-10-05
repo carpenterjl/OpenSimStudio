@@ -38,13 +38,18 @@ public partial class PowerRailViewModel : ObservableObject
 {
     private readonly ProjectSession _session;
     private readonly ILogService _log;
+    private readonly MaterialsViewModel _materials;
+    private readonly EnvironmentViewModel _environment;
     private NetMesher.Result? _mesh;
     private CopperNet? _net;
 
-    public PowerRailViewModel(ProjectSession session, ILogService log)
+    public PowerRailViewModel(ProjectSession session, ILogService log, MaterialsViewModel materials,
+        EnvironmentViewModel environment)
     {
         _session = session;
         _log = log;
+        _materials = materials;
+        _environment = environment;
         // Pads of a body that is gone must not be solved against the new one.
         session.GeometryReplaced += (_, _) => Clear();
     }
@@ -162,6 +167,64 @@ public partial class PowerRailViewModel : ObservableObject
             var report = await Task.Run(() => RailAnalysis.Solve(mesh, net, setup));
             Show(report);
             _session.RaiseResultsProduced(report.Fields, preferFieldName: "Electric potential");
+        }
+        catch (Exception ex) { _session.ReportError(ex); }
+        finally { _session.IsBusy = false; _session.StatusText = "Ready"; }
+    }
+
+    /// <summary>
+    /// The rail with the heat it makes: the copper loss heats the copper and the laminate,
+    /// the environment cools them, and the copper's resistivity follows its temperature
+    /// (<see cref="RailThermalAnalysis"/>). Materials are the meshed body's region
+    /// materials; the environment is the one the Thermal workspace edits.
+    /// </summary>
+    [RelayCommand]
+    private async Task SolveRailThermalAsync()
+    {
+        if (_mesh is null || _net is null)
+        {
+            RailResult = "Mesh a net first (with the laminate, for a board temperature).";
+            return;
+        }
+        var setup = BuildSetup(out string? problem);
+        if (setup is null)
+        {
+            RailResult = problem ?? "";
+            return;
+        }
+        OpenSim.Core.Model.Material copper, laminate;
+        try
+        {
+            var regions = _materials.ResolveRegionMaterials(_mesh.Body);
+            copper = regions?.GetValueOrDefault(OpenSim.Pcb.Extrude.PcbStackup.CopperRegion)
+                     ?? _materials.DefaultConductor();
+            laminate = regions?.GetValueOrDefault(OpenSim.Pcb.Extrude.PcbStackup.DielectricRegion)
+                       ?? _materials.FindByName("FR4 (PCB laminate)") ?? copper;
+        }
+        catch (InvalidOperationException ex)
+        {
+            RailResult = ex.Message;
+            return;
+        }
+        var thermalSetup = new RailThermalSetup
+        {
+            Rail = setup,
+            Copper = copper,
+            Laminate = laminate,
+            Environment = _environment.Build()
+        };
+        var mesh = _mesh;
+        var net = _net;
+        _session.IsBusy = true;
+        _session.StatusText = "Solving the rail with self-heating…";
+        try
+        {
+            var report = await Task.Run(() => RailThermalAnalysis.Solve(mesh, net, thermalSetup));
+            Show(report.Rail, report.Describe());
+            RailAssumptions = "Assumptions: " + string.Join("; ", report.Assumptions) + ".";
+            foreach (string line in report.Log) _log.Append($"Rail: {line}");
+            foreach (string line in report.Describe()) _log.Append($"Rail: {line}");
+            _session.RaiseResultsProduced(report.Fields, preferFieldName: "Temperature");
         }
         catch (Exception ex) { _session.ReportError(ex); }
         finally { _session.IsBusy = false; _session.StatusText = "Ready"; }
