@@ -25,6 +25,10 @@ public sealed record TransientThermalSettings
     /// automatically so at most ~60 frames are stored. The initial state and the final
     /// step are always stored.</summary>
     public int OutputStride { get; init; }
+
+    /// <summary>How the heat sources vary in time (duty cycle, pulse train, table). Null:
+    /// constant, the solve as it always was.</summary>
+    public PowerProfile? PowerProfile { get; init; }
 }
 
 /// <summary>

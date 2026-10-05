@@ -55,6 +55,25 @@ internal static class ScalarSolverHelpers
     }
 
     /// <summary>
+    /// The same loads in two parts, for a solve whose sources vary in time: what the heat
+    /// flows and the volumetric source put in (to be scaled), and the convection
+    /// conditions' ambient terms (which are not sources and stay as they are).
+    /// </summary>
+    public static (double[] Sources, double[] Ambient) AssembleThermalLoadParts(SolveInput input, List<string> log)
+    {
+        var sources = AssembleThermalLoads(input with
+        {
+            BoundaryConditions = input.BoundaryConditions.Where(bc => bc is not Convection).ToList()
+        }, log);
+        var ambient = AssembleThermalLoads(input with
+        {
+            BoundaryConditions = input.BoundaryConditions.OfType<Convection>().ToList<BoundaryCondition>(),
+            ElementHeatSource = null
+        }, log);
+        return (sources, ambient);
+    }
+
+    /// <summary>
     /// Distributes a total surface quantity (current [A], heat flow [W]) area-weighted
     /// over the nodes of the given faces so the resultant is exact: each triangle carries
     /// its area share, split evenly over its three nodes.

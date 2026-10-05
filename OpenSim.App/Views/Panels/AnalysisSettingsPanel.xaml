@@ -26,6 +26,40 @@
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </GroupBox>
+        <!-- Pulsed power and thermal impedance -->
+        <GroupBox Header="Pulsed power and thermal impedance"
+                  Visibility="{Binding Session.ShowsTransientSettings, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <CheckBox Content="Pulse the heat sources during the transient"
+                          IsChecked="{Binding Solve.PulsedPower}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
+                          ToolTip="Heat flows and volumetric sources switch between their value and zero. Each time step takes the mean power over the step, so the energy is right even with an edge inside a step."/>
+                <UniformGrid Columns="2">
+                    <Label Content="Pulse period [s]"/>
+                    <TextBox Text="{Binding Solve.PulsePeriod}"/>
+                    <Label Content="On time [% of period]"/>
+                    <TextBox Text="{Binding Solve.PulseDutyPercent}"/>
+                    <Label Content="Z_th from [s]"/>
+                    <TextBox Text="{Binding Solve.ZthStartTime}"/>
+                    <Label Content="Z_th to [s]"/>
+                    <TextBox Text="{Binding Solve.ZthEndTime}"/>
+                    <Label Content="Network stages (0 = auto)"/>
+                    <TextBox Text="{Binding Solve.ZthStages}"/>
+                </UniformGrid>
+                <Button Content="Thermal impedance curve (Z_th)" Command="{Binding Solve.SolveThermalImpedanceCommand}"
+                        ToolTip="Temperature rise per watt at the heated faces against time after switch-on, on a logarithmic time grid, with a fitted Foster network and its Cauer ladder. Uses the thermal conditions placed on the model."/>
+                <TextBlock Text="{Binding Solve.ZthResult}" TextWrapping="Wrap" FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                <Image Source="{Binding Solve.ZthPlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
+                <UniformGrid Columns="3" Margin="0,3,0,0" IsEnabled="{Binding Solve.HasZth}">
+                    <Button Content="Save curve" Command="{Binding Solve.SaveZthCurveCommand}"/>
+                    <Button Content="Save SPICE" Command="{Binding Solve.SaveZthNetworksCommand}" Margin="2,0,0,0"/>
+                    <Button Content="Save table" Command="{Binding Solve.SaveZthTableCommand}" Margin="2,0,0,0"
+                            ToolTip="R, τ and C of the Foster and Cauer stages as CSV, for tools that take the values typed in."/>
+                </UniformGrid>
+                <TextBlock Text="Z_th belongs to a linear model: with an environment the surface coefficients are held at their steady values. A Foster network reproduces the curve at its terminals only; continue a model from the Cauer ladder."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </GroupBox>
 
         <!-- Modal -->
         <GroupBox Header="Modal settings"

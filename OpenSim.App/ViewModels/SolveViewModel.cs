@@ -120,7 +120,8 @@ public partial class SolveViewModel : ObservableObject
                 {
                     InitialTemperature = InitialTemperature,
                     Duration = TransientDuration,
-                    TimeStep = TransientTimeStep
+                    TimeStep = TransientTimeStep,
+                    PowerProfile = BuildPowerProfile()
                 }
                 : null,
             Modal = kind == AnalysisType.Modal ? new ModalSettings { ModeCount = ModeCount } : null,
@@ -274,7 +275,8 @@ public partial class SolveViewModel : ObservableObject
                             {
                                 InitialTemperature = InitialTemperature,
                                 Duration = TransientDuration,
-                                TimeStep = TransientTimeStep
+                                TimeStep = TransientTimeStep,
+                                PowerProfile = BuildPowerProfile()
                             }
                             : null
                     };
@@ -422,7 +424,8 @@ public partial class SolveViewModel : ObservableObject
                             {
                                 InitialTemperature = InitialTemperature,
                                 Duration = TransientDuration,
-                                TimeStep = TransientTimeStep
+                                TimeStep = TransientTimeStep,
+                                PowerProfile = BuildPowerProfile()
                             }
                             : null
                     };

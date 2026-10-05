@@ -46,6 +46,7 @@ public sealed class TransientThermalSolver : ISolver
             throw new InvalidOperationException("The initial temperature must be positive (absolute kelvin).");
         if (settings.OutputStride < 0)
             throw new InvalidOperationException("The output stride cannot be negative.");
+        settings.PowerProfile?.Validate();
 
         var (steps, stride) = PlanSteps(settings);
         int stored = 2 + (steps - 1) / stride;   // initial state + strided steps + final
@@ -143,6 +144,23 @@ public sealed class TransientThermalSolver : ISolver
         progress?.Report(new SolverProgress("Applying boundary conditions", 0.05));
         var constantLoads = ScalarSolverHelpers.AssembleThermalLoads(input, log);
 
+        // A power profile scales the heat flows and the volumetric source step by step; the
+        // convection conditions' ambient terms are not sources and stay as they are. Each
+        // step takes the profile's MEAN over the step, so the energy put in is the
+        // profile's own even when a pulse edge falls inside a step.
+        var profile = settings.PowerProfile is { Kind: not PowerProfileKind.Constant } varying ? varying : null;
+        double[]? sourceLoads = null, ambientLoads = null, stepLoads = null;
+        if (profile is not null)
+        {
+            (sourceLoads, ambientLoads) = ScalarSolverHelpers.AssembleThermalLoadParts(input, new List<string>());
+            stepLoads = new double[mesh.NodeCount];
+            log.Add($"Power profile: {profile.Describe()}; each step uses its mean over the step.");
+            if (dt > profile.ShortestInterval())
+                log.Add($"WARNING: the time step {dt:g3} s is longer than the profile's shortest interval " +
+                        $"({profile.ShortestInterval():g3} s): the energy is right but the ripple within a " +
+                        "pulse is not resolved. Use a step several times shorter than the pulse.");
+        }
+
         // A prescribed film is FIXED over the whole transient (the frozen-flow contract of
         // the conjugate study): fold its Robin terms into the step matrix and loads once,
         // and the plain linear time loop below runs unchanged — no Picard needed.
@@ -162,6 +180,8 @@ public sealed class TransientThermalSolver : ISolver
         {
             system = EnvironmentThermalTerms.WithFilm(system, mesh, prescribedFilm);
             constantLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, prescribedFilm);
+            if (ambientLoads is not null)
+                ambientLoads = EnvironmentThermalTerms.WithFilmLoads(ambientLoads, mesh, prescribedFilm);
             log.Add($"Prescribed film ({prescribedFilm.Origin}): {prescribedFilm.WettedCount} wetted " +
                     "triangles, held constant over the transient.");
         }
@@ -213,6 +233,14 @@ public sealed class TransientThermalSolver : ISolver
         {
             cancellationToken.ThrowIfCancellationRequested();
             mass.Multiply(temperature_, massTimesT);
+            double[] loads = constantLoads;
+            if (profile is not null)
+            {
+                double scale = profile.Mean((n - 1) * dt, n * dt);
+                for (int i = 0; i < stepLoads!.Length; i++)
+                    stepLoads[i] = ambientLoads![i] + scale * sourceLoads![i];
+                loads = stepLoads;
+            }
 
             // Without an environment this loop runs exactly once and reuses the system
             // reduced before the time loop — the linear path, unchanged to the last bit.
@@ -233,7 +261,7 @@ public sealed class TransientThermalSolver : ISolver
                     film = filmSchedule(n, n * dt, iterate);
                     updatable!.Apply(film);
                     stepSystem = updatable.System;
-                    var scheduledLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, film);
+                    var scheduledLoads = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
                     for (int i = 0; i < fullRhs.Length; i++)
                         fullRhs[i] = massTimesT[i] / dt + scheduledLoads[i];
                 }
@@ -241,16 +269,16 @@ public sealed class TransientThermalSolver : ISolver
                 {
                     stepSystem = reduced;
                     for (int i = 0; i < fullRhs.Length; i++)
-                        fullRhs[i] = massTimesT[i] / dt + constantLoads[i];
+                        fullRhs[i] = massTimesT[i] / dt + loads[i];
                 }
                 else
                 {
                     film = environment.Evaluate(iterate, tangent: true);
                     updatable!.Apply(film);
                     stepSystem = updatable.System;
-                    var stepLoads = EnvironmentThermalTerms.WithFilmLoads(constantLoads, mesh, film);
+                    var filmLoads = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
                     for (int i = 0; i < fullRhs.Length; i++)
-                        fullRhs[i] = massTimesT[i] / dt + stepLoads[i];
+                        fullRhs[i] = massTimesT[i] / dt + filmLoads[i];
                 }
 
                 var rhs = stepSystem.ReduceLoads(fullRhs);
