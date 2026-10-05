@@ -36,10 +36,17 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     private readonly ILogService _log;
 
-    public SignalIntegrityViewModel(ILogService log) => _log = log;
+    public SignalIntegrityViewModel(ILogService log)
+    {
+        _log = log;
+        Pdn = new PdnViewModel(log);
+    }
 
     /// <summary>The stackup and impedance calculator shown above the wizard.</summary>
     public ImpedanceCalculatorViewModel Calculator { get; } = new();
+
+    /// <summary>PDN impedance against frequency, shown below the wizard.</summary>
+    public PdnViewModel Pdn { get; }
 
     // ------------------------------------------------------------------
     // Wizard geometry: N identical coupled microstrips on the substrate.
@@ -226,6 +233,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
         DcNetsResult = "";
         LayoutCheckResult = "";
         CrosstalkScanResult = "";
+        Pdn.LoadBoard(board, meshOptions, sourceFileName);
     }
 
     [ObservableProperty] private string _rlgcResult = "";

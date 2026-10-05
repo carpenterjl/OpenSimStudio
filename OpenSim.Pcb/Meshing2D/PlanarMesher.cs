@@ -17,6 +17,16 @@ public sealed record PlanarMesh(IReadOnlyList<Point2> Points, IReadOnlyList<Tri2
 public sealed record PlanarRegion(int RegionId, IReadOnlyList<Polygon2> Polygons);
 
 /// <summary>
+/// A disc in which the caller places the mesh points itself — a port or a via, far smaller
+/// than the target edge length, with rings of points grading out from it. Inside
+/// <see cref="Radius"/> of <see cref="Center"/> the mesher adds no lattice or boundary-layer
+/// point of its own. Each point carries the local spacing it was laid out for, so one that
+/// falls too close to a constraint edge can be left out.
+/// </summary>
+public sealed record MeshRefinement(Point2 Center, double Radius,
+    IReadOnlyList<(Point2 Point, double Spacing)> Points);
+
+/// <summary>
 /// Meshes a set of prioritized planar regions (e.g. copper over board) into a single
 /// conformal triangulation: every polygon boundary is imprinted as constraint edges,
 /// interior lattice points (deterministically jittered — exact grids feed cocircular
@@ -33,7 +43,7 @@ public sealed class PlanarMesher
     private const double MinAngleDegrees = 15.0;
 
     public PlanarMesh Mesh(IReadOnlyList<PlanarRegion> regionsByPriority, double targetEdgeLength,
-        bool cleanPolygons = true)
+        bool cleanPolygons = true, IReadOnlyList<MeshRefinement>? refinements = null)
     {
         if (targetEdgeLength <= 0)
             throw new ArgumentOutOfRangeException(nameof(targetEdgeLength), "Target edge length must be positive.");
@@ -64,6 +74,13 @@ public sealed class PlanarMesher
             .Select(r => (Region: r, Index: new PolygonSetIndex(r.Polygons)))
             .ToList();
         bool InsideAny(Point2 p) => regionIndexes.Any(r => r.Index.Contains(p));
+        bool Refined(Point2 p)
+        {
+            if (refinements is null) return false;
+            foreach (var r in refinements)
+                if ((p - r.Center).Length < r.Radius) return true;
+            return false;
+        }
 
         // 1. Constraint points and edges from every ring, deduplicated on the 1 nm grid
         //    the polygon engine snap-rounds to (shared boundary vertices merge exactly) —
@@ -159,7 +176,7 @@ public sealed class PlanarMesher
         var segmentGrid = new SegmentGrid(segments, h);
         foreach (var p in boundaryLayer)
         {
-            if (!InsideAny(p)) continue;
+            if (!InsideAny(p) || Refined(p)) continue;
             if (segmentGrid.AnyWithin(p, 0.35 * h)) continue;
             IndexOf(p);
         }
@@ -175,10 +192,20 @@ public sealed class PlanarMesher
                 var p = new Point2(minX + ix * h + Jitter(ix, iy, 17) * h,
                                    minY + iy * h + Jitter(ix, iy, 71) * h);
                 if (p.X >= maxX || p.Y >= maxY) continue;
-                if (!InsideAny(p)) continue;
+                if (!InsideAny(p) || Refined(p)) continue;
                 if (segmentGrid.AnyWithin(p, ConstraintClearance * h)) continue;
                 IndexOf(p);
             }
+
+        // 2c. The caller's own points inside its refinement discs.
+        if (refinements is not null)
+            foreach (var refinement in refinements)
+                foreach (var (p, spacing) in refinement.Points)
+                {
+                    if (!InsideAny(p)) continue;
+                    if (segmentGrid.AnyWithin(p, Math.Min(0.3 * spacing, h))) continue;
+                    IndexOf(p);
+                }
 
         // 3. Constrained Delaunay triangulation.
         var cdt = new Cdt2D();

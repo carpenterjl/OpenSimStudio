@@ -218,5 +218,96 @@
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
         </StackPanel>
     </GroupBox>
+    <GroupBox Header="Power distribution impedance (PDN)" DataContext="{Binding SignalIntegrity.Pdn}">
+        <StackPanel>
+            <TextBlock Text="Impedance against frequency at a load's supply pins: the plane pair of a power and a ground net (2D finite elements on its real outline), the capacitors between the two nets with their mounting inductance, a regulator, and a target."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <UniformGrid Columns="2">
+                <Label Content="Power net"/>
+                <ComboBox x:Name="PdnPowerNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding PowerNet}"
+                          DisplayMemberPath="Label"/>
+                <Label Content="Ground net"/>
+                <ComboBox x:Name="PdnGroundNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding GroundNet}"
+                          DisplayMemberPath="Label"/>
+                <Label Content="Capacitor default C [nF]"/>
+                <TextBox Text="{Binding DefaultNanofarads}"/>
+                <Label Content="Default ESR [mΩ]"/>
+                <TextBox Text="{Binding DefaultEsrMilliohms}"/>
+                <Label Content="Default ESL [nH]"/>
+                <TextBox Text="{Binding DefaultEslNanohenries}"/>
+            </UniformGrid>
+            <Button x:Name="PdnFindPlanesButton" Content="Read planes and capacitors from the board"
+                    Command="{Binding FindPlanesCommand}" Margin="0,3,0,0"
+                    ToolTip="Finds the two nets' planes and where they overlap, and every component C… with a pad on each net: its via to the planes and the inductance of its mounting above them. Uses the stackup panel's thicknesses."/>
+            <TextBlock Text="{Binding PlanesResult}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" Margin="0,2,0,0">
+                <ItemsControl x:Name="PdnCapacitorList" ItemsSource="{Binding Capacitors}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="70"/>
+                                    <ColumnDefinition Width="50"/>
+                                    <ColumnDefinition Width="46"/>
+                                    <ColumnDefinition Width="46"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Content="{Binding Label}" IsChecked="{Binding Include}" IsEnabled="{Binding CanInclude}"
+                                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Mounting}" FontSize="11" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Mounting}"/>
+                                <TextBox Grid.Column="2" Text="{Binding Nanofarads}" ToolTip="C [nF]"/>
+                                <TextBox Grid.Column="3" Text="{Binding EsrMilliohms}" ToolTip="ESR [mΩ]"/>
+                                <TextBox Grid.Column="4" Text="{Binding EslNanohenries}" ToolTip="ESL [nH]"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <UniformGrid Columns="2" Margin="0,3,0,0">
+                <Button x:Name="PdnVendorModelButton" Content="Capacitor S-parameters…" Command="{Binding LoadVendorModelCommand}"
+                        ToolTip="A vendor .s1p, or a .s2p measured in shunt, used for every included capacitor instead of C, ESR and ESL."/>
+                <Button Content="Back to C / ESR / ESL" Command="{Binding ClearVendorModelCommand}" Margin="2,0,0,0"/>
+            </UniformGrid>
+            <TextBlock Text="{Binding VendorModelStatus}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,1,0,0"/>
+            <UniformGrid Columns="2" Margin="0,3,0,0">
+                <Label Content="Load (refdes)"/>
+                <TextBox x:Name="PdnLoadBox" Text="{Binding LoadRefDes}"
+                         ToolTip="The part whose supply pins see the impedance, e.g. U1."/>
+                <Label Content="Regulator (refdes, optional)"/>
+                <TextBox Text="{Binding RegulatorRefDes}"/>
+                <Label Content="Regulator R [mΩ]"/>
+                <TextBox Text="{Binding RegulatorMilliohms}"/>
+                <Label Content="Regulator L [nH]"/>
+                <TextBox Text="{Binding RegulatorNanohenries}"/>
+                <Label Content="Rail [V] (0 = no target)"/>
+                <TextBox Text="{Binding RailVolts}"/>
+                <Label Content="Allowed ripple [%]"/>
+                <TextBox Text="{Binding RipplePercent}"/>
+                <Label Content="Current step [A]"/>
+                <TextBox Text="{Binding StepAmps}"/>
+                <Label Content="Target up to [MHz]"/>
+                <TextBox Text="{Binding TargetUpToMhz}"/>
+                <Label Content="Sweep from [kHz]"/>
+                <TextBox Text="{Binding FromKhz}"/>
+                <Label Content="Sweep to [MHz]"/>
+                <TextBox Text="{Binding ToMhz}"/>
+            </UniformGrid>
+            <Button x:Name="PdnSolveButton" Content="Solve PDN impedance" Command="{Binding SolveCommand}" Margin="0,3,0,0"/>
+            <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <Image Source="{Binding Plot}" MaxHeight="300" Margin="0,4,0,0" Stretch="Uniform"
+                   AutomationProperties.AutomationId="PdnPlotImage"/>
+            <UniformGrid Columns="2" Margin="0,3,0,0">
+                <Button Content="Save curve (CSV)" Command="{Binding SaveCsvCommand}" IsEnabled="{Binding HasResult}"/>
+                <Button Content="Save Touchstone (.s1p)" Command="{Binding SaveTouchstoneCommand}"
+                        IsEnabled="{Binding HasResult}" Margin="2,0,0,0"/>
+            </UniformGrid>
+            <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+        </StackPanel>
+    </GroupBox>
     </StackPanel>
 </UserControl>
