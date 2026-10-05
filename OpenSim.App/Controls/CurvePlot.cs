@@ -5,6 +5,61 @@ using System.Windows.Media.Imaging;
 
 namespace OpenSim.App.Controls;
 
+/// <summary>
+/// A Smith chart with a reflection-coefficient trace, rendered to a bitmap. Must be called
+/// on the UI thread.
+/// </summary>
+public static class SmithPlot
+{
+    public static ImageSource Render(IReadOnlyList<System.Numerics.Complex> reflection, int marked, int size = 300)
+    {
+        var ink = new SolidColorBrush(Color.FromRgb(0x8A, 0x90, 0x99));
+        var grid = new Pen(new SolidColorBrush(Color.FromArgb(0x60, 0x8A, 0x90, 0x99)), 1);
+        var frame = new Pen(ink, 1.2);
+        var trace = new Pen(new SolidColorBrush(Color.FromRgb(0x3D, 0x8B, 0xFD)), 1.6);
+        double radius = size / 2.0 - 8, cx = size / 2.0, cy = size / 2.0;
+        Point Map(double re, double im) => new(cx + re * radius, cy - im * radius);
+
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            dc.PushClip(new EllipseGeometry(new Point(cx, cy), radius, radius));
+            // Constant resistance: centre r/(1 + r), radius 1/(1 + r).
+            foreach (double r in new[] { 0.2, 0.5, 1, 2, 5 })
+                dc.DrawEllipse(null, grid, Map(r / (1 + r), 0), radius / (1 + r), radius / (1 + r));
+            // Constant reactance: centre (1, 1/x), radius 1/|x|.
+            foreach (double x in new[] { 0.2, 0.5, 1, 2, 5 })
+                foreach (double sign in new[] { 1.0, -1.0 })
+                    dc.DrawEllipse(null, grid, Map(1, sign / x), radius / x, radius / x);
+            dc.DrawLine(grid, Map(-1, 0), Map(1, 0));
+            dc.Pop();
+            dc.DrawEllipse(null, frame, new Point(cx, cy), radius, radius);
+
+            if (reflection.Count > 0)
+            {
+                var geometry = new StreamGeometry();
+                using (var g = geometry.Open())
+                {
+                    g.BeginFigure(Map(reflection[0].Real, reflection[0].Imaginary), false, false);
+                    for (int i = 1; i < reflection.Count; i++)
+                        g.LineTo(Map(reflection[i].Real, reflection[i].Imaginary), true, false);
+                }
+                geometry.Freeze();
+                dc.DrawGeometry(null, trace, geometry);
+                // The low-frequency end as a ring, the marked point (best match) as a dot.
+                dc.DrawEllipse(null, trace, Map(reflection[0].Real, reflection[0].Imaginary), 3.5, 3.5);
+                if (marked >= 0 && marked < reflection.Count)
+                    dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0xE5, 0x53, 0x4B)), null,
+                        Map(reflection[marked].Real, reflection[marked].Imaginary), 3.5, 3.5);
+            }
+        }
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+}
+
 /// <summary>One curve of a <see cref="CurvePlot"/>.</summary>
 public sealed record PlotSeries(string Name, IReadOnlyList<double> X, IReadOnlyList<double> Y, Color Color,
     bool Dashed = false);

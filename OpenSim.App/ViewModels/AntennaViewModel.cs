@@ -338,6 +338,7 @@ public partial class AntennaViewModel : ObservableObject
     private async Task SolveAntenna()
     {
         ZinSweep.Clear();
+        ClearNetworkResults();
         AntennaResult = "";
         AntennaAssumptions = "";
         if (SweepFMinMHz <= 0 || SweepFMaxMHz < SweepFMinMHz || SweepPoints < 1 || FrequencyMHz <= 0)
@@ -368,14 +369,28 @@ public partial class AntennaViewModel : ObservableObject
         try
         {
             var solver = new ThinWireMomSolver();
-            for (int k = 0; k < SweepPoints; k++)
+            if (AdaptiveSweep && SweepPoints > 2 && SweepFMaxMHz > SweepFMinMHz)
             {
-                double f = SweepPoints == 1
-                    ? SweepFMinMHz * 1e6
-                    : SweepFMinMHz * 1e6 * Math.Pow(SweepFMaxMHz / SweepFMinMHz, (double)k / (SweepPoints - 1));
-                var point = solver.Solve(wire, f, feedBasis);
-                ZinSweep.Add(new AntennaZinPoint(f,
-                    point.InputImpedance.Real, point.InputImpedance.Imaginary));
+                var rational = OpenSim.Rf.Network.RationalSweep.Run(
+                    f => new[] { solver.Solve(wire, f, feedBasis).InputImpedance },
+                    SweepFMinMHz * 1e6, SweepFMaxMHz * 1e6, maxSamples: Math.Max(SweepPoints, 30));
+                for (int k = 0; k < rational.FrequenciesHz.Count; k++)
+                    ZinSweep.Add(new AntennaZinPoint(rational.FrequenciesHz[k],
+                        rational.Values[k][0].Real, rational.Values[k][0].Imaginary));
+                ShowNetworkResults(DenseCurve(rational), AdaptiveNote(rational));
+            }
+            else
+            {
+                for (int k = 0; k < SweepPoints; k++)
+                {
+                    double f = SweepPoints == 1
+                        ? SweepFMinMHz * 1e6
+                        : SweepFMinMHz * 1e6 * Math.Pow(SweepFMaxMHz / SweepFMinMHz, (double)k / (SweepPoints - 1));
+                    var point = solver.Solve(wire, f, feedBasis);
+                    ZinSweep.Add(new AntennaZinPoint(f,
+                        point.InputImpedance.Real, point.InputImpedance.Imaginary));
+                }
+                ShowNetworkResultsFromSweep();
             }
 
             var display = solver.Solve(wire, FrequencyMHz * 1e6, feedBasis);
@@ -1387,9 +1402,25 @@ public partial class AntennaViewModel : ObservableObject
             double fMin = SweepFMinMHz * 1e6, fMax = SweepFMaxMHz * 1e6;
             int points = SweepPoints;
             var timing = new List<string>();
-            var (sweep, display) = await Task.Run(() =>
+            // Read on the UI thread: the sheet-loss model and the sweep kind.
+            var sheet = SheetModel(applies: probe is null, overGround: substrate is not null || surface.Ground is not null);
+            bool adaptive = AdaptiveSweep && points > 2 && fMax > fMin;
+            int maxSamples = Math.Max(points, 30);
+            var (sweep, display, rational) = await Task.Run(() =>
             {
-                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet };
+                if (adaptive)
+                {
+                    // One solver run after another: each new frequency is chosen from the
+                    // interpolant through the ones before it.
+                    var found = OpenSim.Rf.Network.RationalSweep.Run(
+                        f => new[] { SolveSurfacePoint(solver, surface, port, f, substrate, probe, layered, timing).InputImpedance },
+                        fMin, fMax, maxSamples: maxSamples);
+                    var sampled = found.FrequenciesHz.Select((f, k) =>
+                        new AntennaZinPoint(f, found.Values[k][0].Real, found.Values[k][0].Imaginary)).ToList();
+                    return (sampled, SolveSurfacePoint(solver, surface, port, frequency, substrate, probe, layered, timing),
+                        (OpenSim.Rf.Network.RationalSweepResult?)found);
+                }
                 double FrequencyAt(int k) => points == 1
                     ? fMin
                     : fMin * Math.Pow(fMax / fMin, (double)k / (points - 1));
@@ -1418,10 +1449,27 @@ public partial class AntennaViewModel : ObservableObject
                         results[k].InputImpedance.Real, results[k].InputImpedance.Imaginary));
                     timing.AddRange(pointTiming[k]);
                 }
-                return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, probe, layered, timing));
+                return (list, SolveSurfacePoint(solver, surface, port, frequency, substrate, probe, layered, timing),
+                    (OpenSim.Rf.Network.RationalSweepResult?)null);
             });
 
             foreach (var point in sweep) ZinSweep.Add(point);
+            if (rational is not null) ShowNetworkResults(DenseCurve(rational), AdaptiveNote(rational));
+            else ShowNetworkResultsFromSweep();
+            // Where the input power goes in the metal, at the display frequency.
+            string lossNote = "";
+            if (sheet is not null)
+            {
+                var zs = sheet(frequency);
+                double heat = OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, display.EdgeCurrents, zs);
+                double input = 0.5 * (System.Numerics.Complex.One / display.InputImpedance).Real;
+                lossNote = $" Conductor loss: {heat / input:p1} of the input power is heat in the sheet "
+                    + $"(copper {MetalThicknessUm:g3} µm, {zs.Real * 1e3:g3} mΩ per square at this frequency). "
+                    + "A zero-thickness sheet has a singular current at its edges, so this figure rises slowly "
+                    + "with mesh density; the ground plane is still a perfect conductor.";
+            }
+            else if (ConductorLoss)
+                lossNote = " Conductor loss is not applied to a probe-fed solve: the metal here is perfect.";
             SurfaceCurrentModel = SceneBuilder.BuildSurfaceCurrentModel(surface, display, ColormapKind.Viridis);
             GroundPlaneModel = BuildSurfaceGroundOverlay(surface, substrate);
 
@@ -1440,7 +1488,7 @@ public partial class AntennaViewModel : ObservableObject
                     {
                         try
                         {
-                            var fine = SolveSurfacePoint(new OpenSim.Rf.Surface.SurfaceMomSolver(),
+                            var fine = SolveSurfacePoint(new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet },
                                 fineSurface, finePort, frequency, fineSubstrate, fineProbe, fineLayered,
                                 new List<string>());
                             return " " + OpenSim.Rf.Surface.MeshConvergence.Describe(
@@ -1474,7 +1522,7 @@ public partial class AntennaViewModel : ObservableObject
                         ? OpenSim.Rf.Surface.SurfaceMomSolver.ProbeFedAssumptions
                         : OpenSim.Rf.Surface.SurfaceMomSolver.MultiLayerProbeFedAssumptions)
                 + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "")
-                + portLabel + meshCheck;
+                + portLabel + meshCheck + lossNote;
             // A slow sweep names its own bottleneck: the layered path rebuilds the
             // kernel table per frequency point (a table IS one (f, stackup) pair).
             foreach (string line in timing) _log.Append(line);
@@ -1668,6 +1716,7 @@ public partial class AntennaViewModel : ObservableObject
             });
 
             foreach (var point in sweep) ZinSweep.Add(point);
+            ShowNetworkResultsFromSweep();
             // The FOLDED edge currents are the generic-consumer view (the junction's transported
             // current spread onto the fan's outer edges), which is exactly what a current display
             // wants; the far field uses the raw ones plus the junction's own exact transform.
@@ -1812,9 +1861,10 @@ public partial class AntennaViewModel : ObservableObject
         try
         {
             double frequency = FrequencyMHz * 1e6;
+            var sheet = SheetModel(applies: probe is null, overGround: substrate is not null || surface.Ground is not null);
             var (pattern, solution, surfaceWavePower, inputPower) = await Task.Run(() =>
             {
-                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver();
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet };
                 if (layered is { } spec)
                 {
                     // The multi-layer (Stage F) far field: horizontal RWG currents radiating
@@ -1888,9 +1938,21 @@ public partial class AntennaViewModel : ObservableObject
                 // The Stage C power ledger, shown to the user: what the surface wave
                 // takes is real power the pattern never sees, and on a lossy substrate the
                 // rest is dielectric loss — named, with the efficiency and gain it implies.
+                double heat = sheet is null ? 0
+                    : OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, solution.EdgeCurrents, sheet(frequency));
                 FieldResult += "; " + OpenSim.Rf.Layered.PowerLedger.Describe(inputPower,
                     pattern.TotalRadiatedPowerWatts, surfaceWavePower,
-                    substrate.LossTangent, pattern.MaxDirectivity);
+                    substrate.LossTangent, pattern.MaxDirectivity, heat);
+            }
+            else if (substrate is null && sheet is not null)
+            {
+                // Free space with lossy metal: what is not radiated is heat in the sheet.
+                double input = 0.5 * (System.Numerics.Complex.One / solution.InputImpedance).Real;
+                double heat = OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, solution.EdgeCurrents, sheet(frequency));
+                double efficiency = pattern.TotalRadiatedPowerWatts / input;
+                FieldResult += $"; radiation efficiency {efficiency:p1}, gain "
+                    + $"{10 * Math.Log10(Math.Max(efficiency * pattern.MaxDirectivity, 1e-300)):g3} dBi; conductor loss "
+                    + $"{heat / input:p1} of the input (radiated + heat = {(pattern.TotalRadiatedPowerWatts + heat) / input:p1})";
             }
             _log.Append($"Antenna: {FieldResult}");
         }

@@ -19,17 +19,23 @@ public static class PowerLedger
     /// <param name="surfaceWaveWatts">Power in the extracted surface-wave modes.</param>
     /// <param name="lossTangent">Largest loss tangent of the stackup; 0 = lossless.</param>
     /// <param name="directivity">Peak directivity (linear), for the gain.</param>
+    /// <param name="conductorWatts">Heat in the sheet metal, integrated from the solved
+    /// current; 0 for perfect metal. It is counted with the radiated and surface-wave power
+    /// before anything is put down to the dielectric or to the model's error.</param>
     public static string Describe(double inputWatts, double radiatedWatts, double surfaceWaveWatts,
-        double lossTangent, double directivity)
+        double lossTangent, double directivity, double conductorWatts = 0)
     {
         string P(double fraction) => fraction.ToString("P1", CultureInfo.InvariantCulture);
         string G(double value) => value.ToString("g3", CultureInfo.InvariantCulture);
 
         double efficiency = radiatedWatts / inputWatts;
-        double accounted = (radiatedWatts + surfaceWaveWatts) / inputWatts;
+        double accounted = (radiatedWatts + surfaceWaveWatts + conductorWatts) / inputWatts;
         string text = $"surface wave P_sw = {G(surfaceWaveWatts)} W ({P(surfaceWaveWatts / inputWatts)} of input); " +
                       $"radiation efficiency P_rad/P_in = {P(efficiency)}, gain = " +
                       $"{G(10 * Math.Log10(Math.Max(efficiency * directivity, 1e-300)))} dBi";
+        if (conductorWatts > 0)
+            text += $"; conductor loss {P(conductorWatts / inputWatts)} of input (integrated over the sheet; " +
+                    "the ground plane is taken as perfect)";
 
         if (lossTangent > 0)
         {

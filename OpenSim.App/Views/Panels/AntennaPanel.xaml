@@ -110,10 +110,34 @@
                       IsChecked="{Binding Antenna.CheckMeshConvergence}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
                       ToolTip="After a surface solve, solve once more at f on a mesh 1.5× finer and report the change in Zin."/>
+            <CheckBox x:Name="AdaptiveSweepCheck" Content="Adaptive sweep (the solver places the points)"
+                      IsChecked="{Binding Antenna.AdaptiveSweep}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
+                      ToolTip="Rational interpolation between solver runs: each new frequency goes where the curve is least certain, so a narrow resonance is not stepped over. 'Sweep points' (at least 30) becomes the limit on solver runs. Linear in frequency between f min and f max."/>
+            <CheckBox x:Name="ConductorLossCheck" Content="Copper loss in the sheet metal"
+                      IsChecked="{Binding Antenna.ConductorLoss}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
+                      ToolTip="Sheet solves with an edge (gap) feed only: the metal gets the surface impedance of copper of the given thickness instead of being a perfect conductor."/>
+            <UniformGrid Columns="2">
+                <Label Content="Metal σ [S/m]"/>
+                <TextBox Text="{Binding Antenna.MetalConductivity}" IsEnabled="{Binding Antenna.ConductorLoss}"/>
+                <Label Content="Metal thickness [µm]"/>
+                <TextBox Text="{Binding Antenna.MetalThicknessUm}" IsEnabled="{Binding Antenna.ConductorLoss}"/>
+                <Label Content="Reference impedance [Ω]"/>
+                <TextBox x:Name="ReferenceOhmsBox" Text="{Binding Antenna.ReferenceOhms}"/>
+            </UniformGrid>
             <Button x:Name="SolveAntennaButton" Content="Solve antenna (Zin sweep)"
                     Command="{Binding Antenna.SolveAntennaCommand}"/>
             <TextBlock Text="{Binding Antenna.AntennaResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding Antenna.SParameterResult}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <Image Source="{Binding Antenna.ReturnLossImage}" MaxHeight="220" Margin="0,4,0,0" Stretch="Uniform"
+                   AutomationProperties.AutomationId="AntennaS11Image"/>
+            <Image Source="{Binding Antenna.SmithImage}" MaxHeight="300" Margin="0,4,0,0" Stretch="Uniform"
+                   AutomationProperties.AutomationId="AntennaSmithImage"/>
+            <Button Content="Save S11 (Touchstone .s1p)" Command="{Binding Antenna.ExportS1pCommand}"
+                    IsEnabled="{Binding Antenna.HasSParameters}"/>
             <ItemsControl ItemsSource="{Binding Antenna.ZinSweep}" Margin="0,2,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>

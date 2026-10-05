@@ -124,6 +124,7 @@ public sealed partial class SurfaceMomSolver
             rhs[e] = portSigns[i] * gapVolts * surface.Edges[e].Length;
         }
 
+        if (SheetImpedance is { } sheet) SheetLoss.AddTo(z, surface, sheet(frequencyHz));
         var currents = ComplexLu.Factor(z).Solve(rhs);
         Complex portCurrent = Complex.Zero;
         for (int i = 0; i < port.EdgeBases.Count; i++)
