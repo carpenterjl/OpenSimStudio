@@ -90,3 +90,8 @@ publish/
 *.pidb
 *.svclog
 *.scc
+
+# Local working material: plans, audit reports, generated output
+output/
+plans/
+reports/
