@@ -61,6 +61,15 @@ public sealed record Material
     public double? RelativePermeability { get; init; }
 
     /// <summary>
+    /// Dielectric strength [V/m]: the field at which the material breaks down. Null means
+    /// "not characterised" — an electrostatic solve then reports the field but no stress
+    /// ratio, rather than comparing against a number nobody entered. Published values are
+    /// for a thin test specimen and fall with thickness, temperature and age, so a library
+    /// value is a typical figure, not a specification.
+    /// </summary>
+    public double? DielectricStrength { get; init; }
+
+    /// <summary>
     /// Total hemispherical emissivity ε [-], in [0, 1]. Null means "unknown", which is a
     /// hard failure for a radiating solve rather than a default: ε spans 0.03 (polished
     /// aluminium) to 0.95 (paint) on the SAME metal depending only on its finish, so a

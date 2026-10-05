@@ -39,6 +39,7 @@ public partial class App : Application
         services.AddSingleton<ISolver, TransientThermalSolver>();
         services.AddSingleton<ISolver, ModalAnalysisSolver>();
         services.AddSingleton<ISolver, HarmonicElectricSolver>();
+        services.AddSingleton<ISolver, ElectrostaticSolver>();
         services.AddSingleton<JouleHeatingStudy>();
 
         services.AddSingleton<MaterialLibrary>();

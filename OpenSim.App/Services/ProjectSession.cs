@@ -233,7 +233,8 @@ public partial class ProjectSession : ObservableObject
     public bool IsStructuralAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.Static or AnalysisType.Modal };
     public bool IsElectricalAnalysis => SelectedAnalysis
-        is { Kind: AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical };
+        is { Kind: AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical
+                or AnalysisType.Electrostatic };
     public bool IsThermalAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.Thermal or AnalysisType.JouleCoupled or AnalysisType.TransientThermal
                 or AnalysisType.EnvironmentThermal or AnalysisType.ConjugateHeatFlow };

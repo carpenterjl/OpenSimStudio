@@ -513,6 +513,7 @@ public partial class SolveViewModel : ObservableObject
             AnalysisType.TransientThermal => _solvers.First(s => s is OpenSim.Solvers.TransientThermalSolver),
             AnalysisType.Modal => _solvers.First(s => s is OpenSim.Solvers.ModalAnalysisSolver),
             AnalysisType.AcElectrical => _solvers.First(s => s is OpenSim.Solvers.HarmonicElectricSolver),
+            AnalysisType.Electrostatic => _solvers.First(s => s is OpenSim.Solvers.ElectrostaticSolver),
             _ => throw new InvalidOperationException($"Unknown analysis type '{kind}'.")
         };
         return (solver.Validate, (input, progress) => solver.Solve(input, progress));

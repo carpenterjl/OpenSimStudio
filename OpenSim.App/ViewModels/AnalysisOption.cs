@@ -11,6 +11,10 @@ public enum AnalysisType
     Modal,
     AcElectrical,
 
+    /// <summary>Electrostatics: conductors as equipotentials in a dielectric; capacitance
+    /// matrix, charge per electrode, E-field and dielectric stress.</summary>
+    Electrostatic,
+
     /// <summary>Multi-body transient heat flow in an environment (vacuum, still air, or a
     /// moving fluid): radiation and convection come from the environment settings rather
     /// than hand-entered film coefficients.</summary>
@@ -67,6 +71,7 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
         new AnalysisOption("Thermal (transient)", AnalysisType.TransientThermal),
         new AnalysisOption("Modal (natural frequencies)", AnalysisType.Modal),
         new AnalysisOption("Electrical (AC sweep — quasistatic)", AnalysisType.AcElectrical),
+        new AnalysisOption("Electrostatic (capacitance, E-field)", AnalysisType.Electrostatic),
         new AnalysisOption("Heat flow in an environment", AnalysisType.EnvironmentThermal),
         new AnalysisOption("Heat flow with computed airflow (CFD)", AnalysisType.ConjugateHeatFlow),
         new AnalysisOption("Antenna (Zin sweep)", AnalysisType.Antenna),
@@ -91,7 +96,8 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
             },
             WorkspaceKind.Electrical => new[]
             {
-                Of(AnalysisType.Electrical), Of(AnalysisType.AcElectrical), Of(AnalysisType.JouleCoupled)
+                Of(AnalysisType.Electrical), Of(AnalysisType.AcElectrical), Of(AnalysisType.Electrostatic),
+                Of(AnalysisType.JouleCoupled)
             },
             WorkspaceKind.Rf => new[] { Of(AnalysisType.Antenna) },
             WorkspaceKind.SignalIntegrity => new[] { Of(AnalysisType.SignalIntegrity) },
@@ -107,7 +113,7 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
     public static WorkspaceKind WorkspaceOf(AnalysisType kind) => kind switch
     {
         AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical
-            => WorkspaceKind.Electrical,
+            or AnalysisType.Electrostatic => WorkspaceKind.Electrical,
         AnalysisType.Thermal or AnalysisType.TransientThermal => WorkspaceKind.Thermal,
         AnalysisType.Antenna => WorkspaceKind.Rf,
         AnalysisType.SignalIntegrity => WorkspaceKind.SignalIntegrity,

@@ -426,7 +426,8 @@ public partial class ResultsViewModel : ObservableObject
         {
             AnalysisType.Static => ResultFields.FirstOrDefault(f => f.Name.Contains("Mises")),
             AnalysisType.Modal => ResultFields.FirstOrDefault(f => f.Name == "Mode shape"),
-            AnalysisType.Electrical => ResultFields.FirstOrDefault(f => f.Name == "Electric potential"),
+            AnalysisType.Electrical or AnalysisType.Electrostatic
+                => ResultFields.FirstOrDefault(f => f.Name == "Electric potential"),
             AnalysisType.AcElectrical => ResultFields.FirstOrDefault(f => f.Name == "Potential magnitude"),
             AnalysisType.Thermal or AnalysisType.JouleCoupled or AnalysisType.TransientThermal
                 or AnalysisType.EnvironmentThermal =>

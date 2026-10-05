@@ -258,6 +258,56 @@
             <TextBlock Text="{Binding Pcb.ComponentAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
 
+            <!-- Step 8: clearance and creepage against a spacing table -->
+            <TextBlock Text="8. Spacing check (clearance, creepage)" FontWeight="Bold" Margin="0,8,0,2"/>
+            <TextBlock Text="Working voltage per net (as the table defines it; IPC-2221: peak). Copper of every pair of nets is measured on each layer, around board cutouts on the outer layers, and across each dielectric gap, against the table."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <UniformGrid Columns="3">
+                <Button Content="Nets from the board" Command="{Binding Pcb.ListSpacingNetsCommand}"/>
+                <Button Content="Load table (CSV)" Command="{Binding Pcb.LoadSpacingTableCommand}" Margin="2,0,0,0"
+                        ToolTip="A spacing table: 'Max volts' then one column per case, spacing in mm; an optional 'per volt above' row."/>
+                <Button Content="Save table" Command="{Binding Pcb.SaveSpacingTableCommand}" Margin="2,0,0,0"
+                        ToolTip="Writes the table in use as CSV, to check against your copy of the standard and edit."/>
+            </UniformGrid>
+            <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Pcb.SpacingNets}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="56"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                                <TextBox Grid.Column="1" Text="{Binding Volts}" ToolTip="Working voltage [V]; blank leaves the net out"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+            <UniformGrid Columns="2" Margin="0,4,0,0">
+                <Label Content="Table"/>
+                <TextBlock Text="{Binding Pcb.SpacingTableName}" VerticalAlignment="Center" FontSize="11"/>
+                <Label Content="Outer layers coated"/>
+                <CheckBox IsChecked="{Binding Pcb.SpacingOuterCoated}" VerticalAlignment="Center"
+                          ToolTip="A permanent polymer coating on the outer layers: IPC-2221 column B4 instead of B2."/>
+                <Label Content="List pairs within × required"/>
+                <TextBox Text="{Binding Pcb.SpacingReportWithin}"/>
+            </UniformGrid>
+            <Button Content="Check spacing" Command="{Binding Pcb.CheckSpacingCommand}"/>
+            <TextBlock Text="{Binding Pcb.SpacingResult}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
+            <ItemsControl ItemsSource="{Binding Pcb.SpacingLines}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11" FontFamily="Consolas"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{Binding Pcb.SpacingAssumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+
         </StackPanel>
     </GroupBox>
 </UserControl>
