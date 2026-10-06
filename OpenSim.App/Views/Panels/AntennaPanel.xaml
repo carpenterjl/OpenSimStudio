@@ -138,6 +138,20 @@
                    AutomationProperties.AutomationId="AntennaSmithImage"/>
             <Button Content="Save S11 (Touchstone .s1p)" Command="{Binding Antenna.ExportS1pCommand}"
                     IsEnabled="{Binding Antenna.HasSParameters}"/>
+            <TextBlock Text="Matching network (L-section)" FontWeight="Bold" Margin="0,6,0,0"/>
+            <UniformGrid Columns="2">
+                <Label Content="Design frequency [MHz] (0 = best match)"/>
+                <TextBox Text="{Binding Antenna.MatchFrequencyMHz}"/>
+                <Label Content="Inductor Q (0 = ideal)"/>
+                <TextBox Text="{Binding Antenna.InductorQ}"/>
+                <Label Content="Capacitor Q (0 = ideal)"/>
+                <TextBox Text="{Binding Antenna.CapacitorQ}"/>
+            </UniformGrid>
+            <Button Content="Design matching network" Command="{Binding Antenna.DesignMatchCommand}"
+                    IsEnabled="{Binding Antenna.HasSParameters}"/>
+            <TextBlock Text="{Binding Antenna.MatchResult}" TextWrapping="Wrap" FontSize="11"
+                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <Image Source="{Binding Antenna.MatchImage}" MaxHeight="220" Margin="0,4,0,0" Stretch="Uniform"/>
             <ItemsControl ItemsSource="{Binding Antenna.ZinSweep}" Margin="0,2,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>

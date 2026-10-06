@@ -28,24 +28,82 @@ public sealed class SurfaceStructure
         int V1, int V2, int PlusTriangle, int MinusTriangle,
         int PlusOpposite, int MinusOpposite, double Length);
 
+    /// <summary>
+    /// A free-space sheet-metal ASSEMBLY: plates and strips meeting at any angle, where an edge
+    /// may be shared by three or more triangles (a strip standing on a plate, a shorting wall
+    /// under a PIFA). An edge shared by k triangles carries k − 1 RWG bases, each pairing the
+    /// first triangle with one of the others, so Kirchhoff's current law holds at the junction
+    /// and every branch can carry its own current. Triangle winding is not used — an RWG basis
+    /// is defined by the two opposite vertices, not by orientation. The ground is either meshed
+    /// metal among the parts, or an infinite image plane (<paramref name="ground"/>) on which
+    /// strips may stand.
+    /// </summary>
+    public static SurfaceStructure Assembly(IReadOnlyList<Vector3D> vertices,
+        IReadOnlyList<(int A, int B, int C)> triangles, GroundPlane? ground = null) =>
+        new(vertices, triangles, ground, junctions: true);
+
+    /// <summary>Edges shared by three or more triangles (assemblies only).</summary>
+    public int JunctionEdgeCount { get; private set; }
+
     internal SurfaceStructure(IReadOnlyList<Vector3D> vertices,
-        IReadOnlyList<(int A, int B, int C)> triangles, GroundPlane? ground)
+        IReadOnlyList<(int A, int B, int C)> triangles, GroundPlane? ground, bool junctions = false)
     {
         Vertices = vertices;
         Triangles = triangles;
         Ground = ground;
 
-        // Directed-edge map: interior edge = seen once in each direction.
-        var directed = new Dictionary<(int, int), (int Triangle, int Opposite)>();
-        foreach (var (t, (a, b, c)) in triangles.Select((tri, i) => (i, tri)))
+        var edges = new List<RwgEdge>();
+        if (junctions)
         {
-            foreach (var (u, v, opp) in new[] { (a, b, c), (b, c, a), (c, a, b) })
+            // Undirected grouping: every triangle sharing the edge, in triangle order.
+            var shared = new Dictionary<(int, int), List<(int Triangle, int Opposite)>>();
+            for (int t = 0; t < triangles.Count; t++)
             {
-                if (!directed.TryAdd((u, v), (t, opp)))
-                    throw new InvalidOperationException(
-                        $"Edge {u}→{v} appears twice in the same direction — the mesh is " +
-                        "non-manifold or inconsistently oriented.");
+                var (a, b, c) = triangles[t];
+                foreach (var (u, v, opp) in new[] { (a, b, c), (b, c, a), (c, a, b) })
+                {
+                    var key = (Math.Min(u, v), Math.Max(u, v));
+                    if (!shared.TryGetValue(key, out var list)) shared[key] = list = new List<(int, int)>(2);
+                    list.Add((t, opp));
+                }
             }
+            foreach (var ((u, v), list) in shared)
+            {
+                if (list.Count == 1 && ground is { } g
+                    && vertices[u].Z == g.SurfaceZ && vertices[v].Z == g.SurfaceZ)
+                {
+                    // A rim edge standing on the image plane: half-RWG into the ground.
+                    edges.Add(new RwgEdge(u, v, list[0].Triangle, -1, list[0].Opposite, -1,
+                        (vertices[v] - vertices[u]).Length));
+                    continue;
+                }
+                if (list.Count < 2) continue;
+                if (list.Count > 2) JunctionEdgeCount++;
+                double length = (vertices[v] - vertices[u]).Length;
+                for (int i = 1; i < list.Count; i++)
+                    edges.Add(new RwgEdge(u, v, list[0].Triangle, list[i].Triangle,
+                        list[0].Opposite, list[i].Opposite, length));
+            }
+            edges.Sort((x, y) => x.V1 != y.V1 ? x.V1.CompareTo(y.V1)
+                : x.V2 != y.V2 ? x.V2.CompareTo(y.V2) : x.MinusTriangle.CompareTo(y.MinusTriangle));
+            Edges = edges;
+        }
+        else
+        {
+            // Directed-edge map: interior edge = seen once in each direction.
+            var directed = new Dictionary<(int, int), (int Triangle, int Opposite)>();
+            foreach (var (t, (a, b, c)) in triangles.Select((tri, i) => (i, tri)))
+            {
+                foreach (var (u, v, opp) in new[] { (a, b, c), (b, c, a), (c, a, b) })
+                {
+                    if (!directed.TryAdd((u, v), (t, opp)))
+                        throw new InvalidOperationException(
+                            $"Edge {u}→{v} appears twice in the same direction — the mesh is " +
+                            "non-manifold or inconsistently oriented.");
+                }
+            }
+            BuildManifoldEdges(vertices, ground, directed, edges);
+            Edges = edges;
         }
 
         if (ground is { } plane)
@@ -55,25 +113,6 @@ public sealed class SurfaceStructure
                         $"a vertex at z = {vertex.Z:g4} lies below the ground plane at " +
                         $"z = {plane.SurfaceZ:g4} — image theory needs the metal strictly above it " +
                         "(only a rim edge may touch)");
-
-        var edges = new List<RwgEdge>();
-        foreach (var ((u, v), (plusTri, plusOpp)) in directed)
-        {
-            double length = (vertices[v] - vertices[u]).Length;
-            if (directed.TryGetValue((v, u), out var minus))
-            {
-                if (u > v) continue;   // canonical: enumerate each undirected edge once
-                edges.Add(new RwgEdge(u, v, plusTri, minus.Triangle, plusOpp, minus.Opposite, length));
-                continue;
-            }
-            // Boundary edge: grounded (half-RWG, image supplies the minus half) when
-            // both vertices sit exactly on the plane — the builder snaps them bitwise.
-            if (ground is { } g && vertices[u].Z == g.SurfaceZ && vertices[v].Z == g.SurfaceZ)
-                edges.Add(new RwgEdge(Math.Min(u, v), Math.Max(u, v), plusTri, -1, plusOpp, -1, length));
-        }
-        // Deterministic basis ordering regardless of dictionary iteration order.
-        edges.Sort((x, y) => x.V1 != y.V1 ? x.V1.CompareTo(y.V1) : x.V2.CompareTo(y.V2));
-        Edges = edges;
 
         var areas = new double[triangles.Count];
         var centroids = new Vector3D[triangles.Count];
@@ -103,6 +142,27 @@ public sealed class SurfaceStructure
                 supports[edges[e].MinusTriangle].Add((e, -1.0, edges[e].MinusOpposite));
         }
         TriangleSupports = supports;
+    }
+
+    private static void BuildManifoldEdges(IReadOnlyList<Vector3D> vertices, GroundPlane? ground,
+        Dictionary<(int, int), (int Triangle, int Opposite)> directed, List<RwgEdge> edges)
+    {
+        foreach (var ((u, v), (plusTri, plusOpp)) in directed)
+        {
+            double length = (vertices[v] - vertices[u]).Length;
+            if (directed.TryGetValue((v, u), out var minus))
+            {
+                if (u > v) continue;   // canonical: enumerate each undirected edge once
+                edges.Add(new RwgEdge(u, v, plusTri, minus.Triangle, plusOpp, minus.Opposite, length));
+                continue;
+            }
+            // Boundary edge: grounded (half-RWG, image supplies the minus half) when
+            // both vertices sit exactly on the plane — the builder snaps them bitwise.
+            if (ground is { } g && vertices[u].Z == g.SurfaceZ && vertices[v].Z == g.SurfaceZ)
+                edges.Add(new RwgEdge(Math.Min(u, v), Math.Max(u, v), plusTri, -1, plusOpp, -1, length));
+        }
+        // Deterministic basis ordering regardless of dictionary iteration order.
+        edges.Sort((x, y) => x.V1 != y.V1 ? x.V1.CompareTo(y.V1) : x.V2.CompareTo(y.V2));
     }
 
     public IReadOnlyList<Vector3D> Vertices { get; }

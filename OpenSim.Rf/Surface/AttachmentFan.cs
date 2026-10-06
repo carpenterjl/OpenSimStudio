@@ -381,6 +381,16 @@ internal sealed class AttachmentFan
         DiscSelf(kernel, surface, outerOrder: 3, sPanels: 1, innerOrder: 3, PotentialResolve);
 
     internal Complex DiscSelf(IRadialGaKernel kernel, SurfaceStructure surface,
+        int outerOrder, int sPanels, int innerOrder, double innerResolve) =>
+        DiscAgainst(kernel, surface, this, outerOrder, sPanels, innerOrder, innerResolve);
+
+    /// <summary>∬ D·A(D_source) — this fan's disc tested against another junction's disc (two
+    /// pins on one sheet). The same outer rule as <see cref="DiscSelf(IRadialGaKernel, SurfaceStructure)"/>;
+    /// the inner potential is the source fan's, which resolves its own peak.</summary>
+    internal Complex DiscAgainst(IRadialGaKernel kernel, SurfaceStructure surface, AttachmentFan source) =>
+        DiscAgainst(kernel, surface, source, outerOrder: 3, sPanels: 1, innerOrder: 3, PotentialResolve);
+
+    private Complex DiscAgainst(IRadialGaKernel kernel, SurfaceStructure surface, AttachmentFan source,
         int outerOrder, int sPanels, int innerOrder, double innerResolve)
     {
         Complex sum = Complex.Zero;
@@ -412,7 +422,7 @@ internal sealed class AttachmentFan
                         for (int ti = 0; ti < nodes.Length; ti++)
                         {
                             var rPrime = VertexPosition + e * (tLow + (tHigh - tLow) * nodes[ti]);
-                            var (ax, ay) = DiscPotential(kernel, surface, rPrime,
+                            var (ax, ay) = source.DiscPotential(kernel, surface, rPrime,
                                 innerOrder, innerResolve);
                             sum += weights[ti] * (tHigh - tLow) * scale * (e.X * ax + e.Y * ay);
                         }
