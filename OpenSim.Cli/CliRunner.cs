@@ -63,6 +63,16 @@ public static partial class CliRunner
             nets.csv: "net,volts" lines. --table FILE loads a table (CSV), --coated uses the
             coated outer-layer column, --within F lists pairs within F × their requirement.
 
+        opensim emi <job.json> [--out DIR]
+            Conducted-emission estimate of a switching converter's input on two LISNs against a
+            limit line, and first-order radiated estimates of its hot loop and input cable.
+            Job: { "vin": 12, "iout": 3, "frequencyHz": 5e5, "duty": 0.4, "riseSeconds": 1e-8,
+                   "fallSeconds": 1e-8, "switchNodeCapacitance": 2e-11, "inputCapacitance": 1e-5,
+                   "inputEsr": 0.005, "inputEsl": 1e-9, "filterInductance": 0, "filterCapacitance": 0,
+                   "limit": "ConductedClassBQuasiPeak", "loopArea": 1e-4, "cableLength": 1,
+                   "distance": 3, "radiatedLimit": "RadiatedClassB3m" }
+            Exit code 3 when a conducted line is over the limit.
+
         opensim magnetics <board> --nets P[,S...] --center X,Y [options]
             Planar magnetics from the layout: the windings' copper cut along a ray from the
             winding axis (mm), solved as an axisymmetric section.
@@ -93,6 +103,7 @@ public static partial class CliRunner
                 "sweep" => Sweep(Require(args, "a sweep job file"), options, stdout),
                 "impedance" => Impedance(Require(args, "an impedance job file"), options, stdout),
                 "spacing" => Spacing(Require(args, "a board"), options, stdout),
+                "emi" => Emi(Require(args, "an EMI job file"), options, stdout),
                 "magnetics" => Magnetics(Require(args, "a board"), options, stdout),
                 _ => Fail(stderr, $"Unknown command '{args[0]}'.{Environment.NewLine}{Usage}", 1)
             };
