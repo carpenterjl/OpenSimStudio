@@ -21,17 +21,14 @@ public class BoardStructuresTests
     private const double Mu0 = 4e-7 * Math.PI;
 
     [Fact]
-    public void OnePortPin_WithoutTheVertexTerm_IsTheProbeFedSolve()
+    public void OnePortPin_IsTheProbeFedSolve()
     {
-        // The pin array is the single-probe assembly per pin; with the junction vertex term left
-        // out (the shipped probe solve does not carry it) one pin must be that solve. Measured: equal
-        // to the last bit.
+        // The pin array is the single-probe assembly per pin, so one pin must be that solve.
         var surface = Plate(CoarseEdge);
         var probe = Probe();
         var table = new LayeredKernelTable(Substrate, Frequency, 0.025);
         var single = new SurfaceMomSolver().SolveProbeFed(surface, table, probe).Surface.InputImpedance;
-        var pins = new SurfaceMomSolver { OmitJunctionVertexTerm = true }
-            .SolvePins(surface, table, new[] { new VerticalPin("feed", probe) });
+        var pins = new SurfaceMomSolver().SolvePins(surface, table, new[] { new VerticalPin("feed", probe) });
         var z = pins.Impedance()[0, 0];
         double rel = (z - single).Magnitude / single.Magnitude;
         _out.WriteLine($"probe-fed {single}, pin array {z}, rel {rel:e3}");

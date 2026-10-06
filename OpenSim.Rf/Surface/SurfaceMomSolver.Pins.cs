@@ -60,12 +60,12 @@ public sealed record PinArraySolution(double FrequencyHz, IReadOnlyList<string> 
 /// vector potential A_h = −∇V by parts onto the sheet current's divergence. A junction's disc D has
 /// divergence δ(v) at its vertex as well as the half-RWGs' distributed −l/A; the δ's scalar part
 /// cancels against the tube top's end, but its vector part leaves −jω·V(v), the coupling potential's
-/// vector part read at the vertex. The single-probe solve leaves this term out. It vanishes when the
+/// vector part read at the vertex. The single-probe solve left this term out until it was found here. It vanishes when the
 /// medium is homogeneous (G_A^xz = 0 for air over the ground), which is why the εr = 1 gates never
 /// saw it; with a dielectric it does not. Measured on a feed pin and a shorting pin 9 mm apart under
 /// a 60 mm plate at 30 MHz (a two-post loop inductance, which cannot depend on εr): 2.371 nH in
 /// air; at εr = 4.4, 1.668 nH without the term, 2.549 nH with only each pin's own vertex term,
-/// 1.496 nH with only the cross terms, 2.376 nH with both. Here it is always included, own and
+/// 1.496 nH with only the cross terms, 2.376 nH with both. Both solves include it: here own and
 /// cross.</para>
 /// <para>Every cross entry is computed once and written to both (i, j) and (j, i), so the matrix is
 /// complex-symmetric as the single-probe one is. Two pins whose attachment fans (the triangles at
@@ -126,10 +126,6 @@ public sealed partial class SurfaceMomSolver
         public required Func<double, Complex[]> VertexVector { get; init; }
     }
 
-    /// <summary>Leaves out the junction vertex's vector term (see the class remarks) so a single
-    /// pin reproduces <see cref="SolveProbeFed(SurfaceStructure, LayeredKernelTable, ProbeFeed, double)"/>,
-    /// which does not carry it. For that comparison only.</summary>
-    internal bool OmitJunctionVertexTerm { get; init; }
 
     private PinArraySolution SolvePinsCore(SurfaceStructure surface, in LayeredKernelSplit split,
         IRadialGaKernel gaKernel, double frequencyHz, VerticalKernels set, double[][] nodes,
@@ -371,7 +367,7 @@ public sealed partial class SurfaceMomSolver
         // from this tube's axis (see the class remarks on the disc's divergence).
         Complex[] VertexVector(double rho)
         {
-            double rhoEff = Math.Sqrt(rho * rho + probe.RadiusMeters * probe.RadiusMeters);
+            double rhoEff = rho == 0 ? probe.RadiusMeters : Math.Sqrt(rho * rho + probe.RadiusMeters * probe.RadiusMeters);
             var result = new Complex[tubeBases];
             for (int q = 0; q < zNodes.Length; q++)
             {
@@ -380,7 +376,6 @@ public sealed partial class SurfaceMomSolver
             }
             return result;
         }
-        if (!OmitJunctionVertexTerm)
         {
             var own = VertexVector(0);
             for (int n = 0; n < tubeBases; n++) junctionTube[n] += own[n];
@@ -574,7 +569,6 @@ public sealed partial class SurfaceMomSolver
             for (int n = 0; n <= tube.Segments; n++)
                 result[n] += div * tube.TriangleIntegrals[wedge.NeighborTriangle, n];
         }
-        if (!OmitJunctionVertexTerm)
         {
             double dx = tube.Pin.Geometry.X - junction.Pin.Geometry.X, dy = tube.Pin.Geometry.Y - junction.Pin.Geometry.Y;
             var vector = tube.VertexVector(Math.Sqrt(dx * dx + dy * dy));

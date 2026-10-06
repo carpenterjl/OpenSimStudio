@@ -34,7 +34,12 @@ public sealed record ProbeFedSolution(
 /// A is ∇_ρ of the G_A^xz potential, so jω⟨f, ∇V⟩ integrates by parts onto
 /// −jω⟨∇·f, V⟩ — valid for RWG bases (no rim flux) and for the junction's surface
 /// part AS A WHOLE (D's outer-edge flux is absorbed by the halves, interior boundary
-/// terms cancel pairwise). Transposed entries are assigned symmetrically — exact,
+/// terms cancel pairwise) PLUS the vertex: ∇·D = δ(v) contributes −jω·V(v), the vector
+/// part of the coupling potential read at the junction vertex (ρ_eff = a). Its scalar part
+/// cancels against the tube top's end, its vector part does not. It is zero in a homogeneous
+/// medium (G_A^xz = 0 for air over the ground) and was missing until Feature 12, whose
+/// feed-plus-shorting-pin inductance (εr-independent) read 1.668 nH at εr = 4.4 without it
+/// against 2.371 nH in air, and 2.376 nH with it. Transposed entries are assigned symmetrically — exact,
 /// because G_A^xz(z_m, z′) = −W̃(z′, z_m) makes the two directions the same integral.
 /// The probe-absent path is untouched: Z_cc is the existing bitwise-pinned fill.
 ///
@@ -229,6 +234,14 @@ public sealed partial class SurfaceMomSolver
             for (int n = 0; n < tubeBases; n++)
                 junctionTube[n] += div * triangleIntegrals[wedge.NeighborTriangle, n];
         }
+        // The junction vertex: −jω·V(v), V the coupling potential's vector part at ρ_eff = a.
+        var vertexVector = new Complex[tubeBases];
+        for (int q = 0; q < zNodes.Length; q++)
+        {
+            var (gxz, _) = tables.Evaluate(q, probe.RadiusMeters);
+            for (int n = 0; n < tubeBases; n++) vertexVector[n] += minusJOmega * valueWeights[n][q] * gxz;
+        }
+        for (int n = 0; n < tubeBases; n++) junctionTube[n] += vertexVector[n];
 
         // Disc-current vector couplings: jω⟨f, A(D)⟩ with A(D) from the fan quadrature.
         var discV = new Complex[nEdges];
