@@ -19,7 +19,7 @@ namespace OpenSim.Cli;
 /// with the assumptions, the tables as CSV, the log — so a study can be run again from a
 /// script and compared. Exit codes: 0 done, 1 usage, 2 the run failed.
 /// </summary>
-public static class CliRunner
+public static partial class CliRunner
 {
     public const string Usage = """
         opensim — OpenSim Studio from the command line
@@ -63,6 +63,17 @@ public static class CliRunner
             nets.csv: "net,volts" lines. --table FILE loads a table (CSV), --coated uses the
             coated outer-layer column, --within F lists pairs within F × their requirement.
 
+        opensim magnetics <board> --nets P[,S...] --center X,Y [options]
+            Planar magnetics from the layout: the windings' copper cut along a ray from the
+            winding axis (mm), solved as an axisymmetric section.
+            --angle DEG         direction of the cut (default 0)
+            --radius MM         how far out to cut (default 30)
+            --frequency HZ      AC resistance and inductance with skin and proximity effect
+            --drive NET         the winding that carries current (default the first)
+            --core FILE         core JSON: { "postRadius": 3e-3, "windowRadius": 10e-3,
+                                "outerRadius": 12e-3, "plateThickness": 2e-3, "windowHeight": 3e-3,
+                                "centreGap": 2e-4, "relativePermeability": 2000 }
+
         opensim help
         """;
 
@@ -82,6 +93,7 @@ public static class CliRunner
                 "sweep" => Sweep(Require(args, "a sweep job file"), options, stdout),
                 "impedance" => Impedance(Require(args, "an impedance job file"), options, stdout),
                 "spacing" => Spacing(Require(args, "a board"), options, stdout),
+                "magnetics" => Magnetics(Require(args, "a board"), options, stdout),
                 _ => Fail(stderr, $"Unknown command '{args[0]}'.{Environment.NewLine}{Usage}", 1)
             };
         }
