@@ -90,5 +90,15 @@
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </GroupBox>
+
+        <!-- Report of the last solve: inputs, conditions, summary, field ranges, assumptions, log -->
+        <GroupBox Header="Report">
+            <StackPanel>
+                <TextBlock Text="The last solve as a document: what was solved, the summary values, every field's range, the assumptions the solver stated, and its log. The same report the command line writes."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <Button Content="Save report (Markdown / HTML)" Command="{Binding Solve.SaveReportCommand}"
+                        IsEnabled="{Binding Solve.HasReport}"/>
+            </StackPanel>
+        </GroupBox>
     </StackPanel>
 </UserControl>

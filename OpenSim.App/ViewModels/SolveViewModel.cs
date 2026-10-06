@@ -162,6 +162,7 @@ public partial class SolveViewModel : ObservableObject
             foreach (var line in output.Log)
                 _log.Append(line);
 
+            RememberRun(kind.ToString(), body.Name, input, output);
             _session.RaiseResultsProduced(output.Fields, analysis: kind,
                 frames: output.Frames, frameAxis: output.FrameAxis);
             _session.StatusText = "Solve complete";
@@ -173,6 +174,46 @@ public partial class SolveViewModel : ObservableObject
             _session.IsBusy = false;
             _session.ProgressFraction = 0;
         }
+    }
+
+    // The last completed solve, for the report export.
+    private (string Analysis, string Body, SolveInput Input, SolveOutput Output)? _lastRun;
+
+    [ObservableProperty] private bool _hasReport;
+
+    private void RememberRun(string analysis, string body, SolveInput input, SolveOutput output)
+    {
+        _lastRun = (analysis, body, input, output);
+        HasReport = true;
+    }
+
+    /// <summary>Writes the last solve as a report (Markdown or HTML): inputs, conditions,
+    /// summary values, field ranges, the assumptions lifted from the log, and the log.</summary>
+    [RelayCommand]
+    private void SaveReport()
+    {
+        if (_lastRun is not { } run)
+        {
+            _log.Append("Nothing to report yet: run a solve first.");
+            return;
+        }
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = $"{_session.Project.Name}-{run.Analysis}-report.md",
+            Filter = "Markdown report|*.md|HTML report|*.html",
+            Title = "Save the study report"
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            var report = OpenSim.Core.PostProcessing.StudyReport.FromSolve(_session.Project.Name, run.Body, run.Analysis,
+                run.Input, run.Output);
+            bool html = dialog.FileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
+                        || dialog.FileName.EndsWith(".htm", StringComparison.OrdinalIgnoreCase);
+            System.IO.File.WriteAllText(dialog.FileName, html ? report.ToHtml() : report.ToMarkdown());
+            _log.Append($"Report saved to {dialog.FileName} ({report.Assumptions.Count} assumption line(s)).");
+        }
+        catch (Exception ex) { _session.ReportError(ex); }
     }
 
     /// <summary>
@@ -298,6 +339,7 @@ public partial class SolveViewModel : ObservableObject
             foreach (var line in output.Log)
                 _log.Append(line);
 
+            RememberRun("EnvironmentThermal", string.Join(" + ", bodies.Select(b => b.Name)), input, output);
             // Published before the results so the scene, which rebuilds on the result
             // event, already knows which merged node belongs to which body.
             _session.SetAssembledMesh(assembled);

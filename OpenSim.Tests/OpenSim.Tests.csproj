@@ -33,6 +33,7 @@
     <ProjectReference Include="..\OpenSim.Pcb\OpenSim.Pcb.csproj" />
     <ProjectReference Include="..\OpenSim.Cfd\OpenSim.Cfd.csproj" />
     <ProjectReference Include="..\OpenSim.Rf\OpenSim.Rf.csproj" />
+    <ProjectReference Include="..\OpenSim.Cli\OpenSim.Cli.csproj" />
   </ItemGroup>
 
 </Project>

@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.Rf", "OpenSim.Rf\Op
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.Cfd", "OpenSim.Cfd\OpenSim.Cfd.csproj", "{760FD8A2-7BDC-4C9B-8BAB-7557ADF04736}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.Cli", "OpenSim.Cli\OpenSim.Cli.csproj", "{217D59D9-FB03-4B2B-A688-AD4A3A83655E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -139,6 +141,18 @@ Global
 		{760FD8A2-7BDC-4C9B-8BAB-7557ADF04736}.Release|x64.Build.0 = Release|Any CPU
 		{760FD8A2-7BDC-4C9B-8BAB-7557ADF04736}.Release|x86.ActiveCfg = Release|Any CPU
 		{760FD8A2-7BDC-4C9B-8BAB-7557ADF04736}.Release|x86.Build.0 = Release|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Debug|x64.Build.0 = Debug|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Debug|x86.Build.0 = Debug|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Release|x64.ActiveCfg = Release|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Release|x64.Build.0 = Release|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Release|x86.ActiveCfg = Release|Any CPU
+		{217D59D9-FB03-4B2B-A688-AD4A3A83655E}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
