@@ -68,34 +68,73 @@ public class ProbeFedPatchTests
     }
 
     [Fact]
-    public void ProbeFedResistance_ReproducesTheStageDModalResistance()
+    public void ProbeFedResistance_ReproducesTheModalResistanceAtTheProbePoint()
     {
-        // R_in(y=−L/4)/cos²(π/4) against the edge-fed |V_edge|²/(2P_in) at the same
-        // frequency — the cross-formulation gate (measured ratio ~1.05).
-        double f = 9.4e9;
-        var (probeSol, _, _) = Solve(f, -PatchL / 4);
-        double rProbe = probeSol.Surface.InputImpedance.Real;
-        double modalFromProbe = rProbe / 0.5; // cos²(π/4)
-
+        // The cross-formulation gate (FU-2). A feed that excites one cavity mode sees, at the
+        // mode's resistance peak, R_in = |V(y₀)|²/(2P): the modal voltage at the feed point per
+        // unit of the power that mode radiates. The reference is a DIFFERENT feed — a 0.5 mm
+        // series gap across the patch's centre line, where the mode's current peaks and its
+        // voltage is zero, so no gap sits near either radiating edge — with V(y₀) read at the
+        // probe's own position. Its voltage probe reads ±0.50 V on the two halves of that patch
+        // in the quasi-static limit (the absolute check), both edges agree to the digit, and
+        // the reading is stable under refinement.
+        //
+        // The identity assumes an electrically negligible feed, so the gate is on a thin
+        // substrate (0.508 mm, tube current top/base 1.14–1.18). Measured 1.046 at y = −L/4 and
+        // 1.052 at y = −3L/8. On the Balanis slab (1.588 mm) the tube is not negligible — its top
+        // current is 1.7–2.2× its base current at these high-impedance insets, a distributed
+        // L–C network between the port and the patch — and the same comparison reads 1.70 and
+        // 1.50, inset-dependent: the feed's own physics, not a modal error. The previous gate
+        // (1.258, banded 1.11–1.41) took its reference on the strip between the rim and a
+        // series gap 1.3 mm in from it, where |V|²/2P read anything from 141 to 236 Ω with the
+        // sampling point. The band keeps its ±0.15 width around the new reading.
+        const double h = 0.508e-3;
+        var substrate = new SubstrateStackup(2.2, 0.0, h);
+        double y = -0.375 * PatchL;
         var grid = SurfaceMeshBuilder.BuildRectangularPlate(
-            PatchW, PatchL, MeshEdge, z: Thickness, portFraction: 0);
-        var table = new LayeredKernelTable(Substrate, f, 0.025);
-        var edgeSol = new SurfaceMomSolver().Solve(grid.Structure!, table, grid.Port!);
-        double pIn = 0.5 * (1.0 / edgeSol.InputImpedance).Real;
-        Complex vEdge = Complex.Zero;
-        for (int i = 0; i < 5; i++)
-            vEdge += LayeredPotentialProbe.EdgeVoltage(grid.Structure!, table, edgeSol,
-                new Vector3D(-0.4 * PatchW + 0.2 * PatchW * i, -PatchL / 2 + 0.5 * MeshEdge, Thickness));
-        vEdge /= 5;
-        double modalFromEdge = vEdge.Magnitude * vEdge.Magnitude / (2 * pIn);
+            PatchW, PatchL, MeshEdge, z: h, portFraction: 0, snapVertex: (0.0, y));
+        var probe = new ProbeFeed(0.0, y, 0.06e-3, Segments);
+        var f = new List<double>();
+        var r = new List<double>();
+        for (double frequency = 10.35e9; frequency <= 10.66e9; frequency += 0.05e9)
+        {
+            var table = new LayeredKernelTable(substrate, frequency, 0.025);
+            f.Add(frequency);
+            r.Add(new SurfaceMomSolver().SolveProbeFed(grid.Structure!, table, probe).Surface.InputImpedance.Real);
+        }
+        int k = r.IndexOf(r.Max());
+        Assert.True(k > 0 && k < r.Count - 1, "the resistance peak must lie inside the scan");
+        double shift = 0.5 * (r[k - 1] - r[k + 1]) / (r[k - 1] - 2 * r[k] + r[k + 1]);
+        double peak = r[k] - 0.25 * (r[k - 1] - r[k + 1]) * shift;
 
-        // Measured 1.258 since the junction vertex term (1.05 without it). The probe's
-        // resistance rose (107 → 148 Ω at this inset) while the two insets came into line
-        // with each other (see the cos² trend gate), so the edge-fed modal measure now sits
-        // 26 % below the probe's. Which side carries the remaining difference is not settled
-        // (the probe ledger is still open on a substrate); the band keeps its ±0.15 width
-        // around the new reading.
-        Assert.InRange(modalFromProbe / modalFromEdge, 1.11, 1.41);
+        var at = new LayeredKernelTable(substrate, f[k], 0.025);
+        var centre = SurfaceMeshBuilder.BuildRectangularPlate(
+            PatchW, PatchL, MeshEdge, z: h, portOffset: PatchL / 2, portGapWidth: 0.5e-3);
+        var reference = new SurfaceMomSolver().Solve(centre.Structure!, at, centre.Port!);
+        double pIn = 0.5 * (1.0 / reference.InputImpedance).Real;
+        var v = LayeredPotentialProbe.EdgeVoltage(centre.Structure!, at, reference, new Vector3D(0, y, h));
+        double modal = v.Magnitude * v.Magnitude / (2 * pIn);
+        Assert.InRange(peak / modal, 0.90, 1.20);
+    }
+
+    [Fact]
+    public void TheModalReference_ReadsHalfTheGapVoltageOnEachHalf_AtLowFrequency()
+    {
+        // The absolute check on the reference's voltage probe: at 0.3 GHz the centre-gap patch
+        // is two capacitor halves in series across the 1 V gap, so by symmetry each half sits at
+        // ±0.5 V everywhere. Measured 0.498–0.527 on a 1.4 mm mesh, 0.499–0.513 on 0.7 mm.
+        var table = new LayeredKernelTable(Substrate, 0.3e9, 0.025);
+        var centre = SurfaceMeshBuilder.BuildRectangularPlate(
+            PatchW, PatchL, MeshEdge, z: Thickness, portOffset: PatchL / 2, portGapWidth: 0.5e-3);
+        var solution = new SurfaceMomSolver().Solve(centre.Structure!, table, centre.Port!);
+        foreach (double y in new[] { -4.0e-3, -2.265e-3, -1.0e-3 })
+        {
+            var below = LayeredPotentialProbe.EdgeVoltage(centre.Structure!, table, solution, new Vector3D(0, y, Thickness));
+            var above = LayeredPotentialProbe.EdgeVoltage(centre.Structure!, table, solution, new Vector3D(0, -y, Thickness));
+            Assert.InRange(-below.Real, 0.47, 0.54);
+            Assert.InRange(above.Real, 0.47, 0.54);
+            Assert.Equal(-below.Real, above.Real, 5);
+        }
     }
 
     [Fact]
