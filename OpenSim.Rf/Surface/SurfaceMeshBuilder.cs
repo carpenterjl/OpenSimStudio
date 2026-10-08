@@ -27,10 +27,14 @@ public static class SurfaceMeshBuilder
     /// <summary>Triangles with a smaller minimum angle [deg] are reported.</summary>
     private const double MinAngleWarningDegrees = 10.0;
 
+    /// <summary>Rows across a finite port gap at the least.</summary>
+    internal const int GapRows = 3;
+
     public static SurfaceGridResult BuildRectangularPlate(double width, double length,
         double maxEdgeLength, double z = 0, double portFraction = 0.5,
         GroundPlane? ground = null, int maxUnknowns = 2000,
-        (double X, double Y)? snapVertex = null, double? portOffset = null)
+        (double X, double Y)? snapVertex = null, double? portOffset = null,
+        double? portGapWidth = null)
     {
         // portOffset: the port row's PHYSICAL distance from the −length/2 edge [m]. A vertex
         // row is placed exactly there, so the gap does not move when the mesh changes
@@ -38,6 +42,18 @@ public static class SurfaceMeshBuilder
         if (portOffset is { } requested && !(requested > 0 && requested < length))
             return SurfaceGridResult.Failure(
                 $"the port offset {requested:g4} m must lie strictly inside the plate length {length:g4} m");
+        // portGapWidth: a FINITE gap of this width centred on the offset, across the whole
+        // width — rows at both of its sides, and the field V/g impressed between them. A delta
+        // gap's impedance does not converge under refinement (its own capacitance grows as
+        // ln 1/h); this one does once the mesh resolves the gap (FU-8).
+        if (portGapWidth is { } gap)
+        {
+            if (portOffset is not { } centre)
+                return SurfaceGridResult.Failure("a finite port gap needs the port offset it is centred on");
+            if (!(gap > 0 && centre - gap / 2 > 0 && centre + gap / 2 < length))
+                return SurfaceGridResult.Failure(
+                    $"the {gap:g4} m gap centred {centre:g4} m from the edge must lie inside the plate length {length:g4} m");
+        }
 
         if (width <= 0 || length <= 0 || maxEdgeLength <= 0)
             return SurfaceGridResult.Failure("the plate needs positive width, length, and element size");
@@ -49,7 +65,24 @@ public static class SurfaceMeshBuilder
         int n = Math.Max(2, (int)Math.Ceiling(length / maxEdgeLength));
         int portRow = Math.Clamp((int)Math.Round(portFraction * n), 1, n - 1);
         var rowY = new double[0];
-        if (portOffset is { } offset)
+        if (portGapWidth is { } g && portOffset is { } gapCentre)
+        {
+            // Three runs, each spaced uniformly on its own: rim to gap, the gap, gap to rim.
+            double lower = gapCentre - g / 2, upper = length - gapCentre - g / 2;
+            int below = Math.Max(1, (int)Math.Ceiling(lower / maxEdgeLength - 1e-9));
+            // The gap is resolved on its own: at least GapRows rows across it whatever the element,
+            // because its field, not the patch's, is what the port impedance is most sensitive to.
+            int inside = Math.Max(GapRows, (int)Math.Ceiling(g / maxEdgeLength - 1e-9));
+            int above = Math.Max(1, (int)Math.Ceiling(upper / maxEdgeLength - 1e-9));
+            n = below + inside + above;
+            portRow = below;
+            rowY = new double[n + 1];
+            for (int j = 0; j <= below; j++) rowY[j] = -length / 2 + lower * j / below;
+            for (int j = 1; j <= inside; j++) rowY[below + j] = -length / 2 + lower + g * j / inside;
+            for (int j = 1; j <= above; j++)
+                rowY[below + inside + j] = -length / 2 + lower + g + upper * j / above;
+        }
+        else if (portOffset is { } offset)
         {
             // Rows below and above the port are spaced uniformly on their own side.
             int below = Math.Max(1, (int)Math.Ceiling(offset / maxEdgeLength - 1e-9));
@@ -153,9 +186,35 @@ public static class SurfaceMeshBuilder
                              "reduced accuracy there, or use a finer mesh.");
         }
 
-        var result = SurfaceGridResult.Success(structure,
-            new SurfacePort(portBases, new Vector3D(0, 1, 0)));
+        var port = new SurfacePort(portBases, new Vector3D(0, 1, 0));
+        if (portGapWidth is { } width2 && portOffset is { } centre2)
+            port = FiniteGapPort(structure, -length / 2 + centre2 - width2 / 2, width2);
+        var result = SurfaceGridResult.Success(structure, port);
         return warnings.Count > 0 ? result with { Warnings = warnings } : result;
+    }
+
+    /// <summary>The finite gap between y = <paramref name="y0"/> and y0 + g, across the whole
+    /// width: the impressed field V/g·ŷ on the triangles between those rows, tested against every
+    /// RWG that has support there. On a triangle the basis is σ(l/2A)(r − p_opp), so
+    /// ⟨f, ŷ⟩ over it is σ(l/2)(y_c − y_opp), and the coefficient c = ⟨f, E⟩/(V·l) is the sum of
+    /// σ(y_c − y_opp)/(2g). A uniform current across the gap then reads back as exactly the
+    /// current that crosses it.</summary>
+    private static SurfacePort FiniteGapPort(SurfaceStructure structure, double y0, double g)
+    {
+        var coefficient = new Dictionary<int, double>();
+        double tolerance = 1e-9 * g;
+        for (int t = 0; t < structure.Triangles.Count; t++)
+        {
+            double yc = structure.TriangleCentroids[t].Y;
+            if (yc < y0 - tolerance || yc > y0 + g + tolerance) continue;
+            foreach (var (basis, sign, opposite) in structure.TriangleSupports[t])
+            {
+                double c = sign * (yc - structure.Vertices[opposite].Y) / (2 * g);
+                coefficient[basis] = coefficient.GetValueOrDefault(basis) + c;
+            }
+        }
+        var bases = coefficient.Keys.OrderBy(e => e).ToList();
+        return new SurfacePort(bases, new Vector3D(0, 1, 0), bases.Select(e => coefficient[e]).ToList());
     }
 
     public static SurfaceGridResult BuildPatchOverGround(double width, double length,

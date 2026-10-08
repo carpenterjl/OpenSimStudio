@@ -112,15 +112,10 @@ public sealed partial class SurfaceMomSolver
         double gapVolts, double frequencyHz, ComplexDenseMatrix z)
     {
         var rhs = new Complex[surface.BasisCount];
-        var portSigns = new double[port.EdgeBases.Count];
+        var portSigns = PortSigns(surface, port);
         for (int i = 0; i < port.EdgeBases.Count; i++)
         {
             int e = port.EdgeBases[i];
-            var plusCentroid = surface.TriangleCentroids[surface.Edges[e].PlusTriangle];
-            var crossing = surface.Edges[e].MinusTriangle >= 0
-                ? surface.TriangleCentroids[surface.Edges[e].MinusTriangle] - plusCentroid
-                : ThinWireMomSolver.Mirror(plusCentroid, surface.Ground!.SurfaceZ) - plusCentroid;
-            portSigns[i] = Vector3D.Dot(crossing, port.Direction) >= 0 ? 1.0 : -1.0;
             rhs[e] = portSigns[i] * gapVolts * surface.Edges[e].Length;
         }
 

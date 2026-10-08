@@ -105,6 +105,9 @@
                 <Label Content="Patch gap from edge [mm]"/>
                 <TextBox x:Name="PatchGapOffsetBox" Text="{Binding Antenna.PatchGapOffsetMm}"
                          ToolTip="Edge-fed patch only: where the series-gap port cuts the patch, measured from the edge. 0 = one eighth of the patch length."/>
+                <Label Content="Patch gap width [mm]"/>
+                <TextBox x:Name="PatchGapWidthBox" Text="{Binding Antenna.PatchGapWidthMm}"
+                         ToolTip="Edge-fed patch only: the physical width of the series gap, centred on the position above. The port's impedance depends on it (a gap is a capacitor), and converges under mesh refinement for a fixed width. 0 = one eighteenth of the patch length."/>
             </UniformGrid>
             <CheckBox Content="Mesh convergence check (re-solve 1.5× finer)"
                       IsChecked="{Binding Antenna.CheckMeshConvergence}"

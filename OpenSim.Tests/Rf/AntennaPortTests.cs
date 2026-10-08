@@ -150,19 +150,51 @@ public class AntennaPortTests
         Assert.Null(SurfaceMeshBuilder.BuildRectangularPlate(w, l, 1e-3, portOffset: l).Structure);
     }
 
+    [Fact]
+    public void FiniteGap_ReadsAUniformCurrentAsTheCurrentThatCrossesIt()
+    {
+        // The port current of a finite gap is Σ c_m·l_m·I_m with c_m·l_m = ⟨f_m, E_gap⟩/V, the
+        // average over the gap of the current crossing it. A uniform J = J₀ŷ is exactly
+        // representable by RWGs (I_m = J·n̂_m on every interior edge), so it must read back as
+        // exactly J₀·W, on any mesh and with any number of rows across the gap.
+        double w = 1.186e-2, l = 0.906e-2, j0 = 0.37;
+        foreach (double element in new[] { 1.4e-3, 0.9e-3, 0.4e-3 })
+        {
+            var grid = SurfaceMeshBuilder.BuildRectangularPlate(w, l, element,
+                portOffset: l / 8, portGapWidth: 0.5e-3, maxUnknowns: 20000);
+            var s = grid.Structure!;
+            var port = grid.Port!;
+            Assert.NotNull(port.Coefficients);
+            Complex current = Complex.Zero;
+            for (int i = 0; i < port.EdgeBases.Count; i++)
+            {
+                var edge = s.Edges[port.EdgeBases[i]];
+                var along = s.Vertices[edge.V2] - s.Vertices[edge.V1];
+                var normal = new Vector3D(along.Y, -along.X, 0) * (1 / along.Length);
+                var crossing = s.TriangleCentroids[edge.MinusTriangle] - s.TriangleCentroids[edge.PlusTriangle];
+                if (Vector3D.Dot(normal, crossing) < 0) normal = normal * -1;
+                current += port.Coefficients![i] * edge.Length * j0 * normal.Y;
+            }
+            Assert.Equal(j0 * w, current.Real, 10);
+        }
+    }
+
     /// <summary>The patch resonance seen at the series gap — the peak of R(f) — by a scan and
     /// a parabola through the three highest points. (With the gap an eighth of the length in
     /// from the edge the reactance does not cross zero; the resistance peak marks the mode.)</summary>
-    private (double Frequency, double Resistance) PatchResonance(double element, double offset)
+    private (double Frequency, double Resistance) PatchResonance(double element, double offset,
+        double? gapWidth = null)
     {
         var substrate = new SubstrateStackup(2.2, 0.0, 1.588e-3);
         double w = 1.186e-2, l = 0.906e-2;
         var grid = SurfaceMeshBuilder.BuildRectangularPlate(w, l, element,
-            z: substrate.ThicknessMeters, portOffset: offset);
+            z: substrate.ThicknessMeters, portOffset: offset, portGapWidth: gapWidth);
         var solver = new SurfaceMomSolver();
         var f = new List<double>();
         var r = new List<double>();
-        for (double frequency = 10.125e9; frequency <= 10.76e9; frequency += 0.125e9)
+        // A finite gap has less capacitance than a delta gap, so its peak sits higher.
+        double start = gapWidth is null ? 10.125e9 : 10.45e9;
+        for (double frequency = start; frequency <= start + 0.64e9; frequency += 0.125e9)
         {
             var table = new LayeredKernelTable(substrate, frequency, 0.025);
             Complex z = solver.Solve(grid.Structure!, table, grid.Port!).InputImpedance;
@@ -181,21 +213,23 @@ public class AntennaPortTests
     [Fact]
     public void PatchGap_Resonance_UnderRefinement()
     {
-        // The Balanis patch (εr 2.2, 1.588 mm, 10 GHz design) with the series gap at a
-        // fixed L/8 from the edge, at 10 and at 15 elements along the resonant length.
-        // Measured: resonance 10.503 → 10.445 GHz (0.55 %), peak resistance 43.2 → 39.8 Ω
-        // (8 %). The frequency meets the plan's 5 % gate with room; the RESISTANCE DOES
-        // NOT at these densities, and this test pins what was measured (10 %), not the
-        // gate. It is the case the UI's mesh check exists to flag as "NOT converged".
-        // With the old mesh-row port the gap itself moved with the mesh and the
-        // resistance scaled with the square of the element size.
+        // The Balanis patch (εr 2.2, 1.588 mm, 10 GHz design) with a 0.5 mm series gap
+        // centred L/8 from the edge, at 10 and at 15 elements along the resonant length: the
+        // plan's gate, under 5 % between two successive refinements (FU-8).
+        //
+        // A DELTA gap never meets it. Its peak resistance at 8/10/12/15 elements was 47.65 /
+        // 43.16 / 41.60 / 39.75 Ω — past 10 elements falling linearly in ln h, about 8.5 Ω per
+        // unit, which is the gap's own capacitance growing as ln(1/h); grading the mesh toward
+        // the rim did not change that (7.7–7.8 % from 10 to 15). A gap of physical width has a
+        // finite capacitance, and with its three rows resolving it the same four meshes read
+        // 65.46 / 64.91 / 64.97 / 64.68 Ω (10.821 → 10.757 GHz).
         double offset = 0.906e-2 / 8;
-        var coarse = PatchResonance(0.906e-2 / 10, offset);
-        var fine = PatchResonance(0.906e-2 / 15, offset);
+        var coarse = PatchResonance(0.906e-2 / 10, offset, gapWidth: 0.5e-3);
+        var fine = PatchResonance(0.906e-2 / 15, offset, gapWidth: 0.5e-3);
         _output.WriteLine($"coarse {coarse}; fine {fine}");
         Assert.InRange(fine.Frequency / coarse.Frequency, 0.99, 1.01);
-        Assert.InRange(fine.Resistance / coarse.Resistance, 0.90, 1.10);
-        Assert.False(MeshConvergence.IsConverged(
+        Assert.InRange(fine.Resistance / coarse.Resistance, 0.95, 1.05);
+        Assert.True(MeshConvergence.IsConverged(
             new Complex(coarse.Resistance, 0), new Complex(fine.Resistance, 0)));
     }
 

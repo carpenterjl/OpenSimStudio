@@ -189,6 +189,11 @@ public partial class AntennaViewModel : ObservableObject
     /// one eighth of the patch length. A physical position, so it does not move with the mesh.</summary>
     [ObservableProperty] private double _patchGapOffsetMm;
 
+    /// <summary>Edge-fed patch: physical width of the series gap [mm], centred on the offset. 0 ⇒
+    /// one eighteenth of the patch length. A finite gap's impedance converges under refinement; a
+    /// delta gap's does not (its capacitance grows as ln 1/h).</summary>
+    [ObservableProperty] private double _patchGapWidthMm;
+
     /// <summary>Near-field sample grid resolution per axis (n³ arrows).</summary>
     [ObservableProperty] private int _gridResolution = 9;
 
@@ -1129,6 +1134,7 @@ public partial class AntennaViewModel : ObservableObject
             : wavelengthElement;
         // The edge-fed patch's series gap, at a physical distance from the edge.
         double gapOffset = PatchGapOffsetMm > 0 ? PatchGapOffsetMm * 1e-3 : PlateLengthMm * 1e-3 / 8;
+        double gapWidth = PatchGapWidthMm > 0 ? PatchGapWidthMm * 1e-3 : PlateLengthMm * 1e-3 / 18;
 
         OpenSim.Rf.Surface.SurfaceGridResult grid;
         switch (SourceMode)
@@ -1166,7 +1172,7 @@ public partial class AntennaViewModel : ObservableObject
                 {
                     grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
                         PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
-                        z: groundZ + PatchHeightMm * 1e-3, portOffset: gapOffset);
+                        z: groundZ + PatchHeightMm * 1e-3, portOffset: gapOffset, portGapWidth: gapWidth);
                     substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                         SubstrateEpsR, Math.Max(SubstrateTanD, 0), PatchHeightMm * 1e-3);
                 }
@@ -1175,7 +1181,7 @@ public partial class AntennaViewModel : ObservableObject
                     grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
                         PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
                         z: groundZ + PatchHeightMm * 1e-3,
-                        ground: new GroundPlane(groundZ), portOffset: gapOffset);
+                        ground: new GroundPlane(groundZ), portOffset: gapOffset, portGapWidth: gapWidth);
                 }
                 break;
 
@@ -1234,7 +1240,7 @@ public partial class AntennaViewModel : ObservableObject
                 double hSub = PatchHeightMm * 1e-3;
                 grid = OpenSim.Rf.Surface.SurfaceMeshBuilder.BuildRectangularPlate(
                     PlateWidthMm * 1e-3, PlateLengthMm * 1e-3, plateElement,
-                    z: groundZ + hSub, portOffset: gapOffset);
+                    z: groundZ + hSub, portOffset: gapOffset, portGapWidth: gapWidth);
                 substrate = new OpenSim.Rf.Layered.SubstrateStackup(
                     SubstrateEpsR, Math.Max(SubstrateTanD, 0), hSub);
                 layered = new LayeredSpec(
@@ -1500,7 +1506,8 @@ public partial class AntennaViewModel : ObservableObject
             }
             string portLabel = probe is not null ? ""
                 : SourceMode == PatchMode || SourceMode == CoveredPatchMode
-                    ? $" Port: a series gap across the full patch width, "
+                    ? $" Port: a series gap {(PatchGapWidthMm > 0 ? PatchGapWidthMm : PlateLengthMm / 18):g3} mm wide "
+                      + $"across the full patch width, centred "
                       + $"{(PatchGapOffsetMm > 0 ? PatchGapOffsetMm : PlateLengthMm / 8):g3} mm in from the edge. "
                       + "Zin is the impedance in series at that cut — NOT the ground-referenced edge or "
                       + "inset-feed impedance; use the probe-fed patch for a ground-referenced figure."

@@ -128,11 +128,22 @@ public sealed partial class SurfaceMomSolver
         return SolveMultiPortAssembled(surface, ports, kernel.FrequencyHz, z);
     }
 
-    /// <summary>The sign with which each edge of a port is driven: +1 where the edge's own
+    /// <summary>The coefficient with which each edge of a port is driven (rhs = c·V·l, port
+    /// current Σ c·l·I): a finite gap's own coefficients, or for a delta gap +1 where the edge's
     /// T⁺→T⁻ crossing runs along the port direction (a grounded rim edge crosses into the
-    /// plane).</summary>
+    /// plane) and −1 otherwise.</summary>
     private static double[] PortSigns(SurfaceStructure surface, SurfacePort port)
     {
+        if (port.Coefficients is { } given)
+        {
+            if (given.Count != port.EdgeBases.Count)
+                throw new ArgumentException(
+                    $"The port has {port.EdgeBases.Count} edges but {given.Count} coefficients.", nameof(port));
+            foreach (int e in port.EdgeBases)
+                if (e < 0 || e >= surface.BasisCount)
+                    throw new ArgumentOutOfRangeException(nameof(port), $"Port edge {e} is outside 0..{surface.BasisCount - 1}.");
+            return given.ToArray();
+        }
         var signs = new double[port.EdgeBases.Count];
         for (int i = 0; i < signs.Length; i++)
         {

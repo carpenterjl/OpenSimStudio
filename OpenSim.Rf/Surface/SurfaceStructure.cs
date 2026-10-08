@@ -208,8 +208,15 @@ public sealed class SurfaceStructure
 /// <summary>A delta-gap voltage port across a group of interior edges (one edge for
 /// unstructured meshes; a colinear vertex-line group on wizard grids). The reference
 /// <see cref="Direction"/> orients the port: an RWG basis whose T⁺→T⁻ crossing agrees
-/// with it is driven at +V·l, the opposite at −V·l.</summary>
-public sealed record SurfacePort(IReadOnlyList<int> EdgeBases, Vector3D Direction);
+/// with it is driven at +V·l, the opposite at −V·l.
+///
+/// <para><see cref="Coefficients"/> makes it a FINITE gap instead: basis m is driven at
+/// c_m·V·l_m and the port current is Σ c_m·l_m·I_m, so c_m·l_m = ⟨f_m, E_gap⟩/V for the
+/// impressed field of the gap. A delta gap's own capacitance grows as ln(1/h) under
+/// refinement and its impedance never converges; a gap of physical width does (FU-8). Null is
+/// the delta gap, with c = ±1 from <see cref="Direction"/>.</para></summary>
+public sealed record SurfacePort(IReadOnlyList<int> EdgeBases, Vector3D Direction,
+    IReadOnlyList<double>? Coefficients = null);
 
 /// <summary>Either a solvable surface or the specific reason none could be built,
 /// plus accuracy warnings that must reach the user (never silently degraded).</summary>
