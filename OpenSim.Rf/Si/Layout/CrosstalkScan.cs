@@ -34,7 +34,15 @@ public sealed record CrosstalkScanOptions
 /// <summary>One stretch geometry two nets share: same layer, widths and gap.</summary>
 public sealed record CrosstalkRun(int Layer, double WidthAMeters, double WidthBMeters, double EdgeGapMeters,
     double LengthMeters, double NearEndCoupling, double FarEndCouplingSecondsPerMeter,
-    double DelaySecondsPerMeter, double MutualCapacitanceFaradsPerMeter = 0);
+    double DelaySecondsPerMeter, double MutualCapacitanceFaradsPerMeter = 0)
+{
+    /// <summary>Width of the copper running between the two [m]; 0 when there is none.</summary>
+    public double GuardWidthMeters { get; init; }
+
+    /// <summary>The copper between them belongs to the reference plane's net (a stitched
+    /// ground guard), rather than being another signal.</summary>
+    public bool GuardIsGround { get; init; }
+}
 
 /// <summary>Two nets that run side by side, with what couples between them.</summary>
 public sealed record CrosstalkPair
@@ -106,6 +114,10 @@ public static class CrosstalkScan
     {
         public int Layer;
         public double WidthA, WidthB, Gap, Length;
+        /// <summary>Copper of a third net between the two over most of the run: its width,
+        /// its centre's distance from A's centre toward B, and its net.</summary>
+        public double GuardWidth, GuardFromA;
+        public CopperNet? GuardNet;
         public double LongestPiece;
         public Point2 At;
         public List<Point2> Samples = new();
@@ -179,11 +191,41 @@ public static class CrosstalkScan
                     if (!pairs.TryGetValue((first.Id, second.Id), out var pair))
                         pairs[(first.Id, second.Id)] = pair = new PairData { A = first, B = second };
                     double wA = swap ? tj.Width : ti.Width, wB = swap ? ti.Width : tj.Width;
+
+                    // Copper of a third net between the two, along most of this run: a guard.
+                    double guardWidth = 0, guardFromA = 0;
+                    CopperNet? guardNet = null;
+                    double bestOverlap = 0;
+                    foreach (int k in list)
+                    {
+                        if (k == i || k == j) continue;
+                        var (tk, nk) = traces[k];
+                        if (ReferenceEquals(nk, ni) || ReferenceEquals(nk, nj) || tk.LayerOrder != ti.LayerOrder) continue;
+                        if (Math.Abs(Point2.Dot((tk.End - tk.Start) * (1 / tk.Length), axis)) < cosTolerance) continue;
+                        double at = Point2.Dot(tk.Midpoint - ti.Start, normal);
+                        // Inside the gap, edges and all, on the same side as tj.
+                        if (Math.Sign(at) != Math.Sign(offset)) continue;
+                        double near = Math.Abs(at) - tk.Width / 2, far = Math.Abs(at) + tk.Width / 2;
+                        if (near <= ti.Width / 2 || far >= Math.Abs(offset) - tj.Width / 2) continue;
+                        double kA = Point2.Dot(tk.Start - ti.Start, axis), kB = Point2.Dot(tk.End - ti.Start, axis);
+                        double overlap = Math.Min(hi, Math.Max(kA, kB)) - Math.Max(lo, Math.Min(kA, kB));
+                        if (overlap < 0.5 * (hi - lo) || overlap <= bestOverlap) continue;
+                        bestOverlap = overlap;
+                        guardWidth = tk.Width;
+                        double fromTi = Math.Abs(at), pitchHere = Math.Abs(offset);
+                        guardFromA = swap ? pitchHere - fromTi : fromTi;
+                        guardNet = nk;
+                    }
+
                     var key = (ti.LayerOrder, (long)Math.Round(wA * 1e6), (long)Math.Round(wB * 1e6),
-                        (long)Math.Round(gap * 1e6 / 5));
+                        (long)Math.Round(gap * 1e6 / 5) * 100000 + (long)Math.Round(guardWidth * 1e6) * 1000
+                        + (long)Math.Round(guardFromA * 1e6 / 5));
                     if (!pair.Groups.TryGetValue(key, out var group))
                         pair.Groups[key] = group = new Group
-                            { Layer = ti.LayerOrder, WidthA = wA, WidthB = wB, Gap = gap };
+                        {
+                            Layer = ti.LayerOrder, WidthA = wA, WidthB = wB, Gap = gap,
+                            GuardWidth = guardWidth, GuardFromA = guardFromA, GuardNet = guardNet
+                        };
                     double length = hi - lo;
                     group.Length += length;
                     group.Gap = Math.Min(group.Gap, gap);
@@ -226,25 +268,44 @@ public static class CrosstalkScan
                 var substrate = BoardReferencePlanes.Resolve(board, group.Layer, group.Samples, own, coupled,
                     out string planeFailure);
                 if (substrate is null) { failure ??= planeFailure; continue; }
+                bool guardIsGround = false;
+                if (group.GuardNet is { } guardNet)
+                {
+                    var reference = BoardCoplanarGround.ReferenceNets(board, substrate.PlaneLayers, group.Samples);
+                    guardIsGround = reference.Nets.Contains(guardNet)
+                        || (!string.IsNullOrWhiteSpace(guardNet.Name) && reference.Names.Contains(guardNet.Name));
+                }
                 string key = string.Join("|", substrate.Stackup.Layers.Select(l =>
                         FormattableString.Invariant($"{l.RelativePermittivity:r},{l.ThicknessMeters:r}")))
                     + FormattableString.Invariant(
-                        $"|{substrate.MetalInterface}|{substrate.TopGround}|{group.WidthA:r}|{group.WidthB:r}|{Math.Round(group.Gap * 1e6 / 5)}|{stackup.CopperThicknessOf(group.Layer):r}");
+                        $"|{substrate.MetalInterface}|{substrate.TopGround}|{group.WidthA:r}|{group.WidthB:r}|{Math.Round(group.Gap * 1e6 / 5)}|{stackup.CopperThicknessOf(group.Layer):r}")
+                    + FormattableString.Invariant($"|{group.GuardWidth:r}|{Math.Round(group.GuardFromA * 1e6 / 5)}");
                 if (!solved.TryGetValue(key, out var k))
                 {
                     double thickness = stackup.CopperThicknessOf(group.Layer);
                     double pitch = group.Gap + (group.WidthA + group.WidthB) / 2;
-                    var section = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface, new[]
+                    var traceList = new List<TraceCrossSection>
                     {
                         new TraceCrossSection(-pitch / 2, group.WidthA, thickness, options.ConductivitySiemensPerMeter),
                         new TraceCrossSection(pitch / 2, group.WidthB, thickness, options.ConductivitySiemensPerMeter),
-                    }, substrate.TopGround);
-                    var rlgc = RlgcExtractor.Extract(section, Model);
+                    };
+                    // A guard is solved as a conductor and then held quiet: tied to the reference
+                    // along its length, which a stitched ground guard is, and which a terminated
+                    // neighbouring signal nearly is for the coupling between the other two.
+                    if (group.GuardWidth > 0)
+                        traceList.Add(new TraceCrossSection(-pitch / 2 + group.GuardFromA, group.GuardWidth, thickness,
+                            options.ConductivitySiemensPerMeter) { IsGround = true });
+                    var section = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface, traceList,
+                        substrate.TopGround);
+                    var rlgc = BoardCoupledResult.Reduce(section, RlgcExtractor.Extract(section, Model));
                     solved[key] = k = Coefficients(rlgc);
                     mutualCapacitance[key] = -rlgc.CapacitanceFaradsPerMeter[0, 1];
                 }
                 runs.Add(new CrosstalkRun(group.Layer, group.WidthA, group.WidthB, group.Gap, group.Length,
-                    k.Near, k.Far, k.Delay, mutualCapacitance[key]));
+                    k.Near, k.Far, k.Delay, mutualCapacitance[key])
+                {
+                    GuardWidthMeters = group.GuardWidth, GuardIsGround = guardIsGround
+                });
             }
 
             var longest = pair.Groups.Values.MaxBy(g => g.LongestPiece)!;
@@ -276,8 +337,10 @@ public static class CrosstalkScan
         {
             $"Crosstalk as a fraction of the aggressor's swing for a {options.RiseTimeSeconds * 1e9:g3} ns edge, "
                 + "both lines matched at both ends; a mismatched end reflects and can double it.",
-            "Each pair is solved as two traces alone over their reference plane(s): a trace or a ground "
-                + "guard between them is not in the solve, so a pair with copper in between is over-stated.",
+            "Each pair is solved as its two traces over their reference plane(s), with the copper of a third "
+                + "net that runs between them along most of a run (a guard) solved too and held quiet: exact for a "
+                + "ground guard stitched to the plane, close for a terminated signal trace. Other neighbours are "
+                + "not in the solve.",
             $"Only traces on the same layer within {options.MaxEdgeGapMeters * 1e3:g3} mm edge to edge and within "
                 + $"{options.AngleToleranceDegrees:g2}° of parallel are scanned; coupling between layers (broadside) "
                 + "and between vias is not.",

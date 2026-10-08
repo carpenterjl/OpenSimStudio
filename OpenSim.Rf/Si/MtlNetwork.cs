@@ -146,6 +146,68 @@ public sealed record MtlLeadSection : MtlSectionBase
     }
 }
 
+/// <summary>
+/// A section where SOME of the conductors run coupled over one length and the rest pass
+/// through it untouched: three nets of which two run side by side for a while. The coupled
+/// group's chain sits in the rows and columns of its conductors; every other conductor gets an
+/// exact identity block (it advances in a lead section of its own, before or after).
+/// </summary>
+public sealed record MtlGroupSection : MtlSectionBase
+{
+    private readonly int _total;
+
+    /// <param name="group">The coupled section of the group's conductors.</param>
+    /// <param name="conductors">Which of the cascade's conductors the group's are, in the
+    /// group section's own conductor order.</param>
+    /// <param name="total">How many conductors the cascade has.</param>
+    public MtlGroupSection(MtlSection group, IReadOnlyList<int> conductors, int total)
+    {
+        if (conductors.Count != group.ConductorCount)
+            throw new ArgumentException($"The group has {group.ConductorCount} conductors but {conductors.Count} indices.", nameof(conductors));
+        if (conductors.Distinct().Count() != conductors.Count || conductors.Any(c => c < 0 || c >= total))
+            throw new ArgumentException("The group's conductor indices must be distinct and within the cascade.", nameof(conductors));
+        Group = group;
+        Conductors = conductors.ToArray();
+        _total = total;
+    }
+
+    public MtlSection Group { get; }
+    public IReadOnlyList<int> Conductors { get; }
+
+    public override int ConductorCount => _total;
+    public override double LongestLengthMeters => Group.LengthMeters;
+
+    internal override double DelaySeconds(double frequencyHz) => Group.DelaySeconds(frequencyHz);
+
+    internal override ComplexDenseMatrix Chain(double frequencyHz)
+    {
+        int n = _total, k = Conductors.Count;
+        var total = new ComplexDenseMatrix(2 * n, 2 * n);
+        for (int i = 0; i < n; i++)
+        {
+            total[i, i] = Complex.One;
+            total[n + i, n + i] = Complex.One;
+        }
+        var block = Group.Chain(frequencyHz);
+        for (int a = 0; a < k; a++)
+        {
+            int i = Conductors[a];
+            total[i, i] = Complex.Zero;
+            total[n + i, n + i] = Complex.Zero;
+        }
+        for (int a = 0; a < k; a++)
+            for (int b = 0; b < k; b++)
+            {
+                int i = Conductors[a], j = Conductors[b];
+                total[i, j] = block[a, b];
+                total[i, n + j] = block[a, k + b];
+                total[n + i, j] = block[k + a, b];
+                total[n + i, n + j] = block[k + a, k + b];
+            }
+        return total;
+    }
+}
+
 /// <summary>Per-line linear terminations: a Thevenin driver resistance at the near end
 /// and an R∥C receiver at the far end (R may be PositiveInfinity for an open).</summary>
 public sealed record LineTermination(

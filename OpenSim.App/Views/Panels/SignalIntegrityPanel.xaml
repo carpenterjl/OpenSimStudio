@@ -149,8 +149,13 @@
                              Background="{DynamicResource SurfaceContainerLowestBrush}" BorderBrush="{DynamicResource PanelBorderBrush}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}"
-                                          Foreground="{DynamicResource TextMutedBrush}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}"
+                                              Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                    <ComboBox ItemsSource="{Binding DriverChoices}" SelectedItem="{Binding DriverPin}"
+                                              MinWidth="120" Margin="6,0,0,0" FontSize="11"
+                                              ToolTip="The net's driver pin: its route end nearest this pin is the driven end"/>
+                                </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

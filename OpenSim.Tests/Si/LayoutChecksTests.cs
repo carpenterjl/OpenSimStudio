@@ -1,3 +1,4 @@
+using OpenSim.Rf.Layered;
 using OpenSim.Core.Geometry2D;
 using OpenSim.Pcb.Import;
 using OpenSim.Rf.Si;
@@ -322,6 +323,37 @@ public class LayoutChecksTests
         Assert.Equal(near, pair.NearEnd, 1e-6 * near);
         Assert.Equal(Math.Abs(far) * length / options.RiseTimeSeconds, pair.FarEnd, 1e-6 * pair.FarEnd);
         Assert.True(pair.FarEnd > 0.01);
+    }
+
+    [Fact]
+    public void AGroundGuardBetweenThePair_IsInTheSolve()
+    {
+        // A 0.2 mm GND trace in the middle of a 0.6 mm gap, the same net as the plane under them:
+        // the pair is solved with it, tied to the plane, as the three strips by hand are.
+        const double gap = 0.6e-3, length = 40e-3, guard = 0.2e-3;
+        double pitch = gap + W;
+        var model = new RlgcModel { ThicknessCorrection = true, SurfaceImpedance = false, WidebandDielectric = false };
+        Builder Pair() => new Builder()
+            .Trace("A", 1, 0, 0, length, 0).Trace("B", 1, 0, pitch, length, pitch)
+            .Copper("GND", 2, Rect(-5e-3, -10e-3, 45e-3, 10e-3));
+        var guarded = CrosstalkScan.Run(Pair().Trace("GND", 1, 0, pitch / 2, length, pitch / 2, guard).Build(), ScanOptions(1));
+        var open = CrosstalkScan.Run(Pair().Build(), ScanOptions(1));
+        var run = Assert.Single(guarded.Pairs.Single(p => (p.NetA, p.NetB) == ("A", "B")).Runs);
+        Assert.Equal(guard, run.GuardWidthMeters, 1e-12);
+        Assert.True(run.GuardIsGround);
+
+        var stack = new LayeredStackup(new[] { new LayeredStackup.Layer(4.0, 0, 0.2e-3) });
+        var section = new CoupledLineCrossSection(stack, 0, new[]
+        {
+            TraceCrossSection.Copper(-pitch / 2, W), TraceCrossSection.Copper(0, guard) with { IsGround = true },
+            TraceCrossSection.Copper(pitch / 2, W)
+        });
+        var expected = CrosstalkScan.Coefficients(BoardCoupledResult.Reduce(section, RlgcExtractor.Extract(section, model)));
+        Assert.Equal(expected.Near, run.NearEndCoupling, 1e-6 * expected.Near);
+
+        double without = Assert.Single(open.Pairs).Runs[0].NearEndCoupling;
+        _output.WriteLine($"near-end coefficient: {without:e3} open, {run.NearEndCoupling:e3} with the ground guard");
+        Assert.True(run.NearEndCoupling < 0.5 * without);
     }
 
     [Fact]

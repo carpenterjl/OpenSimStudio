@@ -75,7 +75,21 @@ public sealed record BoardCoupledOptions
 /// stretch where every net runs alone over its own length (<see cref="LeadLengthsMeters"/>).</summary>
 public sealed record BoardRouteSection(
     CoupledLineCrossSection? Coupled, double CoupledLengthMeters,
-    IReadOnlyList<double>? LeadLengthsMeters);
+    IReadOnlyList<double>? LeadLengthsMeters)
+{
+    /// <summary>The nets the coupled section carries, ascending; null is every net. The rest
+    /// pass through it unchanged.</summary>
+    public IReadOnlyList<int>? Group { get; init; }
+
+    /// <summary>For each net of the group (ascending), which signal conductor of
+    /// <see cref="Coupled"/> it is — the cross-section numbers its traces left to right.
+    /// Null is the identity.</summary>
+    public IReadOnlyList<int>? ConductorOrder { get; init; }
+
+    /// <summary>For a lead section, the single-trace cross-section each net runs this piece
+    /// at (its width here); null takes <see cref="BoardCoupledResult.LeadCrossSections"/>.</summary>
+    public IReadOnlyList<CoupledLineCrossSection>? LeadSections { get; init; }
+}
 
 /// <summary>
 /// The coupled cross-section extracted from a set of real board nets, plus the network it
@@ -131,14 +145,21 @@ public sealed record BoardCoupledResult(
         RlgcResult Of(CoupledLineCrossSection s) =>
             cache.TryGetValue(s, out var r) ? r : cache[s] = Reduce(s, extract(s));
 
+        int nets = LeadCrossSections.Count;
         var sections = new List<MtlSectionBase>();
         foreach (var s in Sections)
         {
             if (s.Coupled is not null)
-                sections.Add(new MtlSection(Of(s.Coupled), s.CoupledLengthMeters));
+            {
+                var rlgc = s.ConductorOrder is { } order ? RlgcReduction.Permute(Of(s.Coupled), order) : Of(s.Coupled);
+                var coupled = new MtlSection(rlgc, s.CoupledLengthMeters);
+                sections.Add(s.Group is { } group && group.Count < nets
+                    ? new MtlGroupSection(coupled, group, nets)
+                    : coupled);
+            }
             else
                 sections.Add(new MtlLeadSection(s.LeadLengthsMeters!
-                    .Select((l, i) => (Of(LeadCrossSections[i]), l))
+                    .Select((l, i) => (Of(s.LeadSections?[i] ?? LeadCrossSections[i]), l))
                     .ToArray()));
         }
         return new MtlNetwork(sections);
@@ -153,23 +174,25 @@ public sealed record BoardCoupledResult(
 
 /// <summary>
 /// SI Stage S6 — the board multi-trace bridge. Takes 2+ selected copper nets and walks each
-/// net's WHOLE ordered route (pin to pin). Every stretch where all the selected nets run
-/// parallel within a spacing limit becomes a coupled section — widths from the draws,
+/// net's WHOLE ordered route (pin to pin), across layers through its vias. Every stretch where
+/// two or more of the selected nets run parallel on one layer within a spacing limit becomes a
+/// coupled section of those nets (the others pass through it) — widths from the draws,
 /// lateral centres from the perpendicular offsets, the substrate from the reference planes
-/// the board actually has above and below (<see cref="BoardReferencePlanes"/>: microstrip,
-/// embedded microstrip or stripline — or a refusal when no layer has copper under them).
-/// Everything else on each route — pad escapes, bends, the legs of an L or Z, a stretch
-/// where only some of the nets run together — is an uncoupled single-line lead of that
-/// net's own length, cascaded in route order. No routed length is left out. Every section
-/// uses the same <see cref="RlgcExtractor"/> / <see cref="MtlNetwork"/> the wizard uses —
-/// so a synthetic two-trace board round-trips to the wizard geometry's RLGC exactly.
+/// the board actually has above and below that layer (<see cref="BoardReferencePlanes"/>:
+/// microstrip, embedded microstrip or stripline — or a refusal when no layer has copper
+/// under them). Everything else on each route — pad escapes, bends, the legs of an L or Z —
+/// is an uncoupled single-line lead of that net's own length, piece by piece at its own
+/// width and on its own layer, cascaded in route order. No routed length is left out. Every
+/// section uses the same <see cref="RlgcExtractor"/> / <see cref="MtlNetwork"/> the wizard
+/// uses — so a synthetic two-trace board round-trips to the wizard geometry's RLGC exactly.
+/// The network's conductors are the nets in the order they were selected.
 ///
 /// <para>The network's near end is the first net's driven end
 /// (<see cref="BoardCoupledOptions.DriverPoints"/>, else where its chain starts); the
 /// other nets' near ends are the ends on the same side of the coupled stretches.</para>
 ///
 /// <para>Non-conforming topologies are typed failures, never a garbage matrix: a pour/region
-/// net (no centerlines), a net that branches or changes layer (surfaced verbatim from
+/// net (no centerlines), a net that branches (surfaced verbatim from
 /// <see cref="TraceChainBuilder"/>), nets with no parallel run in common, or conductors
 /// that overlap laterally (a broadside pair or one net drawn twice). The
 /// coplanar-at-one-interface contract is the whole layered track's; broadside coupling
@@ -179,7 +202,7 @@ public static class BoardCoupledExtractor
 {
     /// <summary>A straight run of a route: consecutive near-collinear chain segments merged.
     /// A → B in route order; the path coordinate of A and the summed segment length.</summary>
-    private sealed record Run(Point2 A, Point2 B, double Width, double PathStart, double PathLength)
+    private sealed record Run(Point2 A, Point2 B, double Width, double PathStart, double PathLength, int Layer)
     {
         public double Extent => (B - A).Length;
     }
@@ -191,18 +214,59 @@ public static class BoardCoupledExtractor
         public double Length;
         public double DominantWidth;
         public bool MixedWidths;
+        /// <summary>Where the route changes layer through a via.</summary>
+        public int LayerChanges;
     }
 
-    /// <summary>A stretch where every net runs parallel: per net the route's path
-    /// coordinates at its two ends (Lo at the first net's upstream end), the lateral
-    /// offset from the first net's run, and the run's width.</summary>
+    /// <summary>A stretch where the member nets run parallel: per member the route's path
+    /// coordinates at its two ends (Lo at the axis' low end), the lateral offset from the
+    /// anchor's run, the run's width, and how path and axis map onto each other.</summary>
     private sealed class Stretch
     {
         public double Length;
+        public required bool[] Member;
         public required double[] PathLo, PathHi, Offset, Width;
         public required TraceCenterline[] Pieces;
-    }
+        public required (double SA, double SB, double PathStart, double PathLength)[] Map;
+        public required Point2 Origin, Axis, Perp;
+        public double AxisLo, AxisHi;
+        public int Layer;
 
+        public IEnumerable<int> Members => Enumerable.Range(0, Member.Length).Where(i => Member[i]);
+        public int Count => Member.Count(m => m);
+
+        public double PathAt(int net, double s)
+        {
+            var m = Map[net];
+            return m.PathStart + (s - m.SA) / (m.SB - m.SA) * m.PathLength;
+        }
+
+        public double AxisAt(int net, double path)
+        {
+            var m = Map[net];
+            return m.SA + (path - m.PathStart) / m.PathLength * (m.SB - m.SA);
+        }
+
+        /// <summary>The same stretch over [lo, hi] of its axis.</summary>
+        public Stretch Trim(double lo, double hi)
+        {
+            int n = Member.Length;
+            var trimmed = new Stretch
+            {
+                Length = hi - lo, Member = Member, Offset = Offset, Width = Width, Map = Map,
+                Origin = Origin, Axis = Axis, Perp = Perp, AxisLo = lo, AxisHi = hi, Layer = Layer,
+                PathLo = new double[n], PathHi = new double[n], Pieces = new TraceCenterline[n],
+            };
+            foreach (int i in Members)
+            {
+                trimmed.PathLo[i] = PathAt(i, lo);
+                trimmed.PathHi[i] = PathAt(i, hi);
+                var at = Origin + Perp * Offset[i];
+                trimmed.Pieces[i] = new TraceCenterline(Layer, at + Axis * lo, at + Axis * hi, Width[i]);
+            }
+            return trimmed;
+        }
+    }
     public static BoardCoupledResult Extract(PcbBoard board, IReadOnlyList<CopperNet> nets,
         BoardCoupledOptions? options = null)
     {
@@ -213,10 +277,11 @@ public static class BoardCoupledExtractor
         int n = nets.Count;
         double cosTol = Math.Cos(options.AngleToleranceDegrees * Math.PI / 180.0);
 
-        // Every net's ordered route and the common trace layer.
+        // Every net's ordered route: on one layer the planar chain, across layers the chain
+        // through its via barrels, flattened to the trace segments with their layers.
         var routes = new Route[n];
         var drawnLength = new double[n];
-        int layer = -1;
+        var stack = StackupOf(board, options);
         for (int i = 0; i < n; i++)
         {
             var centerlines = NetTraceExtractor.ForNet(board, nets[i]);
@@ -225,72 +290,114 @@ public static class BoardCoupledExtractor
                     $"net '{nets[i].Label}' has no trace centerlines (a pour/region net cannot "
                     + "be a coupled line — select routed signal nets).");
 
-            var chain = TraceChainBuilder.Build(centerlines);
-            if (chain.Chain is null)
-                return BoardCoupledResult.Failure($"net '{nets[i].Label}': {chain.FailureReason}");
-
-            int netLayer = chain.Chain[0].LayerOrder;
-            if (layer < 0) layer = netLayer;
-            else if (netLayer != layer)
-                return BoardCoupledResult.Failure(
-                    $"net '{nets[i].Label}' routes on layer L{netLayer} but the others are on "
-                    + $"L{layer} — a coplanar coupled line needs every conductor on one layer.");
-
-            var ordered = chain.Chain.ToList();
+            List<TraceCenterline> ordered;
+            if (centerlines.Select(c => c.LayerOrder).Distinct().Count() == 1)
+            {
+                var chain = TraceChainBuilder.Build(centerlines);
+                if (chain.Chain is null)
+                    return BoardCoupledResult.Failure($"net '{nets[i].Label}': {chain.FailureReason}");
+                ordered = chain.Chain.ToList();
+            }
+            else
+            {
+                var meshOptions = new NetMeshOptions
+                {
+                    CopperThickness = stack.DefaultCopperThickness, LayerThickness = stack.LayerThickness,
+                    DefaultDielectricThickness = stack.DefaultGapThickness, DielectricGapThickness = stack.GapThickness
+                };
+                var chain = TraceChainBuilder.Build(centerlines, nets[i].StitchingVias, meshOptions, nets[i].Islands);
+                if (chain.Chain is null)
+                    return BoardCoupledResult.Failure($"net '{nets[i].Label}': {chain.FailureReason}");
+                ordered = Flatten(chain);
+            }
             if (i == 0 && StartsAtFarEnd(ordered, options, 0)) ordered = Reversed(ordered);
             routes[i] = RouteOf(ordered, cosTol);
             drawnLength[i] = centerlines.Sum(c => c.Length);
         }
 
-        // Stretches where ALL nets run parallel, found along each run of the first net.
-        var stretches = FindStretches(routes, cosTol, options.CouplingSpacingLimitMeters);
-        if (stretches.Count == 0)
+        const double slack = 1e-9;
+        // Stretches where some of the nets run parallel: every group of two or more, largest
+        // groups and longest stretches first, each trimmed to where no stretch already taken
+        // claims any of its nets.
+        var candidates = new List<Stretch>();
+        for (int mask = 1; mask < 1 << n; mask++)
+        {
+            var members = Enumerable.Range(0, n).Where(i => (mask & (1 << i)) != 0).ToArray();
+            if (members.Length < 2) continue;
+            candidates.AddRange(FindStretches(routes, members, cosTol, options.CouplingSpacingLimitMeters));
+        }
+        var taken = new List<Stretch>();
+        foreach (var c in candidates.OrderByDescending(s => s.Count).ThenByDescending(s => s.Length))
+        {
+            var cuts = new List<(double Lo, double Hi)>();
+            foreach (var a in taken)
+                foreach (int i in c.Members)
+                {
+                    if (!a.Member[i]) continue;
+                    double s0 = c.AxisAt(i, a.PathLo[i]), s1 = c.AxisAt(i, a.PathHi[i]);
+                    cuts.Add((Math.Min(s0, s1), Math.Max(s0, s1)));
+                }
+            double narrowest = c.Members.Min(i => c.Width[i]);
+            foreach (var (lo, hi) in Remaining(c.AxisLo, c.AxisHi, cuts))
+                if (hi - lo > narrowest) taken.Add(c.Trim(lo, hi));
+        }
+        if (taken.Count == 0)
             return BoardCoupledResult.Failure(NoCommonRunReason(nets, routes, cosTol, options));
 
-        // Orient every other net the way the first net traverses the LONGEST stretch: a
-        // net whose path coordinate falls along it is walked from its other end.
-        var longest = stretches.MaxBy(s => s.Length)!;
-        for (int i = 1; i < n; i++)
+        // Orient every net the way the nets it runs with are walked, starting from the first
+        // net and the longest stretches: a net whose path coordinate falls along a stretch is
+        // walked from its other end.
+        var oriented = new bool[n];
+        oriented[0] = true;
+        for (bool changed = true; changed;)
         {
-            if (longest.PathLo[i] <= longest.PathHi[i]) continue;
-            double total = routes[i].Length;
-            foreach (var s in stretches)
+            changed = false;
+            foreach (var s in taken.OrderByDescending(s => s.Length))
             {
-                s.PathLo[i] = total - s.PathLo[i];
-                s.PathHi[i] = total - s.PathHi[i];
+                int known = s.Members.FirstOrDefault(i => oriented[i], -1);
+                if (known < 0) continue;
+                bool forward = s.PathHi[known] > s.PathLo[known];
+                foreach (int i in s.Members.Where(i => !oriented[i]).ToList())
+                {
+                    if ((s.PathHi[i] > s.PathLo[i]) != forward)
+                    {
+                        double total = routes[i].Length;
+                        foreach (var t in taken.Where(t => t.Member[i]))
+                        {
+                            t.PathLo[i] = total - t.PathLo[i];
+                            t.PathHi[i] = total - t.PathHi[i];
+                        }
+                        routes[i] = RouteOf(Reversed(routes[i].Chain), cosTol);
+                    }
+                    oriented[i] = true;
+                    changed = true;
+                }
             }
-            routes[i] = RouteOf(Reversed(routes[i].Chain), cosTol);
         }
 
-        // Keep the stretches every net meets in the same order and the same sense (longest
-        // first); the rest — a fold-back, or stretches two nets meet in opposite order —
-        // cannot sit in one cascade and stay in the leads as uncoupled length.
-        const double slack = 1e-9;
-        var kept = new List<Stretch>();
+        // A stretch some net walks backwards (a fold-back) cannot sit in one cascade, nor can
+        // stretches two nets meet in a different order: the shortest of those goes back to
+        // the leads until every net meets its stretches in route order.
         double droppedCoupling = 0;
-        foreach (var s in stretches.OrderByDescending(s => s.Length))
+        var kept = new List<Stretch>();
+        foreach (var s in taken)
+            if (s.Members.All(i => s.PathHi[i] > s.PathLo[i])) kept.Add(s); else droppedCoupling += s.Length;
+        List<Stretch>? inOrder;
+        while ((inOrder = InRouteOrder(kept, n)) is null)
         {
-            bool ok = Enumerable.Range(0, n).All(i => s.PathHi[i] > s.PathLo[i]);
-            foreach (var k in kept)
-            {
-                if (!ok) break;
-                bool before = s.PathHi[0] <= k.PathLo[0] + slack;
-                bool after = s.PathLo[0] >= k.PathHi[0] - slack;
-                if (!before && !after) { ok = false; break; }
-                for (int i = 1; i < n && ok; i++)
-                    ok = before ? s.PathHi[i] <= k.PathLo[i] + slack : s.PathLo[i] >= k.PathHi[i] - slack;
-            }
-            if (ok) kept.Add(s); else droppedCoupling += s.Length;
+            var shortest = kept.MinBy(s => s.Length)!;
+            kept.Remove(shortest);
+            droppedCoupling += shortest.Length;
         }
+        kept = inOrder;
         if (kept.Count == 0)
             return BoardCoupledResult.Failure(NoCommonRunReason(nets, routes, cosTol, options));
-        kept.Sort((a, b) => a.PathLo[0].CompareTo(b.PathLo[0]));
 
         // Lateral overlap (edge gap ≤ 0) in any stretch is not a coplanar coupled line.
         foreach (var s in kept)
         {
-            var order = Enumerable.Range(0, n).OrderBy(i => s.Offset[i]).ToArray();
-            for (int k = 1; k < n; k++)
+            var order = s.Members.OrderBy(i => s.Offset[i]).ToArray();
+            for (int k = 1; k < order.Length; k++)
             {
                 int a = order[k - 1], b = order[k];
                 double edgeGap = (s.Offset[b] - s.Width[b] / 2) - (s.Offset[a] + s.Width[a] / 2);
@@ -302,50 +409,65 @@ public static class BoardCoupledExtractor
             }
         }
 
-        // The substrate: the dielectric between the coupled runs and the reference plane(s)
-        // the board has above and below them.
+        // The substrate of every layer a route runs on: the dielectric between its traces and
+        // the reference plane(s) the board has above and below them, found under that layer's
+        // coupled stretches, or under the routes' own segments there when it has none.
         var ownIslands = nets.SelectMany(net => net.Islands).ToList();
-        var substrate = BoardReferencePlanes.Resolve(board, layer,
-            kept.SelectMany(s => s.Pieces).ToList(), ownIslands, options, out string planeFailure);
-        if (substrate is null)
-            return BoardCoupledResult.Failure(planeFailure);
-
-        double copperThickness = StackupOf(board, options).CopperThicknessOf(layer);
+        var routeLayers = routes.SelectMany(r => r.Chain.Select(c => c.LayerOrder)).Distinct().OrderBy(l => l).ToList();
+        var substrates = new Dictionary<int, BoardSubstrate>();
+        foreach (int routeLayer in routeLayers)
+        {
+            var samples = kept.Where(s => s.Layer == routeLayer).SelectMany(s => s.Members.Select(i => s.Pieces[i])).ToList();
+            if (samples.Count == 0) samples = routes.SelectMany(r => r.Chain.Where(c => c.LayerOrder == routeLayer)).ToList();
+            var resolved = BoardReferencePlanes.Resolve(board, routeLayer, samples, ownIslands, options, out string planeFailure);
+            if (resolved is null) return BoardCoupledResult.Failure(planeFailure);
+            substrates[routeLayer] = resolved;
+        }
 
         // Ground copper on the trace layer beside each coupled stretch: the reference net(s)
         // under the traces say which copper is ground.
-        var layerThickness = substrate.Stackup.Layers.Select(l => l.ThicknessMeters).ToArray();
-        double toPlaneBelow = layerThickness.Take(substrate.MetalInterface + 1).Sum();
-        double toPlaneAbove = substrate.TopGround ? layerThickness.Skip(substrate.MetalInterface + 1).Sum() : 0;
-        double toPlane = substrate.TopGround ? Math.Min(toPlaneBelow, toPlaneAbove) : toPlaneBelow;
-        var reference = options.CoplanarGround
-            ? BoardCoplanarGround.ReferenceNets(board, substrate.PlaneLayers,
-                BoardReferencePlanes.SamplePoints(kept.SelectMany(s => s.Pieces).ToList()))
-            : (new HashSet<CopperNet>(), new HashSet<string>());
+        var references = new Dictionary<int, (HashSet<CopperNet> Nets, HashSet<string> Names)>();
+        (HashSet<CopperNet> Nets, HashSet<string> Names) ReferenceOf(int on)
+        {
+            if (references.TryGetValue(on, out var known)) return known;
+            return references[on] = options.CoplanarGround
+                ? BoardCoplanarGround.ReferenceNets(board, substrates[on].PlaneLayers,
+                    BoardReferencePlanes.SamplePoints(kept.Where(s => s.Layer == on).SelectMany(s => s.Members.Select(i => s.Pieces[i])).ToList()))
+                : (new HashSet<CopperNet>(), new HashSet<string>());
+        }
         var coplanarNotes = new List<string>();
         int stretchesWithGround = 0;
 
         // One cross-section object per distinct coupled geometry, so a pair that bends and
-        // runs on at the same spacing is solved once.
+        // runs on at the same spacing is solved once. Its traces are numbered left to right;
+        // ConductorOrder takes them back to the nets.
         var sectionCache = new Dictionary<string, CoupledLineCrossSection>();
         var coupledSections = new CoupledLineCrossSection[kept.Count];
+        var conductorOrders = new int[kept.Count][];
         try
         {
             for (int k = 0; k < kept.Count; k++)
             {
                 var s = kept[k];
+                var substrate = substrates[s.Layer];
+                double copperThickness = stack.CopperThicknessOf(s.Layer);
+                var members = s.Members.ToArray();
                 var traces = new List<TraceCrossSection>();
-                for (int i = 0; i < n; i++)
+                foreach (int i in members)
                     traces.Add(new TraceCrossSection(s.Offset[i], s.Width[i],
                         copperThickness, options.ConductivitySiemensPerMeter));
-                if (options.CoplanarGround && reference.Item1.Count > 0)
+                var reference = ReferenceOf(s.Layer);
+                if (options.CoplanarGround && reference.Nets.Count > 0)
                 {
-                    double low = Enumerable.Range(0, n).Min(i => s.Offset[i] - s.Width[i] / 2);
-                    double high = Enumerable.Range(0, n).Max(i => s.Offset[i] + s.Width[i] / 2);
-                    var axis = Unit(s.Pieces[0].End - s.Pieces[0].Start);
-                    var start = s.Pieces[0].Start - new Point2(-axis.Y, axis.X) * s.Offset[0];
-                    var (lowSide, highSide, notes) = BoardCoplanarGround.Find(board, layer, ownIslands, reference,
-                        start, axis, s.Length, low, high, toPlane, substrate.TopGround,
+                    var layerThickness = substrate.Stackup.Layers.Select(l => l.ThicknessMeters).ToArray();
+                    double toPlaneBelow = layerThickness.Take(substrate.MetalInterface + 1).Sum();
+                    double toPlaneAbove = substrate.TopGround ? layerThickness.Skip(substrate.MetalInterface + 1).Sum() : 0;
+                    double toPlane = substrate.TopGround ? Math.Min(toPlaneBelow, toPlaneAbove) : toPlaneBelow;
+                    double low = members.Min(i => s.Offset[i] - s.Width[i] / 2);
+                    double high = members.Max(i => s.Offset[i] + s.Width[i] / 2);
+                    var start = s.Origin + s.Axis * s.AxisLo;
+                    var (lowSide, highSide, notes) = BoardCoplanarGround.Find(board, s.Layer, ownIslands, reference,
+                        start, s.Axis, s.Length, low, high, toPlane, substrate.TopGround,
                         Math.Max(toPlaneBelow, toPlaneAbove));
                     coplanarNotes.AddRange(notes.Select(note => kept.Count > 1
                         ? $"Stretch {k + 1} ({s.Length * 1e3:g4} mm): {note}" : note));
@@ -357,7 +479,7 @@ public static class BoardCoupledExtractor
                             copperThickness, options.ConductivitySiemensPerMeter) { IsGround = true });
                     if (lowSide is not null || highSide is not null) stretchesWithGround++;
                 }
-                string key = string.Join("|", traces.Select(t =>
+                string key = $"L{s.Layer}:" + string.Join(",", members) + "/" + string.Join("|", traces.Select(t =>
                     $"{Math.Round(t.CenterMeters * 1e9)}:{Math.Round(t.WidthMeters * 1e9)}:{t.IsGround}"));
                 if (!sectionCache.TryGetValue(key, out var section))
                 {
@@ -366,44 +488,90 @@ public static class BoardCoupledExtractor
                     sectionCache[key] = section;
                 }
                 coupledSections[k] = section;
+                // The section sorts its traces by centre (stably): the k-th signal is the member
+                // with the k-th smallest offset.
+                var leftToRight = members.OrderBy(i => s.Offset[i]).ToArray();
+                conductorOrders[k] = members.Select(i => Array.IndexOf(leftToRight, i)).ToArray();
             }
         }
         catch (ArgumentException ex) { return BoardCoupledResult.Failure(ex.Message); }
 
         // The uncoupled stretches of each net are priced by the SAME RlgcExtractor over a
-        // single-trace cross-section on the same substrate, at the net's dominant width.
+        // single-trace cross-section on its layer's substrate, piece by piece at the width each
+        // piece is drawn at (the net's dominant width on its first layer is its listed lead
+        // cross-section).
         var leadSections = new CoupledLineCrossSection[n];
+        var leadByWidth = new Dictionary<(int, long), CoupledLineCrossSection>[n];
+        CoupledLineCrossSection LeadSection(int i, double width, int on)
+        {
+            var key = (on, (long)Math.Round(width * 1e9));
+            if (leadByWidth[i].TryGetValue(key, out var existing)) return existing;
+            var substrate = substrates[on];
+            return leadByWidth[i][key] = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface,
+                new[] { new TraceCrossSection(0, width, stack.CopperThicknessOf(on), options.ConductivitySiemensPerMeter) },
+                substrate.TopGround);
+        }
         for (int i = 0; i < n; i++)
-            leadSections[i] = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface,
-                new[] { new TraceCrossSection(0, routes[i].DominantWidth, copperThickness,
-                    options.ConductivitySiemensPerMeter) }, substrate.TopGround);
+        {
+            leadByWidth[i] = new Dictionary<(int, long), CoupledLineCrossSection>();
+            leadSections[i] = LeadSection(i, routes[i].DominantWidth, routes[i].Chain[0].LayerOrder);
+        }
 
-        // The cascade, near → far: lead, coupled, lead, coupled, …, lead. A lead no net
-        // extends into is left out, so a board with no leads keeps its single section.
+        // The cascade, near → far. Before each stretch its own nets run on alone to where it
+        // starts; the others wait for a lead of their own (uncoupled pieces of different nets
+        // do not interact, so where they sit in the cascade does not matter).
         var cascade = new List<BoardRouteSection>();
         var leadTotals = new double[n];
-        void AddLead(Func<int, double> length)
+        var position = new double[n];
+        void AddLead(Func<int, double> until, Func<int, bool> moves)
         {
-            var lengths = new double[n];
+            var pieces = new List<(double Width, int Layer, double Length)>[n];
             for (int i = 0; i < n; i++)
             {
-                double l = length(i);
-                lengths[i] = l > slack ? l : 0;
-                leadTotals[i] += lengths[i];
+                pieces[i] = moves(i) ? Pieces(routes[i], position[i], until(i), slack) : new();
+                leadTotals[i] += pieces[i].Sum(p => p.Length);
+                if (moves(i)) position[i] = Math.Max(position[i], until(i));
             }
-            if (lengths.Any(l => l > 0)) cascade.Add(new BoardRouteSection(null, 0, lengths));
+            int count = pieces.Max(p => p.Count);
+            for (int j = 0; j < count; j++)
+            {
+                var lengths = new double[n];
+                var sections = new CoupledLineCrossSection[n];
+                for (int i = 0; i < n; i++)
+                {
+                    lengths[i] = j < pieces[i].Count ? pieces[i][j].Length : 0;
+                    sections[i] = j < pieces[i].Count ? LeadSection(i, pieces[i][j].Width, pieces[i][j].Layer) : leadSections[i];
+                }
+                if (lengths.Any(l => l > 0))
+                    cascade.Add(new BoardRouteSection(null, 0, lengths)
+                    {
+                        LeadSections = sections
+                    });
+            }
         }
         for (int k = 0; k < kept.Count; k++)
         {
-            int kk = k;
-            AddLead(i => kept[kk].PathLo[i] - (kk == 0 ? 0 : kept[kk - 1].PathHi[i]));
-            cascade.Add(new BoardRouteSection(coupledSections[k], kept[k].Length, null));
+            var s = kept[k];
+            AddLead(i => s.PathLo[i], i => s.Member[i]);
+            var members = s.Members.ToArray();
+            bool identity = conductorOrders[k].Select((c, idx) => c == idx).All(x => x);
+            cascade.Add(new BoardRouteSection(coupledSections[k], s.Length, null)
+            {
+                Group = members.Length < n ? members : null,
+                ConductorOrder = identity ? null : conductorOrders[k],
+            });
+            foreach (int i in members) position[i] = s.PathHi[i];
         }
-        AddLead(i => routes[i].Length - kept[^1].PathHi[i]);
+        AddLead(i => routes[i].Length, _ => true);
 
+        // The principal stretch: the longest that carries every net, else the longest.
         int principal = 0;
         for (int k = 1; k < kept.Count; k++)
-            if (kept[k].Length > kept[principal].Length) principal = k;
+        {
+            bool full = kept[k].Count == n, principalFull = kept[principal].Count == n;
+            if ((full && !principalFull) || (full == principalFull && kept[k].Length > kept[principal].Length))
+                principal = k;
+        }
         double coupledLength = kept.Sum(s => s.Length);
 
         var driverAtNear = new bool[n];
@@ -425,15 +593,22 @@ public static class BoardCoupledExtractor
         RlgcResult Rlgc(CoupledLineCrossSection s) =>
             rlgcCache.TryGetValue(s, out var r) ? r : rlgcCache[s] = RlgcExtractor.Extract(s, options.Model);
         var network = result.BuildNetwork(Rlgc);
-        var rlgc = BoardCoupledResult.Reduce(coupledSections[principal], Rlgc(coupledSections[principal]));
+        var rlgc = RlgcReduction.Permute(
+            BoardCoupledResult.Reduce(coupledSections[principal], Rlgc(coupledSections[principal])),
+            conductorOrders[principal]);
 
-        var assumptions = new List<string>(rlgc.Assumptions) { substrate.Note };
+        var assumptions = new List<string>(rlgc.Assumptions) { substrates[kept[principal].Layer].Note };
+        assumptions.AddRange(substrates.Where(kv => kv.Key != kept[principal].Layer).Select(kv => kv.Value.Note));
+        int layerChanges = routes.Sum(r => r.LayerChanges);
+        if (layerChanges > 0)
+            assumptions.Add($"The routes change layer {layerChanges} time(s) through vias; each via is carried as a joint, "
+                + "with no barrel inductance or capacitance, and each layer's traces over that layer's own reference plane(s).");
         assumptions.AddRange(coplanarNotes.Distinct());
         if (stretchesWithGround > 0 && leadTotals.Any(l => l > 0))
             assumptions.Add("Coplanar ground is modelled on the coupled stretches only; the uncoupled "
                 + "leads are single traces over the plane.");
-        else if (options.CoplanarGround && reference.Item1.Count == 0
-                 && board.Islands.Any(i => i.LayerOrder == layer && !ownIslands.Contains(i)))
+        else if (options.CoplanarGround && kept.Any(s => ReferenceOf(s.Layer).Nets.Count == 0
+                 && board.Islands.Any(i => i.LayerOrder == s.Layer && !ownIslands.Contains(i))))
             assumptions.Add("Copper on the trace layer is not modelled: the reference plane's copper "
                 + "belongs to no net of the board, so which copper is ground cannot be told.");
         bool anyLead = leadTotals.Any(l => l > 0);
@@ -451,7 +626,7 @@ public static class BoardCoupledExtractor
             assumptions.Add(coupledText + "; the rest of each route ("
                 + string.Join(", ", leadTotals.Select(l => $"{l * 1e3:g3} mm")) + ") is CASCADED in "
                 + "route order as uncoupled single-trace lead sections (their own R, L and C to the "
-                + "plane at the net's dominant width; a bend is carried as its path length, with no "
+                + "plane at the width each piece is drawn at; a bend is carried as its path length, with no "
                 + "corner discontinuity and no coupling between a net's own legs).");
         }
         assumptions.Add("Routed length in the network: "
@@ -465,16 +640,19 @@ public static class BoardCoupledExtractor
                     + "stubs are merged or dropped); the difference is not modelled.");
             if (routes[i].MixedWidths)
                 assumptions.Add($"Net '{nets[i].Label}' changes width along its route; its uncoupled "
-                    + $"stretches are priced at {routes[i].DominantWidth * 1e3:g3} mm, the width "
-                    + "most of it is drawn at.");
+                    + "stretches are priced piece by piece at the width each is drawn at, and a coupled "
+                    + "stretch at the widest segment of its run.");
         }
         if (droppedCoupling > 0)
             assumptions.Add($"A further {droppedCoupling * 1e3:g3} mm where the nets run parallel is "
                 + "modelled as UNCOUPLED: the nets fold back or meet those stretches in a different "
                 + "order, which one cascade cannot express.");
-        if (n > 2)
-            assumptions.Add("A stretch is coupled only where ALL selected nets run parallel; where "
-                + "only some do, each is modelled as running alone.");
+        if (kept.Any(s => s.Count < n))
+            assumptions.Add("Where only some of the selected nets run parallel, those are coupled among "
+                + "themselves and the others run alone beside them: "
+                + string.Join("; ", kept.Where(s => s.Count < n).Select(s =>
+                    $"{string.Join(" + ", s.Members.Select(i => nets[i].Label))} over {s.Length * 1e3:g4} mm"))
+                + ".");
         assumptions.Add("Near end: "
             + string.Join(", ", Enumerable.Range(0, n).Select(i =>
                 $"{nets[i].Label} at ({result.NearEnds[i].X * 1e3:g4}, {result.NearEnds[i].Y * 1e3:g4}) mm"))
@@ -485,9 +663,11 @@ public static class BoardCoupledExtractor
             if (!driverAtNear[i])
                 assumptions.Add($"Net '{nets[i].Label}' has its driver at the network's FAR end: "
                     + "drive it at its far port.");
+        assumptions.Add("The network's conductors are the selected nets, in the order they were selected.");
 
         return result with { Rlgc = rlgc, Network = network, Assumptions = assumptions };
     }
+
 
     /// <summary>True when net <paramref name="index"/>'s driver is at the END of the chain as
     /// ordered: its driver point is nearer the last endpoint, or (first net, no driver
@@ -525,12 +705,12 @@ public static class BoardCoupledExtractor
             for (int j = start + 1; j < chain.Count; j++)
             {
                 var d = Unit(chain[j].End - chain[j].Start);
-                if (Point2.Dot(d, runDir) < cosTol) break;
+                if (Point2.Dot(d, runDir) < cosTol || chain[j].LayerOrder != chain[start].LayerOrder) break;
                 length += chain[j].Length;
                 width = Math.Max(width, chain[j].Width);
                 end = j;
             }
-            runs.Add(new Run(chain[start].Start, chain[end].End, width, path, length));
+            runs.Add(new Run(chain[start].Start, chain[end].End, width, path, length, chain[start].LayerOrder));
             path += length;
             start = end + 1;
         }
@@ -547,32 +727,50 @@ public static class BoardCoupledExtractor
             DominantWidth = byWidth[0].Width,
             MixedWidths = byWidth.Count > 1
                 && byWidth.Skip(1).Any(g => Math.Abs(g.Width - byWidth[0].Width) > 0.1 * byWidth[0].Width),
+            LayerChanges = Enumerable.Range(1, Math.Max(0, chain.Count - 1)).Count(j => chain[j].LayerOrder != chain[j - 1].LayerOrder),
         };
     }
 
-    /// <summary>For every run of the first net, the intervals along it over which a run of
-    /// EVERY other net lies parallel within the spacing limit.</summary>
-    private static List<Stretch> FindStretches(Route[] routes, double cosTol, double spacingLimit)
+    /// <summary>A chain through via barrels as its trace segments, each with the copper layer
+    /// it lies on (by its height in the chain's stackup frame); the barrels themselves drop out,
+    /// leaving the layer change between two segments that meet at the via.</summary>
+    private static List<TraceCenterline> Flatten(TraceChain3DResult chain)
+    {
+        var layerZ = chain.LayerZ ?? throw new InvalidOperationException("A multi-layer chain carries its stackup frame.");
+        int LayerAt(double z) => layerZ.MinBy(kv => Math.Abs(0.5 * (kv.Value.zLo + kv.Value.zHi) - z)).Key;
+        var flat = new List<TraceCenterline>();
+        foreach (var segment in chain.Chain!)
+        {
+            if (Math.Abs(segment.End.Z - segment.Start.Z) > 1e-9) continue;          // a via barrel
+            flat.Add(new TraceCenterline(LayerAt(segment.Start.Z), new Point2(segment.Start.X, segment.Start.Y),
+                new Point2(segment.End.X, segment.End.Y), segment.Width));
+        }
+        return flat;
+    }
+
+    /// <summary>For every run of the group's first net, the intervals along it over which a
+    /// run of EVERY other member lies parallel within the spacing limit.</summary>
+    private static List<Stretch> FindStretches(Route[] routes, int[] members, double cosTol, double spacingLimit)
     {
         int n = routes.Length;
+        int anchor = members[0];
         var found = new List<Stretch>();
-        foreach (var r0 in routes[0].Runs)
+        foreach (var r0 in routes[anchor].Runs)
         {
             double l0 = r0.Extent;
             if (l0 <= 0) continue;
             var axis = (r0.B - r0.A) * (1.0 / l0);
             var perp = new Point2(-axis.Y, axis.X);
 
-            // Candidates: an interval [lo, hi] along the axis and the run picked per net.
-            var candidates = new List<(double Lo, double Hi, Run[] Picks)>
-                { (0, l0, new[] { r0 }) };
-            for (int j = 1; j < n && candidates.Count > 0; j++)
+            // Candidates: an interval [lo, hi] along the axis and the run picked per member.
+            var candidates = new List<(double Lo, double Hi, Run[] Picks)> { (0, l0, new[] { r0 }) };
+            foreach (int j in members.Skip(1))
             {
                 var next = new List<(double, double, Run[])>();
                 foreach (var (lo, hi, picks) in candidates)
                     foreach (var r in routes[j].Runs)
                     {
-                        if (r.Extent <= 0) continue;
+                        if (r.Extent <= 0 || r.Layer != r0.Layer) continue;
                         if (Math.Abs(Point2.Dot(Unit(r.B - r.A), axis)) < cosTol) continue;
                         double off = Point2.Dot((r.A + r.B) * 0.5 - r0.A, perp);
                         if (Math.Abs(off) > spacingLimit) continue;
@@ -591,27 +789,96 @@ public static class BoardCoupledExtractor
                 var s = new Stretch
                 {
                     Length = hi - lo,
+                    Member = new bool[n],
                     PathLo = new double[n], PathHi = new double[n],
                     Offset = new double[n], Width = new double[n],
                     Pieces = new TraceCenterline[n],
+                    Map = new (double, double, double, double)[n],
+                    Origin = r0.A, Axis = axis, Perp = perp, AxisLo = lo, AxisHi = hi,
+                    Layer = r0.Layer,
                 };
-                for (int i = 0; i < n; i++)
+                for (int k = 0; k < members.Length; k++)
                 {
-                    var r = picks[i];
+                    int i = members[k];
+                    var r = picks[k];
                     double sA = Point2.Dot(r.A - r0.A, axis), sB = Point2.Dot(r.B - r0.A, axis);
-                    double PathAt(double sAxis) => r.PathStart + (sAxis - sA) / (sB - sA) * r.PathLength;
-                    s.PathLo[i] = PathAt(lo);
-                    s.PathHi[i] = PathAt(hi);
+                    s.Member[i] = true;
+                    s.Map[i] = (sA, sB, r.PathStart, r.PathLength);
                     s.Offset[i] = Point2.Dot((r.A + r.B) * 0.5 - r0.A, perp);
                     s.Width[i] = r.Width;
-                    var at = r0.A + perp * s.Offset[i];
-                    s.Pieces[i] = new TraceCenterline(routes[i].Chain[0].LayerOrder,
-                        at + axis * lo, at + axis * hi, r.Width);
                 }
-                found.Add(s);
+                found.Add(s.Trim(lo, hi));
             }
         }
         return found;
+    }
+
+    /// <summary>[lo, hi] less the given intervals, as the pieces that remain.</summary>
+    private static List<(double Lo, double Hi)> Remaining(double lo, double hi, List<(double Lo, double Hi)> cuts)
+    {
+        var pieces = new List<(double, double)>();
+        double at = lo;
+        foreach (var (a, b) in cuts.OrderBy(c => c.Lo))
+        {
+            if (b <= at) continue;
+            if (a >= hi) break;
+            if (a > at) pieces.Add((at, Math.Min(a, hi)));
+            at = Math.Max(at, b);
+        }
+        if (at < hi) pieces.Add((at, hi));
+        return pieces;
+    }
+
+    /// <summary>The stretches in an order every net meets its own in, or null when two nets
+    /// meet theirs in different orders.</summary>
+    private static List<Stretch>? InRouteOrder(List<Stretch> stretches, int n)
+    {
+        var after = stretches.ToDictionary(s => s, _ => new List<Stretch>(), ReferenceEqualityComparer.Instance);
+        var before = stretches.ToDictionary(s => s, _ => 0, ReferenceEqualityComparer.Instance);
+        for (int i = 0; i < n; i++)
+        {
+            var own = stretches.Where(s => s.Member[i]).OrderBy(s => s.PathLo[i]).ToList();
+            for (int k = 1; k < own.Count; k++)
+            {
+                after[own[k - 1]].Add(own[k]);
+                before[own[k]]++;
+            }
+        }
+        var ordered = new List<Stretch>();
+        var ready = stretches.Where(s => before[s] == 0).ToList();
+        while (ready.Count > 0)
+        {
+            // Of the ones free to go, the one nearest the start of its first net's route.
+            var next = ready.MinBy(s => s.PathLo[s.Members.First()])!;
+            ready.Remove(next);
+            ordered.Add(next);
+            foreach (var s in after[next])
+                if (--before[s] == 0) ready.Add(s);
+        }
+        return ordered.Count == stretches.Count ? ordered : null;
+    }
+
+    /// <summary>The route between path coordinates a and b as pieces of one width each, in route order.</summary>
+    private static List<(double Width, int Layer, double Length)> Pieces(Route route, double a, double b, double slack)
+    {
+        var pieces = new List<(double Width, int Layer, double Length)>();
+        if (b - a <= slack) return pieces;
+        double path = 0;
+        foreach (var segment in route.Chain)
+        {
+            double from = Math.Max(a, path), to = Math.Min(b, path + segment.Length);
+            path += segment.Length;
+            if (to - from <= 0) continue;
+            if (pieces.Count > 0 && Math.Abs(pieces[^1].Width - segment.Width) < 1e-9 && pieces[^1].Layer == segment.LayerOrder)
+                pieces[^1] = (segment.Width, segment.LayerOrder, pieces[^1].Length + to - from);
+            else
+                pieces.Add((segment.Width, segment.LayerOrder, to - from));
+        }
+        // What the chain does not cover (rounding at its end) goes to the last piece.
+        double covered = pieces.Sum(p => p.Length);
+        if (pieces.Count > 0 && b - a - covered > 0)
+            pieces[^1] = (pieces[^1].Width, pieces[^1].Layer, pieces[^1].Length + b - a - covered);
+        return pieces.Where(p => p.Length > slack).ToList();
     }
 
     private static string NoCommonRunReason(IReadOnlyList<CopperNet> nets, Route[] routes,

@@ -107,6 +107,43 @@ public static class RlgcReduction
         };
     }
 
+    /// <summary>
+    /// The same line with its conductors renumbered: conductor i of the result is conductor
+    /// <paramref name="order"/>[i] of <paramref name="full"/>. A cross-section numbers its
+    /// conductors left to right; a board network numbers them by net, and the two must agree
+    /// before sections are cascaded.
+    /// </summary>
+    public static RlgcResult Permute(RlgcResult full, IReadOnlyList<int> order)
+    {
+        ArgumentNullException.ThrowIfNull(full);
+        int n = full.ConductorCount;
+        if (order.Count != n || order.Distinct().Count() != n || order.Any(i => i < 0 || i >= n))
+            throw new ArgumentException("The order must name every conductor once.", nameof(order));
+        if (Enumerable.Range(0, n).All(i => order[i] == i)) return full;
+
+        double[,] P(double[,] a)
+        {
+            var s = new double[n, n];
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) s[i, j] = a[order[i], order[j]];
+            return s;
+        }
+        Func<double, double[,]>? Wrap(Func<double, double[,]>? f) => f is null ? null : x => P(f(x));
+        return new RlgcResult(n,
+            P(full.CapacitanceFaradsPerMeter), P(full.CapacitanceLossFaradsPerMeter),
+            P(full.AirCapacitanceFaradsPerMeter), P(full.InductanceHenriesPerMeter),
+            order.Select(i => full.ResistanceDcOhmsPerMeter[i]).ToArray(),
+            order.Select(i => full.SkinResistanceOhmsPerMeterPerSqrtHz[i]).ToArray(),
+            full.Assumptions, Wrap(full.ResistanceMatrixOhmsPerMeter), Wrap(full.InternalInductanceHenriesPerMeter))
+        {
+            Dielectric = full.Dielectric,
+            DielectricSolves = full.DielectricSolves?.Sub(order),
+            PlaneSkinResistanceOhmsPerMeterPerSqrtHz = full.PlaneSkinResistanceOhmsPerMeterPerSqrtHz is { } plane ? P(plane) : null,
+            Roughness = full.Roughness,
+            RoughnessConductivitySiemensPerMeter = full.RoughnessConductivitySiemensPerMeter,
+        };
+    }
+
     private static Complex[,] ToComplex(double[,] a)
     {
         int n = a.GetLength(0);

@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
+using OpenSim.Core.Geometry2D;
 using OpenSim.Core.Signals;
 using OpenSim.Pcb.Import;
 using OpenSim.Rf.Layered;
@@ -16,10 +17,42 @@ namespace OpenSim.App.ViewModels;
 /// <summary>A board net offered for coupled extraction, with its selection toggle.</summary>
 public partial class SiNetSelection : ObservableObject
 {
-    public SiNetSelection(CopperNet net) => Net = net;
+    public const string ChainStart = "(route start)";
+
+    public SiNetSelection(CopperNet net, IReadOnlyList<CopperPad>? pads = null)
+    {
+        Net = net;
+        Pads = pads ?? Array.Empty<CopperPad>();
+        DriverChoices = new[] { ChainStart }
+            .Concat(Pads.Select(PinLabel)).ToList();
+    }
+
     public CopperNet Net { get; }
     public string Label => Net.Label;
     [ObservableProperty] private bool _isSelected;
+
+    /// <summary>The net's pads (component pins and via landings) on its own copper.</summary>
+    public IReadOnlyList<CopperPad> Pads { get; }
+
+    /// <summary>"(route start)" and one entry per pad: the net's driver pin.</summary>
+    public IReadOnlyList<string> DriverChoices { get; }
+
+    /// <summary>Nullable so a ComboBox transient null push lands harmlessly.</summary>
+    [ObservableProperty] private string? _driverPin = ChainStart;
+
+    /// <summary>The chosen driver pin's position, or null for the route's own start.</summary>
+    public Point2? DriverPoint
+    {
+        get
+        {
+            int index = DriverChoices.ToList().IndexOf(DriverPin ?? ChainStart) - 1;
+            return index >= 0 && index < Pads.Count ? Pads[index].Center : null;
+        }
+    }
+
+    private static string PinLabel(CopperPad pad) =>
+        (pad.ComponentRef is null ? "pad" : pad.ComponentRef + (pad.Pin is null ? "" : "." + pad.Pin))
+        + $" L{pad.LayerOrder} ({pad.Center.X * 1e3:g4}, {pad.Center.Y * 1e3:g4}) mm";
 }
 
 /// <summary>
@@ -291,7 +324,13 @@ public partial class SignalIntegrityViewModel : ObservableObject
         _boardExtraction = null;
         UseBoardNets = false;
         BoardNets.Clear();
-        foreach (var net in board.Nets) BoardNets.Add(new SiNetSelection(net));
+        foreach (var net in board.Nets)
+        {
+            var index = new PolygonSetIndex(net.Islands.Select(i => i.Shape).ToList());
+            var pads = board.Pads.Where(p => net.Islands.Any(i => i.LayerOrder == p.LayerOrder) && index.Contains(p.Center))
+                .OrderBy(p => p.ComponentRef ?? "~").ThenBy(p => p.Pin).ToList();
+            BoardNets.Add(new SiNetSelection(net, pads));
+        }
         HasBoard = board.Nets.Count > 0;
         BoardExtractionResult = "";
         DcNetsResult = "";
@@ -402,12 +441,16 @@ public partial class SignalIntegrityViewModel : ObservableObject
             BoardExtractionResult = "Import a board first (PCB panel).";
             return;
         }
-        var selected = BoardNets.Where(n => n.IsSelected).Select(n => n.Net).ToList();
+        var selectedRows = BoardNets.Where(n => n.IsSelected).ToList();
+        var selected = selectedRows.Select(n => n.Net).ToList();
         if (selected.Count < 2)
         {
             BoardExtractionResult = "Select at least two parallel signal nets.";
             return;
         }
+        // Each net's driver pin, where one was picked; otherwise the route's own start.
+        var drivers = selectedRows.Select(r => r.DriverPoint).ToList();
+        IReadOnlyList<Point2?>? driverPoints = drivers.Any(d => d is not null) ? drivers : null;
 
         BoardExtractionResult = "Extracting…";
         try
@@ -422,6 +465,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                     Stackup = options.Stackup,
                     CopperThicknessMeters = options.CopperThickness,
                     SwapEnds = SwapBoardEnds,
+                    DriverPoints = driverPoints,
                     Model = model,
                 }));
             if (extraction.FailureReason is not null)
@@ -435,8 +479,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
             _boardExtraction = extraction;
             UseBoardNets = true;
-            var signals = extraction.CrossSection!.Traces.Where(t => !t.IsGround).ToList();
-            LineCount = signals.Count;      // terminations follow the real count
+            var signals = extraction.CrossSection!.SignalTraces;
+            LineCount = selected.Count;     // the network's conductors are the selected nets
             DrivenLine = Math.Clamp(DrivenLine, 1, LineCount);
             var widths = string.Join(", ", signals.Select(t => $"{t.WidthMeters * 1e3:g3}"));
             BoardExtractionResult =
