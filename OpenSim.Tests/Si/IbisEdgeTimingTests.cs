@@ -320,8 +320,9 @@ public class IbisEdgeTimingTests
     [Fact]
     public void TheSingleLineEngine_AgreesWithTheNPortEngine_OnADriverCapacitance()
     {
-        // The single-line engine steps the driver's C_comp itself (trapezoidal); the N-port
-        // engine has it in the channel. Same link, 4 pF at the driver.
+        // The single-line entry runs on the N-port engine (SI-15), which carries the driver's
+        // C_comp in the channel reduction; this pins that the entry passes it through. Same
+        // link, 4 pF at the driver.
         const int spui = 32;
         const double dt = 1e-9 / spui, rs = 40, rl = 60, cDriver = 4e-12;
         var bits = new[] { true, false, true, true, false, false, true, false };

@@ -15,6 +15,41 @@ public abstract record MtlSectionBase
     public abstract double LongestLengthMeters { get; }
 
     internal abstract ComplexDenseMatrix Chain(double frequencyHz);
+
+    /// <summary>The slowest mode's one-way delay through this section at f [s].</summary>
+    internal abstract double DelaySeconds(double frequencyHz);
+
+    /// <summary>The slowest quasi-TEM mode's delay per metre, √λ_max(L·C) [s/m], with the
+    /// internal inductance at f included. L·C is a product of two symmetric positive-definite
+    /// matrices, so its eigenvalues are real and positive (the squared modal slownesses) and
+    /// power iteration finds the largest.</summary>
+    internal static double SlownessSecondsPerMeter(RlgcResult rlgc, double frequencyHz)
+    {
+        int n = rlgc.ConductorCount;
+        var c = rlgc.CapacitancePerMeter(frequencyHz);
+        var internalL = rlgc.InternalInductanceHenriesPerMeter?.Invoke(frequencyHz);
+        var lc = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                for (int k = 0; k < n; k++)
+                    lc[i, j] += (rlgc.InductanceHenriesPerMeter[i, k] + (internalL?[i, k] ?? 0))
+                                * c[k, j];
+        var v = Enumerable.Repeat(1.0, n).ToArray();
+        double lambda = 0;
+        for (int iteration = 0; iteration < 200; iteration++)
+        {
+            var w = new double[n];
+            for (int i = 0; i < n; i++)
+                for (int j = 0; j < n; j++) w[i] += lc[i, j] * v[j];
+            double norm = Math.Sqrt(w.Sum(x => x * x));
+            if (!(norm > 0)) return 0;
+            double next = norm / Math.Sqrt(v.Sum(x => x * x));
+            for (int i = 0; i < n; i++) v[i] = w[i] / norm;
+            if (Math.Abs(next - lambda) <= 1e-12 * next) { lambda = next; break; }
+            lambda = next;
+        }
+        return Math.Sqrt(lambda);
+    }
 }
 
 /// <summary>One uniform coupled-line section: RLGC matrices over a length.</summary>
@@ -26,6 +61,9 @@ public sealed record MtlSection(RlgcResult Rlgc, double LengthMeters) : MtlSecti
 
     internal override ComplexDenseMatrix Chain(double frequencyHz) =>
         MtlNetwork.UniformSectionChain(this, frequencyHz);
+
+    internal override double DelaySeconds(double frequencyHz) =>
+        SlownessSecondsPerMeter(Rlgc, frequencyHz) * LengthMeters;
 }
 
 /// <summary>
@@ -79,6 +117,9 @@ public sealed record MtlLeadSection : MtlSectionBase
     public bool IsEmpty => _lines.All(l => l.LengthMeters <= 0);
 
     public IReadOnlyList<double> LengthsMeters => _lines.Select(l => l.LengthMeters).ToArray();
+
+    internal override double DelaySeconds(double frequencyHz) =>
+        _lines.Max(l => l.LengthMeters <= 0 ? 0 : SlownessSecondsPerMeter(l.Rlgc, frequencyHz) * l.LengthMeters);
 
     internal override ComplexDenseMatrix Chain(double frequencyHz)
     {
@@ -157,6 +198,11 @@ public sealed class MtlNetwork
     /// <summary>End-to-end length of the cascade [m], along the longest line of each
     /// section.</summary>
     public double TotalLengthMeters => _sections.Sum(s => s.LongestLengthMeters);
+
+    /// <summary>An upper bound on the one-way delay at f [s]: each section's slowest mode,
+    /// summed along the cascade. What the nonlinear engine sizes its FIR window from.</summary>
+    public double LongestOneWayDelaySeconds(double frequencyHz) =>
+        _sections.Sum(s => s.DelaySeconds(frequencyHz));
 
     /// <summary>The 2N×2N chain (ABCD) matrix of the whole cascade at one frequency:
     /// [V_near; I_near] = T·[V_far; I_far].</summary>

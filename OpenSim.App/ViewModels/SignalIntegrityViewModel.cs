@@ -772,7 +772,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
                 bits.Length * SamplesPerUi, dt, warmupPeriods: warmup);
             var folded = EyeDiagram.Fold(result.FarVolts[driven], SamplesPerUi, dt, bits);
             return (folded, $"channel FIR {result.ChannelMemorySamples} taps, "
-                + $"tail {result.TailEnergyFraction:e1}"
+                + $"tail {result.TailEnergyFraction:e1}, {result.WarmupPeriods} warm-up periods, "
+                + $"last period moved {result.SettlingResidualVolts:e1} V"
                 + (lines > 1 ? $", line {driven + 1} of {lines} coupled" : ""), source, warns);
         });
         foreach (var w in switchingWarnings) _log.Append($"SI: IBIS — {w}");

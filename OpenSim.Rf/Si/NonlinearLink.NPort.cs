@@ -12,9 +12,14 @@ namespace OpenSim.Rf.Si;
 /// <param name="TailEnergyFraction">The worst retained entry's discarded tail energy.</param>
 /// <param name="SkippedEntryFloor">Entries whose total energy fell below this fraction of the
 /// largest entry's were treated as zero and not given memory of their own.</param>
+/// <param name="WarmupPeriods">Periods actually run before the reported one: the requested
+/// count, raised to cover the channel memory and then until the circuit settled.</param>
+/// <param name="SettlingResidualVolts">The largest change at any node between the reported
+/// period and the one before it: how far from the periodic steady state the result still is.</param>
 public sealed record NonlinearNPortResult(
     double TimeStepSeconds, double[][] NearVolts, double[][] FarVolts,
-    int ChannelMemorySamples, double TailEnergyFraction, double SkippedEntryFloor);
+    int ChannelMemorySamples, double TailEnergyFraction, double SkippedEntryFloor,
+    int WarmupPeriods, double SettlingResidualVolts);
 
 public static partial class NonlinearLink
 {
@@ -58,7 +63,8 @@ public static partial class NonlinearLink
     /// <param name="periodSamples">Samples in one repetition period.</param>
     /// <param name="dt">Sample step.</param>
     /// <param name="warmupPeriods">Periods run before the reported one, so the FIR history is
-    /// primed and the result is the periodic steady state rather than a turn-on transient.</param>
+    /// primed and the result is the periodic steady state rather than a turn-on transient. A
+    /// minimum: raised to cover the channel memory (reported in the result).</param>
     /// <param name="tailEnergyBound">Fraction of an entry's energy allowed to fall outside the
     /// truncated FIR.</param>
     /// <param name="referenceSiemens">The reduction's conditioning conductance.</param>
@@ -66,21 +72,32 @@ public static partial class NonlinearLink
     public static NonlinearNPortResult SolveNPort(
         MtlNetwork network, IReadOnlyList<INonlinearDriver> near, IReadOnlyList<INonlinearDriver> far,
         int periodSamples, double dt, int warmupPeriods = 4, double tailEnergyBound = 1e-6,
-        double referenceSiemens = 1 / 50.0, int? maxDegreeOfParallelism = null) =>
-        SolveNPort(network.ConductorCount, network.TransferImpedance, near, far, periodSamples, dt,
-            warmupPeriods, tailEnergyBound, referenceSiemens, maxDegreeOfParallelism);
+        double referenceSiemens = 1 / 50.0, int? maxDegreeOfParallelism = null)
+    {
+        if (dt <= 0) throw new ArgumentOutOfRangeException(nameof(dt));
+        // The slowest the line can be over the band the FIR is built on: its lowest bin and
+        // Nyquist (a dispersive dielectric and internal inductance are slower at the low end).
+        double delay = Math.Max(network.LongestOneWayDelaySeconds(1 / (MinimumChannelFft * dt)),
+            network.LongestOneWayDelaySeconds(1 / (2 * dt)));
+        return SolveNPort(network.ConductorCount, network.TransferImpedance, near, far,
+            periodSamples, dt, warmupPeriods, tailEnergyBound, referenceSiemens,
+            maxDegreeOfParallelism, delay);
+    }
 
     /// <summary>
     /// The same engine on any channel that can give its reference-terminated transfer impedance
     /// (frequency [Hz], reference conductance [S]) → 2N×2N, ports 0..N−1 near and N..2N−1 far —
     /// a measured or imported channel as well as a line model. The function is called at every
     /// bin from DC to the Nyquist frequency 1/(2·dt) and must be defined over that whole range.
+    /// <paramref name="oneWayDelaySeconds"/> is the channel's longest one-way delay, from which
+    /// the FIR window is sized; 0 (unknown) leaves it at the minimum window.
     /// </summary>
     public static NonlinearNPortResult SolveNPort(
         int lineCount, Func<double, double, Complex[,]> transferImpedance,
         IReadOnlyList<INonlinearDriver> near, IReadOnlyList<INonlinearDriver> far,
         int periodSamples, double dt, int warmupPeriods = 4, double tailEnergyBound = 1e-6,
-        double referenceSiemens = 1 / 50.0, int? maxDegreeOfParallelism = null)
+        double referenceSiemens = 1 / 50.0, int? maxDegreeOfParallelism = null,
+        double oneWayDelaySeconds = 0)
     {
         int n = lineCount;
         if (n < 1) throw new ArgumentOutOfRangeException(nameof(lineCount));
@@ -97,12 +114,12 @@ public static partial class NonlinearLink
         for (int i = 0; i < n; i++) { elements[i] = near[i]; elements[n + i] = far[i]; }
 
         // ---- Channel reduction: matrix FIR z[k] from the reference-terminated impedance. ----
-        // The same channel-FFT length the single-line path uses: long enough that the
-        // channel's impulse response has decayed well inside it at every practical length.
-        // It bounds the channel's MEMORY, not the pattern: the time stepping below convolves
-        // with the truncated FIR and runs for as many samples as the pattern has, so a period
-        // longer than the FFT (PRBS-9 and PRBS-11 at 32 samples per UI) is an ordinary case.
-        const int fft = 8192;
+        // The DFT length bounds the channel's MEMORY, not the pattern: the time stepping below
+        // convolves with the truncated FIR and runs for as many samples as the pattern has, so a
+        // period longer than the FFT (PRBS-9 and PRBS-11 at 32 samples per UI) is an ordinary
+        // case. What it must hold is the impulse response itself, or the part past the window
+        // wraps around onto its start (SI-15): see ChannelWindow.
+        int fft = ChannelWindow(oneWayDelaySeconds, dt);
         var spectra = new Complex[ports * ports][];
         for (int e = 0; e < spectra.Length; e++) spectra[e] = new Complex[fft];
 
@@ -171,9 +188,17 @@ public static partial class NonlinearLink
             out double tailFraction, out double skippedFloor);
 
         // ---- Time stepping: Newton on all 2N node voltages per sample. ----
-        int total = (warmupPeriods + 1) * periodSamples;
-        var history = new double[ports][];
-        for (int p = 0; p < ports; p++) history[p] = new double[total];
+        // The run is reported once it is the periodic steady state, which takes two things
+        // (SI-15). The warm-up has to outlast the FIR, or the reported period still carries the
+        // turn-on transient through the history sum: four periods of an 8-bit pattern are 1024
+        // samples at 32 per UI, against a memory that can run to thousands. And the CIRCUIT has
+        // to have settled, which the FIR length does not measure: the reduction is terminated
+        // in the reference, the circuit in its own elements, and a 30 Ω driver on a 75 Ω line
+        // keeps 43 % of every echo. So the requested count is a minimum, raised to cover the
+        // memory, and periods then keep running until one repeats the last.
+        int warmup = Math.Max(warmupPeriods, (memory + periodSamples - 1) / periodSamples);
+        int lastPeriod = warmup + Math.Max(1,
+            SettlingSamplesPerMemory * Math.Max(memory, periodSamples) / periodSamples);
 
         var v = new double[ports];
         var vPrev = new double[ports];
@@ -184,56 +209,141 @@ public static partial class NonlinearLink
         var pivot = new int[ports];
         var trial = new double[ports];
         // The port "source" current the channel sees: element current + the reference term.
-        // (No capacitor current: the port capacitances are inside z.)
+        // (No capacitor current: the port capacitances are inside z.) A ring of memory + 1
+        // samples, written twice (at w and w + ring) so the last `memory` samples are always
+        // one contiguous run ending at w + ring − 1; before the first sample it holds zeros,
+        // which is the quiet line the run starts from.
+        int ring = memory + 1;
         var driveHistory = new double[ports][];
-        for (int p = 0; p < ports; p++) driveHistory[p] = new double[total];
+        for (int p = 0; p < ports; p++) driveHistory[p] = new double[2 * ring];
+        var current = new double[ports][];
+        var previous = new double[ports][];
+        for (int p = 0; p < ports; p++)
+        {
+            current[p] = new double[periodSamples];
+            previous[p] = new double[periodSamples];
+        }
 
         double[] z0 = new double[ports * ports];
         for (int e = 0; e < taps.Length; e++) z0[e] = taps[e][0];
 
-        for (int step_n = 0; step_n < total; step_n++)
+        int step_n = 0, period = 0, quietPeriods = 0;
+        int periodsPerMemory = Math.Max(1, (memory + periodSamples - 1) / periodSamples);
+        double settling = double.PositiveInfinity;
+        for (; ; period++)
         {
-            // The element schedules are PERIODIC, so time wraps within one period — the same
-            // convention the single-line engine uses. Feeding absolute time instead would run
-            // every driver off the end of its schedule during warm-up and hold it at the last
-            // sample forever, which reads as a driver that never switches.
-            double t = (step_n % periodSamples) * dt;
-
-            // History term: everything the channel remembers from earlier samples.
-            for (int i = 0; i < ports; i++)
+            for (int s = 0; s < periodSamples; s++, step_n++)
             {
-                double sum = 0;
-                for (int k = 1; k <= memory && k <= step_n; k++)
+                // The element schedules are PERIODIC, so time wraps within one period — the
+                // same convention the single-line engine uses. Feeding absolute time instead
+                // would run every driver off the end of its schedule during warm-up and hold it
+                // at the last sample forever, which reads as a driver that never switches.
+                double t = s * dt;
+                int w = step_n % ring;
+
+                // History term: everything the channel remembers from earlier samples.
+                for (int i = 0; i < ports; i++)
                 {
-                    var tap = taps;
+                    double sum = 0;
                     for (int j = 0; j < ports; j++)
-                        sum += tap[i * ports + j][k] * driveHistory[j][step_n - k];
+                    {
+                        var tap = taps[i * ports + j];
+                        var drive = driveHistory[j];
+                        for (int k = 1; k <= memory; k++) sum += tap[k] * drive[w + ring - k];
+                    }
+                    hist[i] = sum;
                 }
-                hist[i] = sum;
+
+                // v already holds the previous sample's solution, which IS the warm start.
+                SolveNode(elements, z0, hist, v, vPrev, dt, t, referenceSiemens, ports,
+                    resid, step, jac, pivot, trial, step_n);
+
+                for (int i = 0; i < ports; i++)
+                {
+                    var (cur, _) = elements[i].Evaluate(v[i], t);
+                    double drive = cur + referenceSiemens * v[i];
+                    driveHistory[i][w] = drive;
+                    driveHistory[i][w + ring] = drive;
+                    current[i][s] = v[i];
+                }
+                Array.Copy(v, vPrev, ports);
             }
 
-            // v already holds the previous sample's solution, which IS the warm start.
-            SolveNode(elements, z0, hist, v, vPrev, dt, t, referenceSiemens, ports,
-                resid, step, jac, pivot, trial, step_n);
-
-            for (int i = 0; i < ports; i++)
+            if (period >= warmup)
             {
-                var (cur, _) = elements[i].Evaluate(v[i], t);
-                driveHistory[i][step_n] = cur + referenceSiemens * v[i];
-                history[i][step_n] = v[i];
+                double change = 0, scale = 0;
+                for (int i = 0; i < ports; i++)
+                    for (int s = 0; s < periodSamples; s++)
+                    {
+                        change = Math.Max(change, Math.Abs(current[i][s] - previous[i][s]));
+                        scale = Math.Max(scale, Math.Abs(current[i][s]));
+                    }
+                // One quiet period is not enough. A line whose round trip is many periods long
+                // changes only when an echo arrives, so between arrivals two periods agree
+                // exactly while the circuit is still far from settled. What fixes everything
+                // that follows is the last `memory` samples (they are the whole of the history
+                // sum), so the run is settled once every period across a memory span repeated
+                // the one before it.
+                if (change <= SettledFraction * scale)
+                {
+                    settling = quietPeriods == 0 ? change : Math.Max(settling, change);
+                    quietPeriods++;
+                }
+                else
+                {
+                    settling = change;
+                    quietPeriods = 0;
+                }
+                if (quietPeriods >= periodsPerMemory || period >= lastPeriod) break;
             }
-            Array.Copy(v, vPrev, ports);
+            (current, previous) = (previous, current);
         }
 
         var nearOut = new double[n][];
         var farOut = new double[n][];
-        int start = warmupPeriods * periodSamples;
         for (int i = 0; i < n; i++)
         {
-            nearOut[i] = history[i][start..(start + periodSamples)];
-            farOut[i] = history[n + i][start..(start + periodSamples)];
+            nearOut[i] = current[i];
+            farOut[i] = current[n + i];
         }
-        return new NonlinearNPortResult(dt, nearOut, farOut, memory, tailFraction, skippedFloor);
+        return new NonlinearNPortResult(dt, nearOut, farOut, memory, tailFraction, skippedFloor,
+            period, settling);
+    }
+
+    /// <summary>A period counts as the steady state when no node moved by more than this
+    /// fraction of the largest node voltage since the period before.</summary>
+    private const double SettledFraction = 1e-6;
+
+    /// <summary>How long the run may go on settling past the warm-up, in channel memories (or
+    /// periods, if longer). A circuit still moving after that is reported with its residual
+    /// rather than run on without bound.</summary>
+    private const int SettlingSamplesPerMemory = 32;
+
+    /// <summary>The smallest channel DFT, and the largest this engine will build (one complex
+    /// spectrum per port pair at this length).</summary>
+    internal const int MinimumChannelFft = 8192, MaximumChannelFft = 1 << 18;
+
+    /// <summary>Round trips of the longest line the FIR window must hold. Reference-terminated,
+    /// an echo loses (1 − |Γ_ref|) of itself at every return to the near end: a 75 Ω or a 33 Ω
+    /// line under the 50 Ω reference is down to 0.2⁸ ≈ 3·10⁻⁶ after eight.</summary>
+    private const int RoundTripsInWindow = 8;
+
+    /// <summary>The DFT length: a power of two, at least <see cref="MinimumChannelFft"/>, and at
+    /// least <see cref="RoundTripsInWindow"/> round trips of the channel. A fixed window was
+    /// silently too short for a line longer than about a thousand samples: the echoes past its
+    /// end came back at the start of the FIR.</summary>
+    private static int ChannelWindow(double oneWayDelaySeconds, double dt)
+    {
+        double needed = RoundTripsInWindow * 2 * Math.Max(0, oneWayDelaySeconds) / dt;
+        if (!(needed <= MaximumChannelFft))
+            throw new ArgumentException(
+                $"The channel's round trip is {2 * oneWayDelaySeconds / dt:F0} samples at this "
+                + $"step; holding {RoundTripsInWindow} of them needs a {needed:F0}-point DFT, more "
+                + $"than the {MaximumChannelFft} this engine builds. Use a coarser sample step or "
+                + "a shorter channel.");
+        int fft = MinimumChannelFft;
+        while (fft < needed) fft *= 2;
+        return fft;
     }
 
     /// <summary>Damped Newton on F(V) = V − z0·(I_elem(V) + g·V) − hist. The per-step system is

@@ -6,9 +6,8 @@ namespace OpenSim.Rf.Si;
 
 /// <summary>A nonlinear buffer at the driver node: the current it pushes INTO the line at a
 /// node voltage and time, plus that current's slope dI/dV (for the Newton step) and its die
-/// capacitance C_comp (a linear shunt the engines account for themselves, both by the
-/// trapezoidal rule: the N-port engine inside its channel reduction, the single-line engine
-/// in its time stepping).</summary>
+/// capacitance C_comp (a linear shunt the engine accounts for itself, by the trapezoidal rule
+/// inside its channel reduction).</summary>
 public interface INonlinearDriver
 {
     (double Current, double Conductance) Evaluate(double nodeVolts, double timeSeconds);
@@ -291,24 +290,23 @@ public sealed class IbisDriver : INonlinearDriver
     }
 }
 
-/// <summary>The receiver termination for the SINGLE-LINE reduction (linear R∥C; open = R = ∞),
-/// which folds this admittance into the channel FIRs. A nonlinear (clamped) receiver cannot be
-/// expressed that way and goes through <see cref="NonlinearLink.SolveNPort"/> instead, where
-/// every port is an unknown.</summary>
+/// <summary>The receiver termination for the SINGLE-LINE entry (linear R∥C; open = R = ∞). It
+/// becomes a <see cref="LinearLoadElement"/> at the far port of the reference-terminated
+/// reduction. A nonlinear (clamped) receiver goes through <see cref="NonlinearLink.SolveNPort"/>
+/// directly, with an <see cref="IbisReceiverElement"/> there.</summary>
 public sealed record NonlinearReceiver(double LoadOhms, double LoadCapacitanceFarads = 0)
 {
     public Complex Admittance(double frequencyHz)
     {
-        // The channel reduction folds this admittance into the driver-node FIRs, so an
-        // infinite admittance has nowhere to go: a shorted far end must be refused here rather
-        // than silently producing Infinity (and, from there, NaN samples the Newton loop would
+        // A shorted far end has no finite node voltage to solve for, so it is refused here
+        // rather than producing Infinity (and, from there, NaN samples the Newton loop would
         // blame on a non-monotone table). MtlNetwork.SolveTerminated carries the impedance-form
         // row that CAN express a short; the linear transient path reaches it directly.
         if (LoadOhms <= 0)
             throw new ArgumentOutOfRangeException(nameof(LoadOhms),
                 $"Receiver resistance must be positive (got {LoadOhms} Ω). The nonlinear "
-                + "driver engine reduces the channel against a finite load; for a shorted far "
-                + "end use the linear TransientLink path, which solves the short exactly.");
+                + "driver engine solves the far end as a node; for a shorted far end use the "
+                + "linear TransientLink path, which solves the short exactly.");
         double omega = 2 * Math.PI * frequencyHz;
         Complex y = double.IsPositiveInfinity(LoadOhms) ? Complex.Zero : 1.0 / LoadOhms;
         return y + new Complex(0, omega * LoadCapacitanceFarads);
@@ -316,35 +314,36 @@ public sealed record NonlinearReceiver(double LoadOhms, double LoadCapacitanceFa
 }
 
 /// <summary>The result of a nonlinear link solve: one steady-state period at the driver node
-/// and the receiver, plus the channel memory (truncated FIR length) and its tail-energy bound.</summary>
+/// and the receiver, plus the channel memory (truncated FIR length), its tail-energy bound, the
+/// warm-up periods actually run and how far the reported period still moved from the one before
+/// (see <see cref="NonlinearNPortResult"/>).</summary>
 public sealed record NonlinearResult(
     double SampleIntervalSeconds, double[] DriverVolts, double[] ReceiverVolts,
-    int ChannelMemorySamples, double TailEnergyFraction);
+    int ChannelMemorySamples, double TailEnergyFraction, int WarmupPeriods,
+    double SettlingResidualVolts);
 
 /// <summary>
-/// The Stage S11 nonlinear transient engine: a NONLINEAR driver into a LINEAR channel. The
-/// channel (a single-line MTL with a linear receiver load) is reduced to two FIR filters from
-/// its frequency response — the driver-node driving-point admittance Y_in(ω) and the near→far
-/// transfer H(ω) — sampled and inverse-FFT'd, then truncated at a measured tail-energy bound.
-/// The driver node is time-stepped: at each sample the channel presents a Norton equivalent
-/// (its instantaneous admittance y_in[0] + a history current from past node voltages), and the
-/// nonlinear node equation I_drv(V) = y_in[0]·V + hist + I_C is solved by Newton on the
-/// monotone buffer curves, with the die capacitance's current I_C by the trapezoidal rule
-/// (backward Euler made its time constant 12–23 % long at 32 samples per UI). The
-/// receiver waveform is the FIR H convolved with the settled node voltage. Warm-up over several
-/// periods primes the FIR; the last period is the steady state.
+/// The Stage S11 nonlinear transient engine: a NONLINEAR driver into a LINEAR channel with a
+/// linear R∥C receiver. This entry is the single-line case of <see cref="SolveNPort"/>: the
+/// receiver becomes a <see cref="LinearLoadElement"/> at the far port and both ends are
+/// unknowns of the reference-terminated reduction.
+///
+/// <para><b>Why it is not reduced on its own any more (SI-15).</b> It used to fold the
+/// receiver into two FIRs taken with the near end VOLTAGE-FORCED: the driving-point admittance
+/// Y_in(ω) and the transfer H(ω) = V_far/V_near. With the near end forced, the near-end
+/// reflection coefficient is −1; with an open far end it is +1; so on a low-loss line those
+/// responses decay only through the line loss, and on a lossless one never — Y_in has its poles
+/// on the real-frequency axis. Sampled on a finite DFT they wrapped around the window, and an
+/// open lossless line did not even solve. The reference-terminated reduction loads every port
+/// with g_ref while it is being characterised, so each echo loses (1 − |Γ_ref|) at the near end
+/// and the responses decay in a few round trips whatever the far end is.</para>
 ///
 /// <para>The engine does NOT claim the exact-periodic identity the linear <see cref="TransientLink"/>
 /// holds — a nonlinear system has no closed-form periodic answer — but a LINEAR driver reduces
-/// it to that engine (gated). This entry point takes a single driven line; coupled lines with a
-/// nonlinear element at every port go through <see cref="SolveNPort"/>.</para>
+/// it to that engine (gated).</para>
 /// </summary>
 public static partial class NonlinearLink
 {
-    /// <summary>The channel FIR is built on this DFT length (a power of two); its Δf = 1/(N·Δt)
-    /// resolves the channel memory (round trips ≪ N·Δt for any real board line).</summary>
-    private const int ChannelFft = 8192;
-
     public static NonlinearResult Solve(MtlNetwork network, INonlinearDriver driver,
         NonlinearReceiver receiver, IReadOnlyList<bool> bits, int samplesPerUi,
         double sampleIntervalSeconds, int warmupPeriods = 4, double tailEnergyBound = 1e-4,
@@ -352,124 +351,18 @@ public static partial class NonlinearLink
     {
         if (network.ConductorCount != 1)
             throw new ArgumentException(
-                "This entry reduces the channel against ONE linear receiver, so it handles a "
-                + "single line. For coupled lines — or for a nonlinear (clamped) receiver — use "
-                + nameof(SolveNPort) + ", which solves every port as an unknown.");
+                "This entry takes ONE line with a linear receiver. For coupled lines — or for a "
+                + "nonlinear (clamped) receiver — use " + nameof(SolveNPort) + ", which takes an "
+                + "element at every port.");
         if (samplesPerUi < 2) throw new ArgumentOutOfRangeException(nameof(samplesPerUi));
-        double dt = sampleIntervalSeconds;
+        receiver.Admittance(0);                              // refuses a short, as it always has
+        var load = new LinearLoadElement(receiver.LoadOhms, receiver.LoadCapacitanceFarads);
 
-        // ---- Channel FIRs from the frequency response (half spectrum, parallel slots). ----
-        var yInSpec = new Complex[ChannelFft];
-        var hSpec = new Complex[ChannelFft];
-        int half = ChannelFft / 2;
-        Parallel.For(0, half + 1,
-            new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 }, m =>
-        {
-            double f = m / (ChannelFft * dt);
-            var t = network.ChainMatrix(f);                 // 2×2 for one line
-            Complex yl = receiver.Admittance(f);
-            Complex denom = t[0, 0] + t[0, 1] * yl;         // V_near = denom · V_far
-            Complex yIn = (t[1, 0] + t[1, 1] * yl) / denom; // I_near / V_near
-            Complex h = 1.0 / denom;                        // V_far / V_near
-            yInSpec[m] = yIn; hSpec[m] = h;
-            if (m > 0 && m < half)                          // conjugate-symmetric mirror
-            {
-                yInSpec[ChannelFft - m] = Complex.Conjugate(yIn);
-                hSpec[ChannelFft - m] = Complex.Conjugate(h);
-            }
-        });
-        var yInFir = RealPart(Fft.Inverse(yInSpec));
-        var hFir = RealPart(Fft.Inverse(hSpec));
-
-        int memory = TruncationLength(yInFir, hFir, tailEnergyBound, out double tailFraction);
-        double g0 = yInFir[0];                               // instantaneous channel admittance
-
-        // ---- Time-step the driver node over warm-up + one final period. ----
-        int period = bits.Count * samplesPerUi;
-        int total = (warmupPeriods + 1) * period;
-        double ccomp = driver.CompCapacitanceFarads;
-        // C_comp by the trapezoidal rule: I_C[n] = (2C/Δt)(V[n] − V[n−1]) − I_C[n−1], second
-        // order in the step. Where the step does not resolve the capacitor's time constant
-        // against the channel (2C/Δt below the channel's instantaneous admittance) the
-        // trapezoidal rule rings sample to sample, and the capacitor is too small to matter at
-        // this step anyway, so backward Euler is kept there.
-        bool trapezoidal = ccomp > 0 && 2 * ccomp / dt >= Math.Abs(g0);
-        double capCurrent = 0;                               // I_C at the previous sample
-        var vNode = new double[total];
-        for (int n = 0; n < total; n++)
-        {
-            double tSchedule = (n % period) * dt;           // the periodic driver schedule
-            double vPrev = n > 0 ? vNode[n - 1] : 0;
-            double hist = 0;                                 // Σ_{k≥1} y_in[k]·V[n−k]
-            int kMax = Math.Min(memory, n);
-            for (int k = 1; k <= kMax; k++) hist += yInFir[k] * vNode[n - k];
-
-            // Newton: g(V) = I_drv(V) − g0·V − hist − I_C(V) = 0.
-            double v = vPrev;
-            bool converged = false;
-            for (int iter = 0; iter < 60; iter++)
-            {
-                var (idrv, gdrv) = driver.Evaluate(v, tSchedule);
-                double iCap = trapezoidal
-                    ? 2 * ccomp * (v - vPrev) / dt - capCurrent
-                    : ccomp * (v - vPrev) / dt;
-                double gv = idrv - g0 * v - hist - iCap;
-                double slope = gdrv - g0 - (trapezoidal ? 2 : 1) * ccomp / dt;
-                if (slope == 0) break;
-                double step = gv / slope;
-                v -= step;
-                if (Math.Abs(step) <= 1e-9 * (1 + Math.Abs(v))) { converged = true; break; }
-            }
-            if (!converged)
-                throw new InvalidOperationException(
-                    $"The nonlinear driver Newton solve did not converge at sample {n} "
-                    + "(a non-monotone V-I table or a degenerate channel admittance).");
-            if (trapezoidal) capCurrent = 2 * ccomp * (v - vPrev) / dt - capCurrent;
-            vNode[n] = v;
-        }
-
-        // ---- Receiver = H FIR ∗ node voltage; return the last (steady) period. ----
-        var vRxFull = new double[total];
-        for (int n = 0; n < total; n++)
-        {
-            double acc = 0;
-            int kMax = Math.Min(memory, n);
-            for (int k = 0; k <= kMax; k++) acc += hFir[k] * vNode[n - k];
-            vRxFull[n] = acc;
-        }
-        var driverPeriod = vNode[^period..];
-        var receiverPeriod = vRxFull[^period..];
-        return new NonlinearResult(dt, driverPeriod, receiverPeriod, memory, tailFraction);
-    }
-
-    private static double[] RealPart(Complex[] c)
-    {
-        var r = new double[c.Length];
-        for (int i = 0; i < c.Length; i++) r[i] = c[i].Real;
-        return r;
-    }
-
-    /// <summary>The FIR memory length: the smallest L past which BOTH filters' tail energy is
-    /// below <paramref name="bound"/> of their total (measured, reported — the truncation-
-    /// convergence gate doubles the window and checks the waveform barely moves).</summary>
-    private static int TruncationLength(double[] a, double[] b, double bound, out double tailFraction)
-    {
-        double Total(double[] x) => x.Sum(v => v * v);
-        double ta = Total(a), tb = Total(b);
-        int Cut(double[] x, double t)
-        {
-            double acc = 0;
-            for (int i = x.Length - 1; i >= 0; i--)
-            {
-                acc += x[i] * x[i];
-                if (acc > bound * t) return Math.Min(i + 1, x.Length - 1);
-            }
-            return 0;
-        }
-        int la = Cut(a, ta), lb = Cut(b, tb);
-        int l = Math.Max(la, lb);
-        double tail(double[] x, double t) => t == 0 ? 0 : x.Skip(l + 1).Sum(v => v * v) / t;
-        tailFraction = Math.Max(tail(a, ta), tail(b, tb));
-        return l;
+        var result = SolveNPort(network, new[] { driver }, new INonlinearDriver[] { load },
+            bits.Count * samplesPerUi, sampleIntervalSeconds, warmupPeriods, tailEnergyBound,
+            maxDegreeOfParallelism: maxDegreeOfParallelism);
+        return new NonlinearResult(sampleIntervalSeconds, result.NearVolts[0], result.FarVolts[0],
+            result.ChannelMemorySamples, result.TailEnergyFraction, result.WarmupPeriods,
+            result.SettlingResidualVolts);
     }
 }
