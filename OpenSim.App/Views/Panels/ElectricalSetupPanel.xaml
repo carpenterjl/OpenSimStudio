@@ -185,9 +185,33 @@
                 <TextBox Text="{Binding Rail.CopperConductivity}"/>
             </UniformGrid>
             <Button x:Name="SolveRailButton" Content="Solve rail" Command="{Binding Rail.SolveRailCommand}"/>
+            <UniformGrid Columns="2" Margin="0,4,0,0">
+                <CheckBox x:Name="RailWholeBoardCheck" Content="Whole board (planes, other nets)" IsChecked="{Binding Rail.WholeBoardThermal}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="The heat spreads in the whole board — every layer's copper, planes and other nets — instead of this net's own mesh. Mesh the net with the laminate first."/>
+                <CheckBox Content="Along the traces" IsChecked="{Binding Rail.TraceDirections}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="On the whole board, trace copper conducts along its traces, and across them only in series with the laminate."/>
+                <CheckBox Content="With the parts (component table)" IsChecked="{Binding Rail.IncludeParts}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="On the whole board, the parts that dissipate in the component table, on their two-resistor models."/>
+                <CheckBox Content="Cool with CFD" IsChecked="{Binding Rail.CoolWithCfd}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="A conjugate CFD solve of the air (the CFD setup of the Thermal workspace) instead of the environment's film. Steady only; each pass is a full CFD solve."/>
+                <Label Content="CFD cell [mm] (0 = auto)"/>
+                <TextBox Text="{Binding Rail.CfdCellSizeMm}"/>
+                <Label Content="Transient: duration / step [s]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding Rail.TransientDurationSeconds}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding Rail.TransientStepSeconds}" Margin="2,0,0,0"/>
+                </UniformGrid>
+            </UniformGrid>
             <Button x:Name="SolveRailThermalButton" Content="Solve rail with self-heating"
                     Command="{Binding Rail.SolveRailThermalCommand}"
                     ToolTip="Copper loss heats the board, the environment (Thermal workspace) cools it, copper resistivity follows temperature. Mesh the net with the laminate first."/>
+            <Button x:Name="SolveRailTransientButton" Content="Self-heating transient"
+                    Command="{Binding Rail.SolveRailTransientCommand}"
+                    ToolTip="The same, marched in time from the ambient: how fast the copper heats. Cooled by the environment."/>
             <TextBlock Text="{Binding Rail.RailResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
             <ItemsControl ItemsSource="{Binding Rail.ResultLines}" Margin="0,2,0,0">

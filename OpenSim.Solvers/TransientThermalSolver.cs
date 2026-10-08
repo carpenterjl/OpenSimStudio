@@ -1,4 +1,4 @@
-﻿using OpenSim.Core.Interfaces;
+using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 using OpenSim.Core.Results;
@@ -47,6 +47,9 @@ public sealed class TransientThermalSolver : ISolver
         if (settings.OutputStride < 0)
             throw new InvalidOperationException("The output stride cannot be negative.");
         settings.PowerProfile?.Validate();
+        if (input.ElementHeatSourceSchedule is not null && settings.PowerProfile is { Kind: not PowerProfileKind.Constant })
+            throw new InvalidOperationException(
+                "A heat-source schedule sets the source of every step itself; it does not take a power profile.");
 
         var (steps, stride) = PlanSteps(settings);
         int stored = 2 + (steps - 1) / stride;   // initial state + strided steps + final
@@ -77,6 +80,7 @@ public sealed class TransientThermalSolver : ISolver
                     $"Convection '{c.Name}': the heat transfer coefficient must be positive.");
         }
 
+        ScalarSolverHelpers.ValidateConductivityTensor(input);
         EnvironmentBoundaryModel.ValidateMaterials(input);
         HeatConductionSolver.ValidatePrescribedFilm(input);
 
@@ -98,8 +102,7 @@ public sealed class TransientThermalSolver : ISolver
         var (steps, stride) = PlanSteps(settings);
 
         progress?.Report(new SolverProgress("Assembling matrices", 0.02));
-        var assembler = new ScalarDiffusionAssembler(mesh,
-            el => input.MaterialOf(el).ThermalConductivity!.Value);
+        var assembler = ScalarDiffusionAssembler.Thermal(input);
         var robin = new List<ScalarDiffusionAssembler.RobinTerm>();
         foreach (var convection in input.BoundaryConditions.OfType<Convection>())
             foreach (var t in mesh.GetFaceTriangles(convection.FaceIds))
@@ -142,7 +145,15 @@ public sealed class TransientThermalSolver : ISolver
         HeatConductionSolver.LogContacts(input, log);
 
         progress?.Report(new SolverProgress("Applying boundary conditions", 0.05));
-        var constantLoads = ScalarSolverHelpers.AssembleThermalLoads(input, log);
+        // A source schedule owns the volumetric source: the fixed loads leave it out, and each
+        // pass adds the schedule's own.
+        var sourceSchedule = input.ElementHeatSourceSchedule;
+        var constantLoads = sourceSchedule is null
+            ? ScalarSolverHelpers.AssembleThermalLoads(input, log)
+            : ScalarSolverHelpers.AssembleThermalLoads(input with { ElementHeatSource = null }, log);
+        if (sourceSchedule is not null)
+            log.Add("Heat-source schedule: the volumetric source is re-evaluated every pass" +
+                    (input.HeatSourceStepAccepted is null ? "." : ", and each step is repeated until the schedule's owner accepts it."));
 
         // A power profile scales the heat flows and the volumetric source step by step; the
         // convection conditions' ambient terms are not sources and stay as they are. Each
@@ -249,9 +260,13 @@ public sealed class TransientThermalSolver : ISolver
             var iterate = temperature_;
             int picard = 0;
             double change = 0;
+            var stepLoadsBase = loads;
             while (true)
             {
                 picard++;
+                loads = stepLoadsBase;
+                if (sourceSchedule is not null)
+                    loads = WithSource(stepLoadsBase, mesh, sourceSchedule(n, n * dt, iterate));
                 ConstrainedSystemSolver.ReducedSystem stepSystem;
                 if (filmSchedule is not null)
                 {
@@ -294,6 +309,17 @@ public sealed class TransientThermalSolver : ISolver
                 totalIterations += iterations.Iterations;
                 var next = stepSystem.Expand(free);
 
+                bool sourceAccepted = true;
+                if (sourceSchedule is not null && input.HeatSourceStepAccepted is { } sourceCheck)
+                {
+                    couplingIterations++;
+                    sourceAccepted = sourceCheck(n, next);
+                    if (!sourceAccepted && picard >= MaxSourceIterations)
+                        throw new InvalidOperationException(
+                            $"Time step {n}: the heat source and the temperature did not agree after {picard} solves. " +
+                            "Reduce the time step.");
+                }
+
                 if (filmSchedule is not null && input.PrescribedFilmStepAccepted is { } accepted)
                 {
                     // Implicit coupling owned by the schedule's author: the step is solved
@@ -301,18 +327,19 @@ public sealed class TransientThermalSolver : ISolver
                     // with the temperatures it produced.
                     iterate = next;
                     couplingIterations++;
-                    if (accepted(n, next)) break;
+                    if (accepted(n, next) && sourceAccepted) break;
                     continue;
                 }
                 if (environment is null)
                 {
                     iterate = next;
-                    break;
+                    if (sourceAccepted) break;
+                    continue;
                 }
                 nonlinearIterations++;
                 change = EnvironmentThermalTerms.MaxChange(iterate, next);
                 iterate = next;
-                if (picard >= 2 && change < EnvironmentThermalTerms.Threshold(iterate)) break;
+                if (picard >= 2 && change < EnvironmentThermalTerms.Threshold(iterate) && sourceAccepted) break;
                 if (picard >= EnvironmentThermalTerms.MaxTransientIterations)
                     throw new InvalidOperationException(
                         $"Time step {n}: the environment's surface coefficients did not settle " +
@@ -369,6 +396,26 @@ public sealed class TransientThermalSolver : ISolver
         };
     }
 
+    /// <summary>Cap on the solves of one step when a heat-source schedule repeats it.</summary>
+    private const int MaxSourceIterations = 60;
+
+    /// <summary>The loads plus the consistent nodal loads q·V/4 of an element source.</summary>
+    private static double[] WithSource(double[] loads, FeMesh mesh, IReadOnlyList<double> source)
+    {
+        if (source.Count != mesh.ElementCount)
+            throw new InvalidOperationException(
+                $"The heat-source schedule returned {source.Count} values for {mesh.ElementCount} elements.");
+        var result = (double[])loads.Clone();
+        for (int e = 0; e < mesh.ElementCount; e++)
+        {
+            if (source[e] == 0) continue;
+            double share = source[e] * mesh.ElementVolume(e) / 4;
+            var el = mesh.Elements[e];
+            result[el.N0] += share; result[el.N1] += share; result[el.N2] += share; result[el.N3] += share;
+        }
+        return result;
+    }
+
     /// <summary>
     /// The step below which backward Euler with the CONSISTENT capacity matrix stops being
     /// monotone: the largest h²/(6α) over the elements, with h the edge of the regular
@@ -383,7 +430,10 @@ public sealed class TransientThermalSolver : ISolver
         for (int e = 0; e < mesh.ElementCount; e++)
         {
             var m = input.MaterialOf(e);
-            double alpha = m.ThermalConductivity!.Value / (m.Density * m.SpecificHeat!.Value);
+            double k = input.ElementThermalConductivity is { } tensors
+                ? Math.Min(tensors[e].Xx, Math.Min(tensors[e].Yy, tensors[e].Zz))
+                : m.ThermalConductivity!.Value;
+            double alpha = k / (m.Density * m.SpecificHeat!.Value);
             double h = Math.Cbrt(6 * Math.Sqrt(2) * Math.Abs(mesh.ElementVolume(e)));
             double bound = h * h / (6 * alpha);
             if (bound <= worst) continue;
@@ -412,8 +462,7 @@ public sealed class TransientThermalSolver : ISolver
         // Flux recovery only for STORED frames — O(stored), not O(steps).
         var flux = new Vector3D[mesh.ElementCount];
         for (int e = 0; e < mesh.ElementCount; e++)
-            flux[e] = assembler.ElementGradient(e, temperature)
-                      * -input.MaterialOf(e).ThermalConductivity!.Value;   // q = −k∇T
+            flux[e] = ScalarDiffusionAssembler.HeatFlux(input, assembler, e, temperature);   // q = −K∇T
 
         var fields = new List<IResultField>
         {

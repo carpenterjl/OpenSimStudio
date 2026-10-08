@@ -1,9 +1,11 @@
+using OpenSim.Core.Interfaces;
 using OpenSim.Core.Geometry2D;
 using OpenSim.Core.Model;
 using OpenSim.Pcb.Extrude;
 using OpenSim.Pcb.Import;
 using OpenSim.Pcb.Meshing2D;
 using OpenSim.Pcb.Power;
+using OpenSim.Pcb.Thermal;
 using OpenSim.Solvers;
 using Xunit;
 using Xunit.Abstractions;
@@ -381,6 +383,162 @@ public class ElectroThermalTests
         });
         _output.WriteLine($"copper alone: rise {bare.PeakCopperKelvin - 298.15:f2} K");
         Assert.Contains(bare.Assumptions, a => a.Contains("copper-only mesh"));
+    }
+
+    // ---------------- The whole board as the thermal body (FU-25) ----------------
+
+    /// <summary>The trace's board for <see cref="BoardThermalMesher"/>: the trace on L1 with its
+    /// centerline, a second copper layer from the stackup, and whatever else is given.</summary>
+    private static PcbBoard WholeBoard(CopperNet net, IReadOnlyList<CopperNet>? others = null) => new()
+    {
+        Outline = new[] { Rect(0, 0, BoardX, BoardY) },
+        Islands = net.Islands.Concat(others?.SelectMany(n => n.Islands) ?? Array.Empty<CopperIsland>()).ToList(),
+        Pads = Array.Empty<CopperPad>(),
+        Vias = Array.Empty<Via>(),
+        Nets = new[] { net }.Concat(others ?? Array.Empty<CopperNet>()).ToList(),
+        Layers = Array.Empty<BoardLayer>(),
+        Warnings = Array.Empty<string>(),
+        TraceCenterlines = new[] { new TraceCenterline(1, new Point2(TraceX0, 10e-3), new Point2(TraceX1, 10e-3), TraceY1 - TraceY0) },
+        Stackup = new PcbStackupSettings { CopperThickness = Cu, DielectricGapThicknesses = new[] { Board } }
+    };
+
+    private static BoardThermalMesh BoardMesh(PcbBoard board, bool traceDirections,
+        IReadOnlyList<ThermalComponent>? parts = null) =>
+        BoardThermalMesher.Mesh(board, parts ?? Array.Empty<ThermalComponent>(), new BoardThermalOptions
+        {
+            Stackup = board.Stackup!, Copper = Copper, Laminate = Fr4, TargetEdgeLength = 1e-3,
+            GapElementLayers = 3, TraceDirections = traceDirections
+        });
+
+    private const double FilmH = 12.0, Air = 298.15;
+
+    private static RailThermalReport RunOnBoard(NetMesher.Result mesh, CopperNet net, double amps,
+        BoardThermalMesh? board, IReadOnlyList<ThermalComponent>? parts = null) =>
+        RailThermalAnalysis.Solve(mesh, net, new RailThermalSetup
+        {
+            Rail = TraceRail(mesh, amps), Copper = Copper, Laminate = Fr4,
+            ThermalConditions = new BoundaryCondition[]
+            {
+                new Convection { Name = "air", FaceIds = new[] { 0, 1 }, Coefficient = FilmH, AmbientTemperature = Air }
+            },
+            Board = board,
+            Components = parts ?? Array.Empty<ThermalComponent>(),
+            Tolerance = 1e-4
+        });
+
+    [Fact]
+    public void OnTheWholeBoard_TheHeatBalances_AndTheTraceAgreesWithItsExplicitCopper()
+    {
+        // The same rail twice: explicit copper on its own laminate, and the whole-board mesh with
+        // the trace as its share of 1 mm elements (as wide as the trace), conducting along it.
+        var (net, pads, options, board) = TraceOnBoard();
+        var mesh = new NetMesher().MeshNetOnBoard(net, pads, options, board);
+        const double amps = 4.0;
+        var explicitCopper = RunOnBoard(mesh, net, amps, null);
+        var directed = BoardMesh(WholeBoard(net), traceDirections: true);
+        var onBoard = RunOnBoard(mesh, net, amps, directed);
+        var isotropic = RunOnBoard(mesh, net, amps, BoardMesh(WholeBoard(net), traceDirections: false));
+
+        double rise = explicitCopper.PeakCopperKelvin - 293.15, riseBoard = onBoard.PeakCopperKelvin - 293.15,
+            riseIsotropic = isotropic.PeakCopperKelvin - 293.15;
+        _output.WriteLine($"peak copper rise: explicit {rise:f3} K, whole board along the trace {riseBoard:f3} K " +
+                          $"({(riseBoard / rise - 1) * 100:f2} %), isotropic {riseIsotropic:f3} K ({(riseIsotropic / rise - 1) * 100:f2} %)");
+        foreach (string line in onBoard.Describe()) _output.WriteLine(line);
+
+        // Energy: the board received the copper loss, and it leaves through the film.
+        Assert.Equal(onBoard.Rail.CopperLossWatts, onBoard.Solution.HeatIntoThermalWatts, onBoard.Rail.CopperLossWatts * 1e-9);
+        double leaving = 0;
+        var temperature = onBoard.Solution.Temperature;
+        foreach (var t in directed.Mesh.BoundaryTriangles)
+        {
+            if (t.FaceId > 1) continue;
+            leaving += FilmH * Area(directed.Mesh, t) * ((temperature[t.A] + temperature[t.B] + temperature[t.C]) / 3 - Air);
+        }
+        Assert.Equal(onBoard.Rail.CopperLossWatts, leaving, onBoard.Rail.CopperLossWatts * 1e-5);
+        Assert.Contains(onBoard.Assumptions, a => a.Contains("whole board is the thermal body"));
+        Assert.Equal("L1", onBoard.HottestWhere);
+
+        // The fast model against the explicit copper. Measured: −3.5 % conducting along the
+        // trace, −15.3 % with the copper spread in every direction (the elements at the trace
+        // edges, part copper, part laminate, then conduct across it as well).
+        Assert.InRange(riseBoard / rise, 0.95, 1.05);
+        Assert.True(Math.Abs(riseIsotropic / rise - 1) > 2 * Math.Abs(riseBoard / rise - 1));
+    }
+
+    [Fact]
+    public void APlaneUnderTheTrace_SpreadsItsHeat()
+    {
+        // Another net's plane on L2: only the whole-board model sees it.
+        var (net, pads, options, board) = TraceOnBoard();
+        var mesh = new NetMesher().MeshNetOnBoard(net, pads, options, board);
+        var plane = new CopperNet(2, new[] { new CopperIsland(1, 2, "L2", Rect(0, 0, BoardX, BoardY)) }) { Name = "GND" };
+        var bare = RunOnBoard(mesh, net, 4.0, BoardMesh(WholeBoard(net), true));
+        var withPlane = RunOnBoard(mesh, net, 4.0, BoardMesh(WholeBoard(net, new[] { plane }), true));
+        _output.WriteLine($"peak rise bare {bare.PeakCopperKelvin - 293.15:f3} K, over a plane {withPlane.PeakCopperKelvin - 293.15:f3} K");
+        Assert.True(withPlane.PeakCopperKelvin - 293.15 < 0.9 * (bare.PeakCopperKelvin - 293.15));
+    }
+
+    [Fact]
+    public void APartBesideTheTrace_HeatsIt_AndHasItsJunctionReported()
+    {
+        var (net, pads, options, board) = TraceOnBoard();
+        var mesh = new NetMesher().MeshNetOnBoard(net, pads, options, board);
+        var part = new ThermalComponent
+        {
+            RefDes = "U9", Footprint = ComponentPlacement.Rectangle(new Point2(20e-3, 14e-3), 4e-3, 4e-3),
+            PowerWatts = 0.1, ThetaJb = 20, ThetaJc = 15, OnTop = true
+        };
+        var parts = new[] { part };
+        var alone = RunOnBoard(mesh, net, 4.0, BoardMesh(WholeBoard(net), true));
+        var withPart = RunOnBoard(mesh, net, 4.0, BoardMesh(WholeBoard(net), true, parts), parts);
+        var junction = Assert.Single(withPart.Components);
+        _output.WriteLine($"trace peak {alone.PeakCopperKelvin - 273.15:f2} → {withPart.PeakCopperKelvin - 273.15:f2} °C; " +
+                          $"U9 junction {junction.JunctionKelvin - 273.15:f2} °C, {junction.ToBoardWatts:f3} W into the board");
+        Assert.True(withPart.PeakCopperKelvin > alone.PeakCopperKelvin + 0.1);
+        Assert.Equal("U9", junction.RefDes);
+        Assert.True(junction.JunctionKelvin > junction.BoardKelvin);
+    }
+
+    [Fact]
+    public void TheRailTransient_RisesToTheSteadyAnswer()
+    {
+        // The board's time constant is about 2.6 J/K over 0.019 W/K, some 140 s. Twenty steps
+        // of 100 s shrink what is left of the transient by 1.7 each: the march ends on the
+        // steady coupled answer, and it rises all the way.
+        var (net, pads, options, board) = TraceOnBoard();
+        var mesh = new NetMesher().MeshNetOnBoard(net, pads, options with { TargetEdgeLength = 1e-3 }, board);
+        var setup = new RailThermalSetup
+        {
+            Rail = TraceRail(mesh, 4.0), Copper = Copper, Laminate = Fr4,
+            ThermalConditions = new BoundaryCondition[]
+            {
+                new Convection { Name = "air", FaceIds = new[] { 0, 1 }, Coefficient = FilmH, AmbientTemperature = Air }
+            },
+            Tolerance = 1e-4
+        };
+        var steady = RailThermalAnalysis.Solve(mesh, net, setup);
+        var transient = RailThermalAnalysis.SolveTransient(mesh, net, setup, new TransientThermalSettings
+        {
+            InitialTemperature = Air, TimeStep = 100, Duration = 2000
+        });
+        foreach (string line in transient.Describe()) _output.WriteLine(line);
+        var history = transient.Solution.History;
+        Assert.Equal(20, history.Count);
+        for (int n = 1; n < history.Count; n++) Assert.True(history[n].PeakKelvin >= history[n - 1].PeakKelvin);
+        double rise = steady.PeakCopperKelvin - Air;
+        Assert.Equal(rise, history[^1].PeakKelvin - Air, 1e-3 * rise);
+        Assert.Equal(steady.Rail.CopperLossWatts, transient.Rail.CopperLossWatts, 1e-3 * steady.Rail.CopperLossWatts);
+    }
+
+    [Fact]
+    public void ANetMeshAtTheWrongHeight_IsRefused()
+    {
+        // A copper-only net mesh stands at z = 0: on the board its heat would land in L2.
+        var (net, pads, options, _) = TraceOnBoard();
+        var alone = new NetMesher().MeshNet(net, pads, options);
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            RunOnBoard(alone, net, 1.0, BoardMesh(WholeBoard(net), true)));
+        Assert.Contains("MeshNetOnBoard", ex.Message);
     }
 
     [Fact]

@@ -1,4 +1,4 @@
-﻿using OpenSim.Core.Interfaces;
+using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 using OpenSim.Core.Results;
@@ -45,6 +45,7 @@ public sealed class HeatConductionSolver : ISolver
         // so it is checked FIRST — a missing emissivity is irrelevant when the whole
         // environment should not be there.
         ValidatePrescribedFilm(input);
+        ScalarSolverHelpers.ValidateConductivityTensor(input);
         EnvironmentBoundaryModel.ValidateMaterials(input);
         if (!input.BoundaryConditions.Any(bc => bc is FixedTemperature or Convection)
             && !EnvironmentCouples(input) && !PrescribedFilmCouples(input))
@@ -192,8 +193,7 @@ public sealed class HeatConductionSolver : ISolver
         var mesh = input.Mesh;
 
         progress?.Report(new SolverProgress("Assembling conduction matrix", 0.05));
-        var assembler = new ScalarDiffusionAssembler(mesh,
-            el => input.MaterialOf(el).ThermalConductivity!.Value);
+        var assembler = ScalarDiffusionAssembler.Thermal(input);
 
         // Robin terms regularize the matrix, so they are assembled with it (keeps SPD).
         var robin = new List<ScalarDiffusionAssembler.RobinTerm>();
@@ -253,8 +253,7 @@ public sealed class HeatConductionSolver : ISolver
         progress?.Report(new SolverProgress("Recovering heat flux", 0.85));
         var flux_ = new Vector3D[mesh.ElementCount];
         for (int e = 0; e < mesh.ElementCount; e++)
-            flux_[e] = assembler.ElementGradient(e, temperatureField)
-                       * -input.MaterialOf(e).ThermalConductivity!.Value;   // q = −k∇T
+            flux_[e] = ScalarDiffusionAssembler.HeatFlux(input, assembler, e, temperatureField);   // q = −K∇T
 
         var groups = ScalarSolverHelpers.MaterialGroups(input);
         if (groups is not null)

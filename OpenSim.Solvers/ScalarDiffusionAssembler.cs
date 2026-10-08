@@ -1,3 +1,4 @@
+using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 
@@ -12,6 +13,7 @@ public sealed class ScalarDiffusionAssembler
 {
     private readonly FeMesh _mesh;
     private readonly Func<int, double> _coefficient;
+    private readonly Func<int, ConductivityTensor>? _tensor;
 
     /// <summary>Shape-function gradients per element, cached for flux recovery.</summary>
     private readonly Vector3D[][] _gradients;
@@ -33,6 +35,31 @@ public sealed class ScalarDiffusionAssembler
                     "degenerate and cannot be assembled. Re-generate the mesh.");
             _gradients[i] = Tet4ShapeGradients.Compute(mesh, i);
         }
+    }
+
+    /// <param name="tensor">Diffusion tensor of one element (symmetric positive definite):
+    /// K_ij = ∫ ∇Nᵢ·K·∇Nⱼ dV.</param>
+    public ScalarDiffusionAssembler(FeMesh mesh, Func<int, ConductivityTensor> tensor)
+        : this(mesh, el => tensor(el).Xx)
+    {
+        _tensor = tensor;
+    }
+
+    /// <summary>A thermal assembler for a solve: the per-element tensor when the input carries
+    /// one, the materials' scalar conductivity otherwise.</summary>
+    public static ScalarDiffusionAssembler Thermal(SolveInput input) =>
+        input.ElementThermalConductivity is { } tensors
+            ? new ScalarDiffusionAssembler(input.Mesh, el => tensors[el])
+            : new ScalarDiffusionAssembler(input.Mesh, el => input.MaterialOf(el).ThermalConductivity!.Value);
+
+    /// <summary>The heat flux −K·∇T of one element for a solve's input.</summary>
+    public static Vector3D HeatFlux(SolveInput input, ScalarDiffusionAssembler assembler, int element,
+        ReadOnlySpan<double> temperature)
+    {
+        var gradient = assembler.ElementGradient(element, temperature);
+        return input.ElementThermalConductivity is { } tensors
+            ? tensors[element].Apply(gradient) * -1
+            : gradient * -input.MaterialOf(element).ThermalConductivity!.Value;
     }
 
     public int DofCount => _mesh.NodeCount;
@@ -64,11 +91,23 @@ public sealed class ScalarDiffusionAssembler
             if ((el & 1023) == 0)
                 cancellationToken.ThrowIfCancellationRequested();
 
-            double cv = _coefficient(el) * _mesh.ElementVolume(el);
             var g = _gradients[el];
             var e = _mesh.Elements[el];
             nodes[0] = e.N0; nodes[1] = e.N1; nodes[2] = e.N2; nodes[3] = e.N3;
+            if (_tensor is not null)
+            {
+                var k = _tensor(el);
+                double volume = _mesh.ElementVolume(el);
+                for (int i = 0; i < 4; i++)
+                {
+                    var kg = k.Apply(g[i]);
+                    for (int j = 0; j < 4; j++)
+                        builder.Add(nodes[i], nodes[j], volume * Vector3D.Dot(kg, g[j]));
+                }
+                continue;
+            }
 
+            double cv = _coefficient(el) * _mesh.ElementVolume(el);
             for (int i = 0; i < 4; i++)
                 for (int j = 0; j < 4; j++)
                     builder.Add(nodes[i], nodes[j], cv * Vector3D.Dot(g[i], g[j]));

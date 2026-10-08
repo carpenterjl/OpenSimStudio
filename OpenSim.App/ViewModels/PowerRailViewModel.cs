@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Services;
 using OpenSim.Pcb.Import;
 using OpenSim.Pcb.Power;
+using OpenSim.Pcb.Thermal;
 
 namespace OpenSim.App.ViewModels;
 
@@ -40,16 +41,18 @@ public partial class PowerRailViewModel : ObservableObject
     private readonly ILogService _log;
     private readonly MaterialsViewModel _materials;
     private readonly EnvironmentViewModel _environment;
+    private readonly CfdSetupViewModel _cfd;
     private NetMesher.Result? _mesh;
     private CopperNet? _net;
 
     public PowerRailViewModel(ProjectSession session, ILogService log, MaterialsViewModel materials,
-        EnvironmentViewModel environment)
+        EnvironmentViewModel environment, CfdSetupViewModel cfd)
     {
         _session = session;
         _log = log;
         _materials = materials;
         _environment = environment;
+        _cfd = cfd;
         // Pads of a body that is gone must not be solved against the new one.
         session.GeometryReplaced += (_, _) => Clear();
     }
@@ -69,6 +72,33 @@ public partial class PowerRailViewModel : ObservableObject
     [ObservableProperty] private double _copperConductivity = 5.96e7;
     [ObservableProperty] private string _railResult = "";
     [ObservableProperty] private string _railAssumptions = "";
+
+    /// <summary>The board, its thermal options and parts for the whole-board thermal body.</summary>
+    public sealed record BoardThermalContext(PcbBoard Board, BoardThermalOptions Options, IReadOnlyList<ThermalComponent> Parts);
+
+    /// <summary>Set by the PCB panel: (trace directions, with the parts) → the board's thermal
+    /// context, or the reason there is none.</summary>
+    public Func<bool, bool, (BoardThermalContext? Context, string? Problem)>? BoardThermal { get; set; }
+
+    /// <summary>Solve the heat on the whole board (planes, other nets, parts) instead of the
+    /// net's own mesh. The net must be meshed with the board.</summary>
+    [ObservableProperty] private bool _wholeBoardThermal;
+
+    /// <summary>On the whole board, trace copper conducts along its traces (orthotropic).</summary>
+    [ObservableProperty] private bool _traceDirections = true;
+
+    /// <summary>On the whole board, the parts of the component table with their losses.</summary>
+    [ObservableProperty] private bool _includeParts;
+
+    /// <summary>Cool by a conjugate CFD solve (the CFD setup of the Thermal workspace) instead of
+    /// the environment's film.</summary>
+    [ObservableProperty] private bool _coolWithCfd;
+
+    /// <summary>CFD cell size [mm]; 0 = automatic.</summary>
+    [ObservableProperty] private double _cfdCellSizeMm;
+
+    [ObservableProperty] private double _transientDurationSeconds = 600;
+    [ObservableProperty] private double _transientStepSeconds = 10;
 
     /// <summary>The mesh and net the last hand-over installed; null before any.</summary>
     public (NetMesher.Result Mesh, CopperNet Net)? Current =>
@@ -206,25 +236,129 @@ public partial class PowerRailViewModel : ObservableObject
             RailResult = ex.Message;
             return;
         }
-        var thermalSetup = new RailThermalSetup
+        var environment = _environment.Build();
+        var (context, contextProblem) = WholeBoardThermal
+            ? BoardThermal?.Invoke(TraceDirections, IncludeParts) ?? (null, "Import a board first (PCB panel).")
+            : (null, null);
+        if (WholeBoardThermal && context is null)
         {
-            Rail = setup,
-            Copper = copper,
-            Laminate = laminate,
-            Environment = _environment.Build()
-        };
+            RailResult = contextProblem ?? "";
+            return;
+        }
+        Func<OpenSim.Core.Interfaces.SolveInput, CancellationToken, OpenSim.Core.Interfaces.SolveOutput>? cooling = null;
+        if (CoolWithCfd)
+        {
+            var cfd = _cfd.Build(Math.Max(0, CfdCellSizeMm) * 1e-3, environment.FlowVelocity);
+            if (cfd is null)
+            {
+                RailResult = "Set up the CFD domain in the Thermal workspace first.";
+                return;
+            }
+            cooling = OpenSim.Cfd.ConjugateCooling.Steady(cfd);
+        }
         var mesh = _mesh;
         var net = _net;
         _session.IsBusy = true;
         _session.StatusText = "Solving the rail with self-heating…";
         try
         {
-            var report = await Task.Run(() => RailThermalAnalysis.Solve(mesh, net, thermalSetup));
+            var report = await Task.Run(() =>
+            {
+                var board = context is null ? null : BoardThermalMesher.Mesh(context.Board, context.Parts, context.Options);
+                return RailThermalAnalysis.Solve(mesh, net, new RailThermalSetup
+                {
+                    Rail = setup, Copper = copper, Laminate = laminate, Environment = environment,
+                    Board = board, Components = context?.Parts ?? Array.Empty<ThermalComponent>(), Cooling = cooling
+                });
+            });
             Show(report.Rail, report.Describe());
             RailAssumptions = "Assumptions: " + string.Join("; ", report.Assumptions) + ".";
             foreach (string line in report.Log) _log.Append($"Rail: {line}");
             foreach (string line in report.Describe()) _log.Append($"Rail: {line}");
+            foreach (var part in report.Components)
+                ResultLines.Add($"{part.RefDes}: junction {part.JunctionKelvin - 273.15:f1} °C, {part.ToBoardWatts:g3} W into the board.");
             _session.RaiseResultsProduced(report.Fields, preferFieldName: "Temperature");
+        }
+        catch (Exception ex) { _session.ReportError(ex); }
+        finally { _session.IsBusy = false; _session.StatusText = "Ready"; }
+    }
+
+    /// <summary>
+    /// The rail's coupled transient from the ambient: how fast the copper heats and what the
+    /// drop is after the duration given (<see cref="RailThermalAnalysis.SolveTransient"/>).
+    /// Cooled by the environment; the whole-board option applies, the CFD one does not.
+    /// </summary>
+    [RelayCommand]
+    private async Task SolveRailTransientAsync()
+    {
+        if (_mesh is null || _net is null)
+        {
+            RailResult = "Mesh a net first (with the laminate, for a board temperature).";
+            return;
+        }
+        var setup = BuildSetup(out string? problem);
+        if (setup is null)
+        {
+            RailResult = problem ?? "";
+            return;
+        }
+        if (!(TransientStepSeconds > 0 && TransientDurationSeconds >= TransientStepSeconds))
+        {
+            RailResult = "Give a positive time step and a duration of at least one step.";
+            return;
+        }
+        OpenSim.Core.Model.Material copper, laminate;
+        try
+        {
+            var regions = _materials.ResolveRegionMaterials(_mesh.Body);
+            copper = regions?.GetValueOrDefault(OpenSim.Pcb.Extrude.PcbStackup.CopperRegion) ?? _materials.DefaultConductor();
+            laminate = regions?.GetValueOrDefault(OpenSim.Pcb.Extrude.PcbStackup.DielectricRegion)
+                       ?? _materials.FindByName("FR4 (PCB laminate)") ?? copper;
+        }
+        catch (InvalidOperationException ex)
+        {
+            RailResult = ex.Message;
+            return;
+        }
+        var environment = _environment.Build();
+        var (context, contextProblem) = WholeBoardThermal
+            ? BoardThermal?.Invoke(TraceDirections, IncludeParts) ?? (null, "Import a board first (PCB panel).")
+            : (null, null);
+        if (WholeBoardThermal && context is null)
+        {
+            RailResult = contextProblem ?? "";
+            return;
+        }
+        var settings = new OpenSim.Core.Interfaces.TransientThermalSettings
+        {
+            InitialTemperature = environment.AmbientTemperature,
+            Duration = TransientDurationSeconds,
+            TimeStep = TransientStepSeconds
+        };
+        var mesh = _mesh;
+        var net = _net;
+        _session.IsBusy = true;
+        _session.StatusText = "Solving the rail's self-heating transient…";
+        try
+        {
+            var report = await Task.Run(() =>
+            {
+                var board = context is null ? null : BoardThermalMesher.Mesh(context.Board, context.Parts, context.Options);
+                return RailThermalAnalysis.SolveTransient(mesh, net, new RailThermalSetup
+                {
+                    Rail = setup, Copper = copper, Laminate = laminate, Environment = environment,
+                    Board = board, Components = context?.Parts ?? Array.Empty<ThermalComponent>()
+                }, settings);
+            });
+            Show(report.Rail, report.Describe());
+            RailAssumptions = "Assumptions: " + string.Join("; ", report.Assumptions) + ".";
+            foreach (string line in report.Solution.Log) _log.Append($"Rail transient: {line}");
+            foreach (var (time, loss, peak) in report.Solution.History)
+                _log.Append($"Rail transient: t = {time:g4} s, loss {loss * 1e3:g4} mW, hottest copper {peak - 273.15:f2} °C");
+            // The frames are on the thermal body: shown when that is the net's own mesh.
+            if (context is null)
+                _session.RaiseResultsProduced(report.Solution.Thermal.Fields, preferFieldName: "Temperature",
+                    frames: report.Solution.Thermal.Frames, frameAxis: report.Solution.Thermal.FrameAxis);
         }
         catch (Exception ex) { _session.ReportError(ex); }
         finally { _session.IsBusy = false; _session.StatusText = "Ready"; }

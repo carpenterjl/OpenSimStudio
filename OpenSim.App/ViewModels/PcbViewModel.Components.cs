@@ -109,6 +109,56 @@ public partial class PcbViewModel
         catch (Exception ex) { _session.ReportError(ex); }
     }
 
+    /// <summary>The parts that dissipate, as the table gives them, or null and the reason.</summary>
+    private List<ThermalComponent>? ThermalComponentsFromRows(out string? problem)
+    {
+        problem = null;
+        var components = new List<ThermalComponent>();
+        foreach (var row in ThermalParts.Where(r => r.PowerWatts > 0))
+        {
+            if (!(row.WidthMm > 0 && row.HeightMm > 0))
+            {
+                problem = $"{row.Part.RefDes}: enter its body size.";
+                return null;
+            }
+            components.Add(new ThermalComponent
+            {
+                RefDes = row.Part.RefDes, Part = row.Part.Part, OnTop = row.Part.OnTop,
+                Footprint = ComponentPlacement.Rectangle(row.Part.Center, row.WidthMm * 1e-3, row.HeightMm * 1e-3,
+                    row.Part.PadExtent is null ? row.Part.RotationDegrees : 0),
+                PowerWatts = row.PowerWatts, ThetaJc = row.ThetaJc, ThetaJb = row.ThetaJb,
+                CaseToAmbient = row.HeatsinkKelvinPerWatt > 0 ? row.HeatsinkKelvinPerWatt : null,
+                CaseFilmCoefficient = CaseFilmCoefficient
+            });
+        }
+        return components;
+    }
+
+    /// <summary>The board, its thermal mesh options and (when asked) the parts of the component
+    /// table that dissipate: the rail's whole-board thermal body.</summary>
+    internal (PowerRailViewModel.BoardThermalContext? Context, string? Problem) RailBoardThermal(
+        bool traceDirections, bool withParts)
+    {
+        if (_board is null) return (null, "Import a board first (PCB panel) for the whole-board thermal body.");
+        var parts = new List<ThermalComponent>();
+        if (withParts)
+        {
+            var fromRows = ThermalComponentsFromRows(out string? problem);
+            if (fromRows is null) return (null, problem);
+            parts = fromRows;
+        }
+        var laminate = _materials.FindByName("FR4 (PCB laminate)");
+        if (laminate is null) return (null, "The material library has no 'FR4 (PCB laminate)'.");
+        var options = new BoardThermalOptions
+        {
+            Stackup = BuildStackupSettings(), Copper = _materials.DefaultConductor(), Laminate = laminate,
+            TargetEdgeLength = Math.Max(0, ThermalEdgeMm) * 1e-3,
+            ViaPlatingThickness = ViaPlatingMicrons * 1e-6,
+            TraceDirections = traceDirections
+        };
+        return (new PowerRailViewModel.BoardThermalContext(_board, options, parts), null);
+    }
+
     [RelayCommand]
     private async Task SolveComponentTemperaturesAsync()
     {
@@ -124,23 +174,11 @@ public partial class PcbViewModel
             ComponentResult = "Set the environment in the Thermal workspace first.";
             return;
         }
-        var components = new List<ThermalComponent>();
-        foreach (var row in ThermalParts.Where(r => r.PowerWatts > 0))
+        var components = ThermalComponentsFromRows(out string? partProblem);
+        if (components is null)
         {
-            if (!(row.WidthMm > 0 && row.HeightMm > 0))
-            {
-                ComponentResult = $"{row.Part.RefDes}: enter its body size.";
-                return;
-            }
-            components.Add(new ThermalComponent
-            {
-                RefDes = row.Part.RefDes, Part = row.Part.Part, OnTop = row.Part.OnTop,
-                Footprint = ComponentPlacement.Rectangle(row.Part.Center, row.WidthMm * 1e-3, row.HeightMm * 1e-3,
-                    row.Part.PadExtent is null ? row.Part.RotationDegrees : 0),
-                PowerWatts = row.PowerWatts, ThetaJc = row.ThetaJc, ThetaJb = row.ThetaJb,
-                CaseToAmbient = row.HeatsinkKelvinPerWatt > 0 ? row.HeatsinkKelvinPerWatt : null,
-                CaseFilmCoefficient = CaseFilmCoefficient
-            });
+            ComponentResult = partProblem!;
+            return;
         }
         if (components.Count == 0)
         {

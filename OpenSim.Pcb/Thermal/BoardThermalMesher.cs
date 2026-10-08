@@ -31,6 +31,15 @@ public sealed record BoardThermalOptions
     /// <summary>Emissivity of the board's surface (solder mask ≈ 0.9); null keeps the
     /// laminate material's own.</summary>
     public double? SurfaceEmissivity { get; init; } = 0.9;
+
+    /// <summary>
+    /// Give a copper-layer element whose copper is mostly trace an orthotropic conductivity:
+    /// along the trace copper and laminate side by side, across it the two in series, and
+    /// through the layer side by side again (<see cref="BoardThermalMesh.Conductivity"/>).
+    /// Off, every element conducts as copper and laminate side by side in every direction —
+    /// right for planes and pours, too high across a narrow trace.
+    /// </summary>
+    public bool TraceDirections { get; init; }
 }
 
 /// <summary>The whole board as a thermal mesh, with the materials that go with its
@@ -62,6 +71,14 @@ public sealed record BoardThermalMesh
 
     public double EdgeLength { get; init; }
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+
+    /// <summary>Per-element conductivity tensor with <see cref="BoardThermalOptions.TraceDirections"/>;
+    /// null otherwise (the region materials' own conductivity).</summary>
+    public IReadOnlyList<ConductivityTensor>? Conductivity { get; init; }
+
+    /// <summary>z extent of every copper layer (layer order → metres), the board's bottom at 0.</summary>
+    public IReadOnlyDictionary<int, (double zLo, double zHi)> LayerZ { get; init; } =
+        new Dictionary<int, (double zLo, double zHi)>();
 }
 
 /// <summary>
@@ -140,7 +157,9 @@ public static class BoardThermalMesher
         }
 
         // The stack, bottom (z = 0) to top.
-        int layerCount = Math.Max(1, board.Islands.Count == 0 ? 1 : board.Islands.Max(i => i.LayerOrder));
+        // The layers the copper shows, or the stackup's when it lists more (a layer may carry no copper).
+        int layerCount = Math.Max(Math.Max(1, board.Islands.Count == 0 ? 1 : board.Islands.Max(i => i.LayerOrder)),
+            options.Stackup.DielectricGapThicknesses.Count + 1);
         var stackup = options.Stackup;
         double CopperThickness(int order) =>
             order - 1 < stackup.CopperLayerThicknesses.Count ? stackup.CopperLayerThicknesses[order - 1] : stackup.CopperThickness;
@@ -245,6 +264,16 @@ public static class BoardThermalMesher
         var faces = components.Select(c => new PcbMeshGenerator.PadFace(c.Footprint, c.OnTop ? top : 0, c.OnTop)).ToList();
         var mesh = new PcbMeshGenerator().GenerateLayered(planar, slabs, faces);
 
+        IReadOnlyList<ConductivityTensor>? conductivity = null;
+        if (options.TraceDirections)
+        {
+            var directions = new (double Share, double Angle)[layerCount + 1][];
+            for (int order = 1; order <= layerCount; order++)
+                directions[order] = TraceDirections(planar, board, order);
+            conductivity = Tensors(mesh, planar, h, levels, slabKinds, coverage, directions, options.Copper,
+                options.Laminate, notes);
+        }
+
         var contact = new double[components.Count];
         foreach (var triangle in mesh.BoundaryTriangles)
         {
@@ -280,8 +309,86 @@ public static class BoardThermalMesher
             ViaCopperVolume = viaVolume,
             LayerCoverage = layerCoverage,
             EdgeLength = h,
-            Notes = notes
+            Notes = notes,
+            Conductivity = conductivity,
+            LayerZ = Enumerable.Range(0, slabKinds.Count).Where(s => slabKinds[s].Copper)
+                .ToDictionary(s => slabKinds[s].Order, s => (levels[s], levels[s + 1]))
         };
+    }
+
+    /// <summary>Per triangle of a copper layer: the share of its copper samples that lie on a
+    /// trace (within half a width of a centerline), and the traces' mean direction there
+    /// (doubled-angle mean, so a trace and its reverse agree).</summary>
+    private static (double Share, double Angle)[] TraceDirections(PlanarMesh planar, PcbBoard board, int order)
+    {
+        var result = new (double, double)[planar.Triangles.Count];
+        var lines = board.TraceCenterlines.Where(c => c.LayerOrder == order && c.Length > 0).ToList();
+        var shapes = board.Islands.Where(i => i.LayerOrder == order).Select(i => i.Shape).ToList();
+        if (lines.Count == 0 || shapes.Count == 0) return result;
+        var copper = new PolygonSetIndex(shapes);
+        Parallel.For(0, planar.Triangles.Count, t =>
+        {
+            var tri = planar.Triangles[t];
+            Point2 a = planar.Points[tri.A], b = planar.Points[tri.B], c = planar.Points[tri.C];
+            int onCopper = 0, onTrace = 0;
+            double cos2 = 0, sin2 = 0;
+            foreach (var (w0, w1, w2) in Samples)
+            {
+                var p = new Point2(w0 * a.X + w1 * b.X + w2 * c.X, w0 * a.Y + w1 * b.Y + w2 * c.Y);
+                if (!copper.Contains(p)) continue;
+                onCopper++;
+                foreach (var line in lines)
+                {
+                    var d = line.End - line.Start;
+                    double length = d.Length;
+                    double s = Math.Clamp(Point2.Dot(p - line.Start, d) / (length * length), 0, 1);
+                    if ((p - (line.Start + d * s)).Length > 0.5 * line.Width * 1.05) continue;
+                    double angle = Math.Atan2(d.Y, d.X);
+                    cos2 += Math.Cos(2 * angle);
+                    sin2 += Math.Sin(2 * angle);
+                    onTrace++;
+                    break;
+                }
+            }
+            result[t] = onCopper == 0 ? (0, 0) : ((double)onTrace / onCopper, 0.5 * Math.Atan2(sin2, cos2));
+        });
+        return result;
+    }
+
+    /// <summary>The conductivity tensor of every element: orthotropic where a copper layer's
+    /// copper is mostly trace, isotropic (copper and laminate side by side) elsewhere.</summary>
+    private static ConductivityTensor[] Tensors(FeMesh mesh, PlanarMesh planar, double h, List<double> levels,
+        List<(bool Copper, int Order)> slabKinds, int[][] coverage, (double Share, double Angle)[][] directions,
+        Material copper, Material laminate, List<string> notes)
+    {
+        var locator = new TriangleLocator(planar, h);
+        double kc = copper.ThermalConductivity!.Value, kl = laminate.ThermalConductivity!.Value;
+        var tensors = new ConductivityTensor[mesh.ElementCount];
+        int orthotropic = 0;
+        for (int e = 0; e < mesh.ElementCount; e++)
+        {
+            var el = mesh.Elements[e];
+            var centroid = (mesh.Nodes[el.N0] + mesh.Nodes[el.N1] + mesh.Nodes[el.N2] + mesh.Nodes[el.N3]) * 0.25;
+            int slab = 0;
+            while (slab < slabKinds.Count - 1 && centroid.Z > levels[slab + 1]) slab++;
+            int t = locator.Find(new Point2(centroid.X, centroid.Y));
+            var (isCopper, order) = slabKinds[slab];
+            if (isCopper && t >= 0 && directions[order][t].Share >= 0.5)
+            {
+                double f = coverage[order][t] / (double)Samples.Length;
+                double parallel = kl + f * (kc - kl);
+                double series = 1 / (f / kc + (1 - f) / kl);
+                tensors[e] = ConductivityTensor.InPlane(parallel, series, parallel, directions[order][t].Angle);
+                orthotropic++;
+                continue;
+            }
+            double fraction = (mesh.RegionOf(e) >= CopperLayerRegionBase ? mesh.RegionOf(e) - CopperLayerRegionBase : mesh.RegionOf(e))
+                              / (double)FractionSteps;
+            tensors[e] = ConductivityTensor.Isotropic(kl + Math.Max(0, fraction) * (kc - kl));
+        }
+        notes.Add($"Trace directions: {orthotropic} copper-layer elements conduct along their traces as copper and " +
+                  "laminate side by side and across them in series.");
+        return tensors;
     }
 
     /// <summary>Laminate with a share of its volume copper, the two conducting side by side.</summary>

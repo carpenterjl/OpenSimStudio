@@ -49,6 +49,13 @@ public sealed record SolveInput
     public IReadOnlyList<double>? ElementHeatSource { get; init; }
 
     /// <summary>
+    /// Optional thermal conductivity tensor per element, in place of the material's scalar
+    /// conductivity in the conduction matrix and the heat flux (an orthotropic board layer).
+    /// Consumed by the thermal solvers; null leaves every path as it was.
+    /// </summary>
+    public IReadOnlyList<OpenSim.Core.Numerics.ConductivityTensor>? ElementThermalConductivity { get; init; }
+
+    /// <summary>
     /// Time-integration settings for a transient thermal solve. Consumed by the transient
     /// thermal solver (and the Joule study's thermal leg); ignored by others. Null for
     /// steady-state solves.
@@ -112,6 +119,23 @@ public sealed record SolveInput
     /// (the explicit exchange), which is the path as it was.
     /// </summary>
     public Func<int, IReadOnlyList<double>, bool>? PrescribedFilmStepAccepted { get; init; }
+
+    /// <summary>
+    /// A volumetric heat source that CHANGES with the solution: (step index, time [s], the
+    /// nodal temperature at the start of the step — or, on a repeat, the step's last result)
+    /// -> the source per element [W/m³] for that step, used by the transient solver in place
+    /// of <see cref="ElementHeatSource"/>. Joule heat whose resistivity follows the
+    /// temperature is one. Null leaves the path as it was.
+    /// </summary>
+    public Func<int, double, IReadOnlyList<double>, IReadOnlyList<double>>? ElementHeatSourceSchedule { get; init; }
+
+    /// <summary>
+    /// With <see cref="ElementHeatSourceSchedule"/>: (step index, the nodal temperature the step
+    /// just produced) -> whether the step is accepted. On false the step is solved again from
+    /// the same start state with the schedule pulled at the rejected result, which makes the
+    /// step implicit in the source. Null accepts every step after one solve.
+    /// </summary>
+    public Func<int, IReadOnlyList<double>, bool>? HeatSourceStepAccepted { get; init; }
 
     /// <summary>Settings for a modal analysis. Null (the default mode count applies)
     /// or ignored outside the modal solver.</summary>

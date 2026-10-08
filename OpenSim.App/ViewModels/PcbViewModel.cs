@@ -35,6 +35,7 @@ public partial class PcbViewModel : ObservableObject
         AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, PowerRailViewModel rail)
     {
         _rail = rail;
+        rail.BoardThermal = RailBoardThermal;
         _session = session;
         _log = log;
         _meshing = meshing;

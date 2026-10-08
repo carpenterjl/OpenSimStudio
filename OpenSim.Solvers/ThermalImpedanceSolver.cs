@@ -156,7 +156,7 @@ public static class ThermalImpedanceSolver
             throw new InvalidOperationException("Thermal impedance needs a heat source: a heat flow condition or a volumetric source.");
 
         // Conduction with the convection conditions; an environment as the film it settles to.
-        var assembler = new ScalarDiffusionAssembler(mesh, el => input.MaterialOf(el).ThermalConductivity!.Value);
+        var assembler = ScalarDiffusionAssembler.Thermal(input);
         var robin = new List<ScalarDiffusionAssembler.RobinTerm>();
         foreach (var convection in input.BoundaryConditions.OfType<Convection>())
             foreach (var t in mesh.GetFaceTriangles(convection.FaceIds))

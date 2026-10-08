@@ -95,8 +95,13 @@ public sealed record ComponentThermalReport
 /// </summary>
 public static class ComponentThermalAnalysis
 {
-    public static ComponentThermalReport Solve(BoardThermalMesh mesh, ComponentThermalSetup setup,
-        IProgress<SolverProgress>? progress = null, CancellationToken cancellationToken = default)
+    /// <summary>One part's eliminated network: the exchange its footprint has with the board.</summary>
+    internal readonly record struct PartNetwork(double Conductance, double Source, double Top, bool Mounted);
+
+    /// <summary>The board conditions with every part's footprint exchange added, the parts'
+    /// networks, and the air temperature at the parts.</summary>
+    internal static (List<BoundaryCondition> Conditions, PartNetwork[] Network, double Ambient) Conditions(
+        BoardThermalMesh mesh, ComponentThermalSetup setup)
     {
         var components = setup.Components;
         if (components.Count != mesh.ComponentFaceIds.Count)
@@ -107,7 +112,7 @@ public static class ComponentThermalAnalysis
             ?? throw new InvalidOperationException("Give the air temperature at the parts (an environment or an ambient).");
 
         var conditions = new List<BoundaryCondition>(setup.BoardConditions);
-        var network = new (double Conductance, double Source, double Top, bool Mounted)[components.Count];
+        var network = new PartNetwork[components.Count];
         for (int k = 0; k < components.Count; k++)
         {
             var part = components[k];
@@ -119,7 +124,7 @@ public static class ComponentThermalAnalysis
             if (double.IsPositiveInfinity(top))
             {
                 // Nothing leaves through the top: all the power goes into the board.
-                network[k] = (0, 0, top, true);
+                network[k] = new PartNetwork(0, 0, top, true);
                 if (part.PowerWatts != 0)
                     conditions.Add(new HeatFlux { Name = part.RefDes, FaceIds = new[] { face }, TotalPower = part.PowerWatts });
                 continue;
@@ -129,24 +134,21 @@ public static class ComponentThermalAnalysis
                 throw new InvalidOperationException(
                     $"{part.RefDes}: θJB and the case-to-ambient resistance are both zero, which ties the board to the air.");
             double conductance = 1.0 / series, source = ambient + part.PowerWatts * top;
-            network[k] = (conductance, source, top, true);
+            network[k] = new PartNetwork(conductance, source, top, true);
             conditions.Add(new Convection
             {
                 Name = part.RefDes, FaceIds = new[] { face },
                 Coefficient = conductance / mesh.ComponentContactArea[k], AmbientTemperature = source
             });
         }
+        return (conditions, network, ambient);
+    }
 
-        var output = new HeatConductionSolver().Solve(new SolveInput
-        {
-            Mesh = mesh.Mesh,
-            Material = mesh.Laminate,
-            RegionMaterials = mesh.RegionMaterials,
-            BoundaryConditions = conditions,
-            Environment = setup.Environment
-        }, progress, cancellationToken);
-        var temperature = ((NodalScalarField)output.Fields.First(f => f.Name == "Temperature")).Values;
-
+    /// <summary>Each mounted part's temperatures from the board temperature, hottest junction
+    /// first, and the heat the parts put into the board.</summary>
+    internal static (List<ComponentTemperature> Parts, double IntoBoard) Temperatures(BoardThermalMesh mesh,
+        IReadOnlyList<ThermalComponent> components, PartNetwork[] network, IReadOnlyList<double> temperature, double ambient)
+    {
         // Area-mean board temperature under each part.
         var weighted = new double[components.Count];
         var area = new double[components.Count];
@@ -183,6 +185,26 @@ public static class ComponentThermalAnalysis
             });
         }
         results.Sort((a, b) => b.JunctionKelvin.CompareTo(a.JunctionKelvin));
+        return (results, intoBoard);
+    }
+
+    public static ComponentThermalReport Solve(BoardThermalMesh mesh, ComponentThermalSetup setup,
+        IProgress<SolverProgress>? progress = null, CancellationToken cancellationToken = default)
+    {
+        var components = setup.Components;
+        var (conditions, network, ambient) = Conditions(mesh, setup);
+
+        var output = new HeatConductionSolver().Solve(new SolveInput
+        {
+            Mesh = mesh.Mesh,
+            Material = mesh.Laminate,
+            RegionMaterials = mesh.RegionMaterials,
+            ElementThermalConductivity = mesh.Conductivity,
+            BoundaryConditions = conditions,
+            Environment = setup.Environment
+        }, progress, cancellationToken);
+        var temperature = ((NodalScalarField)output.Fields.First(f => f.Name == "Temperature")).Values;
+        var (results, intoBoard) = Temperatures(mesh, components, network, temperature, ambient);
 
         var log = new List<string>(mesh.Notes);
         log.AddRange(output.Log);

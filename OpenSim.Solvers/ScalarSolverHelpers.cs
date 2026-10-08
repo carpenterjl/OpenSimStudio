@@ -7,6 +7,20 @@ namespace OpenSim.Solvers;
 /// <summary>Shared load-distribution and field-recovery helpers for the scalar solvers.</summary>
 internal static class ScalarSolverHelpers
 {
+    /// <summary>A per-element conductivity tensor, when given, must cover every element and be
+    /// symmetric positive definite (the conduction matrix stays SPD only then).</summary>
+    public static void ValidateConductivityTensor(SolveInput input)
+    {
+        if (input.ElementThermalConductivity is not { } tensors) return;
+        if (tensors.Count != input.Mesh.ElementCount)
+            throw new InvalidOperationException(
+                $"ElementThermalConductivity has {tensors.Count} entries but the mesh has {input.Mesh.ElementCount} elements.");
+        for (int e = 0; e < tensors.Count; e++)
+            if (!tensors[e].IsPositiveDefinite)
+                throw new InvalidOperationException(
+                    $"The conductivity tensor of element {e} is not positive definite: heat would flow up the gradient.");
+    }
+
     /// <summary>
     /// The time-constant thermal nodal load vector shared by the steady and transient
     /// heat solvers: surface heat flows, the convection ambient term h·T_amb·A/3 per
