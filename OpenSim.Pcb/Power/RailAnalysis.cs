@@ -243,8 +243,11 @@ public static class RailAnalysis
         {
             "every source and load pad is an equipotential (a soldered pin); the pads of one terminal " +
                 "are tied together off the board",
-            "a pad electrode is the mesh faces whose centre lies in the pad, so its edge is resolved to " +
-                "a fraction of an element — refine the mesh when a span between pads is only a few elements long",
+            mesh.PadOutlinesImprinted
+                ? "a pad electrode is the pad's own outline: pad outlines are edges of the mesh"
+                : "pad outlines could not be made edges of the mesh, so a pad electrode is the mesh faces whose " +
+                  "centre lies in the pad and its edge is resolved to a fraction of an element — refine the mesh " +
+                  "when a span between pads is only a few elements long",
             "DC conduction in this net's copper only — the return path's drop is a second run on the " +
                 "ground net and adds to what the load sees",
             !temperatureCorrected

@@ -1,5 +1,6 @@
 using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
+using OpenSim.Core.Numerics;
 using OpenSim.Core.Persistence;
 using OpenSim.Core.Results;
 using OpenSim.Pcb.Extrude;
@@ -117,6 +118,67 @@ public class PadElectrodeTests
         double thin = SolveR(35);
         double thick = SolveR(70);
         Assert.Equal(0.5, thick / thin, 0.05);
+    }
+
+    /// <summary>Area of the boundary faces carrying a face id [m²].</summary>
+    private static double TaggedArea(FeMesh mesh, int faceId) => mesh.BoundaryTriangles
+        .Where(t => t.FaceId == faceId)
+        .Sum(t => 0.5 * Vector3D.Cross(mesh.Nodes[t.B] - mesh.Nodes[t.A], mesh.Nodes[t.C] - mesh.Nodes[t.A]).Length);
+
+    /// <summary>The area a pad outline can gain or lose to the polygon engine's snap and weld:
+    /// its perimeter times 10 nm, far below any copper feature (an unimprinted pad was off by
+    /// a fraction of an element, ~0.1 mm).</summary>
+    private static double Snap(Polygon2 pad) =>
+        10e-9 * pad.Outer.Select((p, i) => (pad.Outer[(i + 1) % pad.Outer.Count] - p).Length).Sum();
+
+    private static Polygon2 Disc(double cx, double cy, double r, int n) =>
+        new(Enumerable.Range(0, n).Select(i => new Point2(
+            cx + r * Math.Cos(2 * Math.PI * i / n), cy + r * Math.Sin(2 * Math.PI * i / n))).ToList());
+
+    [Fact]
+    public void APadSmallerThanAnElement_IsAnElectrodeOfExactlyItsOwnArea()
+    {
+        // A 0.4 × 0.3 mm pad and a 0.25 mm round pad in a 10 mm pour meshed at 1 mm: the pads
+        // are constraints of the mesh, so each is an electrode and its face is the pad, no
+        // more and no less (PCB-17: before, a pad got whichever triangles had their centre
+        // inside it — none, or triangles larger than the pad).
+        var pour = new CopperIsland(0, 1, "L1", Rect(0, 0, 10e-3, 10e-3));
+        var net = new CopperNet(1, new[] { pour });
+        var square = Rect(3.1e-3, 4.2e-3, 3.5e-3, 4.5e-3);
+        var round = Disc(7.3e-3, 6.1e-3, 0.125e-3, 24);
+        var pads = new System.Collections.Generic.List<CopperPad>
+        {
+            new(1, new Point2(3.3e-3, 4.35e-3), square, 0.4e-3),
+            new(1, new Point2(7.3e-3, 6.1e-3), round, 0.25e-3)
+        };
+        var result = new NetMesher().MeshNet(net, pads, new NetMeshOptions { TargetEdgeLength = 1e-3 });
+
+        Assert.Equal(2, result.Pads.Count);
+        var mesh = result.Body.Mesh!;
+        Assert.Equal(square.Area(), TaggedArea(mesh, result.Pads.Single(p => p.Center.X < 5e-3).FaceId), Snap(square));
+        Assert.Equal(round.Area(), TaggedArea(mesh, result.Pads.Single(p => p.Center.X > 5e-3).FaceId), Snap(round));
+    }
+
+    [Fact]
+    public void OnAMultiLayerNet_EachPadFaceIsItsPad()
+    {
+        // The same check through the multi-layer path: copper on L1 and L2, a pad on each.
+        var top = new CopperIsland(0, 1, "L1", Rect(0, 0, 8e-3, 3e-3));
+        var bottom = new CopperIsland(1, 2, "L2", Rect(2e-3, 0, 10e-3, 3e-3));
+        var net = new CopperNet(1, new[] { top, bottom });
+        var padTop = Rect(0.7e-3, 1.1e-3, 1.3e-3, 1.9e-3);
+        var padBottom = Disc(9.1e-3, 1.4e-3, 0.3e-3, 32);
+        var pads = new System.Collections.Generic.List<CopperPad>
+        {
+            new(1, new Point2(1e-3, 1.5e-3), padTop, 0.8e-3),
+            new(2, new Point2(9.1e-3, 1.4e-3), padBottom, 0.6e-3)
+        };
+        var result = new NetMesher().MeshNet(net, pads, new NetMeshOptions { TargetEdgeLength = 1e-3 });
+
+        Assert.Equal(2, result.Pads.Count);
+        var mesh = result.Body.Mesh!;
+        Assert.Equal(padTop.Area(), TaggedArea(mesh, result.Pads.Single(p => p.LayerOrder == 1).FaceId), Snap(padTop));
+        Assert.Equal(padBottom.Area(), TaggedArea(mesh, result.Pads.Single(p => p.LayerOrder == 2).FaceId), Snap(padBottom));
     }
 
     [Fact]

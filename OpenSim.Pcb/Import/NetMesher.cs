@@ -121,6 +121,12 @@ public sealed class NetMesher
         /// <summary>The plated wall thickness the via barrels were meshed with [m] (the
         /// option, after the meshable minimum was applied).</summary>
         public double ViaPlating { get; init; }
+
+        /// <summary>True when every pad outline is an edge of the mesh, so each electrode is
+        /// exactly its pad. False when the net has no pads, or when the imprinted mesh could
+        /// not be built and the net was meshed without them (a warning says so); an
+        /// electrode is then the faces whose centre lies in the pad.</summary>
+        public bool PadOutlinesImprinted { get; init; }
     }
 
     public Result MeshNet(CopperNet net, IReadOnlyList<CopperPad>? boardPads = null, NetMeshOptions? options = null)
@@ -204,7 +210,31 @@ public sealed class NetMesher
         double edge = options.TargetEdgeLength > 0 ? options.TargetEdgeLength : AutoEdge(polygons);
         double thickness = CopperThickness(options, layer);
 
-        var planar = MeshRobust(polygons, edge);
+        // Pad outlines are edges of the mesh, so an electrode ends where its pad does and a
+        // pad smaller than an element still has a face of its own. The copper is cleaned
+        // before the booleans, as on the multi-layer path, since the faces they give share
+        // boundaries the mesher must not clean twice.
+        PlanarMesh planar;
+        bool imprinted = false;
+        if (padShapes.Count == 0)
+            planar = MeshRobust(polygons, edge);
+        else
+        {
+            double cleanTol = Math.Min(PolygonCleaner.DefaultTolerance, edge / 20);
+            var copper = PolygonCleaner.Clean(polygons, cleanTol).ToList();
+            try
+            {
+                var domain = Ops.Union(copper.SelectMany(Polygon2.OrientedRings).ToList());
+                var faces = ImprintPads(domain, padShapes, cleanTol);
+                planar = MeshRobust(ArrangementWeld.Apply(faces, WeldTolerance), edge, cleanPolygons: false);
+                imprinted = true;
+            }
+            catch (ConstraintRecoveryException ex)
+            {
+                warnings.Add(NotImprinted(net, ex));
+                planar = MeshRobust(polygons, edge);
+            }
+        }
         var mesh = new PcbMeshGenerator().GenerateCopperOnly(planar, thickness, padShapes);
 
         var electrodes = CollectElectrodes(mesh, netPads);
@@ -213,9 +243,33 @@ public sealed class NetMesher
                      $"{edge * 1e3:g3} mm edge (single layer L{layer}).");
         return new Result(body, electrodes, warnings)
         {
-            LayerZ = new Dictionary<int, (double zLo, double zHi)> { [layer] = (0, thickness) }
+            LayerZ = new Dictionary<int, (double zLo, double zHi)> { [layer] = (0, thickness) },
+            PadOutlinesImprinted = imprinted
         };
     }
+
+    /// <summary>
+    /// Splits the faces along every pad outline, so each pad is a union of faces. Pads that
+    /// overlap are imprinted by the outline of their union; a face in the overlap belongs to
+    /// the first pad that covers it.
+    /// </summary>
+    private static IReadOnlyList<Polygon2> ImprintPads(IReadOnlyList<Polygon2> faces,
+        IReadOnlyList<Polygon2> padShapes, double cleanTol)
+    {
+        var pads = PolygonCleaner.Clean(padShapes, Math.Min(cleanTol, PadCleanTolerance)).ToList();
+        return pads.Count == 0 ? faces : SplitFaces(faces, pads);
+    }
+
+    /// <summary>Cleaning tolerance for pad outlines [m]. The copper's tolerance (up to 10 µm)
+    /// removes vertices one after another, which turns a 0.25 mm round pad into an octagon
+    /// with 9 % less area; arcs are tessellated at <see cref="ChordTolerance"/>, so 1 µm keeps
+    /// every arc vertex and still removes sub-micron spurs.</summary>
+    private const double PadCleanTolerance = 1e-6;
+
+    private static string NotImprinted(CopperNet net, Exception ex) =>
+        $"Net {net.Id}: the mesh with pad outlines as edges could not be built ({ex.Message}); meshed " +
+        "without them, so each pad electrode is the faces whose centre lies in the pad and its edge is " +
+        "resolved to a fraction of an element.";
 
     // ---------------- Multi layer + via barrels ----------------
 
@@ -329,11 +383,39 @@ public sealed class NetMesher
             faces = SplitFaces(faces, group);
         if (laminate.Count > 0)
             faces = SplitFaces(faces, laminate);
+
+        // The net's pads on the spanned layers, matched against the pre-drill footprints (a
+        // via-in-pad's centre lies inside the bore). Their outlines become edges of the mesh
+        // too, so each electrode is exactly its pad.
+        var netPads = new List<CopperPad>();
+        foreach (var pad in boardPads)
+        {
+            if (!padLookupPolys.TryGetValue(pad.LayerOrder, out var polys)) continue;
+            if (!polys.Any(poly => PlanarMesher.ContainsPoint(new[] { poly }, pad.Center))) continue;
+            netPads.Add(pad);
+        }
+
         // Boolean outputs sharing a boundary can disagree by a snap-rounding unit at
         // grazing tangencies (crossing chains a nanometre deep, unrecoverable as CDT
         // constraints) — weld + imprint restores a conformal face set.
-        faces = ArrangementWeld.Apply(faces, WeldTolerance);
-        var planar = MeshRobust(faces, edge, cleanPolygons: false);
+        PlanarMesh planar;
+        bool imprinted = false;
+        if (netPads.Count == 0)
+            planar = MeshRobust(ArrangementWeld.Apply(faces, WeldTolerance), edge, cleanPolygons: false);
+        else
+        {
+            try
+            {
+                var withPads = ImprintPads(faces, netPads.Select(p => p.Shape).ToList(), cleanTol);
+                planar = MeshRobust(ArrangementWeld.Apply(withPads, WeldTolerance), edge, cleanPolygons: false);
+                imprinted = true;
+            }
+            catch (ConstraintRecoveryException ex)
+            {
+                warnings.Add(NotImprinted(net, ex));
+                planar = MeshRobust(ArrangementWeld.Apply(faces, WeldTolerance), edge, cleanPolygons: false);
+            }
+        }
 
         // 4. True z of every copper layer and dielectric gap in the spanned range.
         var (layerZ, gapZ) = BuildStackupZ(minL, maxL, options);
@@ -398,14 +480,9 @@ public sealed class NetMesher
         //    surrounded by air except at the barrels, so both faces are boundary — top is enough).
         //    With the board the bottom layer's upper face is against laminate: its pads are
         //    exposed on their lower face.
-        var netPads = new List<CopperPad>();
         var padFaces = new List<PcbMeshGenerator.PadFace>();
-        foreach (var pad in boardPads)
+        foreach (var pad in netPads)
         {
-            // Match against the pre-drill footprints: a via-in-pad's center is inside the bore.
-            if (!padLookupPolys.TryGetValue(pad.LayerOrder, out var polys)) continue;
-            if (!polys.Any(poly => PlanarMesher.ContainsPoint(new[] { poly }, pad.Center))) continue;
-            netPads.Add(pad);
             padFaces.Add(board is not null && pad.LayerOrder == maxL
                 ? new PcbMeshGenerator.PadFace(pad.Shape, layerZ[pad.LayerOrder].zLo, TopFacing: false)
                 : new PcbMeshGenerator.PadFace(pad.Shape, layerZ[pad.LayerOrder].zHi, TopFacing: true));
@@ -433,7 +510,10 @@ public sealed class NetMesher
         if (bridges.Count == 0 && layers.Count > 1)
             warnings.Add($"Net {net.Id} spans layers L{string.Join("+", layers)} but has no annular-ring via bridges; " +
                          "layers are meshed at their true z but stay electrically separate (no barrel).");
-        return new Result(body, electrodes, warnings) { LayerZ = layerZ, ViaPlating = plating };
+        return new Result(body, electrodes, warnings)
+        {
+            LayerZ = layerZ, ViaPlating = plating, PadOutlinesImprinted = imprinted
+        };
     }
 
     // ---------------- Shared helpers ----------------

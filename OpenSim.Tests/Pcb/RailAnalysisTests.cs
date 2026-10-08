@@ -115,7 +115,7 @@ public class RailAnalysisTests
 
     /// <summary>A 60 × 1 mm trace with four full-width 1 mm pads. Between pad edges the
     /// current is uniform, so each span is exactly ρ·ℓ/(w·t) and the rail is a ladder.</summary>
-    private static (NetMesher.Result Mesh, CopperNet Net) Ladder()
+    private static (NetMesher.Result Mesh, CopperNet Net) Ladder(double edge = 0.125e-3)
     {
         var net = new CopperNet(1, new[] { new CopperIsland(0, 1, "L1", Rect(0, 0, 60e-3, 1e-3)) });
         var pads = new[]
@@ -126,17 +126,19 @@ public class RailAnalysisTests
             Pad(1, 59e-3, 0, 60e-3, 1e-3, "U4", "1"),
         };
         var mesh = new NetMesher().MeshNet(net, pads,
-            new NetMeshOptions { TargetEdgeLength = 0.125e-3, CopperThickness = Cu });
+            new NetMeshOptions { TargetEdgeLength = edge, CopperThickness = Cu });
         return (mesh, net);
     }
 
     private static NetMesher.PadElectrode PadOf(NetMesher.Result mesh, string refDes) =>
         mesh.Pads.Single(p => p.ComponentRef == refDes);
 
-    [Fact]
-    public void Ladder_LoadVoltages_MatchTheResistorNetwork()
+    [Theory]
+    [InlineData(0.125e-3)]
+    [InlineData(0.5e-3)]
+    public void Ladder_LoadVoltages_MatchTheResistorNetwork(double edge)
     {
-        var (mesh, net) = Ladder();
+        var (mesh, net) = Ladder(edge);
         var report = RailAnalysis.Solve(mesh, net, new RailSetup
         {
             Sources = new[] { new RailSource("U1", new[] { PadOf(mesh, "U1") }, 3.3) { OutputResistance = 0.010 } },
@@ -160,9 +162,9 @@ public class RailAnalysisTests
         Assert.Equal(vSource, report.Sources[0].PadVolts, 6);
         Assert.Equal(3.5, report.Sources[0].Amps, 6);
         Assert.Equal(0.010 * 3.5 * 3.5, report.Sources[0].OutputLossWatts, 6);
-        // Drops from the source pad, each within 0.5 % of the network's. (A pad electrode is
-        // the mesh faces whose centre lies in the pad, so its edge is resolved to a fraction
-        // of an element: at a 0.5 mm edge these spans read 1.6 % short, at 0.125 mm 0.1 %.)
+        // Drops from the source pad, each within 0.5 % of the network's, at a coarse mesh as
+        // at a fine one: pad outlines are constraints of the mesh, so an electrode ends where
+        // its pad does. (Before they were, a 0.5 mm edge read these spans 1.6 % short.)
         var expected = new[] { v2, v3, v4 };
         for (int i = 0; i < 3; i++)
         {
