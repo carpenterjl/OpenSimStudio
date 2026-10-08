@@ -18,11 +18,16 @@
                     <TextBox Text="{Binding TopWidthMm}" Margin="2,0,0,0"
                              ToolTip="Width at the top of an etched trace; 0 = rectangular"/>
                 </UniformGrid>
-                <Label Content="Copper [µm] / rough [µm]"/>
+                <Label Content="Copper [µm]"/>
+                <TextBox Text="{Binding CopperThicknessUm}"/>
+                <Label Content="Roughness"/>
+                <ComboBox ItemsSource="{Binding RoughnessModels}" SelectedItem="{Binding RoughnessModel}"/>
+                <Label Content="RMS or radius [µm] / ratio"/>
                 <UniformGrid Columns="2">
-                    <TextBox Text="{Binding CopperThicknessUm}" Margin="0,0,2,0"/>
-                    <TextBox Text="{Binding RoughnessUm}" Margin="2,0,0,0"
-                             ToolTip="RMS surface roughness (Hammerstad); 0 = smooth copper"/>
+                    <TextBox Text="{Binding RoughnessUm}" Margin="0,0,2,0"
+                             ToolTip="Hammerstad: RMS roughness. Huray: sphere radius. From the foil's data sheet."/>
+                    <TextBox Text="{Binding HuraySurfaceRatio}" Margin="2,0,0,0"
+                             ToolTip="Huray only: sphere surface area per flat area, from the foil's data sheet"/>
                 </UniformGrid>
                 <Label Content="Below: h [mm] / εr / tanδ"/>
                 <UniformGrid Columns="3">
@@ -40,6 +45,13 @@
                 <CheckBox x:Name="ZcPairCheck" Content="Differential pair, gap [mm]" IsChecked="{Binding IsPair}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
                 <TextBox Text="{Binding PairGapMm}"/>
+                <CheckBox Content="Side walls (thick-trace solve)" IsChecked="{Binding SideWallSolve}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Solve the trace as the trapezoid it is, side walls included, instead of a strip of effective width. Matters for close pairs of thick copper."/>
+                <Label/>
+                <Label Content="Pair: second width [mm]"
+                       ToolTip="Base width of the pair's second trace; 0 = the same as the first (a symmetric pair)"/>
+                <TextBox Text="{Binding SecondWidthMm}"/>
                 <CheckBox x:Name="ZcCoplanarCheck" Content="Coplanar ground, gap [mm]" IsChecked="{Binding HasCoplanarGround}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
                 <TextBox Text="{Binding CoplanarGapMm}"/>
@@ -79,6 +91,17 @@
                     <TextBox Text="{Binding SignalIntegrity.SiTanD}" Margin="0,0,2,0"/>
                     <TextBox Text="{Binding SignalIntegrity.CopperThicknessUm}" Margin="2,0,0,0"/>
                 </UniformGrid>
+                <Label Content="Roughness"/>
+                <ComboBox x:Name="SiRoughnessCombo" ItemsSource="{Binding SignalIntegrity.RoughnessModels}"
+                          SelectedItem="{Binding SignalIntegrity.RoughnessModel}"
+                          ToolTip="Copper roughness for the RLGC, S-parameters and eye, board nets and proximity option included"/>
+                <Label Content="RMS or radius [µm] / ratio"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SignalIntegrity.RoughnessUm}" Margin="0,0,2,0"
+                             ToolTip="Hammerstad: RMS roughness. Huray: sphere radius. From the foil's data sheet."/>
+                    <TextBox Text="{Binding SignalIntegrity.HuraySurfaceRatio}" Margin="2,0,0,0"
+                             ToolTip="Huray only: sphere surface area per flat area, from the foil's data sheet"/>
+                </UniformGrid>
                 <Label Content="Length [mm]"/>
                 <TextBox x:Name="SiLengthBox" Text="{Binding SignalIntegrity.LineLengthMm}"/>
                 <Label Content="Signal"/>
@@ -103,6 +126,10 @@
                           IsChecked="{Binding SignalIntegrity.AggressorsEnabled}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
                           ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
+                <CheckBox x:Name="SiSideWallsCheck" Content="Side walls"
+                          IsChecked="{Binding SignalIntegrity.SideWallSolve}"
+                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
+                          ToolTip="Solve the traces as the trapezoids they are, side walls included, instead of strips of effective width"/>
                 <CheckBox x:Name="SiProximityCheck" Content="Proximity R(f)"
                           IsChecked="{Binding SignalIntegrity.ProximityEffect}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"

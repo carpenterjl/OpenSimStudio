@@ -262,6 +262,127 @@ public class BoardCoupledExtractorTests
     }
 
     // ------------------------------------------------------------------
+    // Coplanar ground copper on the trace layer.
+    // ------------------------------------------------------------------
+
+    private const double GroundGap = 0.2e-3, GroundWidth = 2e-3;
+
+    /// <summary>Two strips at y = 5 mm and 5 mm + pitch, x 0..40 mm, between L1 ground pours
+    /// <see cref="GroundGap"/> from their outer edges, stitched to the L2 plane (one GND net).
+    /// The high-side pour runs only from x = 0 to <paramref name="highPourEnd"/>; a further
+    /// island of another net may sit between the low pour and the pair.</summary>
+    private static (PcbBoard Board, List<CopperNet> Nets) PairBetweenPours(double highPourEnd = 42e-3,
+        bool otherCopperBetween = false)
+    {
+        const double y0 = 5e-3, y1 = 5e-3 + Pitch;
+        var a = new CopperIsland(0, 1, "L1", Rect(0, y0 - W / 2, 40e-3, y0 + W / 2));
+        var b = new CopperIsland(1, 1, "L1", Rect(0, y1 - W / 2, 40e-3, y1 + W / 2));
+        double lowEdge = y0 - W / 2, highEdge = y1 + W / 2;
+        var lowPour = new CopperIsland(2, 1, "L1", Rect(-2e-3, lowEdge - GroundGap - GroundWidth, 42e-3, lowEdge - GroundGap));
+        var highPour = new CopperIsland(3, 1, "L1", Rect(-2e-3, highEdge + GroundGap, highPourEnd, highEdge + GroundGap + GroundWidth));
+        var plane = new CopperIsland(4, 2, "L2", Rect(-100e-3, -100e-3, 100e-3, 100e-3));
+        var islands = new List<CopperIsland> { a, b, lowPour, highPour, plane };
+        var nets = new List<CopperNet>
+        {
+            new(1, new[] { a }) { Name = "A" },
+            new(2, new[] { b }) { Name = "B" },
+            new(3, new[] { lowPour, highPour, plane }) { Name = "GND" },
+        };
+        if (otherCopperBetween)
+        {
+            // A sliver of another net in the low-side gap, over the whole run.
+            var other = new CopperIsland(5, 1, "L1", Rect(-2e-3, lowEdge - 0.15e-3, 42e-3, lowEdge - 0.1e-3));
+            islands.Add(other);
+            nets.Add(new CopperNet(4, new[] { other }) { Name = "OTHER" });
+        }
+        var board = new PcbBoard
+        {
+            Outline = Array.Empty<Polygon2>(),
+            Islands = islands,
+            Pads = Array.Empty<CopperPad>(),
+            Vias = Array.Empty<Via>(),
+            Nets = nets,
+            Layers = Array.Empty<BoardLayer>(),
+            Warnings = Array.Empty<string>(),
+            TraceCenterlines = new[]
+            {
+                new TraceCenterline(1, new Point2(0, y0), new Point2(40e-3, y0), W),
+                new TraceCenterline(1, new Point2(0, y1), new Point2(40e-3, y1), W),
+            },
+            Stackup = new PcbStackupSettings
+            {
+                DielectricGapThicknesses = new[] { H },
+                DielectricGapPermittivities = new[] { EpsR },
+                DielectricGapLossTangents = new[] { TanD },
+            },
+        };
+        return (board, nets.Take(2).ToList());
+    }
+
+    /// <summary>The pair with the given ground strips, solved and reduced by hand.</summary>
+    private static RlgcResult PairWithGrounds(bool low, bool high)
+    {
+        var stack = new LayeredStackup(new[] { new LayeredStackup.Layer(EpsR, TanD, H) });
+        var traces = new List<TraceCrossSection> { TraceCrossSection.Copper(0, W), TraceCrossSection.Copper(Pitch, W) };
+        if (low) traces.Add(TraceCrossSection.Copper(-W / 2 - GroundGap - GroundWidth / 2, GroundWidth) with { IsGround = true });
+        if (high) traces.Add(TraceCrossSection.Copper(Pitch + W / 2 + GroundGap + GroundWidth / 2, GroundWidth) with { IsGround = true });
+        var section = new CoupledLineCrossSection(stack, 0, traces);
+        return BoardCoupledResult.Reduce(section, RlgcExtractor.Extract(section));
+    }
+
+    [Fact]
+    public void GroundPoursBesideThePair_AreCoplanarGrounds()
+    {
+        var (board, nets) = PairBetweenPours();
+        var result = BoardCoupledExtractor.Extract(board, nets);
+        Assert.Null(result.FailureReason);
+        Assert.Equal(2, result.CrossSection!.SignalTraces.Count);
+        Assert.Equal(2, result.CrossSection.GroundIndices.Count);
+        Assert.Equal(2, result.Rlgc!.ConductorCount);
+
+        // The same cross-section built by hand, to the round-trip tolerance.
+        var byHand = PairWithGrounds(low: true, high: true);
+        AssertMatrixClose(byHand.CapacitanceFaradsPerMeter, result.Rlgc.CapacitanceFaradsPerMeter, 1e-6, "C");
+        AssertMatrixClose(byHand.InductanceHenriesPerMeter, result.Rlgc.InductanceHenriesPerMeter, 1e-6, "L");
+
+        // And it is not the pair alone: the grounds take charge and lower the impedance.
+        var alone = BoardCoupledExtractor.Extract(board, nets, new BoardCoupledOptions { CoplanarGround = false });
+        // Measured: C11 1.0118× the pair's alone, with the ground one substrate height away.
+        double rise = result.Rlgc.CapacitanceFaradsPerMeter[0, 0] / alone.Rlgc!.CapacitanceFaradsPerMeter[0, 0];
+        Assert.InRange(rise, 1.005, 1.05);
+        Assert.Contains(result.Assumptions, a => a.Contains("Coplanar ground") && a.Contains("tied to the reference"));
+        Assert.Equal(2, result.Network!.ConductorCount);
+    }
+
+    [Fact]
+    public void GroundBesideOnlyPartOfTheStretch_IsNotModelled_AndSaysSo()
+    {
+        // The high-side pour stops halfway: under 90 % of the stretch, so only the low side is
+        // carried, and the note says why the other is not.
+        var (board, nets) = PairBetweenPours(highPourEnd: 20e-3);
+        var result = BoardCoupledExtractor.Extract(board, nets);
+        Assert.Null(result.FailureReason);
+        Assert.Single(result.CrossSection!.GroundIndices);
+        AssertMatrixClose(PairWithGrounds(low: true, high: false).CapacitanceFaradsPerMeter,
+            result.Rlgc!.CapacitanceFaradsPerMeter, 1e-6, "C");
+        Assert.Contains(result.Assumptions, a => a.Contains("NOT modelled"));
+    }
+
+    [Fact]
+    public void OtherCopperBetweenThePairAndTheGround_IsNotTakenForGround()
+    {
+        // Another net's copper is the first copper met on the low side: that side is not a
+        // coplanar ground (and the other copper, not a return conductor, is not solved either).
+        var (board, nets) = PairBetweenPours(otherCopperBetween: true);
+        var result = BoardCoupledExtractor.Extract(board, nets);
+        Assert.Null(result.FailureReason);
+        Assert.Single(result.CrossSection!.GroundIndices);
+        AssertMatrixClose(PairWithGrounds(low: false, high: true).CapacitanceFaradsPerMeter,
+            result.Rlgc!.CapacitanceFaradsPerMeter, 1e-6, "C");
+        Assert.Contains(result.Assumptions, a => a.Contains("other copper first"));
+    }
+
+    // ------------------------------------------------------------------
     // Real-board robustness: the extractor must return a WELL-FORMED typed result
     // (a valid cross-section, or a failure with a reason) on the messy real centerlines
     // of arbitrary net pairs — never throw, never a half-built garbage matrix. This is the
@@ -293,7 +414,7 @@ public class BoardCoupledExtractorTests
                 {
                     Assert.NotNull(result.Rlgc);
                     Assert.NotNull(result.Network);
-                    Assert.Equal(2, result.CrossSection!.Traces.Count);
+                    Assert.Equal(2, result.CrossSection!.SignalTraces.Count);
                     Assert.True(result.CoupledLengthMeters > 0);
                 }
                 wellFormed++;

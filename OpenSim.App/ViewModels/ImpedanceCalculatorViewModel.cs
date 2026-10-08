@@ -26,6 +26,8 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
 
     [ObservableProperty] private bool _isPair;
     [ObservableProperty] private double _pairGapMm = 0.2;
+    /// <summary>Base width of the pair's second trace [mm]; 0 = the first's (a symmetric pair).</summary>
+    [ObservableProperty] private double _secondWidthMm;
     [ObservableProperty] private bool _hasCoplanarGround;
     [ObservableProperty] private double _coplanarGapMm = 0.2;
 
@@ -39,8 +41,21 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
     [ObservableProperty] private double _upperTanD = 0.02;
 
     [ObservableProperty] private double _frequencyGhz = 1;
-    /// <summary>Hammerstad RMS roughness [µm]; 0 = smooth copper.</summary>
+
+    public ObservableCollection<string> RoughnessModels { get; } = RoughnessChoice.Models();
+
+    /// <summary>Nullable so a ComboBox transient null push lands harmlessly.</summary>
+    [ObservableProperty] private string? _roughnessModel = RoughnessChoice.Smooth;
+
+    /// <summary>RMS roughness [µm] (Hammerstad) or sphere radius [µm] (Huray).</summary>
     [ObservableProperty] private double _roughnessUm;
+
+    /// <summary>Huray's sphere area per flat area.</summary>
+    [ObservableProperty] private double _huraySurfaceRatio;
+
+    /// <summary>Solve the trace as the trapezoid it is, side walls included
+    /// (<see cref="RlgcModel.SideWalls"/>).</summary>
+    [ObservableProperty] private bool _sideWallSolve;
 
     [ObservableProperty] private string _result = "";
     [ObservableProperty] private string _assumptions = "";
@@ -57,6 +72,7 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
         TopWidthMeters = TopWidthMm > 0 ? TopWidthMm * 1e-3 : null,
         ThicknessMeters = CopperThicknessUm * 1e-6,
         PairGapMeters = IsPair ? PairGapMm * 1e-3 : null,
+        SecondWidthMeters = IsPair && SecondWidthMm > 0 ? SecondWidthMm * 1e-3 : null,
         CoplanarGapMeters = HasCoplanarGround ? CoplanarGapMm * 1e-3 : null,
         HeightMeters = HeightMm * 1e-3,
         RelativePermittivity = EpsR,
@@ -65,9 +81,7 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
         UpperRelativePermittivity = UpperEpsR,
         UpperLossTangent = UpperTanD,
         FrequencyHz = FrequencyGhz * 1e9,
-        Model = RoughnessUm > 0
-            ? RlgcModel.Board with { Roughness = SurfaceRoughness.Hammerstad(RoughnessUm * 1e-6) }
-            : RlgcModel.Board
+        Model = RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio) with { SideWalls = SideWallSolve }
     };
 
     [RelayCommand]

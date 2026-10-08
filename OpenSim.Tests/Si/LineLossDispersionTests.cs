@@ -246,6 +246,49 @@ public class LineLossDispersionTests
         Assert.Equal(lossless.CapacitancePerMeter(1e6)[0, 0], lossless.CapacitancePerMeter(1e10)[0, 0]);
     }
 
+    [Fact]
+    public void TheDielectric_IsSolvedAcrossTheBand_NotExtrapolatedFromOneFrequency()
+    {
+        // A trace under a cover of another laminate: two layers of different ε and tan δ share
+        // the field, so C is not linear in their ε′ over the band. The board model solves the
+        // section again at nodes a decade apart; between them it must agree with a direct solve
+        // at the layers' own ε(f), where the one-frequency first-order form drifts.
+        var stack = new LayeredStackup(new[]
+        {
+            new LayeredStackup.Layer(4.4, 0.02, 0.2e-3),
+            new LayeredStackup.Layer(3.0, 0.05, 0.1e-3),
+        });
+        var section = new CoupledLineCrossSection(stack, 0, new[] { TraceCrossSection.Copper(0, 0.3e-3) });
+        // Without the thickness correction, whose effective width depends on ε as well: what is
+        // compared is the dielectric alone.
+        var model = RlgcModel.Board with { ThicknessCorrection = false };
+        var nodes = RlgcExtractor.Extract(section, model);
+        var firstOrder = RlgcExtractor.Extract(section, model with { DielectricNodesPerDecade = 0 });
+        var shape = new WidebandDebye(RlgcModel.Board.DielectricReferenceHz);
+        Assert.Contains(nodes.Assumptions, a => a.Contains("solved again"));
+
+        foreach (double f in new[] { 3.2e5, 4.7e7, 2.2e10 })
+        {
+            // The direct solve: the same model with the dielectric held at its value at f.
+            var at = new CoupledLineCrossSection(new LayeredStackup(stack.Layers
+                .Select(l => DielectricNodes.Dispersed(l, shape.Shape(f))).ToArray()), 0, section.Traces);
+            var direct = RlgcExtractor.Extract(at, model with { WidebandDielectric = false });
+            double c = direct.CapacitanceFaradsPerMeter[0, 0], g = direct.ConductancePerMeter(f)[0, 0];
+
+            double nodeC = nodes.CapacitancePerMeter(f)[0, 0], nodeG = nodes.ConductancePerMeter(f)[0, 0];
+            double oneC = firstOrder.CapacitancePerMeter(f)[0, 0], oneG = firstOrder.ConductancePerMeter(f)[0, 0];
+            _output.WriteLine($"{f:e2} Hz: C nodes {nodeC / c - 1:e2}, first order {oneC / c - 1:e2}; "
+                + $"G nodes {nodeG / g - 1:e2}, first order {oneG / g - 1:e2}");
+            // Measured: C within 1.7e-5 and G within 6.2e-5 of the direct solve; the first-order
+            // form 5e-4 and 0.9 %.
+            Assert.Equal(c, nodeC, 1e-4 * c);
+            Assert.Equal(g, nodeG, 5e-4 * g);
+            Assert.True(Math.Abs(oneG / g - 1) > 10 * Math.Abs(nodeG / g - 1), "the nodes should be the better G");
+        }
+        // At the reference frequency both are the one solve.
+        Assert.Equal(firstOrder.CapacitancePerMeter(1e9)[0, 0], nodes.CapacitancePerMeter(1e9)[0, 0]);
+    }
+
     // ------------------------------------------------------------------
     // Causality
     // ------------------------------------------------------------------
@@ -338,6 +381,34 @@ public class LineLossDispersionTests
         Assert.InRange(total / rule, 0.85, 1.15);
         // DC is untouched: the plane has no DC share.
         Assert.Equal(table.ResistanceMatrix(1e3)[0, 0], attached.ResistanceMatrixOhmsPerMeter(1e3)[0, 0], 3);
+    }
+
+    [Fact]
+    public void AttachingTheProximityTable_KeepsTheRoughness()
+    {
+        // The proximity option used to replace the board model's series impedance with the
+        // filament table and drop the roughness factor with it. Attached to a rough extraction,
+        // the part of R that grows with frequency and the internal inductance carry K(f), as
+        // the board model's own impedance does.
+        var section = Microstrip(0.3e-3, 0.2e-3, 35e-6, 4.4);
+        var roughness = SurfaceRoughness.Hammerstad(1e-6);
+        var table = ProximityExtractor.Extract(section, 1e3, 1e10);
+        var smooth = ProximityExtractor.Attach(RlgcExtractor.Extract(section, RlgcModel.Board), table);
+        var rough = ProximityExtractor.Attach(
+            RlgcExtractor.Extract(section, RlgcModel.Board with { Roughness = roughness }), table);
+
+        double dc = table.ResistanceMatrix(0)[0, 0];
+        foreach (double f in new[] { 1e8, 1e9, 5e9 })
+        {
+            double k = roughness.Factor(f, section.Traces[0].ConductivitySiemensPerMeter);
+            double excessSmooth = smooth.ResistanceMatrixOhmsPerMeter!(f)[0, 0] - dc;
+            double excessRough = rough.ResistanceMatrixOhmsPerMeter!(f)[0, 0] - dc;
+            _output.WriteLine($"{f / 1e9:g3} GHz: K {k:f4}, excess R smooth {excessSmooth:f3}, rough {excessRough:f3} Ω/m");
+            Assert.Equal(k, excessRough / excessSmooth, 9);
+            Assert.Equal(k, rough.InternalInductanceHenriesPerMeter!(f)[0, 0]
+                / smooth.InternalInductanceHenriesPerMeter!(f)[0, 0], 9);
+        }
+        Assert.Equal(dc, rough.ResistanceMatrixOhmsPerMeter!(0)[0, 0], 12);
     }
 
     [Fact]

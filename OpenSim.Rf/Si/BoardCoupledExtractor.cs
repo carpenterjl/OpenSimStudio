@@ -54,6 +54,11 @@ public sealed record BoardCoupledOptions
     /// for a real board passes <see cref="RlgcModel.Board"/>, as the app does.</summary>
     public RlgcModel Model { get; init; } = RlgcModel.Kernel;
 
+    /// <summary>Carry ground copper on the trace layer beside a coupled stretch as coplanar
+    /// ground strips (see <see cref="BoardCoplanarGround"/>). On by default; off solves the
+    /// traces over their plane(s) alone, as before.</summary>
+    public bool CoplanarGround { get; init; } = true;
+
     /// <summary>Substrate εr when the board has no per-gap permittivity (Gerber sets).</summary>
     public double DefaultEpsR { get; init; } = 4.4;
 
@@ -124,7 +129,7 @@ public sealed record BoardCoupledResult(
             throw new InvalidOperationException("A failed extraction has no network.");
         var cache = new Dictionary<CoupledLineCrossSection, RlgcResult>(ReferenceEqualityComparer.Instance);
         RlgcResult Of(CoupledLineCrossSection s) =>
-            cache.TryGetValue(s, out var r) ? r : cache[s] = extract(s);
+            cache.TryGetValue(s, out var r) ? r : cache[s] = Reduce(s, extract(s));
 
         var sections = new List<MtlSectionBase>();
         foreach (var s in Sections)
@@ -138,6 +143,12 @@ public sealed record BoardCoupledResult(
         }
         return new MtlNetwork(sections);
     }
+
+    /// <summary>A section's extraction with its coplanar ground strips tied to the reference,
+    /// so only the signal traces are ports. A section without ground strips is returned as is.
+    /// <see cref="BuildNetwork"/> applies it to what its extraction returns.</summary>
+    public static RlgcResult Reduce(CoupledLineCrossSection section, RlgcResult full) =>
+        section.GroundIndices.Count == 0 ? full : RlgcReduction.GroundConductors(full, section.GroundIndices);
 }
 
 /// <summary>
@@ -301,6 +312,19 @@ public static class BoardCoupledExtractor
 
         double copperThickness = StackupOf(board, options).CopperThicknessOf(layer);
 
+        // Ground copper on the trace layer beside each coupled stretch: the reference net(s)
+        // under the traces say which copper is ground.
+        var layerThickness = substrate.Stackup.Layers.Select(l => l.ThicknessMeters).ToArray();
+        double toPlaneBelow = layerThickness.Take(substrate.MetalInterface + 1).Sum();
+        double toPlaneAbove = substrate.TopGround ? layerThickness.Skip(substrate.MetalInterface + 1).Sum() : 0;
+        double toPlane = substrate.TopGround ? Math.Min(toPlaneBelow, toPlaneAbove) : toPlaneBelow;
+        var reference = options.CoplanarGround
+            ? BoardCoplanarGround.ReferenceNets(board, substrate.PlaneLayers,
+                BoardReferencePlanes.SamplePoints(kept.SelectMany(s => s.Pieces).ToList()))
+            : (new HashSet<CopperNet>(), new HashSet<string>());
+        var coplanarNotes = new List<string>();
+        int stretchesWithGround = 0;
+
         // One cross-section object per distinct coupled geometry, so a pair that bends and
         // runs on at the same spacing is solved once.
         var sectionCache = new Dictionary<string, CoupledLineCrossSection>();
@@ -310,14 +334,33 @@ public static class BoardCoupledExtractor
             for (int k = 0; k < kept.Count; k++)
             {
                 var s = kept[k];
-                string key = string.Join("|", Enumerable.Range(0, n)
-                    .Select(i => $"{Math.Round(s.Offset[i] * 1e9)}:{Math.Round(s.Width[i] * 1e9)}"));
+                var traces = new List<TraceCrossSection>();
+                for (int i = 0; i < n; i++)
+                    traces.Add(new TraceCrossSection(s.Offset[i], s.Width[i],
+                        copperThickness, options.ConductivitySiemensPerMeter));
+                if (options.CoplanarGround && reference.Item1.Count > 0)
+                {
+                    double low = Enumerable.Range(0, n).Min(i => s.Offset[i] - s.Width[i] / 2);
+                    double high = Enumerable.Range(0, n).Max(i => s.Offset[i] + s.Width[i] / 2);
+                    var axis = Unit(s.Pieces[0].End - s.Pieces[0].Start);
+                    var start = s.Pieces[0].Start - new Point2(-axis.Y, axis.X) * s.Offset[0];
+                    var (lowSide, highSide, notes) = BoardCoplanarGround.Find(board, layer, ownIslands, reference,
+                        start, axis, s.Length, low, high, toPlane, substrate.TopGround,
+                        Math.Max(toPlaneBelow, toPlaneAbove));
+                    coplanarNotes.AddRange(notes.Select(note => kept.Count > 1
+                        ? $"Stretch {k + 1} ({s.Length * 1e3:g4} mm): {note}" : note));
+                    if (lowSide is not null)
+                        traces.Add(new TraceCrossSection(low - lowSide.Gap - lowSide.Width / 2, lowSide.Width,
+                            copperThickness, options.ConductivitySiemensPerMeter) { IsGround = true });
+                    if (highSide is not null)
+                        traces.Add(new TraceCrossSection(high + highSide.Gap + highSide.Width / 2, highSide.Width,
+                            copperThickness, options.ConductivitySiemensPerMeter) { IsGround = true });
+                    if (lowSide is not null || highSide is not null) stretchesWithGround++;
+                }
+                string key = string.Join("|", traces.Select(t =>
+                    $"{Math.Round(t.CenterMeters * 1e9)}:{Math.Round(t.WidthMeters * 1e9)}:{t.IsGround}"));
                 if (!sectionCache.TryGetValue(key, out var section))
                 {
-                    var traces = new TraceCrossSection[n];
-                    for (int i = 0; i < n; i++)
-                        traces[i] = new TraceCrossSection(s.Offset[i], s.Width[i],
-                            copperThickness, options.ConductivitySiemensPerMeter);
                     section = new CoupledLineCrossSection(substrate.Stackup, substrate.MetalInterface,
                         traces, substrate.TopGround);
                     sectionCache[key] = section;
@@ -382,9 +425,17 @@ public static class BoardCoupledExtractor
         RlgcResult Rlgc(CoupledLineCrossSection s) =>
             rlgcCache.TryGetValue(s, out var r) ? r : rlgcCache[s] = RlgcExtractor.Extract(s, options.Model);
         var network = result.BuildNetwork(Rlgc);
-        var rlgc = Rlgc(coupledSections[principal]);
+        var rlgc = BoardCoupledResult.Reduce(coupledSections[principal], Rlgc(coupledSections[principal]));
 
         var assumptions = new List<string>(rlgc.Assumptions) { substrate.Note };
+        assumptions.AddRange(coplanarNotes.Distinct());
+        if (stretchesWithGround > 0 && leadTotals.Any(l => l > 0))
+            assumptions.Add("Coplanar ground is modelled on the coupled stretches only; the uncoupled "
+                + "leads are single traces over the plane.");
+        else if (options.CoplanarGround && reference.Item1.Count == 0
+                 && board.Islands.Any(i => i.LayerOrder == layer && !ownIslands.Contains(i)))
+            assumptions.Add("Copper on the trace layer is not modelled: the reference plane's copper "
+                + "belongs to no net of the board, so which copper is ground cannot be told.");
         bool anyLead = leadTotals.Any(l => l > 0);
         if (!anyLead && kept.Count == 1)
         {

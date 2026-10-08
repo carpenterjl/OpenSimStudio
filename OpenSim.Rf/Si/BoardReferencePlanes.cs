@@ -16,7 +16,12 @@ internal sealed record BoardSubstrate(
     int MetalInterface,
     bool TopGround,
     double PlateCapacitancePerSquareMeter,
-    string Note);
+    string Note)
+{
+    /// <summary>The copper layer(s) the line returns through: one for a microstrip, the upper
+    /// then the lower for a stripline.</summary>
+    public IReadOnlyList<int> PlaneLayers { get; init; } = Array.Empty<int>();
+}
 
 /// <summary>
 /// Finds the reference planes of a trace layer from the board's copper, and builds the
@@ -139,7 +144,8 @@ internal static class BoardReferencePlanes
                 + $"(copper under {coverAbove:P0} of the trace) and L{planeBelow} below ({coverBelow:P0}). "
                 + $"Dielectric ({stackup.Source}) below the trace: {Describe(below.AsEnumerable().Reverse())}; "
                 + $"above: {Describe(above)}. Both planes are taken as infinite and solid, and "
-                + "coupling to any other layer is out of scope by construction.");
+                + "coupling to any other layer is out of scope by construction.")
+            { PlaneLayers = new[] { planeAbove, planeBelow } };
         }
 
         // One plane. Build ground-up from it: the gaps between plane and trace, then the
@@ -177,7 +183,7 @@ internal static class BoardReferencePlanes
                 + " Coupling to any other layer is out of scope by construction.";
 
         return new BoardSubstrate(new LayeredStackup(layers), between.Count - 1, TopGround: false,
-            PlatePerArea(between), note);
+            PlatePerArea(between), note) { PlaneLayers = new[] { plane } };
     }
 
     /// <summary>Copper layers of the board: what the islands show, or what the file's
@@ -192,7 +198,7 @@ internal static class BoardReferencePlanes
 
     /// <summary>Points along the centerlines, about two widths apart (at least the two ends,
     /// at most 64 per segment): what "copper under the trace" is measured on.</summary>
-    private static List<Point2> SamplePoints(IReadOnlyList<TraceCenterline> traces)
+    internal static List<Point2> SamplePoints(IReadOnlyList<TraceCenterline> traces)
     {
         var points = new List<Point2>();
         foreach (var t in traces)

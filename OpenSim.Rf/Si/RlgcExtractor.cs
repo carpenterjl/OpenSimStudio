@@ -47,15 +47,28 @@ public sealed record RlgcResult(
     /// frequency.</summary>
     public WidebandDebye? Dielectric { get; init; }
 
+    /// <summary>The cross-section solved at several frequencies with every layer at its own
+    /// ε(f); when present, <see cref="CapacitancePerMeter"/> and <see cref="ConductancePerMeter"/>
+    /// come from it instead of from the first-order form.</summary>
+    internal DielectricNodes? DielectricSolves { get; init; }
+
     /// <summary>The part of the skin resistance that belongs to the reference plane(s)
     /// [Ω/m/√Hz], N×N — set by the board model. A filament solve of the strips over a perfect
     /// plane (the proximity option) has to add it; the scalar model already contains it.</summary>
     public double[,]? PlaneSkinResistanceOhmsPerMeterPerSqrtHz { get; init; }
 
+    /// <summary>The surface roughness the board model applied to the series impedance, and the
+    /// conductivity its factor was evaluated with. A series impedance attached later (the
+    /// proximity option) applies the same factor.</summary>
+    public SurfaceRoughness? Roughness { get; init; }
+
+    public double RoughnessConductivitySiemensPerMeter { get; init; }
+
     /// <summary>The capacitance matrix at f [F/m]: C′ + C″·Re ψ(f) with the dielectric model,
     /// the constant C′ without one.</summary>
     public double[,] CapacitancePerMeter(double frequencyHz)
     {
+        if (DielectricSolves is { } nodes) return nodes.Capacitance(frequencyHz);
         if (Dielectric is null) return CapacitanceFaradsPerMeter;
         double shape = Dielectric.Shape(frequencyHz).Real;
         int n = ConductorCount;
@@ -71,6 +84,7 @@ public sealed record RlgcResult(
     /// reference frequency).</summary>
     public double[,] ConductancePerMeter(double frequencyHz)
     {
+        if (DielectricSolves is { } nodes) return nodes.Conductance(frequencyHz);
         double w = 2 * Math.PI * frequencyHz;
         if (Dielectric is not null) w *= -Dielectric.Shape(frequencyHz).Imaginary;
         int n = ConductorCount;
@@ -220,7 +234,7 @@ public static class RlgcExtractor
         int panelsPerTrace = 48)
     {
         ArgumentNullException.ThrowIfNull(model);
-        if (!model.ThicknessCorrection && !model.SurfaceImpedance && !model.WidebandDielectric)
+        if (!model.ThicknessCorrection && !model.SurfaceImpedance && !model.WidebandDielectric && !model.SideWalls)
             return Extract(section, panelsPerTrace);
         if (panelsPerTrace < 4)
             throw new ArgumentOutOfRangeException(nameof(panelsPerTrace),
@@ -231,6 +245,7 @@ public static class RlgcExtractor
         int metal = section.MetalInterface;
         bool spectral = section.TopGround || layers.Count > 1;
         bool limited = false;
+        bool sideWalls = model.SideWalls;
 
         // The cross-section with every strip surface receded into the metal by `strip` and
         // every plane surface by `plane` (both zero for the geometry as drawn): the strips'
@@ -241,11 +256,16 @@ public static class RlgcExtractor
             var thickness = layers.Select(l => l.ThicknessMeters).ToArray();
             thickness[metal] += strip;
             thickness[0] += plane;
-            if (section.TopGround)
-            {
+            if (section.TopGround) thickness[^1] += plane;
+            // A strip's top face recedes away from what is above it. A thick trace stands in a
+            // zone of the dielectric above, as thick as the copper (the layer above is the
+            // dielectric over the traces' top faces, as the board stackup and Wheeler's plane
+            // spacing b = below + t + above have it); it recedes inside itself, so its base
+            // rises with the interface and the zone loses what the layer below gains.
+            if (metal + 1 < layers.Count && sideWalls)
+                thickness[metal + 1] += section.Traces.Max(tr => tr.ThicknessMeters) - strip;
+            else if (section.TopGround)
                 thickness[metal + 1] += strip;
-                thickness[^1] += plane;
-            }
             var stack = new LayeredStackup(layers.Select((l, i) =>
                 new LayeredStackup.Layer(l.RelativePermittivity, l.LossTangent, thickness[i])).ToArray());
             double below = 0, above = 0;
@@ -258,7 +278,7 @@ public static class RlgcExtractor
             {
                 var trace = section.Traces[i];
                 double w = trace.WidthMeters - 2 * strip, t = trace.ThicknessMeters - 2 * strip;
-                if (!model.ThicknessCorrection) continue;
+                if (!model.ThicknessCorrection || sideWalls) continue;
                 if (section.TopGround)
                     widenAir[i] = widenDielectric[i] = ThicknessCorrection.Stripline(w, t, below + above);
                 else
@@ -282,6 +302,20 @@ public static class RlgcExtractor
             }
             var air = new TraceCrossSection[n];
             var dielectric = new TraceCrossSection[n];
+            if (sideWalls)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    var trace = section.Traces[i];
+                    air[i] = dielectric[i] = trace with
+                    {
+                        WidthMeters = trace.WidthMeters - 2 * strip,
+                        TopWidthMeters = trace.TopWidthMeters is { } top ? top - 2 * strip : null,
+                        ThicknessMeters = trace.ThicknessMeters - 2 * strip,
+                    };
+                }
+                return (stack, air, dielectric);
+            }
             for (int i = 0; i < n; i++)
             {
                 double w = section.Traces[i].WidthMeters - 2 * strip;
@@ -296,6 +330,9 @@ public static class RlgcExtractor
 
         Complex[,] Maxwell(LayeredStackup stack, IReadOnlyList<TraceCrossSection> traces)
         {
+            if (sideWalls)
+                return ThickConductorBem.Capacitance(traces, stack, metal, section.TopGround,
+                    Math.Max(8, panelsPerTrace / 2));
             var panels = BuildPanels(traces, panelsPerTrace);
             return SolveCapacitance(panels, n, spectral
                 ? SpectralMoments(panels, stack, metal, section.TopGround)
@@ -320,23 +357,44 @@ public static class RlgcExtractor
         var cAir = AirCapacitance(0, 0);
         var airInverse = Invert(cAir);
         var inductance = ScaleMatrix(airInverse, Mu0 * Epsilon0);
-        var cComplex = Maxwell(drawn.Stack, drawn.Dielectric);
         bool twoWidths = false;
         for (int i = 0; i < n; i++)
             twoWidths |= drawn.Air[i].WidthMeters != drawn.Dielectric[i].WidthMeters;
-        if (twoWidths)
+        var airAtDielectricWidth = twoWidths ? Maxwell(AirOf(drawn.Stack), drawn.Dielectric) : null;
+        Complex[,] DielectricCapacitance(LayeredStackup stack)
         {
-            var airAtDielectricWidth = Maxwell(AirOf(drawn.Stack), drawn.Dielectric);
+            var solved = Maxwell(stack, drawn.Dielectric);
+            if (airAtDielectricWidth is null) return solved;
             var composed = new Complex[n, n];
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++)
                     for (int k = 0; k < n; k++)
                         for (int m = 0; m < n; m++)
-                            composed[i, j] += cComplex[i, k] * airInverse[k, m]
+                            composed[i, j] += solved[i, k] * airInverse[k, m]
                                 * airAtDielectricWidth[m, j].Real;
+            var symmetric = new Complex[n, n];
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++)
-                    cComplex[i, j] = 0.5 * (composed[i, j] + composed[j, i]);
+                    symmetric[i, j] = 0.5 * (composed[i, j] + composed[j, i]);
+            return symmetric;
+        }
+        var cComplex = DielectricCapacitance(drawn.Stack);
+
+        // ---- The dielectric across the band: the cross-section solved again with every layer
+        // at its own ε(f) (Djordjevic–Sarkar), at nodes a decade apart and at the reference.
+        // The strips keep the effective widths of the reference ε (the thickness correction's
+        // dielectric width moves with ε too, by about 0.2 % of C three decades away).
+        DielectricNodes? dielectricNodes = null;
+        if (model.WidebandDielectric && model.DielectricNodesPerDecade > 0
+            && layers.Any(l => l.LossTangent > 0))
+        {
+            var debye = new WidebandDebye(model.DielectricReferenceHz);
+            var frequencies = DielectricNodes.Frequencies(model.DielectricReferenceHz, model.DielectricNodesPerDecade);
+            var solved = frequencies.Select(f => f == model.DielectricReferenceHz
+                ? cComplex
+                : DielectricCapacitance(new LayeredStackup(drawn.Stack.Layers
+                    .Select(l => DielectricNodes.Dispersed(l, debye.Shape(f))).ToArray()))).ToArray();
+            dielectricNodes = new DielectricNodes(debye, frequencies, solved);
         }
 
         var c = new double[n, n];
@@ -387,7 +445,7 @@ public static class RlgcExtractor
             // Without the thickness correction the strip is a zero-thickness sheet, for which
             // the rule has no finite answer (the edge current is not square-integrable); the
             // kernel's uniform two-sided strip term is kept there and only the plane is added.
-            var stripDerivative = model.ThicknessCorrection ? Derivative(step, 0) : null;
+            var stripDerivative = model.ThicknessCorrection || sideWalls ? Derivative(step, 0) : null;
             for (int i = 0; i < n; i++)
                 for (int j = 0; j < n; j++)
                 {
@@ -404,7 +462,10 @@ public static class RlgcExtractor
         {
             "Quasi-TEM per-unit-length model: C from the 2D layered electrostatic BEM, "
                 + "L = µ₀ε₀·C_air⁻¹ (exact in the TEM limit).",
-            model.ThicknessCorrection
+            sideWalls
+                ? "Traces are solved as the trapezoids they are: base, top and side walls carry charge, "
+                  + "so the coupling between the side walls of close traces is in the field solve."
+                : model.ThicknessCorrection
                 ? "Trace thickness enters C and L through an effective width ("
                   + (section.TopGround ? "Wheeler's, for a strip between two planes"
                                        : "Hammerstad–Jensen's, for a strip over one plane")
@@ -428,7 +489,10 @@ public static class RlgcExtractor
             model.WidebandDielectric
                 ? "Dielectric by the Djordjevic–Sarkar wideband Debye model, with the stackup's εr "
                   + $"and tan δ taken as their values at {model.DielectricReferenceHz / 1e9:g3} GHz; "
-                  + "every lossy layer is given the same dispersion shape."
+                  + (dielectricNodes is not null
+                      ? $"the section is solved again with every layer at its own ε(f) at {dielectricNodes.FrequenciesHz.Count} frequencies "
+                        + $"from {DielectricNodes.LowestHz / 1e6:g3} MHz to {DielectricNodes.HighestHz / 1e9:g3} GHz, and C(f), G(f) follow those solves."
+                      : "every lossy layer is given the same dispersion shape, to first order in tan δ.")
                 : "G = ω·C″ with a frequency-independent complex ε (not causal).",
             "All conductors are coplanar at one stackup interface; broadside coupling "
                 + "across layers is out of scope by construction.",
@@ -438,7 +502,7 @@ public static class RlgcExtractor
                 + "the static kernel is the two-ground spectral Green's function over the "
                 + "dielectric layers on each side.");
         foreach (var trace in section.Traces)
-            if (model.ThicknessCorrection && trace.ThicknessMeters > 0.5 * trace.WidthMeters)
+            if (model.ThicknessCorrection && !sideWalls && trace.ThicknessMeters > 0.5 * trace.WidthMeters)
             {
                 assumptions.Add($"A trace is {trace.ThicknessMeters / trace.WidthMeters:g2}× as thick "
                     + "as it is wide; the effective-width correction is meant for t well below w.");
@@ -449,6 +513,7 @@ public static class RlgcExtractor
         {
             Dielectric = model.WidebandDielectric
                 ? new WidebandDebye(model.DielectricReferenceHz) : null,
+            DielectricSolves = dielectricNodes,
             PlaneSkinResistanceOhmsPerMeterPerSqrtHz = planeSkin,
         };
         if (skinMatrix is null) return result;
@@ -465,6 +530,8 @@ public static class RlgcExtractor
         double sigma = stripSigma;
         return result with
         {
+            Roughness = roughness,
+            RoughnessConductivitySiemensPerMeter = sigma,
             ResistanceMatrixOhmsPerMeter = f =>
             {
                 var r = conductors.Resistance(f);
@@ -696,7 +763,7 @@ public static class RlgcExtractor
     /// interface <paramref name="metalInterface"/>: ε·k·coth(kh) for layer 0 on the PEC,
     /// then Y ← ε·k·(Y + ε·k·tanh(kh)) / (ε·k + Y·tanh(kh)) through each layer up to the metal.
     /// </summary>
-    private static Complex AdmittanceDown(IReadOnlyList<LayeredStackup.Layer> layers,
+    internal static Complex AdmittanceDown(IReadOnlyList<LayeredStackup.Layer> layers,
         int metalInterface, double k)
     {
         Complex y = layers[0].ComplexPermittivity * k / Math.Tanh(k * layers[0].ThicknessMeters);
@@ -707,7 +774,7 @@ public static class RlgcExtractor
 
     /// <summary>The same looking UP: the layers above the metal, ending on a PEC
     /// (<paramref name="topGround"/>) or on the open half-space, whose admittance is k.</summary>
-    private static Complex AdmittanceUp(IReadOnlyList<LayeredStackup.Layer> layers,
+    internal static Complex AdmittanceUp(IReadOnlyList<LayeredStackup.Layer> layers,
         int metalInterface, double k, bool topGround)
     {
         int i = layers.Count - 1;

@@ -1,3 +1,4 @@
+using OpenSim.Rf.Layered;
 using System.Numerics;
 
 namespace OpenSim.Rf.Si;
@@ -15,6 +16,15 @@ public sealed record RlgcModel
     /// for a line over one plane, Wheeler for a line between two).</summary>
     public bool ThicknessCorrection { get; init; } = true;
 
+    /// <summary>Solve each trace as the trapezoid it is — base on the interface, top face at its
+    /// thickness, side walls between (<see cref="ThickConductorBem"/>) — instead of a strip of
+    /// effective width. The coupling between the side walls of close traces is then in the
+    /// field solve, and an etched trace's slope too. Takes the place of
+    /// <see cref="ThicknessCorrection"/> when set. A layer above the traces is the dielectric
+    /// over their top faces; the traces stand in a zone of it as thick as the copper. Off by
+    /// default.</summary>
+    public bool SideWalls { get; init; }
+
     /// <summary>Conductor loss by Wheeler's incremental-inductance rule on the extraction's own
     /// L: every metal surface (both faces and both edges of each strip, and the reference
     /// plane or planes) recedes by half a skin depth. This carries the return-path loss and the
@@ -30,6 +40,13 @@ public sealed record RlgcModel
     /// <summary>The frequency the stackup's εr and tan δ are quoted at (laminate data sheets
     /// usually say 1 GHz).</summary>
     public double DielectricReferenceHz { get; init; } = 1e9;
+
+    /// <summary>With <see cref="WidebandDielectric"/>: the cross-section is solved again with
+    /// every layer at its own ε(f) at this many frequencies per decade, from
+    /// <see cref="DielectricNodes.LowestHz"/> to <see cref="DielectricNodes.HighestHz"/>, and C(f),
+    /// G(f) follow those solves. 0 keeps the first-order form C′ + C″·ψ(f) from the one solve
+    /// at the reference frequency, which is exact only to first order in tan δ.</summary>
+    public int DielectricNodesPerDecade { get; init; } = 1;
 
     /// <summary>Conductivity of the reference plane(s) [S/m]; copper by default.</summary>
     public double PlaneConductivitySiemensPerMeter { get; init; } = 5.8e7;
@@ -66,7 +83,10 @@ public sealed record RlgcModel
 /// <code>  C(ω) = C′ + C″·ψ(ω)      ⇒   C(ω) = C′ + C″·Re ψ,   G(ω) = −ω·C″·Im ψ</code>
 ///
 /// <para>which reproduces the solve at the reference frequency exactly and is causal at every
-/// other one.</para>
+/// other one. Away from the reference it is exact only to first order in tan δ: where layers
+/// of different ε and tan δ share the field, C is not linear in their ε′ over the 1.5·tan δ per
+/// decade it moves. The board model therefore solves the section again at nodes across the band
+/// (<see cref="DielectricNodes"/>) and uses this form only between them.</para>
 /// </summary>
 public sealed record WidebandDebye(double ReferenceHz, double LowCornerHz = 1e4,
     double HighCornerHz = 1e12)
@@ -92,6 +112,110 @@ public sealed record WidebandDebye(double ReferenceHz, double LowCornerHz = 1e4,
             return -reference.Real / -reference.Imaginary;
         }
     }
+}
+
+/// <summary>
+/// The dielectric part of a line, C(f) − j·C″(f), from cross-section solves at several
+/// frequencies with every layer at its own Djordjevic–Sarkar ε(f) = ε′·(1 + tan δ·ψ(f)).
+/// Between two nodes the complex capacitance is taken as linear in ψ — the first-order form,
+/// now anchored a decade away at most instead of at the one reference frequency — so each
+/// piece is causal and every node is reproduced exactly. Outside the nodes the end piece
+/// carries on.
+/// </summary>
+internal sealed class DielectricNodes
+{
+    /// <summary>The band the nodes cover [Hz]: below 100 kHz and above 100 GHz the first-order
+    /// form from the end node is used.</summary>
+    public const double LowestHz = 1e5, HighestHz = 1e11;
+
+    private readonly WidebandDebye _shape;
+    private readonly double[] _frequencies;
+    private readonly Complex[] _psi;
+    private readonly Complex[][,] _solved;
+
+    public DielectricNodes(WidebandDebye shape, double[] frequencies, Complex[][,] solved)
+    {
+        if (frequencies.Length < 2 || frequencies.Length != solved.Length)
+            throw new ArgumentException("At least two solved frequencies are needed.");
+        _shape = shape;
+        _frequencies = frequencies;
+        _psi = frequencies.Select(shape.Shape).ToArray();
+        _solved = solved;
+    }
+
+    public IReadOnlyList<double> FrequenciesHz => _frequencies;
+
+    /// <summary>The node frequencies: a decade grid from <see cref="LowestHz"/> to
+    /// <see cref="HighestHz"/> at <paramref name="perDecade"/> per decade, and the reference.</summary>
+    public static double[] Frequencies(double referenceHz, int perDecade)
+    {
+        int steps = (int)Math.Round(Math.Log10(HighestHz / LowestHz) * perDecade);
+        var nodes = Enumerable.Range(0, steps + 1)
+            .Select(k => LowestHz * Math.Pow(10, (double)k / perDecade)).ToList();
+        nodes.RemoveAll(f => Math.Abs(Math.Log(f / referenceHz)) < 0.05);
+        nodes.Add(referenceHz);
+        nodes.Sort();
+        return nodes.ToArray();
+    }
+
+    /// <summary>A layer at the frequency whose shape value is <paramref name="psi"/>, in the
+    /// solver's form ε′(1 − j·tan δ).</summary>
+    public static LayeredStackup.Layer Dispersed(LayeredStackup.Layer layer, Complex psi)
+    {
+        if (layer.LossTangent <= 0) return layer;
+        double real = 1 + layer.LossTangent * psi.Real;
+        return new LayeredStackup.Layer(layer.RelativePermittivity * real,
+            -layer.LossTangent * psi.Imaginary / real, layer.ThicknessMeters);
+    }
+
+    private Complex[,] Value(double frequencyHz)
+    {
+        double f = Math.Max(0, frequencyHz);
+        int node = Array.IndexOf(_frequencies, f);
+        if (node >= 0) return (Complex[,])_solved[node].Clone();     // a node is its own solve, exactly
+        int lo = 0;
+        while (lo < _frequencies.Length - 2 && f > _frequencies[lo + 1]) lo++;
+        int hi = lo + 1;
+        var t = (_shape.Shape(f) - _psi[lo]) / (_psi[hi] - _psi[lo]);
+        int n = _solved[lo].GetLength(0);
+        var value = new Complex[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                value[i, j] = _solved[lo][i, j] + t * (_solved[hi][i, j] - _solved[lo][i, j]);
+        return value;
+    }
+
+    /// <summary>C(f) [F/m].</summary>
+    public double[,] Capacitance(double frequencyHz)
+    {
+        var v = Value(frequencyHz);
+        int n = v.GetLength(0);
+        var c = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) c[i, j] = v[i, j].Real;
+        return c;
+    }
+
+    /// <summary>G(f) = ω·C″(f) [S/m].</summary>
+    public double[,] Conductance(double frequencyHz)
+    {
+        var v = Value(frequencyHz);
+        double w = 2 * Math.PI * frequencyHz;
+        int n = v.GetLength(0);
+        var g = new double[n, n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) g[i, j] = -w * v[i, j].Imaginary;
+        return g;
+    }
+
+    /// <summary>The same nodes for the conductors kept by a reduction.</summary>
+    public DielectricNodes Sub(IReadOnlyList<int> keep) => new(_shape, _frequencies, _solved.Select(c =>
+    {
+        var s = new Complex[keep.Count, keep.Count];
+        for (int i = 0; i < keep.Count; i++)
+            for (int j = 0; j < keep.Count; j++) s[i, j] = c[keep[i], keep[j]];
+        return s;
+    }).ToArray());
 }
 
 /// <summary>

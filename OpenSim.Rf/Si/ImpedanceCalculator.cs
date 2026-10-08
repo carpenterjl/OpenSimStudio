@@ -38,6 +38,11 @@ public sealed record LineSpec
     /// <summary>Edge-to-edge gap (at the base) of an edge-coupled pair. Null is a single trace.</summary>
     public double? PairGapMeters { get; init; }
 
+    /// <summary>Base width of the pair's second trace, for an asymmetric pair. Null (or the
+    /// first trace's width) is a symmetric pair. An etched second trace loses the same width
+    /// from base to top as the first.</summary>
+    public double? SecondWidthMeters { get; init; }
+
     /// <summary>Edge-to-edge gap (at the base) to a coplanar ground on each side. Null is no
     /// coplanar ground.</summary>
     public double? CoplanarGapMeters { get; init; }
@@ -96,16 +101,30 @@ public sealed record LineReport
 
     public bool IsPair => Modes.Count == 2;
 
-    /// <summary>Z0 of a single trace; for a pair, one trace's impedance with the other
-    /// terminated (Z_c11 = (Z_odd + Z_even)/2).</summary>
-    public double ImpedanceOhms => IsPair
-        ? 0.5 * (Modes[0].ImpedanceOhms + Modes[1].ImpedanceOhms) : Modes[0].ImpedanceOhms;
+    /// <summary>Real part of the characteristic impedance matrix Z_c of an ASYMMETRIC pair (the
+    /// forward wave's V = Z_c·I); null for a single trace or a symmetric pair, where the modes
+    /// say everything.</summary>
+    public double[,]? CharacteristicImpedanceOhms { get; init; }
 
-    /// <summary>2·Z_odd. Null for a single trace.</summary>
-    public double? DifferentialOhms => IsPair ? 2 * Modes[0].ImpedanceOhms : null;
+    /// <summary>Z0 of a single trace; for a pair, the first trace's impedance with the other
+    /// terminated (Z_c11; = (Z_odd + Z_even)/2 for a symmetric pair).</summary>
+    public double ImpedanceOhms => CharacteristicImpedanceOhms is { } z ? z[0, 0]
+        : IsPair ? 0.5 * (Modes[0].ImpedanceOhms + Modes[1].ImpedanceOhms) : Modes[0].ImpedanceOhms;
 
-    /// <summary>Z_even/2. Null for a single trace.</summary>
-    public double? CommonOhms => IsPair ? Modes[1].ImpedanceOhms / 2 : null;
+    /// <summary>V_diff/I for a forward wave carrying equal and opposite currents:
+    /// Z_c11 + Z_c22 − 2·Z_c12 (= 2·Z_odd for a symmetric pair). Null for a single trace.</summary>
+    public double? DifferentialOhms => CharacteristicImpedanceOhms is { } z ? z[0, 0] + z[1, 1] - z[0, 1] - z[1, 0]
+        : IsPair ? 2 * Modes[0].ImpedanceOhms : null;
+
+    /// <summary>The voltage over the total current for a forward wave with both traces at the same
+    /// voltage (driven together): 1/Σ(Z_c⁻¹)ᵢⱼ (= Z_even/2 for a symmetric pair; the two lines in
+    /// parallel when they are far apart). Null for a single trace.</summary>
+    public double? CommonOhms => CharacteristicImpedanceOhms is { } z ? 1 / SumOfInverse(z)
+        : IsPair ? Modes[1].ImpedanceOhms / 2 : null;
+
+    /// <summary>Σᵢⱼ (Z⁻¹)ᵢⱼ of a 2×2 matrix: the total current per volt with both traces at it.</summary>
+    private static double SumOfInverse(double[,] z) =>
+        (z[0, 0] + z[1, 1] - z[0, 1] - z[1, 0]) / (z[0, 0] * z[1, 1] - z[0, 1] * z[1, 0]);
 
     /// <summary>Saturated backward (near-end) crosstalk between the two traces, as a fraction
     /// of the aggressor's step: ¼(C_m/C + L_m/L). Null for a single trace.</summary>
@@ -123,7 +142,13 @@ public sealed record LineReport
         static string F(double v, string format = "g4") => v.ToString(format, CultureInfo.InvariantCulture);
         var lines = new List<string>();
         double ghz = Spec.FrequencyHz / 1e9;
-        if (IsPair)
+        if (CharacteristicImpedanceOhms is { } zc)
+        {
+            lines.Add($"Z_diff = {F(DifferentialOhms!.Value)} Ω, Z_common = {F(CommonOhms!.Value)} Ω at {F(ghz)} GHz " +
+                      $"(asymmetric pair, Z_c11 {F(zc[0, 0])} Ω, Z_c22 {F(zc[1, 1])} Ω, Z_c12 {F(zc[0, 1])} Ω; " +
+                      "no even and odd mode exists, and each mode drives the two traces unequally)");
+        }
+        else if (IsPair)
         {
             lines.Add($"Z_diff = {F(DifferentialOhms!.Value)} Ω, Z_common = {F(CommonOhms!.Value)} Ω " +
                       $"(Z_odd {F(Modes[0].ImpedanceOhms)} Ω, Z_even {F(Modes[1].ImpedanceOhms)} Ω; " +
@@ -135,7 +160,14 @@ public sealed record LineReport
         }
         foreach (var mode in Modes)
         {
-            string name = IsPair ? (mode.Name == "odd" ? "Differential (odd) mode" : "Common (even) mode") : "Line";
+            string name = mode.Name switch
+            {
+                "odd" => "Differential (odd) mode",
+                "even" => "Common (even) mode",
+                "pi" => "π mode (traces in opposite phase)",
+                "c" => "c mode (traces in phase)",
+                _ => "Line"
+            };
             lines.Add($"{name}: ε_eff {F(mode.EffectivePermittivity)}, delay {F(mode.DelaySecondsPerMeter * 1e9)} ns/m " +
                       $"({F(mode.DelaySecondsPerMeter * 1e12 * 0.0254)} ps/in), loss {F(mode.LossDbPerMeter)} dB/m = " +
                       $"conductor {F(mode.ConductorLossDbPerMeter)} + dielectric {F(mode.DielectricLossDbPerMeter)} " +
@@ -187,59 +219,97 @@ public static class ImpedanceCalculator
         double width = 0.5 * (baseWidth + (spec.TopWidthMeters ?? baseWidth));
         double shrink = baseWidth - width;                    // total, both edges together
         if (spec.TopWidthMeters is { } t && t != baseWidth)
-            assumptions.Add($"Etched trace ({baseWidth * 1e6:g4} µm at the base, {t * 1e6:g4} µm at the top): solved as a "
-                + $"rectangle of the mean width {width * 1e6:g4} µm with the same copper area. The slope of "
-                + "the side walls is not in the field solve.");
+            assumptions.Add(spec.Model.SideWalls
+                ? $"Etched trace ({baseWidth * 1e6:g4} µm at the base, {t * 1e6:g4} µm at the top): solved as that trapezoid."
+                : $"Etched trace ({baseWidth * 1e6:g4} µm at the base, {t * 1e6:g4} µm at the top): solved as a "
+                  + $"rectangle of the mean width {width * 1e6:g4} µm with the same copper area. The slope of "
+                  + "the side walls is not in the field solve.");
 
         var layers = new List<LayeredStackup.Layer>
         {
             new(spec.RelativePermittivity, spec.LossTangent, spec.HeightMeters)
         };
         if (spec.Structure != LineStructure.Microstrip)
-            layers.Add(new(spec.UpperRelativePermittivity, spec.UpperLossTangent, spec.UpperHeightMeters));
+        {
+            // A cover is measured from the trace's base; the side-wall model takes the layer above
+            // from the traces' top faces, so it is given what lies over them.
+            double upper = spec.UpperHeightMeters;
+            if (spec.Model.SideWalls && spec.Structure == LineStructure.EmbeddedMicrostrip)
+            {
+                upper -= spec.ThicknessMeters;
+                if (!(upper > 0))
+                    throw new ArgumentException("The cover is no thicker than the trace; a conformal cover over the copper is not modelled.");
+            }
+            layers.Add(new(spec.UpperRelativePermittivity, spec.UpperLossTangent, upper));
+        }
         bool topGround = spec.Structure == LineStructure.Stripline;
         if (spec.Structure == LineStructure.EmbeddedMicrostrip)
             assumptions.Add("The layer over the trace is flat and of the given thickness measured from the "
                 + "trace's base; a conformal solder mask that follows the copper is not modelled.");
 
-        // Signal traces, centred on x = 0.
+        // Signal traces: a single trace or a symmetric pair centred on x = 0; an asymmetric
+        // pair with its gap centred on x = 0. lowEdge/highEdge are the outer base edges.
         var traces = new List<TraceCrossSection>();
-        double signalHalfSpan;
-        if (spec.PairGapMeters is { } gap)
+        double lowEdge, highEdge;
+        bool asymmetric = spec.PairGapMeters is not null && spec.SecondWidthMeters is { } second && second != baseWidth;
+        if (spec.SecondWidthMeters is { } w2 && !(w2 - shrink > 0))
+            throw new ArgumentException("The second trace needs a positive width (after the etch).");
+        if (asymmetric)
+        {
+            double gap = spec.PairGapMeters!.Value, secondBase = spec.SecondWidthMeters!.Value;
+            traces.Add(new(-gap / 2 - baseWidth / 2, width, spec.ThicknessMeters, spec.ConductivitySiemensPerMeter));
+            traces.Add(new(gap / 2 + secondBase / 2, secondBase - shrink, spec.ThicknessMeters, spec.ConductivitySiemensPerMeter));
+            lowEdge = -gap / 2 - baseWidth;
+            highEdge = gap / 2 + secondBase;
+        }
+        else if (spec.PairGapMeters is { } gap)
         {
             double pitch = baseWidth + gap;
             traces.Add(new(-pitch / 2, width, spec.ThicknessMeters, spec.ConductivitySiemensPerMeter));
             traces.Add(new(pitch / 2, width, spec.ThicknessMeters, spec.ConductivitySiemensPerMeter));
-            signalHalfSpan = pitch / 2 + baseWidth / 2;
+            highEdge = pitch / 2 + baseWidth / 2;
+            lowEdge = -highEdge;
         }
         else
         {
             traces.Add(new(0, width, spec.ThicknessMeters, spec.ConductivitySiemensPerMeter));
-            signalHalfSpan = baseWidth / 2;
+            highEdge = baseWidth / 2;
+            lowEdge = -highEdge;
         }
         int signals = traces.Count;
+        if (spec.Model.SideWalls && shrink != 0)
+            // The side-wall model solves the trapezoid itself: base as drawn, top narrower.
+            for (int i = 0; i < signals; i++)
+                traces[i] = traces[i] with
+                {
+                    WidthMeters = traces[i].WidthMeters + shrink, TopWidthMeters = traces[i].WidthMeters - shrink
+                };
 
-        var grounded = new List<int>();
         if (spec.CoplanarGapMeters is { } coplanarGap)
         {
             double tallest = Math.Max(spec.HeightMeters, topGround ? spec.UpperHeightMeters : 0);
             double groundWidth = spec.CoplanarGroundWidthMeters > 0
                 ? spec.CoplanarGroundWidthMeters
-                : Math.Max(6 * tallest, 4 * (2 * signalHalfSpan + 2 * coplanarGap));
-            double center = signalHalfSpan + coplanarGap + groundWidth / 2;
+                : Math.Max(6 * tallest, 4 * (highEdge - lowEdge + 2 * coplanarGap));
             // The grounds are etched like the traces: their near edges recede by the same amount.
             double g = groundWidth - shrink / 2;
-            traces.Add(new(-center - shrink / 4, g, spec.ThicknessMeters, spec.ConductivitySiemensPerMeter));
-            traces.Add(new(center + shrink / 4, g, spec.ThicknessMeters, spec.ConductivitySiemensPerMeter));
+            traces.Add(new(lowEdge - coplanarGap - groundWidth / 2 - shrink / 4, g,
+                spec.ThicknessMeters, spec.ConductivitySiemensPerMeter) { IsGround = true });
+            traces.Add(new(highEdge + coplanarGap + groundWidth / 2 + shrink / 4, g,
+                spec.ThicknessMeters, spec.ConductivitySiemensPerMeter) { IsGround = true });
             assumptions.Add($"Coplanar grounds: two strips {groundWidth * 1e3:g3} mm wide, {coplanarGap * 1e6:g4} µm from "
                 + "the trace, solved as conductors and tied to the plane (stitched along their length).");
+            if (spec.Model.SideWalls && shrink != 0)
+            {
+                // Trapezoids at the drawn base, each wall receding by the etch (a far wall too).
+                traces[^2] = traces[^2] with { CenterMeters = lowEdge - coplanarGap - groundWidth / 2, WidthMeters = groundWidth, TopWidthMeters = groundWidth - 2 * shrink };
+                traces[^1] = traces[^1] with { CenterMeters = highEdge + coplanarGap + groundWidth / 2, WidthMeters = groundWidth, TopWidthMeters = groundWidth - 2 * shrink };
+            }
         }
 
         var section = new CoupledLineCrossSection(new LayeredStackup(layers), 0, traces, topGround);
         var full = RlgcExtractor.Extract(section, spec.Model, panelsPerTrace);
-        // The section sorts its traces by centre: the grounds are the first and the last.
-        if (spec.CoplanarGapMeters is not null) { grounded.Add(0); grounded.Add(traces.Count - 1); }
-        var rlgc = RlgcReduction.GroundConductors(full, grounded);
+        var rlgc = RlgcReduction.GroundConductors(full, section.GroundIndices);
 
         double f = spec.FrequencyHz, w = 2 * Math.PI * f;
         var r = rlgc.ResistanceMatrixOhmsPerMeter?.Invoke(f);
@@ -264,9 +334,40 @@ public static class ImpedanceCalculator
 
         var modes = new List<LineMode>();
         double? nearEnd = null, farEnd = null;
+        double[,]? characteristic = null;
         if (signals == 1)
         {
             modes.Add(Mode("single", R(0, 0), L(0, 0), c[0, 0], g2[0, 0]));
+        }
+        else if (asymmetric)
+        {
+            var series = new Complex[2, 2];
+            var shunt = new Complex[2, 2];
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 2; j++)
+                {
+                    series[i, j] = new Complex(R(i, j), w * L(i, j));
+                    shunt[i, j] = new Complex(g2[i, j], w * c[i, j]);
+                }
+            var (pi, cMode, zc) = AsymmetricModes(series, shunt, w);
+            modes.Add(pi);
+            modes.Add(cMode);
+            characteristic = zc;
+
+            // Coupling coefficients with the two traces' own L and C as geometric means
+            // (they reduce to the symmetric pair's when the traces are alike).
+            double cOwn = Math.Sqrt(c[0, 0] * c[1, 1]), cMutual = -0.5 * (c[0, 1] + c[1, 0]);
+            var lExt = rlgc.InductanceHenriesPerMeter;
+            double lOwn = Math.Sqrt(lExt[0, 0] * lExt[1, 1]), lMutual = 0.5 * (lExt[0, 1] + lExt[1, 0]);
+            double z0 = Math.Sqrt(lOwn / cOwn);
+            nearEnd = 0.25 * (cMutual / cOwn + lMutual / lOwn);
+            farEnd = 0.5 * (cMutual * z0 - lMutual / z0);
+            assumptions.Add("Asymmetric pair: Z_diff is that of a forward wave with equal and opposite currents "
+                + "on the two traces (a floating source), Z_common that of one with both traces at the same "
+                + "voltage, both from the characteristic impedance matrix; "
+                + "the π and c modes are the line's own modes, and their impedance is quoted for a voltage "
+                + "vector of unit length. The crosstalk coefficients use the geometric mean of the two traces' "
+                + "own L and C.");
         }
         else
         {
@@ -292,9 +393,114 @@ public static class ImpedanceCalculator
             Section = section,
             Rlgc = rlgc,
             Modes = modes,
+            CharacteristicImpedanceOhms = characteristic,
             NearEndCoupling = nearEnd,
             FarEndCouplingSecondsPerMeter = farEnd,
             Assumptions = assumptions
         };
+    }
+
+    /// <summary>
+    /// The two modes of a pair of unlike traces and its characteristic impedance matrix, from
+    /// the per-unit-length series impedance Z and shunt admittance Y at one frequency.
+    /// <para>
+    /// The voltage modes are the eigenvectors of Z·Y, with γ² its eigenvalues. Z·Y is 2×2, so
+    /// its square root is (Z·Y + γ₁γ₂·I)/(γ₁ + γ₂) (the Cayley–Hamilton form, valid when the
+    /// two γ are equal too), and the forward wave has V = Z_c·I with Z_c = (Z·Y)^−½·Z.
+    /// </para>
+    /// <para>
+    /// Each mode's own z and y are the projections iᵀ·Z·i and vᵀ·Y·v of its current and voltage
+    /// vectors, normalised to vᵀ·v = 1 and iᵀ·v = 1; for a symmetric pair that is
+    /// Z₁₁ ∓ Z₁₂, exactly what the even/odd split gives. The mode with opposite-signed
+    /// voltages is the π mode, the other the c mode.
+    /// </para>
+    /// </summary>
+    internal static (LineMode Pi, LineMode C, double[,] Characteristic) AsymmetricModes(
+        Complex[,] z, Complex[,] y, double w)
+    {
+        var m = Multiply(z, y);
+        Complex trace = m[0, 0] + m[1, 1], det = m[0, 0] * m[1, 1] - m[0, 1] * m[1, 0];
+        Complex root = Complex.Sqrt(trace * trace / 4 - det);
+        var lambdas = new[] { trace / 2 + root, trace / 2 - root };
+        var gammas = lambdas.Select(PrincipalRoot).ToArray();
+
+        // √(Z·Y) and Z_c.
+        Complex sum = gammas[0] + gammas[1], product = gammas[0] * gammas[1];
+        var sqrt = new Complex[2, 2];
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                sqrt[i, j] = (m[i, j] + (i == j ? product : Complex.Zero)) / sum;
+        var zc = Multiply(Invert(sqrt), z);
+        var characteristic = new double[2, 2];
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++) characteristic[i, j] = 0.5 * (zc[i, j].Real + zc[j, i].Real);
+
+        var built = new LineMode[2];
+        var zcInverse = Invert(zc);
+        for (int k = 0; k < 2; k++)
+        {
+            // Voltage eigenvector of Z·Y for λ_k: the larger of the two null-space forms.
+            var a = new[] { m[0, 1], lambdas[k] - m[0, 0] };
+            var b = new[] { lambdas[k] - m[1, 1], m[1, 0] };
+            var v = Norm(a) >= Norm(b) ? a : b;
+            // vᵀ·v = 1 (not vᴴ·v): an eigenvector carries an arbitrary complex phase, which
+            // would turn z/y, though not z·y; this normalisation removes it.
+            Complex length = Complex.Sqrt(v[0] * v[0] + v[1] * v[1]);
+            v = new[] { v[0] / length, v[1] / length };
+            // Its current: the forward wave's I = Z_c⁻¹·V, scaled so iᵀ·v = 1.
+            var i = new[] { zcInverse[0, 0] * v[0] + zcInverse[0, 1] * v[1], zcInverse[1, 0] * v[0] + zcInverse[1, 1] * v[1] };
+            Complex dot = i[0] * v[0] + i[1] * v[1];
+            i = new[] { i[0] / dot, i[1] / dot };
+            Complex zm = Bilinear(i, z, i), ym = Bilinear(v, y, v);
+            built[k] = ModeOf(zm, ym, w, (v[0] * Complex.Conjugate(v[1])).Real < 0 ? "pi" : "c");
+        }
+        if (built[0].Name == built[1].Name)
+        {
+            // Nearly degenerate modes (a homogeneous dielectric) have no well-defined vectors:
+            // the faster one is called the π mode, as it is in a microstrip.
+            int fast = built[0].DelaySecondsPerMeter <= built[1].DelaySecondsPerMeter ? 0 : 1;
+            built[fast] = built[fast] with { Name = "pi" };
+            built[1 - fast] = built[1 - fast] with { Name = "c" };
+        }
+        return (built.First(x => x.Name == "pi"), built.First(x => x.Name == "c"), characteristic);
+    }
+
+    private static LineMode ModeOf(Complex series, Complex shunt, double w, string name)
+    {
+        var z = Complex.Sqrt(series / shunt);
+        var gamma = Complex.Sqrt(series * shunt);
+        double beta = gamma.Imaginary;
+        double lm = series.Imaginary / w, cm = shunt.Imaginary / w;
+        double conductor = Complex.Sqrt(series * new Complex(0, w * cm)).Real;
+        double dielectric = Complex.Sqrt(new Complex(0, w * lm) * shunt).Real;
+        return new LineMode(name, z.Real, Math.Pow(beta * C0 / w, 2), beta / w,
+            conductor * NeperToDb, dielectric * NeperToDb, series.Real, lm, cm, shunt.Real);
+    }
+
+    /// <summary>The root with a positive real part: a wave that decays as it travels.</summary>
+    private static Complex PrincipalRoot(Complex lambda)
+    {
+        var r = Complex.Sqrt(lambda);
+        return r.Real < 0 || (r.Real == 0 && r.Imaginary < 0) ? -r : r;
+    }
+
+    private static double Norm(Complex[] v) => Math.Sqrt(v[0].Magnitude * v[0].Magnitude + v[1].Magnitude * v[1].Magnitude);
+
+    private static Complex Bilinear(Complex[] a, Complex[,] m, Complex[] b) =>
+        a[0] * (m[0, 0] * b[0] + m[0, 1] * b[1]) + a[1] * (m[1, 0] * b[0] + m[1, 1] * b[1]);
+
+    private static Complex[,] Multiply(Complex[,] a, Complex[,] b)
+    {
+        var r = new Complex[2, 2];
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                r[i, j] = a[i, 0] * b[0, j] + a[i, 1] * b[1, j];
+        return r;
+    }
+
+    private static Complex[,] Invert(Complex[,] a)
+    {
+        Complex det = a[0, 0] * a[1, 1] - a[0, 1] * a[1, 0];
+        return new[,] { { a[1, 1] / det, -a[0, 1] / det }, { -a[1, 0] / det, a[0, 0] / det } };
     }
 }

@@ -338,17 +338,19 @@ public static class ProximityExtractor
     /// strips in a PERFECT plane, so the plane's own loss is not in it; when the extraction
     /// carries the plane's share of the skin resistance (the board model) it is added here,
     /// with its internal inductance, blended to nothing at DC on the same crossover the
-    /// strips have.</summary>
+    /// strips have. When the extraction carries a surface roughness, the same factor is applied
+    /// as the board model applies it: to the part of R that grows above DC and to the
+    /// internal inductance.</summary>
     public static RlgcResult Attach(RlgcResult rlgc, ProximityResult proximity)
     {
         var plane = rlgc.PlaneSkinResistanceOhmsPerMeterPerSqrtHz;
-        if (plane is null)
+        if (plane is null && rlgc.Roughness is null)
             return rlgc with
             {
                 ResistanceMatrixOhmsPerMeter = proximity.ResistanceMatrix,
                 InternalInductanceHenriesPerMeter = proximity.InternalInductance,
             };
-        var shared = new ConductorImpedance(rlgc.ResistanceDcOhmsPerMeter, plane, sharedOnly: true);
+        var shared = plane is null ? null : new ConductorImpedance(rlgc.ResistanceDcOhmsPerMeter, plane, sharedOnly: true);
         double[,] Sum(double[,] a, double[,] b)
         {
             int n = a.GetLength(0);
@@ -357,11 +359,41 @@ public static class ProximityExtractor
                 for (int j = 0; j < n; j++) s[i, j] = a[i, j] + b[i, j];
             return s;
         }
+        if (rlgc.Roughness is not { } roughness)
+            return rlgc with
+            {
+                ResistanceMatrixOhmsPerMeter = f => Sum(proximity.ResistanceMatrix(f), shared!.Resistance(f)),
+                InternalInductanceHenriesPerMeter =
+                    f => Sum(proximity.InternalInductance(f), shared!.InternalInductance(f)),
+            };
+
+        double sigma = rlgc.RoughnessConductivitySiemensPerMeter;
+        var dc = proximity.ResistanceMatrix(0);
         return rlgc with
         {
-            ResistanceMatrixOhmsPerMeter = f => Sum(proximity.ResistanceMatrix(f), shared.Resistance(f)),
-            InternalInductanceHenriesPerMeter =
-                f => Sum(proximity.InternalInductance(f), shared.InternalInductance(f)),
+            ResistanceMatrixOhmsPerMeter = f =>
+            {
+                // The table returns its own arrays at the band edge: never write into them.
+                var r = proximity.ResistanceMatrix(f);
+                if (shared is not null) r = Sum(r, shared.Resistance(f));
+                double k = roughness.Factor(f, sigma);
+                int n = r.GetLength(0);
+                var scaled = new double[n, n];
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < n; j++) scaled[i, j] = dc[i, j] + k * (r[i, j] - dc[i, j]);
+                return scaled;
+            },
+            InternalInductanceHenriesPerMeter = f =>
+            {
+                var l = proximity.InternalInductance(f);
+                if (shared is not null) l = Sum(l, shared.InternalInductance(f));
+                double k = roughness.Factor(f, sigma);
+                int n = l.GetLength(0);
+                var scaled = new double[n, n];
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < n; j++) scaled[i, j] = k * l[i, j];
+                return scaled;
+            },
         };
     }
 

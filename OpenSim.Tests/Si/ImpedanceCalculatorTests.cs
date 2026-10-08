@@ -100,6 +100,106 @@ public class ImpedanceCalculatorTests
         Assert.True(microstrip.Modes[0].ImpedanceOhms < microstrip.Modes[1].ImpedanceOhms);
     }
 
+    // ------------------------------------------------------------------ asymmetric pairs
+
+    private static (System.Numerics.Complex[,] Z, System.Numerics.Complex[,] Y) SeriesAndShunt(RlgcResult rlgc, double f, bool lossless)
+    {
+        double w = 2 * Math.PI * f;
+        var r = rlgc.ResistanceMatrixOhmsPerMeter?.Invoke(f);
+        var li = rlgc.InternalInductanceHenriesPerMeter?.Invoke(f);
+        var c = rlgc.CapacitancePerMeter(f);
+        var g = rlgc.ConductancePerMeter(f);
+        var z = new System.Numerics.Complex[2, 2];
+        var y = new System.Numerics.Complex[2, 2];
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+            {
+                double re = lossless ? 0 : r is not null ? r[i, j] : i == j ? rlgc.ResistancePerMeter(i, f) : 0;
+                double l = rlgc.InductanceHenriesPerMeter[i, j] + (lossless || li is null ? 0 : li[i, j]);
+                z[i, j] = new System.Numerics.Complex(re, w * l);
+                y[i, j] = new System.Numerics.Complex(lossless ? 0 : g[i, j], w * c[i, j]);
+            }
+        return (z, y);
+    }
+
+    [Fact]
+    public void TheGeneralModes_OfASymmetricPair_AreTheEvenAndOddModes()
+    {
+        // The asymmetric pair's modal algebra, fed a symmetric pair's lossy Z and Y, must give
+        // the even/odd split the symmetric path uses (and Cohn's gate stands behind).
+        var spec = new LineSpec { WidthMeters = 0.3e-3, PairGapMeters = 0.2e-3, HeightMeters = 0.2e-3, FrequencyHz = 2e9 };
+        var symmetric = ImpedanceCalculator.Solve(spec);
+        var (z, y) = SeriesAndShunt(symmetric.Rlgc, spec.FrequencyHz, lossless: false);
+        var (pi, c, zc) = ImpedanceCalculator.AsymmetricModes(z, y, 2 * Math.PI * spec.FrequencyHz);
+
+        var odd = symmetric.Modes[0];
+        var even = symmetric.Modes[1];
+        foreach (var (general, split) in new[] { (pi, odd), (c, even) })
+        {
+            Assert.Equal(split.ImpedanceOhms, general.ImpedanceOhms, 1e-9 * split.ImpedanceOhms);
+            Assert.Equal(split.EffectivePermittivity, general.EffectivePermittivity, 1e-9 * split.EffectivePermittivity);
+            Assert.Equal(split.ConductorLossDbPerMeter, general.ConductorLossDbPerMeter, 1e-9 * split.ConductorLossDbPerMeter);
+            Assert.Equal(split.DielectricLossDbPerMeter, general.DielectricLossDbPerMeter, 1e-9 * split.DielectricLossDbPerMeter);
+        }
+        double zDiff = zc[0, 0] + zc[1, 1] - 2 * zc[0, 1];
+        _output.WriteLine(string.Join(Environment.NewLine, symmetric.Describe()));
+        _output.WriteLine($"Zc {zc[0, 0]:g6} {zc[0, 1]:g6} {zc[1, 0]:g6} {zc[1, 1]:g6}; pi {pi.ImpedanceOhms:g6} c {c.ImpedanceOhms:g6}");
+        Assert.Equal(symmetric.DifferentialOhms!.Value, zDiff, 1e-4 * zDiff);
+    }
+
+    [Fact]
+    public void TheCharacteristicMatrix_OfALosslessAsymmetricPair_IsLAndCs()
+    {
+        // Z_c = (Z·Y)^−½·Z by the 2×2 root, against LineReadout's C⁻¹·(C·L)^½ by Cholesky and
+        // Jacobi: two routes to the same matrix.
+        var report = ImpedanceCalculator.Solve(new LineSpec
+        {
+            WidthMeters = 0.2e-3, SecondWidthMeters = 0.45e-3, PairGapMeters = 0.15e-3, HeightMeters = 0.2e-3
+        });
+        Assert.NotNull(report.CharacteristicImpedanceOhms);
+        var (z, y) = SeriesAndShunt(report.Rlgc, 1e9, lossless: true);
+        var (_, _, zc) = ImpedanceCalculator.AsymmetricModes(z, y, 2 * Math.PI * 1e9);
+        var expected = LineReadout.CharacteristicImpedance(report.Rlgc.InductanceHenriesPerMeter, report.Rlgc.CapacitancePerMeter(1e9));
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                Assert.Equal(expected[i, j], zc[i, j], 1e-9 * expected[0, 0]);
+        _output.WriteLine(string.Join(Environment.NewLine, report.Describe()));
+    }
+
+    [Fact]
+    public void AnAsymmetricPairFarApart_IsTwoSingleTraces()
+    {
+        // Twenty substrate heights apart the traces barely couple: a differential wave sees the
+        // two lines in series, a common one sees them in parallel.
+        var single = new LineSpec { WidthMeters = 0.2e-3, HeightMeters = 0.2e-3, Model = Lossless };
+        double z1 = ImpedanceCalculator.Solve(single).ImpedanceOhms;
+        double z2 = ImpedanceCalculator.Solve(single with { WidthMeters = 0.5e-3 }).ImpedanceOhms;
+        var pair = ImpedanceCalculator.Solve(single with { SecondWidthMeters = 0.5e-3, PairGapMeters = 4e-3 });
+        _output.WriteLine($"Z1 {z1:g5}, Z2 {z2:g5}; Z_diff {pair.DifferentialOhms:g5} vs {z1 + z2:g5}, "
+                          + $"Z_common {pair.CommonOhms:g5} vs {z1 * z2 / (z1 + z2):g5}");
+        Assert.Equal(z1 + z2, pair.DifferentialOhms!.Value, 0.01 * (z1 + z2));
+        Assert.Equal(z1 * z2 / (z1 + z2), pair.CommonOhms!.Value, 0.01 * z1 * z2 / (z1 + z2));
+        Assert.Equal(z1, pair.ImpedanceOhms, 0.01 * z1);
+    }
+
+    [Fact]
+    public void AnAsymmetricStripline_InOneDielectric_HasTemModes_AndNoFarEndCrosstalk()
+    {
+        const double epsR = 3.5;
+        var report = ImpedanceCalculator.Solve(new LineSpec
+        {
+            Structure = LineStructure.Stripline, WidthMeters = 0.1e-3, SecondWidthMeters = 0.25e-3, PairGapMeters = 0.12e-3,
+            HeightMeters = 0.2e-3, UpperHeightMeters = 0.2e-3, RelativePermittivity = epsR, UpperRelativePermittivity = epsR,
+            LossTangent = 0, UpperLossTangent = 0, Model = Lossless, FrequencyHz = 10e9
+        });
+        Assert.Equal(new[] { "pi", "c" }, report.Modes.Select(m => m.Name));
+        foreach (var mode in report.Modes)
+            Assert.Equal(epsR, mode.EffectivePermittivity, 0.002 * epsR);
+        double c = report.Rlgc.CapacitanceFaradsPerMeter[0, 1];
+        double z0 = report.ImpedanceOhms;
+        Assert.True(Math.Abs(report.FarEndCouplingSecondsPerMeter!.Value) < 1e-3 * Math.Abs(c) * z0);
+    }
+
     // ------------------------------------------------------------------ coplanar
 
     /// <summary>

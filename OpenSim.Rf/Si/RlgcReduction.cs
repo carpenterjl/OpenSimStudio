@@ -101,6 +101,9 @@ public static class RlgcReduction
             assumptions, Resistance, InternalInductance)
         {
             Dielectric = full.Dielectric,
+            DielectricSolves = full.DielectricSolves?.Sub(keep),
+            Roughness = full.Roughness,
+            RoughnessConductivitySiemensPerMeter = full.RoughnessConductivitySiemensPerMeter,
         };
     }
 

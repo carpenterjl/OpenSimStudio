@@ -15,6 +15,15 @@ public sealed record TraceCrossSection(
     public static TraceCrossSection Copper(double centerMeters, double widthMeters,
         double thicknessMeters = 35e-6) =>
         new(centerMeters, widthMeters, thicknessMeters, 5.8e7);
+
+    /// <summary>A coplanar ground strip: solved as a conductor of its own and then tied to the
+    /// reference (<see cref="RlgcReduction"/>), so it is not a port of the line.</summary>
+    public bool IsGround { get; init; }
+
+    /// <summary>Width of the face away from the interface, for an etched (trapezoidal) trace;
+    /// null is a rectangle. Only the side-wall model (<see cref="RlgcModel.SideWalls"/>) solves
+    /// the slope; the effective-width model takes <see cref="WidthMeters"/>.</summary>
+    public double? TopWidthMeters { get; init; }
 }
 
 /// <summary>
@@ -85,5 +94,14 @@ public sealed record CoupledLineCrossSection
         MetalInterface = metalInterface;
         Traces = sorted;
         TopGround = topGround;
+        GroundIndices = Enumerable.Range(0, sorted.Length).Where(i => sorted[i].IsGround).ToArray();
+        if (GroundIndices.Count == sorted.Length)
+            throw new ArgumentException("Every conductor is a ground strip; a line needs at least one signal trace.", nameof(traces));
     }
+
+    /// <summary>Indices (into <see cref="Traces"/>) of the coplanar ground strips.</summary>
+    public IReadOnlyList<int> GroundIndices { get; }
+
+    /// <summary>The signal traces, in order: the line's ports.</summary>
+    public IReadOnlyList<TraceCrossSection> SignalTraces => Traces.Where(t => !t.IsGround).ToArray();
 }

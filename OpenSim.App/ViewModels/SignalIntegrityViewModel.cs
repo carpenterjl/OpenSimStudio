@@ -92,6 +92,25 @@ public partial class SignalIntegrityViewModel : ObservableObject
     /// current crowding + internal L(f). Default OFF so existing results don't shift.</summary>
     [ObservableProperty] private bool _proximityEffect;
 
+    public ObservableCollection<string> RoughnessModels { get; } = RoughnessChoice.Models();
+
+    /// <summary>Copper roughness for the RLGC, S-parameters and eye (wizard and board nets,
+    /// proximity option included). Nullable so a ComboBox transient null push lands harmlessly.</summary>
+    [ObservableProperty] private string? _roughnessModel = RoughnessChoice.Smooth;
+
+    /// <summary>RMS roughness [µm] (Hammerstad) or sphere radius [µm] (Huray).</summary>
+    [ObservableProperty] private double _roughnessUm;
+
+    /// <summary>Huray's sphere area per flat area.</summary>
+    [ObservableProperty] private double _huraySurfaceRatio;
+
+    /// <summary>Solve the traces as the trapezoids they are, side walls included, instead of
+    /// strips of effective width (<see cref="RlgcModel.SideWalls"/>).</summary>
+    [ObservableProperty] private bool _sideWallSolve;
+
+    private RlgcModel BoardModel() =>
+        RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio) with { SideWalls = SideWallSolve };
+
     // ------------------------------------------------------------------
     // IBIS driver (Stage S11): a nonlinear behavioral buffer replaces the Thevenin driver.
     // Coupled lines are solved together in the same nonlinear solve (NonlinearLink.SolveNPort).
@@ -311,16 +330,15 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
     private (RlgcResult Rlgc, MtlNetwork Network) BuildNetwork()
     {
-        if (UseBoardNets && _boardExtraction is
-            { Rlgc: { } rlgcBoard, Network: { } networkBoard, CrossSection: { } sectionBoard })
+        if (UseBoardNets && _boardExtraction is { CrossSection: { } sectionBoard })
         {
-            if (!ProximityEffect) return (rlgcBoard, networkBoard);
-            // The SAME cascade (every coupled stretch and every lead), each section with
-            // the proximity providers — not one rebuilt section that drops the leads.
+            // The SAME cascade (every coupled stretch and every lead), each section extracted
+            // with the panel's current roughness and proximity choice — not one rebuilt
+            // section that drops the leads, and not the extraction-time model.
             var perSection = new Dictionary<CoupledLineCrossSection, RlgcResult>(
                 ReferenceEqualityComparer.Instance);
             var network = _boardExtraction.BuildNetwork(s => perSection[s] = ExtractRlgc(s));
-            return (perSection[sectionBoard], network);
+            return (BoardCoupledResult.Reduce(sectionBoard, perSection[sectionBoard]), network);
         }
         return Build(BuildCrossSection(), LineLengthMm * 1e-3);
     }
@@ -337,9 +355,10 @@ public partial class SignalIntegrityViewModel : ObservableObject
     private RlgcResult ExtractRlgc(CoupledLineCrossSection section)
     {
         // The board model: thickness, return-path and crowding loss with its internal
-        // inductance, causal dielectric. The proximity option replaces the STRIPS' share of
-        // the conductor loss with the filament solve and keeps the plane's.
-        var rlgc = RlgcExtractor.Extract(section, RlgcModel.Board);
+        // inductance, causal dielectric, the chosen roughness. The proximity option replaces
+        // the STRIPS' share of the conductor loss with the filament solve and keeps the
+        // plane's and the roughness.
+        var rlgc = RlgcExtractor.Extract(section, BoardModel());
         if (ProximityEffect)
         {
             double fMax = Math.Max(1e10, BitRateGbps * 1e9 * 20);
@@ -361,7 +380,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
             + (ProximityEffect
                 ? " Proximity effect ON: the strips' R(f) and internal L(f) come from the 2D "
                   + "filament solve over a perfect plane (current crowding + skin effect, full "
-                  + "N×N); the plane's own loss is added from the incremental-inductance rule."
+                  + "N×N); the plane's own loss is added from the incremental-inductance rule"
+                  + (rlgc.Roughness is { } rough ? $", and the roughness factor ({rough.Describe()}) is applied to both." : ".")
                 : "")
             + " Linear Thevenin driver + R∥C receiver (this run did not use an IBIS buffer).";
 
@@ -393,6 +413,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
         try
         {
             var options = _meshOptions();
+            var model = BoardModel();
             var extraction = await Task.Run(() => BoardCoupledExtractor.Extract(_board, selected,
                 new BoardCoupledOptions
                 {
@@ -401,7 +422,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                     Stackup = options.Stackup,
                     CopperThicknessMeters = options.CopperThickness,
                     SwapEnds = SwapBoardEnds,
-                    Model = RlgcModel.Board,
+                    Model = model,
                 }));
             if (extraction.FailureReason is not null)
             {
@@ -414,10 +435,10 @@ public partial class SignalIntegrityViewModel : ObservableObject
 
             _boardExtraction = extraction;
             UseBoardNets = true;
-            LineCount = extraction.CrossSection!.Traces.Count;      // terminations follow the real count
+            var signals = extraction.CrossSection!.Traces.Where(t => !t.IsGround).ToList();
+            LineCount = signals.Count;      // terminations follow the real count
             DrivenLine = Math.Clamp(DrivenLine, 1, LineCount);
-            var widths = string.Join(", ",
-                extraction.CrossSection.Traces.Select(t => $"{t.WidthMeters * 1e3:g3}"));
+            var widths = string.Join(", ", signals.Select(t => $"{t.WidthMeters * 1e3:g3}"));
             BoardExtractionResult =
                 $"{LineCount} coupled conductors, coupled length = {extraction.CoupledLengthMeters * 1e3:g4} mm "
                 + $"in {extraction.Sections.Count(s => s.Coupled is not null)} section(s), routed lengths ["
