@@ -6,7 +6,12 @@ namespace OpenSim.Rf;
 /// <summary>One frequency point of a thin-wire moment-method solve: the input impedance
 /// seen by the delta-gap feed and the complex current coefficient at every basis node
 /// (peak-value phasors, like the EQS solver).</summary>
-public sealed record MomSolution(double FrequencyHz, Complex InputImpedance, Complex[] BasisCurrents);
+public sealed record MomSolution(double FrequencyHz, Complex InputImpedance, Complex[] BasisCurrents)
+{
+    /// <summary>Power turned to heat in the wire [W] for peak-amplitude currents; 0 for a
+    /// perfect conductor (<see cref="ThinWireMomSolver.WireSurfaceImpedance"/>).</summary>
+    public double OhmicLossWatts { get; init; }
+}
 
 /// <summary>
 /// Frequency-domain thin-wire method of moments: the electric-field integral equation
@@ -32,11 +37,15 @@ public sealed class ThinWireMomSolver
     /// <summary>Kernel facts every consumer must surface next to results.</summary>
     public static IReadOnlyList<string> Assumptions { get; } = new[]
     {
-        "Perfect conductor (no ohmic loss).",
+        "Perfect conductor unless a wire surface impedance is given (then ohmic loss Z_s/2πa per metre of current, skin depth well inside the wire).",
         "Free space — board dielectric and nearby copper are not modeled; physical PCB antennas detune accordingly.",
         "Thin-wire kernel: wire radius ≪ λ; strips as equivalent-radius wires (r = w/4).",
         "Delta-gap voltage feed at a basis node."
     };
+
+    /// <summary>Surface impedance of the wire against frequency [Ω per square] (for example
+    /// <see cref="OpenSim.Rf.Surface.SheetLoss.RoundWire"/>); null is a perfect conductor.</summary>
+    public Func<double, Complex>? WireSurfaceImpedance { get; init; }
 
     public MomSolution Solve(WireStructure wire, double frequencyHz, int feedBasis, double gapVolts = 1.0)
     {
@@ -50,6 +59,10 @@ public sealed class ThinWireMomSolver
         double k = omega / RfConstants.SpeedOfLight;
 
         var z = AssembleImpedanceMatrix(wire, k, omega);
+        Complex zs = WireSurfaceImpedance?.Invoke(frequencyHz) ?? Complex.Zero;
+        var loss = LossMass(wire);
+        if (zs != Complex.Zero)
+            foreach (var (p, q, w) in loss) z[p, q] += zs * w;
         var rhs = new Complex[wire.BasisCount];
         rhs[feedBasis] = gapVolts;
         var currents = ComplexLu.Factor(z).Solve(rhs);
@@ -58,7 +71,39 @@ public sealed class ThinWireMomSolver
         if (feedCurrent == Complex.Zero)
             throw new InvalidOperationException(
                 "The feed carries zero current — the feed sits at a current null of a degenerate structure.");
-        return new MomSolution(frequencyHz, gapVolts / feedCurrent, currents);
+        return new MomSolution(frequencyHz, gapVolts / feedCurrent, currents)
+        {
+            OhmicLossWatts = 0.5 * zs.Real * Squared(loss, b => currents[b])
+        };
+    }
+
+    /// <summary>∫fₘ·fₙ dl/(2πa) over every element, a its radius: the wire's ohmic-loss matrix
+    /// per unit of surface impedance, as (basis, basis, value). On an element a rising and a
+    /// falling leg overlap by h/6 and a leg with itself by h/3 (linear bases).</summary>
+    internal static List<(int P, int Q, double Value)> LossMass(WireStructure wire)
+    {
+        var supports = new List<(int Basis, bool Rising, double Sign)>[wire.ElementCount];
+        for (int e = 0; e < wire.ElementCount; e++) supports[e] = new List<(int, bool, double)>(2);
+        for (int b = 0; b < wire.BasisCount; b++)
+            foreach (var leg in wire.BasisHalves(b))
+                supports[leg.Element].Add((b, leg.Rising, leg.Sign));
+        var entries = new List<(int, int, double)>();
+        for (int e = 0; e < wire.ElementCount; e++)
+        {
+            double h = wire.ElementLength(e), perimeter = 2 * Math.PI * wire.ElementRadii[e];
+            foreach (var (p, risingP, signP) in supports[e])
+                foreach (var (q, risingQ, signQ) in supports[e])
+                    entries.Add((p, q, (risingP == risingQ ? h / 3 : h / 6) * signP * signQ / perimeter));
+        }
+        return entries;
+    }
+
+    /// <summary>Σ conj(Iₚ)·I_q·w over the loss matrix: ∫|I|²dl/(2πa).</summary>
+    internal static double Squared(List<(int P, int Q, double Value)> loss, Func<int, Complex> current)
+    {
+        double sum = 0;
+        foreach (var (p, q, w) in loss) sum += (Complex.Conjugate(current(p)) * current(q)).Real * w;
+        return sum;
     }
 
     // ------------------------------------------------------------------

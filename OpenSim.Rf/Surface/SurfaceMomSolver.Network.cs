@@ -36,6 +36,16 @@ public static class SheetLoss
             : k / conductivity * Coth(k * thickness);
     }
 
+    /// <summary>Surface impedance (1 + j)·√(πfµ₀/σ) of a round conductor whose skin depth is
+    /// well inside it, per square of its surface.</summary>
+    public static Complex RoundWire(double frequencyHz, double conductivity)
+    {
+        if (!(conductivity > 0 && frequencyHz > 0))
+            throw new ArgumentException("Conductivity and frequency must be positive.");
+        double rs = Math.Sqrt(Math.PI * frequencyHz * RfConstants.Mu0 / conductivity);
+        return new Complex(rs, rs);
+    }
+
     /// <summary>The value of every basis on a triangle at its three edge midpoints (a rule
     /// exact for the quadratic f_m·f_n), as (basis, vector) lists per midpoint.</summary>
     private static IEnumerable<(double Weight, (int Basis, Vector3D Value)[] Bases)> Midpoints(SurfaceStructure s, int t)
@@ -94,10 +104,17 @@ public sealed partial class SurfaceMomSolver
 {
     /// <summary>
     /// Impedance per square of the sheet metal against frequency (see <see cref="SheetLoss"/>);
-    /// null is a perfect conductor. Used by the delta-gap solves and the multi-port solve.
-    /// The probe-fed and wire-fed solves keep perfect metal.
+    /// null is a perfect conductor. Used by the delta-gap solves, the multi-port solve and the
+    /// probe-fed solve.
     /// </summary>
     public Func<double, Complex>? SheetImpedance { get; init; }
+
+    /// <summary>
+    /// Surface impedance of round conductors (probe tubes, wires) against frequency [Ω per
+    /// square]; null is a perfect conductor. A round conductor of radius a carries it over its
+    /// circumference: Z_s/(2πa) per metre of its current (<see cref="SheetLoss.RoundWire"/>).
+    /// </summary>
+    public Func<double, Complex>? WireSurfaceImpedance { get; init; }
 
     /// <summary>Several delta-gap ports on a sheet in free space (or over its image plane).</summary>
     public SurfaceMultiPortSolution SolveMultiPort(SurfaceStructure surface, double frequencyHz,

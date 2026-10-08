@@ -1,6 +1,7 @@
 using System.Numerics;
 using OpenSim.Core.Numerics;
 using OpenSim.Rf;
+using OpenSim.Rf.Surface;
 using Xunit;
 
 namespace OpenSim.Tests.Rf;
@@ -44,6 +45,39 @@ public class FieldEvaluationTests
         double pIn = InputPower(solution, wire);
         Assert.True(Math.Abs(pattern.TotalRadiatedPowerWatts / pIn - 1) < 0.02,
             $"P_rad = {pattern.TotalRadiatedPowerWatts:g6} vs P_in = {pIn:g6}");
+    }
+
+    [Fact]
+    public void ALossyShortDipole_PutsItsHeatInTheLedger_AndAddsTheTriangleResistance()
+    {
+        // FU-37. A 0.05 λ copper dipole of 50 µm radius: R' = R_s/2πa per metre, and the short
+        // dipole's current is the triangle I₀(1 − 2|z|/L), so the heat adds R'·L/3 to its input
+        // resistance, about half its radiation resistance 20π²(L/λ)² here. Both are read through
+        // the same delta gap, whose own capacitance across the terminals scales every resistance
+        // seen there by one factor (0.90 at this density, for the lossless radiation resistance
+        // too) — so the gate is their ratio, which the feed cannot move.
+        const double sigma = 5.8e7;
+        double length = 0.05 * Lambda, radius = Lambda / 20000;
+        var grid = WireGridBuilder.Build(
+            new[] { new WireSegment(new Vector3D(0, 0, -length / 2), new Vector3D(0, 0, length / 2), radius) },
+            maxElementLength: length / 20);
+        var wire = grid.Structure!;
+        int feed = wire.NearestBasis(Vector3D.Zero);
+        var lossless = new ThinWireMomSolver().Solve(wire, Frequency, feed);
+        var lossy = new ThinWireMomSolver { WireSurfaceImpedance = f => SheetLoss.RoundWire(f, sigma) }.Solve(wire, Frequency, feed);
+
+        double pIn = InputPower(lossy, wire);
+        double pRad = FarFieldEvaluator.Compute(wire, lossy).TotalRadiatedPowerWatts;
+        double perMeter = SheetLoss.RoundWire(Frequency, sigma).Real / (2 * Math.PI * radius);
+        double added = lossy.InputImpedance.Real - lossless.InputImpedance.Real;
+        double radiation = 20 * Math.PI * Math.PI * Math.Pow(length / Lambda, 2);
+        double ratio = (added / lossless.InputImpedance.Real) / (perMeter * length / 3 / radiation);
+        Console.WriteLine($"R_in {lossless.InputImpedance.Real:f4} → {lossy.InputImpedance.Real:f4} Ω (R'L/3 = {perMeter * length / 3:f4} Ω, " +
+                          $"20π²(L/λ)² = {radiation:f4} Ω); loss over radiation against the ideal {ratio:f4}; " +
+                          $"ledger {(pRad + lossy.OhmicLossWatts) / pIn:f4}");
+        Assert.True(Math.Abs((pRad + lossy.OhmicLossWatts) / pIn - 1) < 0.02);
+        Assert.InRange(ratio, 0.97, 1.03);
+        Assert.Equal(0.0, lossless.OhmicLossWatts);
     }
 
     [Fact]

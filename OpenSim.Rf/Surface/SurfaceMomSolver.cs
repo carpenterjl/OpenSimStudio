@@ -46,7 +46,7 @@ public sealed partial class SurfaceMomSolver
     /// <summary>Kernel facts every consumer must surface next to results.</summary>
     public static IReadOnlyList<string> Assumptions { get; } = new[]
     {
-        "Perfect electric conductor, zero-thickness sheet (no ohmic loss).",
+        "Zero-thickness sheet; a perfect conductor unless a sheet surface impedance is given, which adds its ohmic loss.",
         "Free space — no dielectric substrate; an air-spaced patch only. Substrates arrive with the layered-media stage.",
         "Delta-gap voltage feed across an interior mesh edge (or a colinear edge group).",
         "Current normal to the sheet rim is zero by construction (no wire attachments)."

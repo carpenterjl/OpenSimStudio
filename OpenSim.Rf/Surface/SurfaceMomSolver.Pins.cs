@@ -77,7 +77,7 @@ public sealed partial class SurfaceMomSolver
     /// <summary>Facts every consumer of a pin-array result must show next to it.</summary>
     public static IReadOnlyList<string> PinArrayAssumptions { get; } = new[]
     {
-        "Perfect electric conductor, zero-thickness sheet and pins (no ohmic loss).",
+        "Zero-thickness sheet and pins; perfect conductors unless a sheet or wire surface impedance is given, which adds the sheet's and each tube's ohmic loss (the ground plane stays perfect).",
         "A grounded layered stackup (infinite PEC ground); all sheet metal at one interface. Metal on two levels joined by a via is not modelled.",
         "Each pin is a thin tube from the ground to the sheet, attached by the 1/ρ junction mode at a mesh vertex; a port pin is driven by a delta gap at its base, a shorting pin's base is welded to the ground.",
         "Pins' attachment fans must not touch; the tube-to-tube coupling uses the axis spacing.",
@@ -226,6 +226,16 @@ public sealed partial class SurfaceMomSolver
                 for (int n2 = 0; n2 < segJ; n2++)
                     Put(jI, sJ + n2, tubeTube[segI, n2] + tubeJvsI[n2]);
                 Put(jI, jJ, tubeTube[segI, segJ] + tubeIvsJ[segI] + tubeJvsI[segJ] + sheetSheet);
+            }
+
+        // Ohmic loss: the sheet's surface impedance on the RWG block, each pin's on its tube.
+        SheetLoss.AddTo(z, surface, SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero);
+        if (WireSurfaceImpedance?.Invoke(frequencyHz) is { } wireZ && wireZ != Complex.Zero)
+            for (int i = 0; i < pins.Count; i++)
+            {
+                Complex perMeter = wireZ / (2 * Math.PI * pins[i].Geometry.RadiusMeters);
+                foreach (var (m, n, value) in TubeMass(terms[i].Nodes, tubeStart[i], junctionIndex[i]))
+                    z[m, n] += perMeter * value;
             }
 
         // Ports: pin bases (the base half hat has f(0) = 1) and sheet gaps.

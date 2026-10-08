@@ -21,6 +21,10 @@ public sealed record WireAttachedSolution(
     /// and the omitted edge line charge is no longer small.</summary>
     public double FanFluxMismatch { get; init; }
 
+    /// <summary>Power turned to heat in the sheet and the wire [W] for peak-amplitude currents;
+    /// 0 for perfect metal.</summary>
+    public double OhmicLossWatts { get; init; }
+
     public const double SkewedFanThreshold = 0.5;
 }
 
@@ -61,7 +65,7 @@ public sealed partial class SurfaceMomSolver
     /// <summary>Kernel facts every consumer must surface next to wire-attached results.</summary>
     public static IReadOnlyList<string> WireAttachedAssumptions { get; } = new[]
     {
-        "Perfect electric conductor, zero-thickness sheet and thin wire (no ohmic loss).",
+        "Zero-thickness sheet and thin wire; perfect conductors unless a sheet or wire surface impedance is given, which adds their ohmic loss.",
         "Free space — no dielectric substrate and no image ground plane; a wire over a substrate is named future work.",
         "The sheet is planar and the wire ends ON one of its interior mesh vertices.",
         "Classical 1/ρ attachment mode at the junction: the wire and disc endpoint deltas cancel exactly — no junction point charge.",
@@ -108,6 +112,14 @@ public sealed partial class SurfaceMomSolver
         int nWire = wire.BasisCount;
         int jIndex = z.Rows - 1;
 
+        // Ohmic loss: the sheet's surface impedance on its RWG block, the wire's on its bases.
+        Complex sheet = SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero;
+        Complex wireZ = WireSurfaceImpedance?.Invoke(frequencyHz) ?? Complex.Zero;
+        SheetLoss.AddTo(z, surface, sheet);
+        var wireLoss = ThinWireMomSolver.LossMass(wire);
+        if (wireZ != Complex.Zero)
+            foreach (var (p, q, w) in wireLoss) z[wireIndex[p], wireIndex[q]] += wireZ * w;
+
         // ---- Feed and solve. ----
         var rhs = new Complex[z.Rows];
         int feedIndex = wireIndex[feedBasis];
@@ -132,7 +144,9 @@ public sealed partial class SurfaceMomSolver
         return new WireAttachedSolution(frequencyHz, gapVolts / feedCurrent,
             edgeCurrents, wireCurrents, rawEdgeCurrents, junction.IncidenceDegrees)
         {
-            FanFluxMismatch = junction.Fan.OuterFluxMismatch
+            FanFluxMismatch = junction.Fan.OuterFluxMismatch,
+            OhmicLossWatts = SheetLoss.OhmicPower(surface, rawEdgeCurrents, sheet)
+                             + 0.5 * wireZ.Real * ThinWireMomSolver.Squared(wireLoss, b => x[wireIndex[b]])
         };
     }
 

@@ -14,7 +14,13 @@ namespace OpenSim.Rf.Surface;
 /// currents sit on — uniform for one slab, interface-pinned for a stackup.</summary>
 public sealed record ProbeFedSolution(
     SurfaceMomSolution Surface, Complex[] TubeCurrents, Complex[] RawEdgeCurrents,
-    double[] TubeNodes);
+    double[] TubeNodes)
+{
+    /// <summary>Power turned to heat in the metal [W] for peak-amplitude currents: the sheet's
+    /// (<see cref="SurfaceMomSolver.SheetImpedance"/>) and the probe tube's
+    /// (<see cref="SurfaceMomSolver.WireSurfaceImpedance"/>); 0 for perfect metal.</summary>
+    public double OhmicLossWatts { get; init; }
+}
 
 /// <summary>
 /// The probe-fed (coaxial feed) assembly path: the layered RWG system extended by the
@@ -54,7 +60,7 @@ public sealed partial class SurfaceMomSolver
     /// <summary>Kernel facts every consumer must surface next to probe-fed results.</summary>
     public static IReadOnlyList<string> ProbeFedAssumptions { get; } = new[]
     {
-        "Perfect electric conductor, zero-thickness sheet and probe tube (no ohmic loss).",
+        "Zero-thickness sheet and probe tube; ohmic loss only when the solver is given a sheet or a wire surface impedance (perfect metal otherwise), and the ground plane is perfect.",
         "One dielectric slab (εr, tanδ) on an infinite PEC ground; all sheet metal coplanar at the slab top.",
         "Coaxial probe: a vertical tube from ground to patch, delta-gap driven at its BASE (a real port voltage against ground).",
         "Classical 1/ρ attachment mode at the junction (the probe position is a mesh vertex); the tube and disc deltas cancel exactly — no junction point charge.",
@@ -130,6 +136,15 @@ public sealed partial class SurfaceMomSolver
         int total = nEdges + nTube + 1;
         int jIndex = total - 1;
 
+        // Ohmic loss: the sheet's surface impedance on the RWG block, and the tube's on its
+        // current bases (Z_s per square over the circumference 2πa, so Z_s/2πa per metre).
+        Complex sheet = SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero;
+        Complex tube = (WireSurfaceImpedance?.Invoke(frequencyHz) ?? Complex.Zero) / (2 * Math.PI * probe.RadiusMeters);
+        SheetLoss.AddTo(z, surface, sheet);
+        var tubeMass = TubeMass(tubeNodes, nEdges, jIndex);
+        if (tube != Complex.Zero)
+            foreach (var (m, n, value) in tubeMass) z[m, n] += tube * value;
+
         var rhs = new Complex[total];
         rhs[nEdges] = gapVolts; // the base half hat has f(0) = 1: the real probe port
         var x = ComplexLu.Factor(z).Solve(rhs);
@@ -151,9 +166,34 @@ public sealed partial class SurfaceMomSolver
         for (int n = 0; n < nTube; n++) tubeCurrents[n] = x[nEdges + n];
         tubeCurrents[segments] = junction;
 
+        double tubeSquared = 0;
+        foreach (var (m, n, value) in tubeMass) tubeSquared += (Complex.Conjugate(x[m]) * x[n]).Real * value;
         return new ProbeFedSolution(
             new SurfaceMomSolution(frequencyHz, gapVolts / baseCurrent, edgeCurrents),
-            tubeCurrents, rawEdgeCurrents, tubeNodes);
+            tubeCurrents, rawEdgeCurrents, tubeNodes)
+        {
+            OhmicLossWatts = SheetLoss.OhmicPower(surface, rawEdgeCurrents, sheet) + 0.5 * tube.Real * tubeSquared
+        };
+    }
+
+    /// <summary>∫Nₘ·Nₙ dz of the tube's current bases (the linear-element mass matrix) as
+    /// (row, column, value) in the system's numbering: basis b peaks at node b, the ground half
+    /// basis is b = 0, and the top half basis is the junction unknown.</summary>
+    private static List<(int Row, int Column, double Value)> TubeMass(double[] nodes, int firstTube, int junction)
+    {
+        var entries = new List<(int, int, double)>();
+        int segments = nodes.Length - 1;
+        int IndexOf(int node) => node == segments ? junction : firstTube + node;
+        for (int e = 0; e < segments; e++)
+        {
+            double h = nodes[e + 1] - nodes[e];
+            int a = IndexOf(e), b = IndexOf(e + 1);
+            entries.Add((a, a, h / 3));
+            entries.Add((b, b, h / 3));
+            entries.Add((a, b, h / 6));
+            entries.Add((b, a, h / 6));
+        }
+        return entries;
     }
 
     /// <summary>The probe-fed system matrix on one slab, unknowns ordered [RWG edges | tube

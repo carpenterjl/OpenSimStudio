@@ -29,7 +29,7 @@ public sealed partial class SurfaceMomSolver
     /// <summary>Kernel facts every consumer must surface next to multi-layer probe-fed results.</summary>
     public static IReadOnlyList<string> MultiLayerProbeFedAssumptions { get; } = new[]
     {
-        "Perfect electric conductor, zero-thickness sheet and probe tube (no ohmic loss).",
+        "Zero-thickness sheet and probe tube; perfect conductors unless a sheet or wire surface impedance is given, which adds their ohmic loss (the ground plane stays perfect).",
         "An N-layer grounded stackup (per-layer εr, tanδ); ALL sheet metal coplanar at ONE interface — the top of the stack, or buried under a dielectric cover.",
         "Coaxial probe: a vertical tube from the ground plane to that metal interface, delta-gap driven at its BASE (a real port voltage against ground).",
         "Every internal dielectric interface below the metal is a tube node, so no current element straddles a material change; the probe's segment count is a TARGET for the whole tube and each layer takes at least one element, so a many-layer stack yields more elements than requested.",

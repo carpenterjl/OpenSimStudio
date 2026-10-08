@@ -40,6 +40,27 @@ public class BoardStructuresTests
     /// (µ0·h/π)·ln(s/a) = 2.436 nH, which cannot depend on the dielectric. Measured 2.3712 nH in air
     /// and 2.3758 nH at εr = 4.4 (1.668 nH at εr = 4.4 without the junction vertex term).</summary>
     [Fact]
+    public void OnePortPin_IsTheProbeFedSolve_WithLossyMetalToo()
+    {
+        // FU-37: the pin array carries the sheet and tube losses the single probe does.
+        const double sigma = 5.8e5;
+        var surface = Plate(CoarseEdge);
+        var probe = Probe();
+        var table = new LayeredKernelTable(Substrate, Frequency, 0.025);
+        var solver = new SurfaceMomSolver
+        {
+            SheetImpedance = f => SheetLoss.CopperSheet(f, sigma, 35e-6, bothFaces: false),
+            WireSurfaceImpedance = f => SheetLoss.RoundWire(f, sigma)
+        };
+        var single = solver.SolveProbeFed(surface, table, probe).Surface.InputImpedance;
+        var z = solver.SolvePins(surface, table, new[] { new VerticalPin("feed", probe) }).Impedance()[0, 0];
+        var lossless = new SurfaceMomSolver().SolveProbeFed(surface, table, probe).Surface.InputImpedance;
+        _out.WriteLine($"lossless {lossless}, lossy probe-fed {single}, lossy pin array {z}");
+        Assert.True((z - single).Magnitude <= 1e-12 * single.Magnitude);
+        Assert.True(single.Real != lossless.Real);
+    }
+
+    [Fact]
     public void FeedAndShortingPin_AtLowFrequency_IsTheTwoPostLoopInductance_InAnyDielectric()
     {
         const double h = 1.6e-3, a = 0.2e-3, f = 30e6, s = 9e-3;

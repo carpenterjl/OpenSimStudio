@@ -30,6 +30,9 @@ namespace OpenSim.Tests.Rf;
 /// </summary>
 public class ProbeFedPatchTests
 {
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+    public ProbeFedPatchTests(Xunit.Abstractions.ITestOutputHelper output) => _output = output;
+
     private const double PatchW = 1.186e-2;
     private const double PatchL = 0.906e-2;
     private const double MeshEdge = 1.4e-3;
@@ -199,6 +202,37 @@ public class ProbeFedPatchTests
         var far = LayeredFarField.Compute(grid.Structure!, table, solution, probe);
         double pSw = LayeredFarField.SurfaceWavePowerWatts(grid.Structure!, table, solution, probe);
         Assert.InRange((far.TotalRadiatedPowerWatts + pSw) / pIn, 0.99, 1.01);
+    }
+
+    [Fact]
+    public void WithLossyMetal_TheLedgerClosesOnTheHeat()
+    {
+        // FU-37: the patch sheet and the probe tube carry their surface impedance. With a poor
+        // conductor (a hundredth of copper) the heat is a visible share of the input, and the
+        // ledger closes only when it is counted: radiated + surface wave + heat = input.
+        const double sigma = 5.8e5, frequency = 9.4e9;
+        double y = -0.375 * PatchL;
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+            PatchW, PatchL, MeshEdge, z: Thickness, portFraction: 0, snapVertex: (0.0, y));
+        var table = new LayeredKernelTable(Substrate, frequency, 0.025);
+        var probe = new ProbeFeed(0.0, y, ProbeRadius, Segments);
+        var solver = new SurfaceMomSolver
+        {
+            SheetImpedance = f => SheetLoss.CopperSheet(f, sigma, 35e-6, bothFaces: false),
+            WireSurfaceImpedance = f => SheetLoss.RoundWire(f, sigma)
+        };
+        var lossy = solver.SolveProbeFed(grid.Structure!, table, probe);
+        var lossless = new SurfaceMomSolver().SolveProbeFed(grid.Structure!, table, probe);
+
+        double pIn = 0.5 * Complex.Conjugate(1.0 / lossy.Surface.InputImpedance).Real;
+        var far = LayeredFarField.Compute(grid.Structure!, table, lossy, probe);
+        double pSw = LayeredFarField.SurfaceWavePowerWatts(grid.Structure!, table, lossy, probe);
+        double heat = lossy.OhmicLossWatts;
+        _output.WriteLine($"Zin {lossless.Surface.InputImpedance:f2} → {lossy.Surface.InputImpedance:f2} Ω; heat {heat / pIn:P1} of the input; " +
+                          $"ledger with heat {(far.TotalRadiatedPowerWatts + pSw + heat) / pIn:f4}, without {(far.TotalRadiatedPowerWatts + pSw) / pIn:f4}");
+        Assert.True(heat > 0.02 * pIn, "the heat should be visible at a hundredth of copper");
+        Assert.InRange((far.TotalRadiatedPowerWatts + pSw + heat) / pIn, 0.99, 1.01);
+        Assert.Equal(0.0, lossless.OhmicLossWatts);
     }
 
     [Fact]
