@@ -10,6 +10,9 @@ namespace OpenSim.Rf.Network;
 public sealed record RationalSweepResult(IReadOnlyList<double> FrequenciesHz, IReadOnlyList<Complex[]> Values,
     double EstimatedError, bool Converged)
 {
+    /// <summary>The sweep was sampled, and is interpolated, in ln f.</summary>
+    public bool Logarithmic { get; init; }
+
     /// <summary>The response at any frequency in the band, by rational interpolation through
     /// every sample.</summary>
     public Complex[] At(double frequencyHz)
@@ -20,7 +23,9 @@ public sealed record RationalSweepResult(IReadOnlyList<double> FrequenciesHz, IR
         for (int e = 0; e < entries; e++)
         {
             for (int k = 0; k < column.Length; k++) column[k] = Values[k][e];
-            result[e] = RationalSweep.Interpolate(FrequenciesHz, column, frequencyHz);
+            result[e] = Logarithmic
+                ? RationalSweep.Interpolate(FrequenciesHz.Select(f => Math.Log(f)).ToList(), column, Math.Log(frequencyHz))
+                : RationalSweep.Interpolate(FrequenciesHz, column, frequencyHz);
         }
         return result;
     }
@@ -39,68 +44,104 @@ public sealed record RationalSweepResult(IReadOnlyList<double> FrequenciesHz, IR
 public static class RationalSweep
 {
     /// <param name="evaluate">The solver: frequency → the response's entries (for instance
-    /// the port impedances). Called once per sample.</param>
+    /// the port impedances). Called once per sample, from several threads at once when
+    /// <paramref name="maxDegreeOfParallelism"/> allows.</param>
     /// <param name="tolerance">Largest allowed disagreement between successive interpolants,
     /// relative to the largest magnitude the response has reached.</param>
+    /// <param name="batch">Samples added per round: the frequencies of the largest disagreement
+    /// between the interpolants, one per separate peak of it, solved together.</param>
+    /// <param name="logarithmic">Sample and interpolate in ln f — for a band of several decades,
+    /// where Chebyshev points in f would leave the low decades empty.</param>
     public static RationalSweepResult Run(Func<double, Complex[]> evaluate, double fromHz, double toHz,
         double tolerance = 1e-3, int initialSamples = 5, int maxSamples = 40, int gridPoints = 400,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, int batch = 1, bool logarithmic = false,
+        int maxDegreeOfParallelism = 1)
     {
         if (!(fromHz > 0 && toHz > fromHz)) throw new ArgumentException("The sweep needs 0 < from < to.");
+        if (batch < 1) throw new ArgumentOutOfRangeException(nameof(batch));
         initialSamples = Math.Max(initialSamples, 3);
+        // Work on an abscissa u: f itself, or ln f.
+        double ToU(double f) => logarithmic ? Math.Log(f) : f;
+        double ToF(double u) => logarithmic ? Math.Exp(u) : u;
+        double uFrom = ToU(fromHz), uTo = ToU(toHz);
         var samples = new SortedDictionary<double, Complex[]>();
-        var order = new List<double>();                          // in the order they were taken
-        void Sample(double f)
+        var lastRound = new HashSet<double>();
+        void Sample(IReadOnlyList<double> us)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            samples[f] = evaluate(f);
-            order.Add(f);
+            var values = new Complex[us.Count][];
+            Parallel.For(0, us.Count, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = maxDegreeOfParallelism, CancellationToken = cancellationToken
+            }, i => values[i] = evaluate(ToF(us[i])));
+            lastRound.Clear();
+            for (int i = 0; i < us.Count; i++)
+            {
+                samples[us[i]] = values[i];
+                lastRound.Add(us[i]);
+            }
         }
         // Chebyshev points: closer together toward the band edges, where a rational fit is loosest.
+        var initial = new double[initialSamples];
         for (int k = 0; k < initialSamples; k++)
-        {
-            double t = 0.5 * (1 - Math.Cos(Math.PI * k / (initialSamples - 1)));
-            Sample(fromHz + (toHz - fromHz) * t);
-        }
+            initial[k] = uFrom + (uTo - uFrom) * 0.5 * (1 - Math.Cos(Math.PI * k / (initialSamples - 1)));
+        Sample(initial);
+        // The first round's "newest" is the last Chebyshev point, as a one-at-a-time start would have it.
+        lastRound.Clear();
+        lastRound.Add(initial[^1]);
 
         var grid = new double[gridPoints];
-        for (int g = 0; g < gridPoints; g++) grid[g] = fromHz + (toHz - fromHz) * (g + 0.5) / gridPoints;
+        for (int g = 0; g < gridPoints; g++) grid[g] = uFrom + (uTo - uFrom) * (g + 0.5) / gridPoints;
         double error = double.PositiveInfinity;
         int agreed = 0;
         while (true)
         {
             int entries = samples.Values.First().Length;
             var all = samples.Keys.ToList();
-            var fewer = all.Where(f => f != order[^1]).ToList();
+            var fewer = all.Where(u => !lastRound.Contains(u)).ToList();
             double scale = samples.Values.Max(v => v.Max(c => c.Magnitude));
-            double worst = 0, worstAt = double.NaN;
             var columnAll = new Complex[all.Count];
             var columnFewer = new Complex[fewer.Count];
-            foreach (double f in grid)
+            var difference = new double[gridPoints];
+            for (int g = 0; g < gridPoints; g++)
             {
-                double nearest = all.Min(s => Math.Abs(s - f));
-                if (nearest < 1e-9 * (toHz - fromHz)) continue;
-                double difference = 0;
+                double u = grid[g];
+                double nearest = all.Min(s => Math.Abs(s - u));
+                if (nearest < 1e-9 * (uTo - uFrom)) continue;
+                double worstHere = 0;
                 for (int e = 0; e < entries; e++)
                 {
                     for (int k = 0; k < all.Count; k++) columnAll[k] = samples[all[k]][e];
                     for (int k = 0; k < fewer.Count; k++) columnFewer[k] = samples[fewer[k]][e];
-                    Complex a = Interpolate(all, columnAll, f), b = Interpolate(fewer, columnFewer, f);
+                    Complex a = Interpolate(all, columnAll, u), b = Interpolate(fewer, columnFewer, u);
                     double d = (a - b).Magnitude;
                     if (double.IsNaN(d)) d = double.PositiveInfinity;
-                    difference = Math.Max(difference, d);
+                    worstHere = Math.Max(worstHere, d);
                 }
-                if (difference > worst) { worst = difference; worstAt = f; }
+                difference[g] = worstHere;
             }
+            double worst = difference.Max();
             error = scale > 0 ? worst / scale : 0;
             // Two rounds in a row under the tolerance: one agreement can be a coincidence.
             agreed = error <= tolerance ? agreed + 1 : 0;
-            if (agreed >= 2 || samples.Count >= maxSamples || double.IsNaN(worstAt)) break;
-            Sample(worstAt);
-        }
-        return new RationalSweepResult(samples.Keys.ToList(), samples.Values.ToList(), error, agreed >= 2);
-    }
+            if (agreed >= 2 || samples.Count >= maxSamples || !(worst > 0)) break;
 
+            // The next samples: the largest peaks of the disagreement, one per peak.
+            var peaks = Enumerable.Range(0, gridPoints)
+                .Where(g => difference[g] > 0
+                    && (g == 0 || difference[g] >= difference[g - 1])
+                    && (g == gridPoints - 1 || difference[g] > difference[g + 1]))
+                .OrderByDescending(g => difference[g]).ThenBy(g => g)
+                .Take(Math.Min(batch, maxSamples - samples.Count))
+                .Select(g => grid[g]).ToList();
+            if (peaks.Count == 0) break;
+            Sample(peaks);
+        }
+        return new RationalSweepResult(samples.Keys.Select(ToF).ToList(), samples.Values.ToList(), error, agreed >= 2)
+        {
+            Logarithmic = logarithmic
+        };
+    }
     /// <summary>
     /// The diagonal rational function through all the points, evaluated at
     /// <paramref name="x"/> (Bulirsch and Stoer's recurrence, Numerical Recipes' ratint in

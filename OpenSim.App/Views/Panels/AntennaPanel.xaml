@@ -91,6 +91,12 @@
                 <Label Content="Height above ground [mm]"/>
                 <TextBox Text="{Binding Antenna.HeightAboveGroundMm}"
                          ToolTip="Wizard dipole/loop shapes are lifted this far above the plane; net geometry keeps its board coordinates."/>
+                <Label Content="Feed at junction"/>
+                <ComboBox x:Name="JunctionFeedCombo"
+                          ItemsSource="{Binding Antenna.JunctionFeedOptions}"
+                          SelectedIndex="{Binding Antenna.JunctionFeedIndex}"
+                          IsEnabled="{Binding Antenna.HasJunctionFeedOptions}"
+                          ToolTip="Wire models only, when the feed lands where three or more wires meet: the delta gap sits between two of them, and this picks which two. Filled after a solve."/>
                 <Label Content="f [MHz]"/>
                 <TextBox x:Name="FrequencyBox" Text="{Binding Antenna.FrequencyMHz}"/>
                 <Label Content="Sweep f min [MHz]"/>
@@ -113,14 +119,24 @@
                       IsChecked="{Binding Antenna.CheckMeshConvergence}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
                       ToolTip="After a surface solve, solve once more at f on a mesh 1.5× finer and report the change in Zin."/>
+            <CheckBox Content="Three passes (also 2.25× finer: order and limit)"
+                      IsChecked="{Binding Antenna.ThreePassMeshCheck}"
+                      IsEnabled="{Binding Antenna.CheckMeshConvergence}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="18,2,0,2"
+                      ToolTip="Solve on a third mesh 2.25× finer: from the three, the order at which Zin converges and Richardson's estimate of Zin on an infinitely fine mesh. That mesh has about 5× the unknowns, so its solve alone costs 25–130× the first."/>
             <CheckBox x:Name="AdaptiveSweepCheck" Content="Adaptive sweep (the solver places the points)"
                       IsChecked="{Binding Antenna.AdaptiveSweep}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
-                      ToolTip="Rational interpolation between solver runs: each new frequency goes where the curve is least certain, so a narrow resonance is not stepped over. 'Sweep points' (at least 30) becomes the limit on solver runs. Linear in frequency between f min and f max."/>
-            <CheckBox x:Name="ConductorLossCheck" Content="Copper loss in the sheet metal"
+                      ToolTip="Rational interpolation between solver runs: each round's new frequencies go where the curve is least certain (up to four solved side by side), so a narrow resonance is not stepped over. 'Sweep points' (at least 30) becomes the limit on solver runs. The −10 dB band is read on the interpolant."/>
+            <CheckBox Content="Sample in log frequency"
+                      IsChecked="{Binding Antenna.LogarithmicSweep}"
+                      IsEnabled="{Binding Antenna.AdaptiveSweep}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="18,2,0,2"
+                      ToolTip="The adaptive sweep samples and interpolates in ln f — for a band of a decade or more. Off: linear in frequency between f min and f max."/>
+            <CheckBox x:Name="ConductorLossCheck" Content="Metal loss (sheet, probe and wires)"
                       IsChecked="{Binding Antenna.ConductorLoss}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
-                      ToolTip="Sheet solves with an edge (gap) feed only: the metal gets the surface impedance of copper of the given thickness instead of being a perfect conductor."/>
+                      ToolTip="The metal gets the surface impedance of the given conductivity instead of being a perfect conductor: sheets of the given thickness, wires and the probe tube as skin-deep round conductors. The ground plane stays a perfect conductor."/>
             <UniformGrid Columns="2">
                 <Label Content="Metal σ [S/m]"/>
                 <TextBox Text="{Binding Antenna.MetalConductivity}" IsEnabled="{Binding Antenna.ConductorLoss}"/>

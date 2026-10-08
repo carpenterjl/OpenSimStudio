@@ -38,6 +38,28 @@ public static class WireModelChecks
         return warnings;
     }
 
+    /// <summary>Where a feed at <paramref name="node"/> can sit: each basis that has its peak there,
+    /// with the directions of the two wire pieces its gap would lie between. At a junction of
+    /// three or more wires there are several, and the choice is the user's.</summary>
+    public static IReadOnlyList<(int Basis, string Description)> FeedOptionsAt(WireStructure wire, int node)
+    {
+        var options = new List<(int, string)>();
+        for (int b = 0; b < wire.BasisCount; b++)
+        {
+            if (wire.BasisNode(b) != node) continue;
+            var toward = wire.BasisHalves(b).Select(leg =>
+            {
+                var (a, c) = wire.Elements[leg.Element];
+                var far = wire.Nodes[a == node ? c : a];
+                return $"({far.X * 1e3:g4}, {far.Y * 1e3:g4}, {far.Z * 1e3:g4}) mm";
+            }).ToList();
+            options.Add((b, toward.Count == 2
+                ? $"between the wire toward {toward[0]} and the one toward {toward[1]}"
+                : $"at the end of the wire toward {string.Join(", ", toward)}"));
+        }
+        return options;
+    }
+
     /// <summary>A delta gap sits in ONE basis. Where three or more wires meet, the node carries
     /// several bases (each pairs one wire against a common reference), so a feed placed there
     /// drives the current between two particular wires — which two is a numbering detail, not

@@ -23,6 +23,14 @@ public partial class AntennaViewModel
     /// runs) instead of stepping a fixed number of points.</summary>
     [ObservableProperty] private bool _adaptiveSweep;
 
+    /// <summary>The adaptive sweep samples and interpolates in ln f — for a band of a decade or
+    /// more, where a linear abscissa would leave the low end with almost no samples.</summary>
+    [ObservableProperty] private bool _logarithmicSweep;
+
+    /// <summary>Adaptive-sweep solves per round, run side by side: one per core, at most four —
+    /// past that a round spends solves on the interpolant's minor disagreements.</summary>
+    private static int SweepBatch => Math.Clamp(Environment.ProcessorCount, 1, 4);
+
     /// <summary>Sheet metal with copper loss instead of a perfect conductor (edge-fed sheet
     /// solves only).</summary>
     [ObservableProperty] private bool _conductorLoss;
@@ -39,12 +47,22 @@ public partial class AntennaViewModel
     /// <summary>The sheet impedance the panel asks for, or null for perfect metal. A sheet
     /// close over a ground plane carries its current on the face toward the plane; one in
     /// free space on both.</summary>
-    private Func<double, Complex>? SheetModel(bool applies, bool overGround)
+    private Func<double, Complex>? SheetModel(bool overGround)
     {
-        if (!ConductorLoss || !applies) return null;
+        if (!ConductorLoss) return null;
         double sigma = MetalConductivity, thickness = MetalThicknessUm * 1e-6;
         if (!(sigma > 0 && thickness > 0)) return null;
         return f => SheetLoss.CopperSheet(f, sigma, thickness, bothFaces: !overGround);
+    }
+
+    /// <summary>The surface impedance of a round wire or probe tube of the panel's metal (a
+    /// skin-deep wall, any thickness), or null for perfect metal.</summary>
+    private Func<double, Complex>? WireLossModel()
+    {
+        if (!ConductorLoss) return null;
+        double sigma = MetalConductivity;
+        if (!(sigma > 0)) return null;
+        return f => SheetLoss.RoundWire(f, sigma);
     }
 
     private void ClearNetworkResults()
@@ -60,7 +78,10 @@ public partial class AntennaViewModel
     /// return-loss plot.</summary>
     /// <param name="curve">Zin against frequency: the solved points, or a dense curve
     /// interpolated between them.</param>
-    private void ShowNetworkResults(IReadOnlyList<(double Hz, Complex Zin)> curve, string? sweepNote = null)
+    /// <param name="interpolant">The adaptive sweep the curve came from: its band edges are
+    /// found on the interpolant itself, not by straight lines between points.</param>
+    private void ShowNetworkResults(IReadOnlyList<(double Hz, Complex Zin)> curve, string? sweepNote = null,
+        RationalSweepResult? interpolant = null)
     {
         ClearNetworkResults();
         if (curve.Count == 0 || !(ReferenceOhms > 0)) return;
@@ -92,10 +113,14 @@ public partial class AntennaViewModel
                 return double.NaN;
             }
             double low = Edge(best, -1), high = Edge(best, 1);
+            if (interpolant is not null && MatchBand.Find(interpolant, z0, curve[best].Hz) is { } band)
+                (low, high) = band;
             lines.Add(double.IsNaN(low) || double.IsNaN(high)
                 ? "S11 is under −10 dB to an end of the sweep: widen it to see the band."
-                : $"−10 dB band: {low / 1e6:g5} to {high / 1e6:g5} MHz ({(high - low) / curve[best].Hz:p2} of the centre)"
-                  + (sweepNote is null ? " — between solved points this is a straight-line reading." : "."));
+                : $"−10 dB band: {low / 1e6:g6} to {high / 1e6:g6} MHz ({(high - low) / curve[best].Hz:p2} of the centre)"
+                  + (interpolant is null
+                      ? " — between solved points this is a straight-line reading."
+                      : ", its edges found on the interpolant."));
         }
         lines.AddRange(NetworkChecks.Describe(checks));
         if (sweepNote is not null) lines.Add(sweepNote);
@@ -111,21 +136,28 @@ public partial class AntennaViewModel
         HasSParameters = true;
     }
 
-    /// <summary>The interpolated response on 301 points across the band.</summary>
+    /// <summary>S11 from an adaptive sweep: the dense curve, the note, and the band edges read on
+    /// its interpolant.</summary>
+    private void ShowNetworkResults(RationalSweepResult sweep) =>
+        ShowNetworkResults(DenseCurve(sweep), AdaptiveNote(sweep), sweep);
+
+    /// <summary>The interpolated response on 301 points across the band — evenly in ln f when
+    /// the sweep sampled that way.</summary>
     private static List<(double Hz, Complex Zin)> DenseCurve(RationalSweepResult sweep)
     {
         double from = sweep.FrequenciesHz[0], to = sweep.FrequenciesHz[^1];
         var curve = new List<(double, Complex)>();
         for (int k = 0; k <= 300; k++)
         {
-            double f = from + (to - from) * k / 300;
+            double f = sweep.Logarithmic ? from * Math.Pow(to / from, k / 300.0) : from + (to - from) * k / 300;
             curve.Add((f, sweep.At(f)[0]));
         }
         return curve;
     }
 
     private static string AdaptiveNote(RationalSweepResult sweep) =>
-        $"Adaptive sweep: {sweep.FrequenciesHz.Count} solver runs, the curve between them by rational interpolation; "
+        $"Adaptive sweep: {sweep.FrequenciesHz.Count} solver runs, the curve between them by rational interpolation"
+        + (sweep.Logarithmic ? " in ln f; " : "; ")
         + (sweep.Converged
             ? $"successive interpolants agree to {sweep.EstimatedError:e1} of the largest |Zin|."
             : $"NOT converged — successive interpolants still differ by {sweep.EstimatedError:e1} of the largest "

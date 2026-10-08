@@ -258,6 +258,88 @@ public class NetworkResultsTests
     }
 
     [Fact]
+    public void TheAdaptiveSweep_InParallelBatches_FindsTheSameResonance()
+    {
+        // FU-38: four samples a round, solved together, reach the same response as one at a time.
+        double f0 = 1.37e9, q = 300, r = 2;
+        Complex[] Response(double f)
+        {
+            double x = f / f0 - f0 / f;
+            return new[] { 1 / (r * new Complex(1, q * x)) + 1 / new Complex(50, 2 * Math.PI * f * 4e-9) };
+        }
+        var serial = RationalSweep.Run(Response, 1e9, 2e9, tolerance: 1e-4);
+        var batched = RationalSweep.Run(Response, 1e9, 2e9, tolerance: 1e-4, batch: 4, maxDegreeOfParallelism: 4);
+        _output.WriteLine($"one at a time: {serial.FrequenciesHz.Count} solves; four at a time: {batched.FrequenciesHz.Count} solves");
+        Assert.True(serial.Converged && batched.Converged);
+        double peak = Response(f0)[0].Magnitude;
+        foreach (double f in new[] { 1.05e9, 1.3e9, 1.365e9, f0, 1.38e9, 1.9e9 })
+            Assert.True((batched.At(f)[0] - Response(f)[0]).Magnitude < 2e-3 * peak, $"off at {f / 1e6} MHz");
+    }
+
+    [Fact]
+    public void ALogarithmicSweep_FindsPeaksDecadesApart()
+    {
+        // Three series-RLC branches in parallel, resonant at 10 kHz, 1 MHz and 100 MHz (Q = 5),
+        // swept from 1 kHz to 1 GHz. In f the sweep's first samples and its error grid (400
+        // points, 2.5 MHz apart) never come near the two low peaks, so it converges on a curve
+        // without them; in ln f every decade is sampled and checked, and all three are found.
+        double[] f0 = { 1e4, 1e6, 1e8 };
+        const double r = 10, q = 5;
+        Complex[] Response(double f)
+        {
+            Complex y = Complex.Zero;
+            foreach (double fr in f0)
+                y += 1 / (r * new Complex(1, q * (f / fr - fr / f)));
+            return new[] { y };
+        }
+        var logarithmic = RationalSweep.Run(Response, 1e3, 1e9, tolerance: 1e-5, maxSamples: 80, logarithmic: true);
+        var linear = RationalSweep.Run(Response, 1e3, 1e9, tolerance: 1e-5, maxSamples: 80);
+        double Error(RationalSweepResult sweep, double f) => (sweep.At(f)[0] - Response(f)[0]).Magnitude / Response(f)[0].Magnitude;
+        _output.WriteLine($"ln f: {logarithmic.FrequenciesHz.Count} solves, errors at the peaks " +
+                          string.Join(", ", f0.Select(f => Error(logarithmic, f).ToString("e1"))) +
+                          $"; f: {linear.FrequenciesHz.Count} solves, " + string.Join(", ", f0.Select(f => Error(linear, f).ToString("e1"))));
+        Assert.True(logarithmic.Converged && logarithmic.Logarithmic);
+        foreach (double f in f0.Concat(new[] { 3e3, 5e4, 2e5, 7e6, 3e7, 5e8 }))
+            Assert.True(Error(logarithmic, f) < 1e-3, $"ln f sweep off at {f:g3} Hz");
+        // The linear sweep misses the 10 kHz peak entirely.
+        Assert.True(Error(linear, 1e4) > 0.1);
+    }
+
+    [Fact]
+    public void TheMatchBand_IsReadOnTheInterpolant()
+    {
+        // FU-38. A series R-L-C matched at resonance: |Γ| = |X|/|2R + jX|, so the −10 dB edges are
+        // where X = ±2Rγ/√(1 − γ²), γ = 10^(−1/2) — ωL − 1/ωC = ±X, a quadratic in ω.
+        double rs = 50, l = 10e-9, cap = 1e-12;
+        Complex[] Response(double f) =>
+            new[] { new Complex(rs, 2 * Math.PI * f * l - 1 / (2 * Math.PI * f * cap)) };
+        double f0 = 1 / (2 * Math.PI * Math.Sqrt(l * cap));
+        var sweep = RationalSweep.Run(Response, 1e9, 2.2e9, tolerance: 1e-8);
+        var band = MatchBand.Find(sweep, rs, f0);
+        Assert.NotNull(band);
+        double gamma = Math.Pow(10, -0.5), x = 2 * rs * gamma / Math.Sqrt(1 - gamma * gamma);
+        double Edge(double sign) => (sign * x + Math.Sqrt(x * x + 4 * l / cap)) / (2 * l) / (2 * Math.PI);
+        _output.WriteLine($"band {band!.Value.Low / 1e6:f6} – {band.Value.High / 1e6:f6} MHz, exact {Edge(-1) / 1e6:f6} – {Edge(1) / 1e6:f6} MHz");
+        Assert.Equal(Edge(-1), band.Value.Low, 1e-6 * f0);
+        Assert.Equal(Edge(+1), band.Value.High, 1e-6 * f0);
+    }
+
+    [Fact]
+    public void ThreeMeshes_GiveTheOrderAndTheLimit()
+    {
+        // FU-38. Z(h) = Z∞ + C·h^1.5 on meshes h, h/2, h/4: Richardson recovers both exactly.
+        var limit = new Complex(48.2, -11.7);
+        var c = new Complex(3.1, 1.9);
+        Complex Z(double h) => limit + c * Math.Pow(h, 1.5);
+        var result = MeshConvergence.Richardson(Z(1), Z(0.5), Z(0.25), 2);
+        Assert.Equal(1.5, result.Order!.Value, 9);
+        Assert.True((result.Extrapolated - limit).Magnitude < 1e-9);
+        Assert.Contains("order 1.5", MeshConvergence.Describe(Z(1), Z(0.5), Z(0.25), 1000, 2));
+        // Changes that do not shrink: no order, and said so.
+        Assert.Null(MeshConvergence.Richardson(Z(1), Z(0.5), Z(0.5) + (Z(0.5) - Z(1)), 2).Order);
+    }
+
+    [Fact]
     public void RationalInterpolation_ReproducesARationalFunction()
     {
         // (2 + 3x)/(1 + x²) has degree 2 over 2: five points determine it.

@@ -234,6 +234,16 @@ public class BranchedNetAntennaTests
         double z = wire.Nodes[0].Z;
         int atJunction = wire.NearestBasis(new Vector3D(25e-3, 0, z));
         Assert.Contains("junction of 3 wires", WireModelChecks.FeedAtJunction(wire, atJunction));
+
+        // FU-38: the feed at a junction is a choice — every basis there, each between two wires.
+        int node = wire.BasisNode(atJunction);
+        var options = WireModelChecks.FeedOptionsAt(wire, node);
+        Assert.Equal(2, options.Count);
+        Assert.Contains(atJunction, options.Select(o => o.Basis));
+        Assert.All(options, o => Assert.StartsWith("between the wire toward", o.Description));
+        Assert.Equal(2, options.Select(o => o.Description).Distinct().Count());
+        // An ordinary node has the one.
+        Assert.Single(WireModelChecks.FeedOptionsAt(wire, wire.BasisNode(feed)));
     }
 
     [Fact]
