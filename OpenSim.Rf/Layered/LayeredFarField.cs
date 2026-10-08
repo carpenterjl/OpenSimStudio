@@ -139,8 +139,16 @@ public static class LayeredFarField
         (theta, nodes, currents) =>
             VerticalAmplitude(kernel.Substrate, kernel.K0, theta, nodes, currents));
 
+    /// <summary>Between two planes nothing radiates and no surface wave leaves: a shielded table
+    /// (FU-30) has no far field or surface-wave power to give, and these formulas assume air above.</summary>
+    private static MultiLayerKernelTable RequireOpenTop(MultiLayerKernelTable kernel) => kernel.IsShielded
+        ? throw new ArgumentException("A structure between two ground planes does not radiate: far field and "
+            + "surface-wave power need an open top.", nameof(kernel))
+        : kernel;
+
     private static RadiationMedium Medium(MultiLayerKernelTable kernel)
     {
+        RequireOpenTop(kernel);
         int m = kernel.SourceInterface ?? kernel.Stackup.Layers.Count - 1;
         return new RadiationMedium(
             (kRho, kz0) =>
@@ -364,6 +372,7 @@ public static class LayeredFarField
         MultiLayerKernelTable kernel, ProbeFedSolution probeSolution, ProbeFeed probe,
         int alphaCount = 64)
     {
+        RequireOpenTop(kernel);
         var fan = ProbeVertexFan(surface, probe);
         var junction = new JunctionLeg(fan, probeSolution.TubeCurrents[^1]);
         var tube = new VerticalLeg(fan.VertexPosition.X, fan.VertexPosition.Y, probeSolution.TubeNodes, probeSolution.TubeCurrents);
@@ -388,6 +397,7 @@ public static class LayeredFarField
     public static double SurfaceWavePowerWatts(SurfaceStructure surface, MultiLayerKernelTable kernel,
         PinArrayCurrents currents, IReadOnlyList<VerticalPin> pins, int alphaCount = 64)
     {
+        RequireOpenTop(kernel);
         var (junctions, legs) = PinLegs(surface, currents, pins);
         return MixedSurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
             new MultiLayerVerticalKernelSet(kernel.Stackup, kernel.FrequencyHz), currents.TubeNodes[0][^1],
@@ -602,7 +612,7 @@ public static class LayeredFarField
     /// geometry-only, so it is reused verbatim.</summary>
     public static double SurfaceWavePowerWatts(SurfaceStructure surface,
         MultiLayerKernelTable kernel, SurfaceMomSolution solution, int alphaCount = 64)
-        => SurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
+        => SurfaceWavePowerWatts(surface, kernel.FrequencyHz, RequireOpenTop(kernel).Poles,
             solution.EdgeCurrents, null, alphaCount);
 
     private static double SurfaceWavePowerWatts(SurfaceStructure surface,

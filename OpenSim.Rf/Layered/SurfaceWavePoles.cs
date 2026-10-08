@@ -71,6 +71,61 @@ internal static class SurfaceWavePoles
         return poles;
     }
 
+    /// <summary>
+    /// The parallel-plate modes of the stack closed by a second PEC plane on its top (FU-30), as
+    /// poles of the shielded kernels seen from interior interface <paramref name="sourceInterface"/>.
+    /// Locations: the lossless closed-guide roots of both families
+    /// (<see cref="SurfaceWaveDispersion.ClosedRoots"/>), then on a lossy stack Newton on the complex
+    /// characteristic function, walked from the lossless root in eight steps of the loss. A TE and
+    /// a TM mode at the same k_ρ (every TE_n/TM_n pair in a guide of one dielectric) are ONE pole
+    /// of the kernels and are merged. Residues: the contour integral of the kernels round each pole
+    /// (<see cref="TransmissionLineGreens.PoleResiduesShielded"/>), on a circle a quarter of the way
+    /// to the nearest other pole (or to k_ρ = 0) and at most 1 % of |k_p|.
+    /// </summary>
+    public static IReadOnlyList<SurfaceWavePole> FindShielded(LayeredStackup stackup, double k0, int sourceInterface)
+    {
+        if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));
+        bool lossy = stackup.Layers.Any(l => l.LossTangent > 0);
+        var located = new List<(Complex KRho, bool IsTm)>();
+        foreach (bool isTm in new[] { true, false })
+            foreach (var root in SurfaceWaveDispersion.ClosedRoots(stackup, k0, isTm))
+            {
+                Complex kp = root.KRho;
+                if (lossy)
+                    for (int step = 1; step <= 8; step++)
+                    {
+                        var partial = SurfaceWaveDispersion.WithLossFraction(stackup, step / 8.0);
+                        for (int iteration = 0; iteration < 50; iteration++)
+                        {
+                            Complex h = 1e-7 * kp.Magnitude;
+                            Complex value = SurfaceWaveDispersion.ClosedDispersion(partial, k0, kp, isTm);
+                            Complex slope = (SurfaceWaveDispersion.ClosedDispersion(partial, k0, kp + h, isTm)
+                                - SurfaceWaveDispersion.ClosedDispersion(partial, k0, kp - h, isTm)) / (2 * h);
+                            Complex next = kp - value / slope;
+                            bool done = (next - kp).Magnitude <= 1e-14 * kp.Magnitude;
+                            kp = next;
+                            if (done) break;
+                        }
+                    }
+                if (located.Any(p => (p.KRho - kp).Magnitude <= SurfaceWaveDispersion.DistinctnessTolerance * k0))
+                    continue;   // the TE twin of a TM mode already listed: the same pole
+                located.Add((kp, isTm));
+            }
+
+        var poles = new List<SurfaceWavePole>(located.Count);
+        for (int i = 0; i < located.Count; i++)
+        {
+            Complex kp = located[i].KRho;
+            double nearest = kp.Magnitude;                         // k_ρ = 0, where F is even
+            for (int k = 0; k < located.Count; k++)
+                if (k != i) nearest = Math.Min(nearest, (located[k].KRho - kp).Magnitude);
+            double radius = Math.Min(0.25 * nearest, 0.01 * kp.Magnitude);
+            var (resA, resPhi) = TransmissionLineGreens.PoleResiduesShielded(stackup, k0, kp, sourceInterface, radius);
+            poles.Add(new SurfaceWavePole(kp, located[i].IsTm, resA, resPhi));
+        }
+        return poles;
+    }
+
     public static IReadOnlyList<SurfaceWavePole> Find(SubstrateStackup substrate, double k0)
     {
         if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));

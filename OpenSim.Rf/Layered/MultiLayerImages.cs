@@ -193,6 +193,57 @@ internal static class MultiLayerImages
         return ctx.Emit(kg, scale: 2);
     }
 
+    /// <summary>G̃_A's images between two PEC planes (FU-30), source at interior interface m:
+    /// the static A_x is the plate pair's Dirichlet Green's function whatever the dielectric,
+    /// sinh(k_ρz_m)·sinh(k_ρ(H − z_m))/(k_ρ sinh k_ρH) — the parallel combination of two shorted
+    /// lines, so the same series as <see cref="PhiImagesShielded"/> with every ε set to 1: the
+    /// classical alternating images at 2z_m, 2(H − z_m), 2H, … truncated at the depth cap.</summary>
+    public static IReadOnlyList<Image> GaImagesShielded(LayeredStackup stackup, int m) =>
+        ShieldedSeries(stackup, m, stackup.Layers.Select(_ => Complex.One).ToArray());
+
+    /// <summary>K̃_Φ's quasi-static images between two PEC planes: <see cref="PhiImagesInterior"/>
+    /// with the cover-and-air load above replaced by a short at the top plane — the potential
+    /// vanishes on both conductors. The coefficients do not decay (an alternating series in a
+    /// homogeneous fill); the depth cap truncates it and the Sommerfeld remainder carries the
+    /// rest, which is regular and e^{−k_ρD}-small across the integrator's reach.</summary>
+    public static IReadOnlyList<Image> PhiImagesShielded(LayeredStackup stackup, int m) =>
+        ShieldedSeries(stackup, m, stackup.Layers.Select(l => l.ComplexPermittivity).ToArray());
+
+    private static IReadOnlyList<Image> ShieldedSeries(LayeredStackup stackup, int m, Complex[] eps)
+    {
+        int n = stackup.Layers.Count;
+        if (m < 0 || m >= n - 1)
+            throw new ArgumentOutOfRangeException(nameof(m),
+                $"A source between two planes needs a layer on each side: interface {m} of a {n}-layer stack.");
+        var t = stackup.Layers.Select(l => l.ThicknessMeters).ToArray();
+        var ctx = new Context(n, t, DepthCapFactor * stackup.TotalThicknessMeters, CoefficientFloor, RelativePrune);
+
+        // Z_down: ground short, reflections up through layers 0..m (as PhiImagesInterior).
+        var gDown = ctx.Shift(ctx.Constant(-Complex.One), 0);
+        for (int i = 1; i <= m; i++)
+        {
+            Complex fresnel = (eps[i] - eps[i - 1]) / (eps[i] + eps[i - 1]);
+            gDown = ctx.Multiply(ctx.Add(ctx.Constant(fresnel), gDown),
+                ctx.Reciprocal(ctx.Add(ctx.Constant(Complex.One), ctx.Scale(gDown, fresnel))));
+            gDown = ctx.Shift(gDown, i);
+        }
+        var zDown = Impedance(ctx, gDown, 1 / eps[m]);
+
+        // Z_up: the top plane is a short too, reflections down through layers n−1..m+1.
+        var gUp = ctx.Shift(ctx.Constant(-Complex.One), n - 1);
+        for (int i = n - 2; i >= m + 1; i--)
+        {
+            Complex fresnel = (eps[i] - eps[i + 1]) / (eps[i] + eps[i + 1]);
+            gUp = ctx.Multiply(ctx.Add(ctx.Constant(fresnel), gUp),
+                ctx.Reciprocal(ctx.Add(ctx.Constant(Complex.One), ctx.Scale(gUp, fresnel))));
+            gUp = ctx.Shift(gUp, i);
+        }
+        var zUp = Impedance(ctx, gUp, 1 / eps[m + 1]);
+
+        var kg = ctx.Multiply(ctx.Multiply(zDown, zUp), ctx.Reciprocal(ctx.Add(zDown, zUp)));
+        return ctx.Emit(kg, scale: 2);
+    }
+
     /// <summary>Normalized input impedance (1/ε)(1 + Γ)/(1 − Γ) as a series.</summary>
     private static Dictionary<Key, Complex> Impedance(Context ctx, Dictionary<Key, Complex> gamma, Complex invEps)
     {

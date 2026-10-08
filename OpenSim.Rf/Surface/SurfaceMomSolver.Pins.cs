@@ -143,6 +143,9 @@ public sealed partial class SurfaceMomSolver
     public PinArraySolution SolvePins(SurfaceStructure surface, MultiLayerKernelTable kernel,
         IReadOnlyList<VerticalPin> pins, IReadOnlyList<NamedSurfacePort>? sheetPorts = null)
     {
+        if (kernel.IsShielded)
+            throw new ArgumentException("Pins need the vertical kernels, which are written for an open top; "
+                + "between two ground planes they are not modelled.", nameof(kernel));
         var set = new MultiLayerVerticalKernelSet(kernel.Stackup, kernel.FrequencyHz);
         var nodes = pins.Select(p => ProbeAssembly.TubeNodes(kernel.Stackup, kernel.SourceInterface, p.Geometry)).ToArray();
         double metal = nodes.Length > 0 ? nodes[0][^1] : kernel.Stackup.TotalThicknessMeters;

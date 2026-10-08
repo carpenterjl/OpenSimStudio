@@ -47,6 +47,19 @@ internal static partial class SommerfeldIntegrator
         RemainderMultiLayerCore(stackup, k0, poles, gaImages, phiImages, rho, refinement,
             (kRho, kz0) => TransmissionLineGreens.EvaluateInterior(stackup, k0, kRho, kz0, m));
 
+    /// <summary>The remainder between two PEC planes (FU-30), source and observation at interior
+    /// interface <paramref name="m"/>: the same contour and tail with the shielded kernel
+    /// (<see cref="TransmissionLineGreens.EvaluateShielded"/>), its two-plate images and its
+    /// parallel-plate poles — some of which lie below k₀ (a mode near cutoff, or the TEM mode of
+    /// an air-filled pair AT k₀), where the first segment is broken at them as the second is.
+    /// The kernel has no k_z0 of its own; the contour's k_z0 serves only the image asymptotes.</summary>
+    public static (Complex A, Complex Phi) RemainderMultiLayerShielded(
+        LayeredStackup stackup, double k0, IReadOnlyList<SurfaceWavePole> poles,
+        IReadOnlyList<MultiLayerImages.Image> gaImages,
+        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int m, int refinement = 1) =>
+        RemainderMultiLayerCore(stackup, k0, poles, gaImages, phiImages, rho, refinement,
+            (kRho, _) => TransmissionLineGreens.EvaluateShielded(stackup, k0, kRho, m));
+
     private static (Complex A, Complex Phi) RemainderMultiLayerCore(
         LayeredStackup stackup, double k0, IReadOnlyList<SurfaceWavePole> poles,
         IReadOnlyList<MultiLayerImages.Image> gaImages,
@@ -64,10 +77,31 @@ internal static partial class SommerfeldIntegrator
         Complex sumA = Complex.Zero, sumPhi = Complex.Zero;
 
         // ---- Segment 1: k_ρ = k₀ sin t, t ∈ [0, π/2], k_z0 = k₀ cos t. ----
+        // Panels are broken at any pole below k₀ (only a closed guide has one; with none the
+        // panels are the uniform ones, unchanged).
         int n1 = refinement * (4 + (int)Math.Ceiling(k0 * rho / Math.PI));
-        for (int p = 0; p < n1; p++)
+        var tBreaks = new List<double> { 0 };
+        foreach (var pole in poles)
         {
-            double t0 = Math.PI / 2 * p / n1, t1 = Math.PI / 2 * (p + 1) / n1;
+            double re = pole.KRho.Real;
+            if (re > 0 && re < k0) tBreaks.Add(Math.Asin(re / k0));
+        }
+        tBreaks.Add(Math.PI / 2);
+        tBreaks.Sort();
+        var tPanels = new List<(double T0, double T1)>();
+        if (tBreaks.Count == 2)
+            for (int p = 0; p < n1; p++) tPanels.Add((Math.PI / 2 * p / n1, Math.PI / 2 * (p + 1) / n1));
+        else
+            for (int seg = 0; seg + 1 < tBreaks.Count; seg++)
+            {
+                double lo = tBreaks[seg], hi = tBreaks[seg + 1];
+                if (hi - lo <= 0) continue;
+                int panels = Math.Max(refinement, (int)Math.Ceiling(n1 * (hi - lo) / (Math.PI / 2)));
+                for (int p = 0; p < panels; p++)
+                    tPanels.Add((lo + (hi - lo) * p / panels, lo + (hi - lo) * (p + 1) / panels));
+            }
+        foreach (var (t0, t1) in tPanels)
+        {
             double mid = 0.5 * (t0 + t1), half = 0.5 * (t1 - t0);
             for (int i = 0; i < Gauss.Nodes.Length; i++)
             {

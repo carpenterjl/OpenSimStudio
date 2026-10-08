@@ -127,6 +127,15 @@ internal static class SurfaceWaveDispersion
         if (!(kRho > k0))
             throw new ArgumentOutOfRangeException(nameof(kRho),
                 $"The lossless shot is defined on the bound-mode segment k_ρ > k₀ (k_ρ = {kRho}, k₀ = {k0}).");
+        var (a, b, zeros) = ShootLayers(stackup, k0, kRho, isTm);
+        double gamma0 = Math.Sqrt(kRho * kRho - k0 * k0);
+        return new Shot(a, b, zeros, b + gamma0 * a);
+    }
+
+    /// <summary>The lossless shot through the layers alone, at any real k_ρ &gt; 0: the top state
+    /// (A, B = p·A′) and the zeros of A on (0, d].</summary>
+    private static (double A, double B, int Zeros) ShootLayers(LayeredStackup stackup, double k0, double kRho, bool isTm)
+    {
         double k0Sq = k0 * k0, kRhoSq = kRho * kRho;
         double a = isTm ? 1 : 0, b = isTm ? 0 : 1;
         int zeros = 0;
@@ -178,8 +187,99 @@ internal static class SurfaceWaveDispersion
             a = aTop;
             b = bTop;
         }
-        double gamma0 = Math.Sqrt(kRhoSq - k0Sq);
-        return new Shot(a, b, zeros, b + gamma0 * a);
+        return (a, b, zeros);
+    }
+
+    // ------------------------------------------------------------------ closed (shielded) guide
+
+    /// <summary>The characteristic function of the stack closed by a second PEC plane on top
+    /// (a stripline's two planes), at real k_ρ: TE (A_x) is Dirichlet there, D = A_top; TM (A_z)
+    /// is Neumann, D = B_top. Real and entire in k_ρ² on the lossless twin; its zeros are the
+    /// parallel-plate modes, every one of them real, on (0, k_max].</summary>
+    internal static double ClosedResidual(LayeredStackup stackup, double k0, double kRho, bool isTm)
+    {
+        var (a, b, _) = ShootLayers(stackup, k0, kRho, isTm);
+        return isTm ? b : a;
+    }
+
+    /// <summary>N(k_ρ) for the closed guide: the modes whose propagation constant exceeds k_ρ.
+    /// With the Prüfer angle θ (A = r·sin θ, B = r·cos θ), which crosses multiples of π only
+    /// upward, the Dirichlet top (TE) is passed once per zero of A on (0, d]; the Neumann top (TM)
+    /// once per zero too, plus one when θ_top lies in the second half of its quarter-turn pair,
+    /// A_top·B_top &lt; 0. Non-increasing in k_ρ, a unit step at every root.</summary>
+    internal static int ClosedModeCount(LayeredStackup stackup, double k0, double kRho, bool isTm)
+    {
+        var (a, b, zeros) = ShootLayers(stackup, k0, kRho, isTm);
+        return isTm ? zeros + (a * b < 0 ? 1 : 0) : zeros;
+    }
+
+    /// <summary>Every lossless parallel-plate mode of the closed stack, isolated by bisection on
+    /// <see cref="ClosedModeCount"/> over (10⁻⁶k₀, k_max(1 + 10⁻⁶)) and polished as the open
+    /// segment's roots are. The upper end is past k_max because a guide filled with one
+    /// dielectric carries its TEM mode exactly AT k_max (the TM mode with A_z flat in z); above
+    /// k_max every layer is evanescent and no mode exists. Below the lower end lie modes at
+    /// cutoff, which carry no residue worth extracting.</summary>
+    internal static IReadOnlyList<IsolatedRoot> ClosedRoots(LayeredStackup stackup, double k0, bool isTm)
+    {
+        if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));
+        double kMax = k0 * Math.Sqrt(stackup.Layers.Max(l => l.RelativePermittivity));
+        double lo = 1e-6 * k0, hi = kMax * (1 + 1e-6);
+        int N(double kr) => ClosedModeCount(stackup, k0, kr, isTm);
+        double D(double kr) => ClosedResidual(stackup, k0, kr, isTm);
+        int nLo = N(lo), nHi = N(hi);
+        if (nHi != 0)
+            throw new InvalidOperationException(
+                $"The closed-guide {Family(isTm)} mode count above k_max is {nHi}, not 0 — an integration error in the shot.");
+        var roots = new List<IsolatedRoot>();
+        double scale = ResidualScale(D, lo, hi);
+        void Isolate(double a, int na, double b, int nb)
+        {
+            int step = na - nb;
+            if (step == 0) return;
+            if (step == 1)
+            {
+                roots.Add(Refine(D, N, a, na, b, nb, k0, scale, isTm));
+                return;
+            }
+            if (b - a <= 1e-13 * k0)
+                throw new InvalidOperationException(
+                    $"{step} {Family(isTm)} parallel-plate modes are degenerate within [{a}, {b}].");
+            double m = 0.5 * (a + b);
+            int nm = N(m);
+            if (nm > na || nm < nb)
+                throw new InvalidOperationException(
+                    $"The closed-guide {Family(isTm)} mode count is not monotone: N({a}) = {na}, N({m}) = {nm}, N({b}) = {nb}.");
+            Isolate(a, na, m, nm);
+            Isolate(m, nm, b, nb);
+        }
+        Isolate(lo, nLo, hi, nHi);
+        if (roots.Count != nLo)
+            throw new InvalidOperationException(
+                $"Isolated {roots.Count} closed-guide {Family(isTm)} roots but the mode count at the lower end is {nLo}.");
+        return roots;
+    }
+
+    /// <summary>The closed-guide characteristic function on a lossy stack at complex k_ρ (the
+    /// complex twin of <see cref="ClosedResidual"/>, pre-scaled per layer by a positive factor).</summary>
+    internal static Complex ClosedDispersion(LayeredStackup stackup, double k0, Complex kRho, bool isTm)
+    {
+        double k0Sq = k0 * k0;
+        Complex a = isTm ? Complex.One : Complex.Zero;
+        Complex b = isTm ? Complex.Zero : Complex.One;
+        foreach (var layer in stackup.Layers)
+        {
+            double t = layer.ThicknessMeters;
+            Complex eps = layer.ComplexPermittivity;
+            Complex p = isTm ? 1 / eps : Complex.One;
+            Complex kz = SpectralKernels.Kz(eps * k0Sq, kRho);
+            var (c, s) = ScaledTrig(kz * t);
+            Complex sOverK = kz == Complex.Zero ? t : s / kz;
+            Complex aTop = c * a + sOverK / p * b;
+            Complex bTop = -p * kz * s * a + c * b;
+            a = aTop;
+            b = bTop;
+        }
+        return isTm ? b : a;
     }
 
     /// <summary>N(k_ρ): the number of bound modes of the lossless twin whose propagation

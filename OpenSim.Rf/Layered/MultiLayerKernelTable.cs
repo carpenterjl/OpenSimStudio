@@ -53,31 +53,47 @@ public sealed class MultiLayerKernelTable
     /// (coplanar stackup); m ⇒ a patch buried at interface m with dielectric above.</summary>
     public int? SourceInterface { get; }
 
+    /// <summary>A second PEC plane closes the stack's top (FU-30): the strip of a stripline,
+    /// between two planes, at <see cref="SourceInterface"/>. Nothing radiates and no surface
+    /// wave leaves; the poles are the parallel-plate modes. Far-field, surface-wave, probe and
+    /// near-field consumers refuse a shielded table — they are written for an open top.</summary>
+    public bool IsShielded { get; }
+
     /// <param name="maxDegreeOfParallelism">Thread count for the independent knot integrals
     /// (null = unbounded); the table is bitwise identical for any value (slot-array compute,
     /// sequential spline construction), like the single-slab build.</param>
     /// <param name="sourceInterface">null ⇒ metal at the slab top (F2a); m ⇒ the interior
     /// (covered-patch) source & observation at interface m (F2b), using the interior image
     /// series, interior-plane pole residues, and interior Sommerfeld remainder.</param>
+    /// <param name="shielded">A PEC plane on the stack's top as well as under it (FU-30); the
+    /// source interface must then have a layer on each side.</param>
     public MultiLayerKernelTable(LayeredStackup stackup, double frequencyHz, double rhoMax,
-        int? maxDegreeOfParallelism = null, int? sourceInterface = null)
+        int? maxDegreeOfParallelism = null, int? sourceInterface = null, bool shielded = false)
     {
         if (frequencyHz <= 0) throw new ArgumentOutOfRangeException(nameof(frequencyHz));
         if (rhoMax <= 0) throw new ArgumentOutOfRangeException(nameof(rhoMax));
         if (sourceInterface is int si && (si < 0 || si >= stackup.Layers.Count))
             throw new ArgumentOutOfRangeException(nameof(sourceInterface));
+        if (shielded && !(sourceInterface is int sm && sm < stackup.Layers.Count - 1))
+            throw new ArgumentException("Between two planes the strip needs dielectric on both sides: "
+                + "give a source interface below the top layer.", nameof(sourceInterface));
+        IsShielded = shielded;
         var stopwatch = Stopwatch.StartNew();
         Stackup = stackup;
         FrequencyHz = frequencyHz;
         K0 = 2 * Math.PI * frequencyHz / RfConstants.SpeedOfLight;
         SourceInterface = sourceInterface;
-        PhiImages = sourceInterface is int mp
+        PhiImages = shielded ? MultiLayerImages.PhiImagesShielded(stackup, sourceInterface!.Value)
+            : sourceInterface is int mp
             ? MultiLayerImages.PhiImagesInterior(stackup, mp)
             : MultiLayerImages.PhiImages(stackup);
-        GaImages = sourceInterface is int mg
+        GaImages = shielded ? MultiLayerImages.GaImagesShielded(stackup, sourceInterface!.Value)
+            : sourceInterface is int mg
             ? MultiLayerImages.GaImagesInterior(stackup, mg)
             : MultiLayerImages.GaImages(stackup);
-        _poles = SurfaceWavePoles.Find(stackup, K0, sourceInterface).ToArray();
+        _poles = (shielded
+            ? SurfaceWavePoles.FindShielded(stackup, K0, sourceInterface!.Value)
+            : SurfaceWavePoles.Find(stackup, K0, sourceInterface)).ToArray();
 
         double epsMax = stackup.Layers.Max(l => l.RelativePermittivity);
         double k1 = K0 * Math.Sqrt(epsMax);
@@ -149,7 +165,10 @@ public sealed class MultiLayerKernelTable
     /// <summary>The Sommerfeld remainder at ρ — the interior-source variant when this table is
     /// built for a covered patch, else the top-source one.</summary>
     private (Complex A, Complex Phi) Remainder(double rho, int refinement = 1) =>
-        SourceInterface is int m
+        IsShielded
+            ? SommerfeldIntegrator.RemainderMultiLayerShielded(
+                Stackup, K0, _poles, GaImages, PhiImages, rho, SourceInterface!.Value, refinement)
+        : SourceInterface is int m
             ? SommerfeldIntegrator.RemainderMultiLayerInterior(
                 Stackup, K0, _poles, GaImages, PhiImages, rho, m, refinement)
             : SommerfeldIntegrator.RemainderMultiLayer(

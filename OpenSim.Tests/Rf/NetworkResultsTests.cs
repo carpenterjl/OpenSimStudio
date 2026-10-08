@@ -118,7 +118,8 @@ public class NetworkResultsTests
     /// plane). Built as one folded sheet so the triangles keep one orientation round the
     /// two bends.
     /// </summary>
-    private static (SurfaceStructure Structure, SurfacePort[] Ports) AirLine(double length, double w, double h, double cell)
+    private static (SurfaceStructure Structure, SurfacePort[] Ports) AirLine(double length, double w, double h, double cell,
+        bool graded = false)
     {
         int nTab = Math.Max(1, (int)Math.Round(h / cell)), nLine = (int)Math.Round(length / cell), ny = Math.Max(1, (int)Math.Round(w / cell));
         int rows = nTab + nLine + nTab;
@@ -126,7 +127,8 @@ public class NetworkResultsTests
         for (int i = 0; i <= rows; i++)
             for (int j = 0; j <= ny; j++)
             {
-                double y = -w / 2 + w * j / ny;
+                // Graded: cells crowd toward the strip's edges, where its current peaks.
+                double y = graded ? -w / 2 * Math.Cos(Math.PI * j / ny) : -w / 2 + w * j / ny;
                 Vector3D p;
                 if (i == 0) p = new Vector3D(0, y, 0);
                 else if (i < nTab) p = new Vector3D(0, y, h * i / nTab);
@@ -155,9 +157,9 @@ public class NetworkResultsTests
     }
 
     private static Complex[,] LineS(double length, double f, double reference, Func<double, Complex>? sheet,
-        out SurfaceStructure structure, double cell = 1e-3)
+        out SurfaceStructure structure, double cell = 1e-3, bool graded = false)
     {
-        var (s, ports) = AirLine(length, 2e-3, 1e-3, cell);
+        var (s, ports) = AirLine(length, 2e-3, 1e-3, cell, graded);
         structure = s;
         var solution = new SurfaceMomSolver { SheetImpedance = sheet }.SolveMultiPort(s, f, ports);
         return NetworkChecks.AdmittanceToScattering(solution.Admittance, reference);
@@ -418,5 +420,67 @@ public class NetworkResultsTests
         }
         Complex found = LineFromTwoLengths.PropagationConstant(ToS(Abcd(20e-3)), ToS(Abcd(35e-3)), 15e-3, 65);
         Assert.True((found - gamma).Magnitude < 1e-8 * gamma.Magnitude, $"{found} against {gamma}");
+
+        // FU-30: with the port modelled as a series impedance and a shunt admittance, the same
+        // two lengths give the line's impedance and both port elements exactly.
+        var calibration = LineFromTwoLengths.Calibrate(ToS(Abcd(20e-3)), ToS(Abcd(35e-3)), 20e-3, 35e-3, 50, 65);
+        Assert.True((calibration.CharacteristicOhms - z0).Magnitude < 1e-8 * z0, $"Z0 {calibration.CharacteristicOhms}");
+        Assert.True((calibration.PortSeriesOhms - new Complex(0, omega * 1.5e-9)).Magnitude < 1e-8 * omega * 1.5e-9);
+        Assert.True((calibration.PortShuntSiemens - new Complex(0, omega * 0.4e-12)).Magnitude < 1e-8 * omega * 0.4e-12);
+        // De-embedded, a third length is the bare line; moved 5 mm in at each end, 10 mm shorter.
+        var bare = calibration.DeEmbed(ToS(Abcd(50e-3)), 50, shiftMeters: 5e-3);
+        var expected = calibration.Line(40e-3);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++)
+                Assert.True((bare[i, j] - expected[i, j]).Magnitude < 1e-8 * (1 + expected[i, j].Magnitude));
+        // The other way round — the shunt across the terminals, the series element on the line
+        // side, as at a gap in a strip — is solved exactly by the other model.
+        Complex[,] AbcdShuntFirst(double length)
+        {
+            Complex[,] Mul(Complex[,] a, Complex[,] b) => NetworkParameters.Multiply(a, b);
+            var series = new[,] { { Complex.One, new Complex(4, -900) }, { Complex.Zero, Complex.One } };
+            var shunt = new[,] { { Complex.One, Complex.Zero }, { new Complex(0, omega * 0.07e-12), Complex.One } };
+            var line = new[,]
+            {
+                { Complex.Cosh(gamma * length), z0 * Complex.Sinh(gamma * length) },
+                { Complex.Sinh(gamma * length) / z0, Complex.Cosh(gamma * length) }
+            };
+            return Mul(Mul(Mul(Mul(shunt, series), line), series), shunt);
+        }
+        var gap = LineFromTwoLengths.Calibrate(ToS(AbcdShuntFirst(20e-3)), ToS(AbcdShuntFirst(35e-3)), 20e-3, 35e-3, 50, 65,
+            PortModel.ShuntAtTerminals);
+        Assert.True((gap.CharacteristicOhms - z0).Magnitude < 1e-7 * z0, $"Z0 {gap.CharacteristicOhms}");
+        Assert.True((gap.PortSeriesOhms - new Complex(4, -900)).Magnitude < 1e-7 * 900);
+        Assert.True((gap.PortShuntSiemens - new Complex(0, omega * 0.07e-12)).Magnitude < 1e-7 * omega * 0.07e-12);
+        Assert.True(gap.DeEmbedToLine(ToS(AbcdShuntFirst(50e-3)), 50)[0, 0].Magnitude < 1e-7);
+
+        // Referenced to the line's own impedance it is matched.
+        Assert.True(calibration.DeEmbedToLine(ToS(Abcd(50e-3)), 50)[0, 0].Magnitude < 1e-8);
+    }
+
+    [Fact]
+    public void TheCalibratedAirLine_HasTheImpedanceOfItsCrossSection()
+    {
+        // FU-30. The 2 mm strip 1 mm over a ground, in air, between its two foot ports at 3 GHz:
+        // two lengths take the feeds off (a foot's inductance in series, its edge's capacitance
+        // across) and leave the line's own impedance — which an independent 2D solve of the same
+        // cross-section gives too. A 2D solve is the quasi-static line, the MoM's the full-wave
+        // one; in air the two agree to the mesh's accuracy (the line is TEM).
+        double f = 3e9, k0 = 2 * Math.PI * f / C0, reference = 90;
+        var calibration = LineFromTwoLengths.Calibrate(LineS(30e-3, f, reference, null, out var structure, 0.5e-3, graded: true),
+            LineS(40e-3, f, reference, null, out _, 0.5e-3, graded: true), 30e-3, 40e-3, reference, k0);
+        double z2d = ImpedanceCalculator.Solve(new LineSpec
+        {
+            WidthMeters = 2e-3, HeightMeters = 1e-3, ThicknessMeters = 1e-6,
+            RelativePermittivity = 1, LossTangent = 0, FrequencyHz = f
+        }).ImpedanceOhms;
+        _output.WriteLine($"{structure.BasisCount} unknowns: Z0 = {calibration.CharacteristicOhms.Real:f2} " +
+                          $"{calibration.CharacteristicOhms.Imaginary:+0.00;−0.00}j Ω against the 2D {z2d:f2} Ω; port series " +
+                          $"{calibration.PortSeriesOhms.Imaginary / (2 * Math.PI * f) * 1e9:f3} nH, shunt " +
+                          $"{calibration.PortShuntSiemens.Imaginary / (2 * Math.PI * f) * 1e12:f3} pF");
+        Assert.Equal(z2d, calibration.CharacteristicOhms.Real, 0.03 * z2d);
+        Assert.InRange(Math.Abs(calibration.CharacteristicOhms.Imaginary), 0, 0.02 * calibration.CharacteristicOhms.Real);
+        // The foot is an inductor: a positive series reactance.
+        Assert.True(calibration.PortSeriesOhms.Imaginary > 0);
     }
 }
