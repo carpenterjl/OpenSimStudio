@@ -437,12 +437,20 @@ public static class LayeredFarField
                             vv += ww * Complex.Conjugate(jz[a]) * resZz[a, b] * jz[b];
                             vvPhi += ww * Complex.Conjugate(qv[a]) * resPhiVv[a, b] * qv[b];
                         }
+                    // The tube stands at the junction vertex, not at the origin, so its transform
+                    // carries the same lateral phase e^{jk·ρ_v} the horizontal transform gives
+                    // every patch point (and the far field gives the tube). Without it the cross
+                    // terms paired the patch current with a tube moved to the origin — the RF-6
+                    // residual (0.9643 at resonance, 0.879 at 8 GHz): invisible in air, where
+                    // there is no surface wave, and in the diagonal blocks, where it cancels.
                     Complex cross = Complex.Zero, crossPhi = Complex.Zero;
                     for (int b = 0; b < n; b++)
                     {
                         cross += w[b] * Complex.Conjugate(jRho) * (-j * pk) * resXzTop[b] * jz[b];
                         crossPhi += w[b] * Complex.Conjugate(qh) * resPhiTop[b] * qv[b];
                     }
+                    cross *= discPhase;
+                    crossPhi *= discPhase;
                     qA += vv.Real + 2 * cross.Real;
                     qPhi += vvPhi.Real + 2 * crossPhi.Real;
                 }

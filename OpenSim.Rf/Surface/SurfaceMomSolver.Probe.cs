@@ -121,6 +121,61 @@ public sealed partial class SurfaceMomSolver
         VerticalKernels set, double[] tubeNodes, double metalHeight, ProbeFeed probe,
         int vertex, double gapVolts)
     {
+        var z = AssembleProbeFedCore(surface, split, gaKernel, frequencyHz, set, tubeNodes,
+            metalHeight, probe, vertex);
+        var fan = new AttachmentFan(surface, vertex, probe.RadiusMeters);
+        int nEdges = surface.BasisCount;
+        int segments = tubeNodes.Length - 1;
+        int nTube = segments;
+        int total = nEdges + nTube + 1;
+        int jIndex = total - 1;
+
+        var rhs = new Complex[total];
+        rhs[nEdges] = gapVolts; // the base half hat has f(0) = 1: the real probe port
+        var x = ComplexLu.Factor(z).Solve(rhs);
+        Complex baseCurrent = x[nEdges];
+        if (baseCurrent == Complex.Zero)
+            throw new InvalidOperationException("The probe base carries zero current.");
+
+        // Physical edge currents for the far-field consumers: the junction's surface
+        // current transports θᵢ/2π of J across each fan outer edge — mapped onto the
+        // full RWG there (exact crossing, mesh-scale approximation of the local
+        // distribution, consistent with k₀·mesh ≪ 1).
+        var junction = x[jIndex];
+        var rawEdgeCurrents = new Complex[nEdges];
+        var edgeCurrents = new Complex[nEdges];
+        for (int e = 0; e < nEdges; e++) rawEdgeCurrents[e] = edgeCurrents[e] = x[e];
+        foreach (var wedge in fan.Wedges)
+            edgeCurrents[wedge.EdgeBasis] += wedge.OrientationSign * wedge.Gamma * junction;
+        var tubeCurrents = new Complex[segments + 1];
+        for (int n = 0; n < nTube; n++) tubeCurrents[n] = x[nEdges + n];
+        tubeCurrents[segments] = junction;
+
+        return new ProbeFedSolution(
+            new SurfaceMomSolution(frequencyHz, gapVolts / baseCurrent, edgeCurrents),
+            tubeCurrents, rawEdgeCurrents, tubeNodes);
+    }
+
+    /// <summary>The probe-fed system matrix on one slab, unknowns ordered [RWG edges | tube
+    /// hats from the ground up | junction]. For checking the power ledger block by block:
+    /// for any current vector x on a lossless structure, ½·Re(xᴴ·Z·x) is the power that
+    /// current delivers, which the far field and the surface-wave formula must account for.</summary>
+    internal ComplexDenseMatrix ProbeFedMatrix(SurfaceStructure surface, LayeredKernelTable kernel,
+        ProbeFeed probe)
+    {
+        int vertex = ResolveProbeVertex(surface, probe);
+        return AssembleProbeFedCore(surface, new LayeredKernelSplit(kernel),
+            new LayeredRadialGaKernel(kernel), kernel.FrequencyHz,
+            new VerticalKernelSet(kernel.Substrate, kernel.FrequencyHz),
+            ProbeAssembly.TubeNodes(kernel.Substrate, probe), kernel.Substrate.ThicknessMeters,
+            probe, vertex);
+    }
+
+    private ComplexDenseMatrix AssembleProbeFedCore(SurfaceStructure surface,
+        in LayeredKernelSplit split, IRadialGaKernel gaKernel, double frequencyHz,
+        VerticalKernels set, double[] tubeNodes, double metalHeight, ProbeFeed probe,
+        int vertex)
+    {
         var fan = new AttachmentFan(surface, vertex, probe.RadiusMeters);
 
         double omega = 2 * Math.PI * frequencyHz;
@@ -406,30 +461,6 @@ public sealed partial class SurfaceMomSolver
         }
         z[jIndex, jIndex] = probeBlock[segments, segments] + 2 * junctionTube[segments]
             + discDD + 2 * discVHalfTotal + halfHalf;
-
-        var rhs = new Complex[total];
-        rhs[nEdges] = gapVolts; // the base half hat has f(0) = 1: the real probe port
-        var x = ComplexLu.Factor(z).Solve(rhs);
-        Complex baseCurrent = x[nEdges];
-        if (baseCurrent == Complex.Zero)
-            throw new InvalidOperationException("The probe base carries zero current.");
-
-        // Physical edge currents for the far-field consumers: the junction's surface
-        // current transports θᵢ/2π of J across each fan outer edge — mapped onto the
-        // full RWG there (exact crossing, mesh-scale approximation of the local
-        // distribution, consistent with k₀·mesh ≪ 1).
-        var junction = x[jIndex];
-        var rawEdgeCurrents = new Complex[nEdges];
-        var edgeCurrents = new Complex[nEdges];
-        for (int e = 0; e < nEdges; e++) rawEdgeCurrents[e] = edgeCurrents[e] = x[e];
-        foreach (var wedge in fan.Wedges)
-            edgeCurrents[wedge.EdgeBasis] += wedge.OrientationSign * wedge.Gamma * junction;
-        var tubeCurrents = new Complex[segments + 1];
-        for (int n = 0; n < nTube; n++) tubeCurrents[n] = x[nEdges + n];
-        tubeCurrents[segments] = junction;
-
-        return new ProbeFedSolution(
-            new SurfaceMomSolution(frequencyHz, gapVolts / baseCurrent, edgeCurrents),
-            tubeCurrents, rawEdgeCurrents, tubeNodes);
+        return z;
     }
 }

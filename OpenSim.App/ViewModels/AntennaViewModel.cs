@@ -1903,10 +1903,9 @@ public partial class AntennaViewModel : ObservableObject
                 if (probe is { } p)
                 {
                     // The probe-fed far field carries the vertical E_θ leg + the exact
-                    // junction current. The ledger still reads about 4 % over near
-                    // resonance with the vertical surface-wave leg included (measured
-                    // 1.0417, unchanged by the junction-quadrature fix): an open item whose
-                    // cause is not located, and the result line says so.
+                    // junction current; the surface-wave ledger adds the tube's launch
+                    // coherently, at the tube's own position (FU-1). On a lossless slab the
+                    // ledger closes to 0.1 %.
                     var pf = solver.SolveProbeFed(surface, table, p);
                     double pinP = 0.5 * (System.Numerics.Complex.One / pf.Surface.InputImpedance).Real;
                     return (OpenSim.Rf.Layered.LayeredFarField.Compute(surface, table, pf, p),

@@ -16,16 +16,11 @@ namespace OpenSim.Tests.Rf;
 /// junction transform, the coherent |a_h + a_v|² sum — is the shipped machinery, now written once
 /// against a radiation-medium seam.</para>
 ///
-/// <para><b>What is NOT gated here, and why.</b> The absolute P_rad + P_sw ledger on a
-/// dielectric stack. The shipped single-slab probe carries a documented open item there (the
-/// layered far-field quadrature over-counts by a percent), and MEASURING the shipped path across
-/// εr on this mesh shows how much room that leaves: εr = 2.2 reads 1.110 at its resonance,
-/// εr = 3.59 reads 1.190, εr = 9.8 reads 1.157 — and off resonance the shipped path returns a
-/// small NEGATIVE input resistance, so the ratio is not even defined there. A two-material stack
-/// measures 1.270, inside that family. Gating a number in that range would gate the open item's
-/// magnitude on a coarse mesh, not this stage's physics. What IS gated instead is sharper: the
-/// εr = 1 limit exactly, the N = 1 limit against the single slab, the vertical launch against an
-/// independent oracle on genuinely two-material stacks, and both limits of the coherent form.</para>
+/// <para><b>The absolute ledger.</b> P_rad + P_sw against ½Re(V·I*) on a dielectric stack was left
+/// ungated here while the single-slab probe carried an open item (RF-6): this mesh read 1.110 at
+/// εr = 2.2, 1.190 at 3.59 and 1.270 on a two-material stack. The cause was the surface-wave cross
+/// terms placing the tube at the origin (FU-1); with it fixed the same cases read 0.9995–1.0000,
+/// and the ledger is gated below on one- and two-material stacks.</para>
 /// </summary>
 public class MultiLayerProbeFarFieldTests
 {
@@ -134,6 +129,25 @@ public class MultiLayerProbeFarFieldTests
         double oracle = 0.5 * currents[0].Real - pRad;   // V = 1, so P_in = ½Re(V·I₀*)
         double model = LayeredFarField.VerticalSurfaceWavePowerWatts(set, nodes, tube);
         Assert.InRange(model / oracle, 0.99, 1.01);
+    }
+
+    [Theory]
+    [InlineData(3.59, 3.59, 8.0e9)]    // one material described as two
+    [InlineData(2.2, 9.8, 7.0e9)]      // the high-ε layer on top
+    [InlineData(9.8, 2.2, 7.0e9)]      // and underneath
+    public void TheLedgerCloses_OnAStack(double eLower, double eUpper, double frequency)
+    {
+        // Measured 1.0000 / 0.9999 / 0.9997 (and 0.9999, 0.9995 for one εr = 2.2 layer at 9.4
+        // and 8 GHz) since FU-1.
+        var surface = Plate(MeshEdge);
+        var probe = Probe(ThinRadius, 3);
+        var stack = Two(eLower, Thickness / 2, eUpper, Thickness / 2);
+        var table = new MultiLayerKernelTable(stack, frequency, 0.025);
+        var solution = new SurfaceMomSolver().SolveProbeFed(surface, table, probe);
+        double pIn = 0.5 * Complex.Conjugate(1.0 / solution.Surface.InputImpedance).Real;
+        double rad = LayeredFarField.Compute(surface, table, solution, probe).TotalRadiatedPowerWatts;
+        double sw = LayeredFarField.SurfaceWavePowerWatts(surface, table, solution, probe);
+        Assert.InRange((rad + sw) / pIn, 0.99, 1.01);
     }
 
     [Fact]

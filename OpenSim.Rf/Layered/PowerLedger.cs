@@ -52,7 +52,7 @@ public static class PowerLedger
         {
             text += $"; P_rad + P_sw = {P(accounted)} of input on a LOSSLESS substrate, where it " +
                     $"should be 100 %: the {P(Math.Abs(accounted - 1))} {(accounted > 1 ? "excess" : "shortfall")} " +
-                    "is the model's own error (a known open item for probe-fed patches), so the " +
+                    "is the model's own error (the solve's or the far-field quadrature's), so the " +
                     "efficiency and gain above carry that much uncertainty";
         }
         else

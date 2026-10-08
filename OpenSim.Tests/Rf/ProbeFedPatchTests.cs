@@ -25,10 +25,8 @@ namespace OpenSim.Tests.Rf;
 /// y = −L/4 and 261 Ω at 9.2 GHz for y = −3L/8 (cos² law within 3 %); the quasi-static C
 /// reads 2.09 pF; the figures above are the earlier ones.
 ///
-/// The power ledger carries the sheet currents only (the electrically short probe's
-/// own far field is not yet included): 1.03–1.08 near resonance, gated [0.90, 1.12];
-/// tightening to the plan's 3% needs the vertical far-field leg — a named follow-up,
-/// not an approximation hidden in a band.
+/// The power ledger (sheet, junction and tube, space wave and surface wave, all coherent)
+/// closes to 0.1 % on a lossless slab since FU-1; see PowerLedger_OnSubstrate_Closes.
 /// </summary>
 public class ProbeFedPatchTests
 {
@@ -129,43 +127,105 @@ public class ProbeFedPatchTests
         Assert.InRange(measuredRatio / cosRatio, 0.90, 1.10);
     }
 
-    [Fact]
-    public void PowerLedger_OnSubstrate_HoldsToTheOpenVerticalSurfaceWaveLeg()
+    [Theory]
+    [InlineData(2.2, 9.4e9)]     // at resonance (y = −3L/8)
+    [InlineData(2.2, 8.0e9)]     // well below it
+    [InlineData(2.2, 10.5e9)]    // above it
+    [InlineData(4.4, 7.0e9)]
+    public void PowerLedger_OnSubstrate_Closes(double epsR, double frequencyHz)
     {
         // The COMPLETE mixed-current ledger: the space wave (raw RWG + junction disc/half-RWGs
-        // + the vertical E_theta leg) plus the surface-wave power of the horizontal AND vertical
-        // currents launched COHERENTLY (Stage A5 - both launch the same TM mode, so the power
-        // goes as |a_h + a_v|^2 and the cross term is real physics, not a correction).
+        // + the vertical E_θ leg) plus the surface-wave power of the horizontal AND vertical
+        // currents launched COHERENTLY (both launch the same TM mode, so the power goes as
+        // |a_h + a_v|² and the cross term is real physics).
         //
-        // MEASURED: 1.0415 at resonance, down from 1.0546 when the vertical leg was omitted.
-        // That is a genuine improvement in the derived direction, and both limits of the new
-        // form are pinned at 1e-9 (vertical-only reproduces the oracle-gated
-        // VerticalSurfaceWavePowerWatts; horizontal-only reproduces the shipped formula), so the
-        // change is attributable to the cross term alone.
-        //
-        // IT DOES NOT CLOSE THE LEDGER, and the earlier attribution was wrong: the vertical
-        // surface-wave leg accounts for only about a quarter of the excess, not all of it. The
-        // remaining ~4% is elsewhere, and the evidence narrows it - at epsr = 1 this same far
-        // field conserves power EXACTLY (1.0000), so it is not the space-wave assembly; the
-        // excess appears only WITH a substrate, and P_rad carries 90% of the budget, so a
-        // percent-level over-count in the layered far-field quadrature would produce exactly
-        // this. Naming it as an open item rather than widening the band to hide it.
-        var (solution, surface, table) = Solve(9.4e9, -0.375 * PatchL);
+        // RF-6 (FU-1). This read 1.0415 at resonance, then 0.9643 once the junction vertex term
+        // was in the matrix, and 0.879 at 8 GHz. Checked block by block against ½Re(xᴴZx) — the
+        // power any current vector x delivers, which the far field and surface wave must
+        // account for — the patch currents alone and the tube alone each closed to 1e-4; only
+        // the horizontal-vertical cross terms did not, and only on a dielectric. The cause was
+        // in the surface-wave formula: its cross terms paired the patch transform, which
+        // carries every point's lateral phase e^{jk·ρ′}, with the tube as if it stood at the
+        // origin. With the tube's phase the ledger is 0.9999 / 0.9992 / 1.0000 at
+        // (2.2, 9.4 GHz) / (2.2, 8 GHz) / (4.4, 7 GHz). The εr = 1 gate below is untouched:
+        // air has no surface wave.
+        var substrate = new SubstrateStackup(epsR, 0.0, Thickness);
+        double y = -0.375 * PatchL;
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+            PatchW, PatchL, MeshEdge, z: Thickness, portFraction: 0, snapVertex: (0.0, y));
+        var table = new LayeredKernelTable(substrate, frequencyHz, 0.025);
+        var probe = new ProbeFeed(0.0, y, ProbeRadius, Segments);
+        var solution = new SurfaceMomSolver().SolveProbeFed(grid.Structure!, table, probe);
         double pIn = 0.5 * Complex.Conjugate(1.0 / solution.Surface.InputImpedance).Real;
-        var far = LayeredFarField.Compute(surface, table, solution, probe: new ProbeFeed(
-            0.0, -0.375 * PatchL, ProbeRadius, Segments));
-        double pSw = LayeredFarField.SurfaceWavePowerWatts(surface, table, solution,
-            new ProbeFeed(0.0, -0.375 * PatchL, ProbeRadius, Segments));
-        // Measured 1.0415 at resonance (mesh 1.4 mm, a = 0.2 mm), down from 1.0546 with the
-        // vertical leg omitted — and 0.9643 since the junction vertex term was added to the
-        // matrix (Feature 12). The term is right (it makes a two-post loop inductance
-        // εr-independent) and it shrinks the off-resonance ledger error tenfold (8 GHz: 2.745 →
-        // 0.878; 10.5 GHz: 1.468 → 1.104), but it does not close the ledger. What is left is
-        // dielectric-only (εr = 1 closes to ±0.1 % from 9 to 15 GHz), independent of mesh
-        // (0.878/0.880/0.879 at 1.4/1.0/0.7 mm) and probe radius (0.879/0.878/0.878 at
-        // 0.1/0.2/0.25 mm), and not a sign error in the surface-wave cross terms or the
-        // vertical far-field leg (each flip tried, none closes it). Still open (RF-6).
-        Assert.InRange((far.TotalRadiatedPowerWatts + pSw) / pIn, 0.94, 0.99);
+        var far = LayeredFarField.Compute(grid.Structure!, table, solution, probe);
+        double pSw = LayeredFarField.SurfaceWavePowerWatts(grid.Structure!, table, solution, probe);
+        Assert.InRange((far.TotalRadiatedPowerWatts + pSw) / pIn, 0.99, 1.01);
+    }
+
+    [Fact]
+    public void EveryBlockOfTheCurrent_IsAccountedFor()
+    {
+        // The diagnostic that located RF-6, kept as a gate. For ANY current vector x on a
+        // lossless structure, ½Re(xᴴZx) is the power it delivers, and the far field plus the
+        // surface wave must account for it — so the patch currents alone, the tube alone and the
+        // two together are each a ledger of their own, and a cross term that is wrong shows up
+        // in the last one only. Before FU-1: 1.0000, 1.0002 and 0.952 at 8 GHz.
+        double y = -0.375 * PatchL;
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+            PatchW, PatchL, MeshEdge, z: Thickness, portFraction: 0, snapVertex: (0.0, y));
+        var surface = grid.Structure!;
+        var table = new LayeredKernelTable(Substrate, 8.0e9, 0.025);
+        var probe = new ProbeFeed(0.0, y, ProbeRadius, Segments);
+        var solver = new SurfaceMomSolver();
+        var solution = solver.SolveProbeFed(surface, table, probe);
+        var z = solver.ProbeFedMatrix(surface, table, probe);
+        int edges = surface.BasisCount, total = edges + Segments + 1;
+
+        double Ledger(bool patch, bool tube)
+        {
+            var x = new Complex[total];
+            if (patch) for (int e = 0; e < edges; e++) x[e] = solution.RawEdgeCurrents[e];
+            if (tube) for (int n = 0; n < Segments; n++) x[edges + n] = solution.TubeCurrents[n];
+            Complex delivered = Complex.Zero;
+            for (int i = 0; i < total; i++)
+                for (int j = 0; j < total; j++)
+                    delivered += Complex.Conjugate(x[i]) * z[i, j] * x[j];
+            var tubeCurrents = new Complex[Segments + 1];
+            for (int n = 0; n < Segments; n++) tubeCurrents[n] = x[edges + n];
+            var raw = x[..edges];
+            var part = new ProbeFedSolution(solution.Surface with { EdgeCurrents = raw },
+                tubeCurrents, raw, solution.TubeNodes);
+            return (LayeredFarField.Compute(surface, table, part, probe).TotalRadiatedPowerWatts
+                + LayeredFarField.SurfaceWavePowerWatts(surface, table, part, probe))
+                / (0.5 * delivered.Real);
+        }
+        Assert.InRange(Ledger(patch: true, tube: false), 0.999, 1.001);
+        Assert.InRange(Ledger(patch: false, tube: true), 0.999, 1.001);
+        Assert.InRange(Ledger(patch: true, tube: true), 0.999, 1.001);
+    }
+
+    [Fact]
+    public void PowerLedger_DoesNotDependOnWhereThePatchSits()
+    {
+        // The defect's signature: a lateral shift of the whole structure changes no physics,
+        // but it changed the ledger, because only the tube was left at the origin.
+        double ledger(double shift)
+        {
+            double y = -0.375 * PatchL;
+            var grid = SurfaceMeshBuilder.BuildRectangularPlate(
+                PatchW, PatchL, MeshEdge, z: Thickness, portFraction: 0, snapVertex: (0.0, y));
+            var vertices = grid.Structure!.Vertices
+                .Select(v => new Vector3D(v.X + shift, v.Y + shift, v.Z)).ToList();
+            var moved = new SurfaceStructure(vertices, grid.Structure.Triangles, null);
+            var table = new LayeredKernelTable(Substrate, 8.0e9, 0.025);
+            var probe = new ProbeFeed(shift, y + shift, ProbeRadius, Segments);
+            var solution = new SurfaceMomSolver().SolveProbeFed(moved, table, probe);
+            double pIn = 0.5 * Complex.Conjugate(1.0 / solution.Surface.InputImpedance).Real;
+            return (LayeredFarField.Compute(moved, table, solution, probe).TotalRadiatedPowerWatts
+                + LayeredFarField.SurfaceWavePowerWatts(moved, table, solution, probe)) / pIn;
+        }
+        double here = ledger(0), there = ledger(5e-3);
+        Assert.True(Math.Abs(here - there) < 1e-3, $"ledger {here:f4} here, {there:f4} 5 mm away");
     }
 
     // ---- A5: the coherent mixed-current surface-wave power ----
