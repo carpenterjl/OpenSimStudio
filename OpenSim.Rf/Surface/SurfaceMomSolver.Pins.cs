@@ -14,10 +14,54 @@ public sealed record VerticalPin(string Name, ProbeFeed Geometry, bool IsPort = 
 /// across a cut), named for the network it ends up in.</summary>
 public sealed record NamedSurfacePort(string Name, SurfacePort Port);
 
+/// <summary>The currents of a pin array for one excitation: the raw RWG sheet currents, and per pin
+/// its tube current at each node (index 0 = ground contact, last = the junction's) at its node
+/// heights; the port voltages and currents (currents into the ports).</summary>
+public sealed record PinArrayCurrents(Complex[] RawEdgeCurrents, Complex[][] TubeCurrents, double[][] TubeNodes,
+    Complex[] PortVolts, Complex[] PortCurrents)
+{
+    /// <summary>½·Re Σ V·I* — the power the ports deliver [W].</summary>
+    public double InputPowerWatts => 0.5 * PortVolts.Zip(PortCurrents, (v, i) => (v * Complex.Conjugate(i)).Real).Sum();
+}
+
 /// <summary>One frequency of a pin-array solve: the admittance matrix over the ports (pin bases
 /// first, in pin order, then the sheet ports), every shorting pin closed.</summary>
 public sealed record PinArraySolution(double FrequencyHz, IReadOnlyList<string> PortNames, Complex[,] Admittance)
 {
+    /// <summary>The system solution per port (1 V on it, the others shorted) and where in it the
+    /// sheet, each pin's tube and each junction sit.</summary>
+    internal Complex[][]? PortSolutions { get; init; }
+    internal int EdgeCount { get; init; }
+    internal int[] TubeStart { get; init; } = Array.Empty<int>();
+    internal int[] JunctionIndex { get; init; } = Array.Empty<int>();
+    internal double[][] Nodes { get; init; } = Array.Empty<double[]>();
+
+    /// <summary>The currents for the given port voltages (one per port, in port order), by
+    /// superposing the solve's unit excitations.</summary>
+    public PinArrayCurrents Currents(IReadOnlyList<Complex> portVolts)
+    {
+        var solutions = PortSolutions ?? throw new InvalidOperationException("This solution carries no currents.");
+        int ports = PortNames.Count;
+        if (portVolts.Count != ports)
+            throw new ArgumentException($"{ports} port voltage(s) are needed.", nameof(portVolts));
+        var x = new Complex[solutions[0].Length];
+        for (int q = 0; q < ports; q++)
+            for (int i = 0; i < x.Length; i++) x[i] += portVolts[q] * solutions[q][i];
+        var edges = x.Take(EdgeCount).ToArray();
+        var tubes = new Complex[TubeStart.Length][];
+        for (int p = 0; p < tubes.Length; p++)
+        {
+            int segments = Nodes[p].Length - 1;
+            tubes[p] = new Complex[segments + 1];
+            for (int n = 0; n < segments; n++) tubes[p][n] = x[TubeStart[p] + n];
+            tubes[p][segments] = x[JunctionIndex[p]];
+        }
+        var currents = new Complex[ports];
+        for (int p = 0; p < ports; p++)
+            for (int q = 0; q < ports; q++) currents[p] += Admittance[p, q] * portVolts[q];
+        return new PinArrayCurrents(edges, tubes, Nodes, portVolts.ToArray(), currents);
+    }
+
     /// <summary>Z = Y⁻¹ over the same ports.</summary>
     public Complex[,] Impedance()
     {
@@ -81,7 +125,7 @@ public sealed partial class SurfaceMomSolver
         "A grounded layered stackup (infinite PEC ground); all sheet metal at one interface. Metal on two levels joined by a via is not modelled.",
         "Each pin is a thin tube from the ground to the sheet, attached by the 1/ρ junction mode at a mesh vertex; a port pin is driven by a delta gap at its base, a shorting pin's base is welded to the ground.",
         "Pins' attachment fans must not touch; the tube-to-tube coupling uses the axis spacing.",
-        "The result is the port network only (no far field or power ledger for several pins)."
+        "The far field and surface-wave power of a pin array (LayeredFarField with the pins) add every tube's vertical leg and junction coherently, each tube at its own position, for any port excitation."
     };
 
     /// <summary>Pins and sheet ports over a single grounded slab.</summary>
@@ -244,6 +288,7 @@ public sealed partial class SurfaceMomSolver
         int portCount = portPins.Length + sheetPorts.Count;
         var lu = ComplexLu.Factor(z, MaxDegreeOfParallelism);
         var y = new Complex[portCount, portCount];
+        var solutions = new Complex[portCount][];
         for (int q = 0; q < portCount; q++)
         {
             var rhs = new Complex[total];
@@ -256,6 +301,7 @@ public sealed partial class SurfaceMomSolver
                     rhs[port.EdgeBases[k]] = signs[k] * surface.Edges[port.EdgeBases[k]].Length;
             }
             var x = lu.Solve(rhs);
+            solutions[q] = x;
             for (int p = 0; p < portCount; p++)
             {
                 if (p < portPins.Length) { y[p, q] = x[tubeStart[portPins[p]]]; continue; }
@@ -267,7 +313,11 @@ public sealed partial class SurfaceMomSolver
                 y[p, q] = current;
             }
         }
-        return new PinArraySolution(frequencyHz, names, y);
+        return new PinArraySolution(frequencyHz, names, y)
+        {
+            PortSolutions = solutions, EdgeCount = nEdges, TubeStart = tubeStart, JunctionIndex = junctionIndex,
+            Nodes = terms.Select(t => t.Nodes).ToArray()
+        };
     }
 
     /// <summary>The single-probe terms of one pin (fan, coupling tables, tube block, junction

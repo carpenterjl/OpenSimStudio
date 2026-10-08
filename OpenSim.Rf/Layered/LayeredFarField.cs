@@ -37,7 +37,7 @@ public static class LayeredFarField
     public static FarFieldPattern Compute(SurfaceStructure surface, LayeredKernelTable kernel,
         SurfaceMomSolution solution, int thetaCount = 32, int phiCount = 64)
         => ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
-            solution.EdgeCurrents, null, null, thetaCount, phiCount);
+            solution.EdgeCurrents, Array.Empty<JunctionLeg>(), Array.Empty<VerticalLeg>(), thetaCount, phiCount);
 
     /// <summary>Probe-fed far field: the COMPLETE mixed current, each component once —
     /// the raw horizontal RWG patch currents, the junction's true horizontal current
@@ -53,7 +53,41 @@ public static class LayeredFarField
         var junction = new JunctionLeg(
             ProbeVertexFan(surface, probe), probeSolution.TubeCurrents[^1]);
         return ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
-            probeSolution.RawEdgeCurrents, junction, leg, thetaCount, phiCount);
+            probeSolution.RawEdgeCurrents, new[] { junction }, new[] { leg }, thetaCount, phiCount);
+    }
+
+    /// <summary>Far field of a pin array (FU-35): the sheet currents, every pin's junction and every
+    /// pin's tube, all coherently, for the excitation the currents belong to.</summary>
+    public static FarFieldPattern Compute(SurfaceStructure surface, LayeredKernelTable kernel,
+        PinArrayCurrents currents, IReadOnlyList<VerticalPin> pins, int thetaCount = 32, int phiCount = 64)
+    {
+        var (junctions, legs) = PinLegs(surface, currents, pins);
+        return ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
+            currents.RawEdgeCurrents, junctions, legs, thetaCount, phiCount);
+    }
+
+    /// <summary>The pin array's far field over a multi-layer stackup.</summary>
+    public static FarFieldPattern Compute(SurfaceStructure surface, MultiLayerKernelTable kernel,
+        PinArrayCurrents currents, IReadOnlyList<VerticalPin> pins, int thetaCount = 32, int phiCount = 64)
+    {
+        var (junctions, legs) = PinLegs(surface, currents, pins);
+        return ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
+            currents.RawEdgeCurrents, junctions, legs, thetaCount, phiCount);
+    }
+
+    private static (JunctionLeg[] Junctions, VerticalLeg[] Legs) PinLegs(SurfaceStructure surface,
+        PinArrayCurrents currents, IReadOnlyList<VerticalPin> pins)
+    {
+        if (pins.Count != currents.TubeCurrents.Length)
+            throw new ArgumentException("The pins are not the ones the currents belong to.", nameof(pins));
+        var junctions = new JunctionLeg[pins.Count];
+        var legs = new VerticalLeg[pins.Count];
+        for (int p = 0; p < pins.Count; p++)
+        {
+            junctions[p] = new JunctionLeg(ProbeVertexFan(surface, pins[p].Geometry), currents.TubeCurrents[p][^1]);
+            legs[p] = new VerticalLeg(pins[p].Geometry.X, pins[p].Geometry.Y, currents.TubeNodes[p], currents.TubeCurrents[p]);
+        }
+        return (junctions, legs);
     }
 
     /// <summary>Far field of a MULTI-LAYER stackup solve (Stage F): the horizontal RWG patch
@@ -69,7 +103,7 @@ public static class LayeredFarField
     public static FarFieldPattern Compute(SurfaceStructure surface, MultiLayerKernelTable kernel,
         SurfaceMomSolution solution, int thetaCount = 32, int phiCount = 64)
         => ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
-            solution.EdgeCurrents, null, null, thetaCount, phiCount);
+            solution.EdgeCurrents, Array.Empty<JunctionLeg>(), Array.Empty<VerticalLeg>(), thetaCount, phiCount);
 
     /// <summary>Stage C2 — the probe-fed far field of a MULTI-LAYER stackup: the same complete
     /// mixed current as the single-slab probe overload (raw RWG + the junction's exact transform +
@@ -84,7 +118,7 @@ public static class LayeredFarField
         var junction = new JunctionLeg(
             ProbeVertexFan(surface, probe), probeSolution.TubeCurrents[^1]);
         return ComputeCore(surface, kernel.FrequencyHz, kernel.K0, Medium(kernel),
-            probeSolution.RawEdgeCurrents, junction, leg, thetaCount, phiCount);
+            probeSolution.RawEdgeCurrents, new[] { junction }, new[] { leg }, thetaCount, phiCount);
     }
 
     /// <summary>How a medium turns a source-plane current into a region-0 radiation amplitude:
@@ -140,7 +174,7 @@ public static class LayeredFarField
 
     private static FarFieldPattern ComputeCore(SurfaceStructure surface, double frequencyHz,
         double k0, in RadiationMedium medium, IReadOnlyList<Complex> edgeCurrents,
-        JunctionLeg? junction, VerticalLeg? vertical, int thetaCount, int phiCount)
+        IReadOnlyList<JunctionLeg> junctions, IReadOnlyList<VerticalLeg> verticals, int thetaCount, int phiCount)
     {
         double omega = 2 * Math.PI * frequencyHz;
         double eta = Math.Sqrt(RfConstants.Mu0 / RfConstants.Eps0);
@@ -161,18 +195,18 @@ public static class LayeredFarField
             var (gA, w) = medium.Amplitude(kRho, kz0);
             var thetaFactor = cosTheta + Complex.ImaginaryOne * k0 * sinTheta * sinTheta * w;
 
-            // Ĝ(θ) is φ-independent — the probe is one lateral point, so its transverse
-            // phase factors out per φ. Compute the z′-integral once per θ.
-            Complex gHat = vertical is { } vl
-                ? medium.VerticalAmplitude(theta[ti], vl.Nodes, vl.Currents)
-                : Complex.Zero;
+            // Ĝ(θ) is φ-independent — each tube is one lateral point, so its transverse
+            // phase factors out per φ. Compute its z′-integral once per θ.
+            var gHats = new Complex[verticals.Count];
+            for (int v = 0; v < verticals.Count; v++)
+                gHats[v] = medium.VerticalAmplitude(theta[ti], verticals[v].Nodes, verticals[v].Currents);
 
             for (int pi = 0; pi < phiCount; pi++)
             {
                 var (cosPhi, sinPhi) = (Math.Cos(phi[pi]), Math.Sin(phi[pi]));
                 double kx = kRho * cosPhi, ky = kRho * sinPhi;
                 var (jx, jy) = SpectralCurrent(surface, edgeCurrents, kx, ky);
-                if (junction is { } jl)
+                foreach (var jl in junctions)
                 {
                     var (djx, djy) = jl.Fan.CurrentTransform(surface, kx, ky);
                     jx += jl.Coeff * djx;
@@ -185,13 +219,14 @@ public static class LayeredFarField
                 double amplitude = omega * k0 * cosTheta / (4 * Math.PI);
                 Complex eTheta = amplitude * gA * thetaFactor * jPar;
                 Complex ePhi = amplitude * gA * jPerp;
-                if (vertical is { } v2)
+                for (int v = 0; v < verticals.Count; v++)
                 {
                     // A_θ from the vertical current: −sinθ·e^{+j k⃗_ρ·ρ_probe}·Ĝ(θ),
                     // same amp/normalization and 1/4π convention as the horizontal leg.
+                    var v2 = verticals[v];
                     var (sinPr, cosPr) = Math.SinCos(kRho * (cosPhi * v2.X + sinPhi * v2.Y));
                     var probePhase = new Complex(cosPr, sinPr);
-                    eTheta += amplitude * (-sinTheta) * probePhase * gHat;
+                    eTheta += amplitude * (-sinTheta) * probePhase * gHats[v];
                 }
                 double u = (eTheta.Magnitude * eTheta.Magnitude
                             + ePhi.Magnitude * ePhi.Magnitude) / (2 * eta);
@@ -313,10 +348,12 @@ public static class LayeredFarField
     {
         var fan = ProbeVertexFan(surface, probe);
         var junction = new JunctionLeg(fan, probeSolution.TubeCurrents[^1]);
+        // The tube stands at the junction vertex (the mesh snaps one to the probe).
+        var tube = new VerticalLeg(fan.VertexPosition.X, fan.VertexPosition.Y, probeSolution.TubeNodes, probeSolution.TubeCurrents);
         return MixedSurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
             new VerticalKernelSet(kernel.Substrate, kernel.FrequencyHz),
-            kernel.Substrate.ThicknessMeters, probeSolution.RawEdgeCurrents, junction,
-            probeSolution.TubeNodes, probeSolution.TubeCurrents, alphaCount);
+            kernel.Substrate.ThicknessMeters, probeSolution.RawEdgeCurrents, new[] { junction },
+            new[] { tube }, alphaCount);
     }
 
     /// <summary>Stage C2 — the same coherent horizontal + vertical surface-wave ledger over a
@@ -327,57 +364,84 @@ public static class LayeredFarField
         MultiLayerKernelTable kernel, ProbeFedSolution probeSolution, ProbeFeed probe,
         int alphaCount = 64)
     {
-        var junction = new JunctionLeg(
-            ProbeVertexFan(surface, probe), probeSolution.TubeCurrents[^1]);
+        var fan = ProbeVertexFan(surface, probe);
+        var junction = new JunctionLeg(fan, probeSolution.TubeCurrents[^1]);
+        var tube = new VerticalLeg(fan.VertexPosition.X, fan.VertexPosition.Y, probeSolution.TubeNodes, probeSolution.TubeCurrents);
         return MixedSurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
             new MultiLayerVerticalKernelSet(kernel.Stackup, kernel.FrequencyHz),
-            probeSolution.TubeNodes[^1], probeSolution.RawEdgeCurrents, junction,
-            probeSolution.TubeNodes, probeSolution.TubeCurrents, alphaCount);
+            probeSolution.TubeNodes[^1], probeSolution.RawEdgeCurrents, new[] { junction },
+            new[] { tube }, alphaCount);
+    }
+
+    /// <summary>The surface-wave power of a pin array (FU-35): the sheet, every junction and every
+    /// tube launching the surface waves together.</summary>
+    public static double SurfaceWavePowerWatts(SurfaceStructure surface, LayeredKernelTable kernel,
+        PinArrayCurrents currents, IReadOnlyList<VerticalPin> pins, int alphaCount = 64)
+    {
+        var (junctions, legs) = PinLegs(surface, currents, pins);
+        return MixedSurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
+            new VerticalKernelSet(kernel.Substrate, kernel.FrequencyHz), kernel.Substrate.ThicknessMeters,
+            currents.RawEdgeCurrents, junctions, legs, alphaCount);
+    }
+
+    /// <summary>The pin array's surface-wave power over a multi-layer stackup.</summary>
+    public static double SurfaceWavePowerWatts(SurfaceStructure surface, MultiLayerKernelTable kernel,
+        PinArrayCurrents currents, IReadOnlyList<VerticalPin> pins, int alphaCount = 64)
+    {
+        var (junctions, legs) = PinLegs(surface, currents, pins);
+        return MixedSurfaceWavePowerWatts(surface, kernel.FrequencyHz, kernel.Poles,
+            new MultiLayerVerticalKernelSet(kernel.Stackup, kernel.FrequencyHz), currents.TubeNodes[0][^1],
+            currents.RawEdgeCurrents, junctions, legs, alphaCount);
     }
 
     /// <summary>The coherent horizontal + vertical surface-wave power; see the overload above
-    /// for the derivation and the charge-partition argument.</summary>
+    /// for the derivation and the charge-partition argument. Several tubes (a pin array) add
+    /// their vertical currents into one spectrum, each at its own lateral phase e^{jk·ρ_pin}, and
+    /// each junction takes its own tube''s endpoint charge out of the horizontal charge.</summary>
     private static double MixedSurfaceWavePowerWatts(SurfaceStructure surface,
         double frequencyHz, IReadOnlyList<SurfaceWavePole> poles, VerticalKernels set,
-        double metalHeight, IReadOnlyList<Complex> edgeCurrents, JunctionLeg junction,
-        double[] tubeNodes, Complex[] tubeCurrents, int alphaCount)
+        double metalHeight, IReadOnlyList<Complex> edgeCurrents, IReadOnlyList<JunctionLeg> junctions,
+        IReadOnlyList<VerticalLeg> tubes, int alphaCount)
     {
         double omega = 2 * Math.PI * frequencyHz;
         double d = metalHeight;
         var j = Complex.ImaginaryOne;
 
-        // The tube current and its distributed line charge on the SAME Gauss grid
+        // Every tube's current and distributed line charge on the SAME Gauss grid
         // VerticalSurfaceWavePowerWatts uses, so the vertical-only block reproduces that
         // already-oracle-gated formula rather than approximating it.
         var (gn, gw) = GaussLegendre.Rule(4, 0, 1);
-        int n = (tubeNodes.Length - 1) * gn.Length;
-        var z = new double[n];
-        var jz = new Complex[n];
-        var qv = new Complex[n];
-        var w = new double[n];
-        int idx = 0;
-        for (int e = 0; e + 1 < tubeNodes.Length; e++)
+        var z = new List<double>();
+        var jz = new List<Complex>();
+        var qv = new List<Complex>();
+        var w = new List<double>();
+        var owner = new List<int>();
+        for (int p = 0; p < tubes.Count; p++)
         {
-            double h = tubeNodes[e + 1] - tubeNodes[e];
-            Complex slope = (tubeCurrents[e + 1] - tubeCurrents[e]) / h;
-            for (int q = 0; q < gn.Length; q++)
+            var tubeNodes = tubes[p].Nodes;
+            var tubeCurrents = tubes[p].Currents;
+            for (int e = 0; e + 1 < tubeNodes.Length; e++)
             {
-                z[idx] = tubeNodes[e] + h * gn[q];
-                jz[idx] = tubeCurrents[e] * (1 - gn[q]) + tubeCurrents[e + 1] * gn[q];
-                qv[idx] = j / omega * slope;
-                w[idx] = gw[q] * h;
-                idx++;
+                double h = tubeNodes[e + 1] - tubeNodes[e];
+                Complex slope = (tubeCurrents[e + 1] - tubeCurrents[e]) / h;
+                for (int q = 0; q < gn.Length; q++)
+                {
+                    z.Add(tubeNodes[e] + h * gn[q]);
+                    jz.Add(tubeCurrents[e] * (1 - gn[q]) + tubeCurrents[e + 1] * gn[q]);
+                    qv.Add(j / omega * slope);
+                    w.Add(gw[q] * h);
+                    owner.Add(p);
+                }
             }
         }
-        Complex iTop = tubeCurrents[^1];
-        var vertexPos = junction.Fan.VertexPosition;
+        int n = z.Count;
 
         double power = 0;
         foreach (var pole in poles)
         {
             double kp = pole.KRho.Real;
             var pk = new Complex(kp, 0);
-            bool vertical = pole.IsTm;      // a z-current launches only the TM mode
+            bool vertical = pole.IsTm && n > 0;      // a z-current launches only the TM mode
 
             // Residues independent of the azimuth: computed once per pole, not per alpha.
             Complex[,] resZz = null!, resPhiVv = null!;
@@ -389,7 +453,7 @@ public static class LayeredFarField
                 for (int a = 0; a < n; a++)
                     for (int b = 0; b < n; b++)
                     {
-                        var r = set.PoleResidues(pk, vertical, z[a], z[b]);
+                        var r = set.PoleResidues(pk, pole.IsTm, z[a], z[b]);
                         resZz[a, b] = r.GAzz;
                         resPhiVv[a, b] = r.KPhi;
                     }
@@ -397,7 +461,7 @@ public static class LayeredFarField
                 resPhiTop = new Complex[n];
                 for (int b = 0; b < n; b++)
                 {
-                    var r = set.PoleResidues(pk, vertical, d, z[b]);
+                    var r = set.PoleResidues(pk, pole.IsTm, d, z[b]);
                     resXzTop[b] = r.GAxz;
                     resPhiTop[b] = r.KPhi;
                 }
@@ -405,6 +469,7 @@ public static class LayeredFarField
 
             double dAlpha = 2 * Math.PI / alphaCount;
             double accum = 0;                 // the azimuthal integral of Re[Q_A - Q_Phi]
+            var phase = new Complex[tubes.Count];
             for (int i = 0; i < alphaCount; i++)
             {
                 double alpha = 2 * Math.PI * i / alphaCount;
@@ -412,16 +477,23 @@ public static class LayeredFarField
                 double kx = kp * cos, ky = kp * sin;
 
                 var (jx, jy) = SpectralCurrent(surface, edgeCurrents, kx, ky);
-                var (djx, djy) = junction.Fan.CurrentTransform(surface, kx, ky);
-                jx += junction.Coeff * djx;
-                jy += junction.Coeff * djy;
+                foreach (var junction in junctions)
+                {
+                    var (djx, djy) = junction.Fan.CurrentTransform(surface, kx, ky);
+                    jx += junction.Coeff * djx;
+                    jy += junction.Coeff * djy;
+                }
                 var jRho = cos * jx + sin * jy;
 
-                // Horizontal charge, MINUS the junction disc's point charge: the tube's endpoint
+                // Horizontal charge, MINUS each junction disc's point charge: the tube's endpoint
                 // delta that cancels it is not carried in q_v, so counting one alone would leave
                 // a spurious point charge sitting at the junction.
-                var discPhase = Complex.Exp(j * (kx * vertexPos.X + ky * vertexPos.Y));
-                var qh = kp / omega * jRho - j / omega * iTop * discPhase;
+                var qh = kp / omega * jRho;
+                foreach (var junction in junctions)
+                {
+                    var vertexPos = junction.Fan.VertexPosition;
+                    qh -= j / omega * junction.Coeff * Complex.Exp(j * (kx * vertexPos.X + ky * vertexPos.Y));
+                }
 
                 double qA = pole.ResidueA.Real
                             * (jx.Magnitude * jx.Magnitude + jy.Magnitude * jy.Magnitude);
@@ -429,28 +501,32 @@ public static class LayeredFarField
 
                 if (vertical)
                 {
+                    // Each tube stands at its own lateral point, so its transform carries the
+                    // same lateral phase e^{jk·ρ} the horizontal transform gives every patch point
+                    // (and the far field gives the tube). Without it the cross terms paired the
+                    // patch current with a tube moved to the origin — the RF-6 residual.
+                    for (int p = 0; p < tubes.Count; p++)
+                        phase[p] = Complex.Exp(j * (kx * tubes[p].X + ky * tubes[p].Y));
                     Complex vv = Complex.Zero, vvPhi = Complex.Zero;
                     for (int a = 0; a < n; a++)
+                    {
+                        var ja = Complex.Conjugate(jz[a] * phase[owner[a]]);
+                        var qa = Complex.Conjugate(qv[a] * phase[owner[a]]);
                         for (int b = 0; b < n; b++)
                         {
                             double ww = w[a] * w[b];
-                            vv += ww * Complex.Conjugate(jz[a]) * resZz[a, b] * jz[b];
-                            vvPhi += ww * Complex.Conjugate(qv[a]) * resPhiVv[a, b] * qv[b];
+                            var pb = phase[owner[b]];
+                            vv += ww * ja * resZz[a, b] * jz[b] * pb;
+                            vvPhi += ww * qa * resPhiVv[a, b] * qv[b] * pb;
                         }
-                    // The tube stands at the junction vertex, not at the origin, so its transform
-                    // carries the same lateral phase e^{jk·ρ_v} the horizontal transform gives
-                    // every patch point (and the far field gives the tube). Without it the cross
-                    // terms paired the patch current with a tube moved to the origin — the RF-6
-                    // residual (0.9643 at resonance, 0.879 at 8 GHz): invisible in air, where
-                    // there is no surface wave, and in the diagonal blocks, where it cancels.
+                    }
                     Complex cross = Complex.Zero, crossPhi = Complex.Zero;
                     for (int b = 0; b < n; b++)
                     {
-                        cross += w[b] * Complex.Conjugate(jRho) * (-j * pk) * resXzTop[b] * jz[b];
-                        crossPhi += w[b] * Complex.Conjugate(qh) * resPhiTop[b] * qv[b];
+                        var pb = phase[owner[b]];
+                        cross += w[b] * Complex.Conjugate(jRho) * (-j * pk) * resXzTop[b] * jz[b] * pb;
+                        crossPhi += w[b] * Complex.Conjugate(qh) * resPhiTop[b] * qv[b] * pb;
                     }
-                    cross *= discPhase;
-                    crossPhi *= discPhase;
                     qA += vv.Real + 2 * cross.Real;
                     qPhi += vvPhi.Real + 2 * crossPhi.Real;
                 }

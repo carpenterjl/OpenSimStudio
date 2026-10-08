@@ -35,6 +35,71 @@ public class BoardStructuresTests
         Assert.True(rel <= 1e-12, $"rel {rel:e3}");
     }
 
+    [Fact]
+    public void OnePin_RadiatesAsTheProbeFedSolve()
+    {
+        // FU-35: a pin array's far field and surface wave reduce to the probe-fed ones for one pin.
+        var surface = Plate(CoarseEdge);
+        var probe = Probe();
+        var table = new LayeredKernelTable(Substrate, Frequency, 0.025);
+        var single = new SurfaceMomSolver().SolveProbeFed(surface, table, probe);
+        var pins = new[] { new VerticalPin("feed", probe) };
+        var currents = new SurfaceMomSolver().SolvePins(surface, table, pins).Currents(new Complex[] { 1 });
+        double far = LayeredFarField.Compute(surface, table, single, probe).TotalRadiatedPowerWatts;
+        double farPins = LayeredFarField.Compute(surface, table, currents, pins).TotalRadiatedPowerWatts;
+        double sw = LayeredFarField.SurfaceWavePowerWatts(surface, table, single, probe);
+        double swPins = LayeredFarField.SurfaceWavePowerWatts(surface, table, currents, pins);
+        _out.WriteLine($"radiated {far:e6} / {farPins:e6} W, surface wave {sw:e6} / {swPins:e6} W");
+        Assert.Equal(far, farPins, 1e-9 * far);
+        Assert.Equal(sw, swPins, 1e-9 * Math.Max(sw, far));
+    }
+
+    [Theory]
+    [InlineData(2.2, 9e9)]
+    [InlineData(4.4, 7e9)]
+    public void AFeedAndAShortingPin_CloseTheirPowerLedger(double epsR, double f)
+    {
+        // FU-35: radiated + surface wave = the port's power, with two tubes and two junctions
+        // radiating together — the shorting pin's current is a radiator of its own.
+        var substrate = new SubstrateStackup(epsR, 0, Thickness);
+        var surface = SurfaceMeshBuilder.BuildRectangularPlate(0.012, 0.009, 1.5e-3, z: Thickness).Structure!;
+        var table = new LayeredKernelTable(substrate, f, 0.025);
+        var pins = new[]
+        {
+            new VerticalPin("feed", new ProbeFeed(-3e-3, 0, ProbeRadius, 3)),
+            new VerticalPin("short", new ProbeFeed(3e-3, 0, ProbeRadius, 3), IsPort: false)
+        };
+        var currents = new SurfaceMomSolver().SolvePins(surface, table, pins).Currents(new Complex[] { 1 });
+        double pRad = LayeredFarField.Compute(surface, table, currents, pins).TotalRadiatedPowerWatts;
+        double pSw = LayeredFarField.SurfaceWavePowerWatts(surface, table, currents, pins);
+        double pIn = currents.InputPowerWatts;
+        _out.WriteLine($"εr {epsR}, {f / 1e9} GHz: radiated {pRad / pIn:f4}, surface wave {pSw / pIn:f4}, ledger {(pRad + pSw) / pIn:f4}");
+        Assert.InRange((pRad + pSw) / pIn, 0.99, 1.01);
+    }
+
+    [Fact]
+    public void TwoDrivenPins_CloseTheirLedgerForAnyExcitation()
+    {
+        // Two ports driven at once, unequally and out of phase: the ledger holds for the
+        // superposed currents, cross terms included.
+        const double f = 9e9;
+        var substrate = new SubstrateStackup(2.2, 0, Thickness);
+        var surface = SurfaceMeshBuilder.BuildRectangularPlate(0.012, 0.009, 1.5e-3, z: Thickness).Structure!;
+        var table = new LayeredKernelTable(substrate, f, 0.025);
+        var pins = new[]
+        {
+            new VerticalPin("a", new ProbeFeed(-3e-3, 0, ProbeRadius, 3)),
+            new VerticalPin("b", new ProbeFeed(3e-3, 0, ProbeRadius, 3))
+        };
+        var currents = new SurfaceMomSolver().SolvePins(surface, table, pins)
+            .Currents(new[] { Complex.One, Complex.FromPolarCoordinates(0.6, 2.1) });
+        double pRad = LayeredFarField.Compute(surface, table, currents, pins).TotalRadiatedPowerWatts;
+        double pSw = LayeredFarField.SurfaceWavePowerWatts(surface, table, currents, pins);
+        double pIn = currents.InputPowerWatts;
+        _out.WriteLine($"ledger {(pRad + pSw) / pIn:f4} (radiated {pRad / pIn:f4})");
+        Assert.InRange((pRad + pSw) / pIn, 0.99, 1.01);
+    }
+
     /// <summary>A driven pin and a shorting pin 9 mm apart between a 60 mm plate and the ground at
     /// 30 MHz: the feed sees the loop inductance of two posts in a parallel-plate region,
     /// (µ0·h/π)·ln(s/a) = 2.436 nH, which cannot depend on the dielectric. Measured 2.3712 nH in air
