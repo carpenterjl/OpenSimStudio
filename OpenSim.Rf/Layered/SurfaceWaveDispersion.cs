@@ -190,6 +190,107 @@ internal static class SurfaceWaveDispersion
         return (a, b, zeros);
     }
 
+    // ------------------------------------------------------------------ ungrounded slab
+
+    /// <summary>The characteristic function of the stack with air on BOTH sides (FU-36), lossless
+    /// twin, real k_ρ on (k₀, k_max): the shot starts decaying into the air below (A = 1,
+    /// B = γ₀ — in air B = A′ for both families) and must decay into the air above,
+    /// D = B_top + γ₀·A_top. Real and entire on the segment; its zeros are the slab's bound modes,
+    /// TE0 and TM0 among them for any thickness.</summary>
+    internal static double UngroundedResidual(LayeredStackup stackup, double k0, double kRho, bool isTm)
+    {
+        double gamma0 = Math.Sqrt(Math.Max(kRho * kRho - k0 * k0, 0));
+        double a = 1, b = gamma0;
+        double k0Sq = k0 * k0, kRhoSq = kRho * kRho;
+        foreach (var layer in stackup.Layers)
+        {
+            double t = layer.ThicknessMeters;
+            double p = isTm ? 1 / layer.RelativePermittivity : 1;
+            double k2 = layer.RelativePermittivity * k0Sq - kRhoSq;
+            double aPrime = b / p;
+            double aTop, bTop;
+            if (k2 > 0)
+            {
+                double k = Math.Sqrt(k2);
+                double s = Math.Sin(k * t), c = Math.Cos(k * t);
+                aTop = a * c + aPrime * s / k;
+                bTop = -p * k * s * a + c * b;
+            }
+            else if (k2 < 0)
+            {
+                // Pre-scaled by e^{−γt} (a positive factor: roots unchanged).
+                double g = Math.Sqrt(-k2), e = Math.Exp(-2 * g * t);
+                double c = (1 + e) / 2, s = (1 - e) / 2;
+                aTop = a * c + aPrime * s / g;
+                bTop = p * g * s * a + c * b;
+            }
+            else
+            {
+                aTop = a + aPrime * t;
+                bTop = b;
+            }
+            a = aTop;
+            b = bTop;
+        }
+        return b + gamma0 * a;
+    }
+
+    /// <summary>The same at complex k_ρ on a lossy stack (decaying sheet both sides).</summary>
+    internal static Complex UngroundedDispersion(LayeredStackup stackup, double k0, Complex kRho, bool isTm)
+    {
+        double k0Sq = k0 * k0;
+        Complex gamma0 = Complex.ImaginaryOne * SpectralKernels.Kz(k0Sq, kRho);
+        Complex a = Complex.One, b = gamma0;
+        foreach (var layer in stackup.Layers)
+        {
+            double t = layer.ThicknessMeters;
+            Complex eps = layer.ComplexPermittivity;
+            Complex p = isTm ? 1 / eps : Complex.One;
+            Complex kz = SpectralKernels.Kz(eps * k0Sq, kRho);
+            var (c, s) = ScaledTrig(kz * t);
+            Complex sOverK = kz == Complex.Zero ? t : s / kz;
+            Complex aTop = c * a + sOverK / p * b;
+            Complex bTop = -p * kz * s * a + c * b;
+            a = aTop;
+            b = bTop;
+        }
+        return b + gamma0 * a;
+    }
+
+    /// <summary>The lossless bound modes of the ungrounded stack: sign changes of
+    /// <see cref="UngroundedResidual"/> on a grid over (k₀, k_max) that is geometric in k_ρ − k₀
+    /// near k₀ (a thin slab's TE0 and TM0 sit within 10⁻⁴·k₀ of it) and uniform beyond, bisected
+    /// to 10⁻¹³·k₀. A root closer to k₀ than 10⁻¹⁰·k₀ is at cutoff and not extracted.</summary>
+    internal static IReadOnlyList<double> UngroundedRoots(LayeredStackup stackup, double k0, bool isTm)
+    {
+        double kMax = k0 * Math.Sqrt(stackup.Layers.Max(l => l.RelativePermittivity));
+        var roots = new List<double>();
+        if (!(kMax > k0 * (1 + 1e-9))) return roots;
+        var grid = new List<double>();
+        double span = kMax * (1 - 1e-9) - k0;
+        for (int i = 0; i <= 600; i++) grid.Add(k0 + span * Math.Pow(10, -10 + 10.0 * i / 600) * 0.01);
+        for (int i = 1; i <= 4000; i++) grid.Add(k0 + span * (0.01 + 0.99 * i / 4000.0));
+        double D(double kr) => UngroundedResidual(stackup, k0, kr, isTm);
+        double previous = D(grid[0]);
+        for (int i = 1; i < grid.Count; i++)
+        {
+            double value = D(grid[i]);
+            if (previous * value < 0)
+            {
+                double lo = grid[i - 1], hi = grid[i], flo = previous;
+                for (int it = 0; it < 200 && hi - lo > 1e-13 * k0; it++)
+                {
+                    double mid = 0.5 * (lo + hi);
+                    double fm = D(mid);
+                    if (Math.Sign(fm) == Math.Sign(flo)) { lo = mid; flo = fm; } else hi = mid;
+                }
+                roots.Add(0.5 * (lo + hi));
+            }
+            if (value != 0) previous = value;
+        }
+        return roots;
+    }
+
     // ------------------------------------------------------------------ closed (shielded) guide
 
     /// <summary>The characteristic function of the stack closed by a second PEC plane on top

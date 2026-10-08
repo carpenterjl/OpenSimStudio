@@ -60,6 +60,16 @@ internal static partial class SommerfeldIntegrator
         RemainderMultiLayerCore(stackup, k0, poles, gaImages, phiImages, rho, refinement,
             (kRho, _) => TransmissionLineGreens.EvaluateShielded(stackup, k0, kRho, m));
 
+    /// <summary>The remainder for a stack with air on both sides (FU-36), source and observation
+    /// at interface <paramref name="m"/>: the open contour with the ungrounded kernel
+    /// (<see cref="TransmissionLineGreens.EvaluateUngrounded"/>).</summary>
+    public static (Complex A, Complex Phi) RemainderMultiLayerUngrounded(
+        LayeredStackup stackup, double k0, IReadOnlyList<SurfaceWavePole> poles,
+        IReadOnlyList<MultiLayerImages.Image> gaImages,
+        IReadOnlyList<MultiLayerImages.Image> phiImages, double rho, int m, int refinement = 1) =>
+        RemainderMultiLayerCore(stackup, k0, poles, gaImages, phiImages, rho, refinement,
+            (kRho, kz0) => TransmissionLineGreens.EvaluateUngrounded(stackup, k0, kRho, kz0, m));
+
     private static (Complex A, Complex Phi) RemainderMultiLayerCore(
         LayeredStackup stackup, double k0, IReadOnlyList<SurfaceWavePole> poles,
         IReadOnlyList<MultiLayerImages.Image> gaImages,

@@ -43,9 +43,9 @@ public sealed partial class SurfaceMomSolver
     public ProbeFedSolution SolveProbeFed(SurfaceStructure surface, MultiLayerKernelTable kernel,
         ProbeFeed probe, double gapVolts = 1.0)
     {
-        if (kernel.IsShielded)
-            throw new ArgumentException("A probe needs the vertical kernels, which are written for an open top; "
-                + "between two ground planes it is not modelled.", nameof(kernel));
+        if (kernel.IsShielded || kernel.IsUngrounded)
+            throw new ArgumentException("A probe needs the vertical kernels, which are written for a grounded stack with an open top; "
+                + "between two ground planes or over no ground it is not modelled.", nameof(kernel));
         int vertex = ResolveProbeVertex(surface, probe);
         var set = new MultiLayerVerticalKernelSet(kernel.Stackup, kernel.FrequencyHz);
         double[] tubeNodes = ProbeAssembly.TubeNodes(kernel.Stackup, kernel.SourceInterface, probe);

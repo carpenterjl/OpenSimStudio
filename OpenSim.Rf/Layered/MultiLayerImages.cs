@@ -209,6 +209,49 @@ internal static class MultiLayerImages
     public static IReadOnlyList<Image> PhiImagesShielded(LayeredStackup stackup, int m) =>
         ShieldedSeries(stackup, m, stackup.Layers.Select(l => l.ComplexPermittivity).ToArray());
 
+    /// <summary>G̃_A's images for a stack with no ground (FU-36): with no PEC anywhere the static
+    /// A_x is the free-space one — the primary alone.</summary>
+    public static IReadOnlyList<Image> GaImagesUngrounded() => new[] { new Image(0, Complex.One) };
+
+    /// <summary>K̃_Φ's images for a stack with air on both sides: <see cref="PhiImagesInterior"/> with
+    /// the ground's short replaced by the air below — a matched load seen through the bottom
+    /// layer's face, reflection (ε₀ − 1)/(ε₀ + 1). All air reduces to the free-space primary.</summary>
+    public static IReadOnlyList<Image> PhiImagesUngrounded(LayeredStackup stackup, int m)
+    {
+        int n = stackup.Layers.Count;
+        if (m < 0 || m >= n) throw new ArgumentOutOfRangeException(nameof(m));
+        var t = stackup.Layers.Select(l => l.ThicknessMeters).ToArray();
+        var eps = stackup.Layers.Select(l => l.ComplexPermittivity).ToArray();
+        var ctx = new Context(n, t, DepthCapFactor * stackup.TotalThicknessMeters, CoefficientFloor, RelativePrune);
+
+        var gDown = ctx.Shift(ctx.Constant((eps[0] - Complex.One) / (eps[0] + Complex.One)), 0);
+        for (int i = 1; i <= m; i++)
+        {
+            Complex fresnel = (eps[i] - eps[i - 1]) / (eps[i] + eps[i - 1]);
+            gDown = ctx.Multiply(ctx.Add(ctx.Constant(fresnel), gDown),
+                ctx.Reciprocal(ctx.Add(ctx.Constant(Complex.One), ctx.Scale(gDown, fresnel))));
+            gDown = ctx.Shift(gDown, i);
+        }
+        var zDown = Impedance(ctx, gDown, 1 / eps[m]);
+
+        Dictionary<Key, Complex> zUp;
+        if (m == n - 1) zUp = ctx.Constant(Complex.One);
+        else
+        {
+            var gUp = ctx.Shift(ctx.Constant((eps[n - 1] - Complex.One) / (eps[n - 1] + Complex.One)), n - 1);
+            for (int i = n - 2; i >= m + 1; i--)
+            {
+                Complex fresnel = (eps[i] - eps[i + 1]) / (eps[i] + eps[i + 1]);
+                gUp = ctx.Multiply(ctx.Add(ctx.Constant(fresnel), gUp),
+                    ctx.Reciprocal(ctx.Add(ctx.Constant(Complex.One), ctx.Scale(gUp, fresnel))));
+                gUp = ctx.Shift(gUp, i);
+            }
+            zUp = Impedance(ctx, gUp, 1 / eps[m + 1]);
+        }
+        var kg = ctx.Multiply(ctx.Multiply(zDown, zUp), ctx.Reciprocal(ctx.Add(zDown, zUp)));
+        return ctx.Emit(kg, scale: 2);
+    }
+
     private static IReadOnlyList<Image> ShieldedSeries(LayeredStackup stackup, int m, Complex[] eps)
     {
         int n = stackup.Layers.Count;

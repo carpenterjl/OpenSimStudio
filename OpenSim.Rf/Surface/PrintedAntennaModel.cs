@@ -16,15 +16,17 @@ public sealed record PrintedAntennaModel(SurfaceStructure Structure, SurfacePort
 /// microstrip feed's terminals, centre to the antenna and shield to the pour. The ground is meshed
 /// metal of its real size, so its currents and its share of the radiation are in the solve.
 ///
-/// <para>Solved in AIR (no board dielectric): the dielectric's effect on a printed antenna is a
-/// downward shift of the resonance, which this model does not show. The ground can be clipped to a
-/// rectangle to bound the unknown count; what lies outside the clip is not in the model.</para>
+/// <para>Solved in air (<see cref="SurfaceMomSolver.Solve(SurfaceStructure, double, SurfacePort, double)"/>), or on the
+/// board (<see cref="SolveOnBoard"/>, FU-36): the board as an infinite dielectric slab with no
+/// ground plane — the ground is the meshed pour — which brings the resonance down where it belongs.
+/// The ground can be clipped to a rectangle to bound the unknown count; what lies outside the clip
+/// is not in the model.</para>
 /// </summary>
 public static class PrintedAntennaBuilder
 {
     public static IReadOnlyList<string> Assumptions { get; } = new[]
     {
-        "Free space: the board dielectric is not in the model (a printed antenna on FR-4 resonates lower than this).",
+        "In air, or on the board as an infinite dielectric slab with no ground plane (SolveOnBoard): the board's edges are not in the model, so a board little wider than its copper differs.",
         "Perfect zero-thickness copper; antenna and ground pour coplanar on one layer.",
         "The feed is a delta gap across a bridge between the antenna copper and the pour at the feed point.",
         "Only the chosen antenna and ground copper are present; other nets, components and cables are not."
@@ -107,6 +109,21 @@ public static class PrintedAntennaBuilder
         return Build(antenna, groundIslands, feedNear, bridgeWidth, maxEdgeLength, groundClip, maxUnknowns);
     }
 
+    /// <summary>The antenna on its board (FU-36): the slab's layered Green's function with air on
+    /// both sides (<see cref="MultiLayerKernelTable.IsUngrounded"/>), the copper on its top or bottom
+    /// face. Returns the solution and the table it was solved on (for <see cref="OpenSim.Rf.Layered.SlabFarField"/>).</summary>
+    public static (SurfaceMomSolution Solution, OpenSim.Rf.Layered.MultiLayerKernelTable Table) SolveOnBoard(
+        PrintedAntennaModel model, BoardSlab board, double frequencyHz, SurfaceMomSolver? solver = null)
+    {
+        double diameter = 0;
+        foreach (var v in model.Structure.Vertices)
+            foreach (var w in model.Structure.Vertices)
+                diameter = Math.Max(diameter, Math.Sqrt((v.X - w.X) * (v.X - w.X) + (v.Y - w.Y) * (v.Y - w.Y)));
+        var table = new OpenSim.Rf.Layered.MultiLayerKernelTable(board.Stackup, frequencyHz, rhoMax: 1.2 * diameter,
+            sourceInterface: board.CopperInterface, ungrounded: true);
+        return ((solver ?? new SurfaceMomSolver()).Solve(model.Structure, table, model.Port), table);
+    }
+
     /// <summary>The point of <paramref name="polygon"/>'s outer boundary nearest <paramref name="p"/>.</summary>
     public static Point2 NearestOnBoundary(Polygon2 polygon, Point2 p)
     {
@@ -126,4 +143,23 @@ public static class PrintedAntennaBuilder
             }
         return best;
     }
+}
+
+/// <summary>The board under a printed antenna (FU-36): one dielectric layer, the copper on its top
+/// face or its bottom one, air on both sides — an infinite slab; the board's edges are not in the
+/// model. On the bottom face the copper sits on a thin air layer under the board, which changes
+/// nothing (air on air) but gives the face an interface index.</summary>
+public sealed record BoardSlab(double RelativePermittivity, double LossTangent, double ThicknessMeters, bool CopperOnTop = true)
+{
+    public OpenSim.Rf.Layered.LayeredStackup Stackup => CopperOnTop
+        ? new(new[] { new OpenSim.Rf.Layered.LayeredStackup.Layer(RelativePermittivity, LossTangent, ThicknessMeters) })
+        : new(new[]
+        {
+            new OpenSim.Rf.Layered.LayeredStackup.Layer(1, 0, 0.1 * ThicknessMeters),
+            new OpenSim.Rf.Layered.LayeredStackup.Layer(RelativePermittivity, LossTangent, ThicknessMeters)
+        });
+
+    /// <summary>The interface the copper is on: the board's top (with copper on top) or the top of
+    /// the air layer under it.</summary>
+    public int CopperInterface => 0;
 }

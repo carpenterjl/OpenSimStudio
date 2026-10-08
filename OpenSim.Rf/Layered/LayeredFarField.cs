@@ -141,7 +141,9 @@ public static class LayeredFarField
 
     /// <summary>Between two planes nothing radiates and no surface wave leaves: a shielded table
     /// (FU-30) has no far field or surface-wave power to give, and these formulas assume air above.</summary>
-    private static MultiLayerKernelTable RequireOpenTop(MultiLayerKernelTable kernel) => kernel.IsShielded
+    private static MultiLayerKernelTable RequireOpenTop(MultiLayerKernelTable kernel) => kernel.IsUngrounded
+        ? throw new ArgumentException("A stack with no ground radiates into both half-spaces: use SlabFarField.", nameof(kernel))
+        : kernel.IsShielded
         ? throw new ArgumentException("A structure between two ground planes does not radiate: far field and "
             + "surface-wave power need an open top.", nameof(kernel))
         : kernel;

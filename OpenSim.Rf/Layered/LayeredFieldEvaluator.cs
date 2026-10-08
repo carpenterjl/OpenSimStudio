@@ -91,9 +91,9 @@ public static class LayeredFieldEvaluator
         SurfaceMomSolution solution, IReadOnlyList<Vector3D> points,
         int? maxDegreeOfParallelism = null)
     {
-        if (kernel.IsShielded)
-            throw new ArgumentException("The field kernels are written for an open top; between two ground "
-                + "planes (FU-30) only the potentials on the strip's own plane are available.", nameof(kernel));
+        if (kernel.IsShielded || kernel.IsUngrounded)
+            throw new ArgumentException("The field kernels are written for a grounded stack with an open top; between two ground "
+                + "planes (FU-30) or over no ground (FU-36) only the potentials on the metal's own plane are available.", nameof(kernel));
         double omega = 2 * Math.PI * solution.FrequencyHz;
         var stackup = kernel.Stackup;
         int sourceInterface = kernel.SourceInterface ?? stackup.Layers.Count - 1;

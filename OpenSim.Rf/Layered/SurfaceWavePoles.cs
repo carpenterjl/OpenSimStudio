@@ -126,6 +126,58 @@ internal static class SurfaceWavePoles
         return poles;
     }
 
+    /// <summary>
+    /// The bound modes of a stack with air on both sides (FU-36), as poles of its kernels seen from
+    /// interface <paramref name="sourceInterface"/>: the lossless roots of both families
+    /// (<see cref="SurfaceWaveDispersion.UngroundedRoots"/>), walked onto a lossy stack in eight
+    /// steps of the loss by Newton, residues by the contour integral of the kernels on a circle
+    /// clear of k₀ (the branch point every slab mode lies beyond) and of every other pole.
+    /// </summary>
+    public static IReadOnlyList<SurfaceWavePole> FindUngrounded(LayeredStackup stackup, double k0, int sourceInterface)
+    {
+        if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));
+        bool lossy = stackup.Layers.Any(l => l.LossTangent > 0);
+        var located = new List<(Complex KRho, bool IsTm)>();
+        foreach (bool isTm in new[] { true, false })
+            foreach (double root in SurfaceWaveDispersion.UngroundedRoots(stackup, k0, isTm))
+            {
+                if (root - k0 < 1e-10 * k0) continue;
+                Complex kp = root;
+                if (lossy)
+                    for (int step = 1; step <= 8; step++)
+                    {
+                        var partial = SurfaceWaveDispersion.WithLossFraction(stackup, step / 8.0);
+                        for (int iteration = 0; iteration < 50; iteration++)
+                        {
+                            Complex h = 1e-3 * (kp.Real - k0);
+                            Complex value = SurfaceWaveDispersion.UngroundedDispersion(partial, k0, kp, isTm);
+                            Complex slope = (SurfaceWaveDispersion.UngroundedDispersion(partial, k0, kp + h, isTm)
+                                - SurfaceWaveDispersion.UngroundedDispersion(partial, k0, kp - h, isTm)) / (2 * h);
+                            Complex next = kp - value / slope;
+                            bool done = (next - kp).Magnitude <= 1e-14 * kp.Magnitude;
+                            kp = next;
+                            if (done) break;
+                        }
+                        if (kp.Imaginary > 0)
+                            throw new InvalidOperationException($"A slab mode moved to the non-physical half-plane (k_ρ = {kp}).");
+                    }
+                located.Add((kp, isTm));
+            }
+
+        var poles = new List<SurfaceWavePole>(located.Count);
+        for (int i = 0; i < located.Count; i++)
+        {
+            Complex kp = located[i].KRho;
+            double nearest = kp.Real - k0;
+            for (int k = 0; k < located.Count; k++)
+                if (k != i) nearest = Math.Min(nearest, (located[k].KRho - kp).Magnitude);
+            double radius = Math.Min(0.25 * nearest, 0.01 * kp.Magnitude);
+            var (resA, resPhi) = TransmissionLineGreens.PoleResiduesUngrounded(stackup, k0, kp, sourceInterface, radius);
+            poles.Add(new SurfaceWavePole(kp, located[i].IsTm, resA, resPhi));
+        }
+        return poles;
+    }
+
     public static IReadOnlyList<SurfaceWavePole> Find(SubstrateStackup substrate, double k0)
     {
         if (k0 <= 0) throw new ArgumentOutOfRangeException(nameof(k0));

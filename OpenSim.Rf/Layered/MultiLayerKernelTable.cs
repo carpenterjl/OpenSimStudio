@@ -59,6 +59,12 @@ public sealed class MultiLayerKernelTable
     /// near-field consumers refuse a shielded table — they are written for an open top.</summary>
     public bool IsShielded { get; }
 
+    /// <summary>No ground plane at all (FU-36): air below the stack as well as above it — a board
+    /// as an infinite dielectric slab, its ground (if any) meshed copper. Radiation leaves into both
+    /// half-spaces (<see cref="SlabFarField"/>); the grounded-stack far field, probes, pins and field
+    /// maps refuse such a table.</summary>
+    public bool IsUngrounded { get; }
+
     /// <param name="maxDegreeOfParallelism">Thread count for the independent knot integrals
     /// (null = unbounded); the table is bitwise identical for any value (slot-array compute,
     /// sequential spline construction), like the single-slab build.</param>
@@ -68,7 +74,7 @@ public sealed class MultiLayerKernelTable
     /// <param name="shielded">A PEC plane on the stack's top as well as under it (FU-30); the
     /// source interface must then have a layer on each side.</param>
     public MultiLayerKernelTable(LayeredStackup stackup, double frequencyHz, double rhoMax,
-        int? maxDegreeOfParallelism = null, int? sourceInterface = null, bool shielded = false)
+        int? maxDegreeOfParallelism = null, int? sourceInterface = null, bool shielded = false, bool ungrounded = false)
     {
         if (frequencyHz <= 0) throw new ArgumentOutOfRangeException(nameof(frequencyHz));
         if (rhoMax <= 0) throw new ArgumentOutOfRangeException(nameof(rhoMax));
@@ -78,20 +84,27 @@ public sealed class MultiLayerKernelTable
             throw new ArgumentException("Between two planes the strip needs dielectric on both sides: "
                 + "give a source interface below the top layer.", nameof(sourceInterface));
         IsShielded = shielded;
+        if (shielded && ungrounded) throw new ArgumentException("A stack cannot be both shielded and ungrounded.");
+        IsUngrounded = ungrounded;
+        int sourceOrTop = sourceInterface ?? stackup.Layers.Count - 1;
         var stopwatch = Stopwatch.StartNew();
         Stackup = stackup;
         FrequencyHz = frequencyHz;
         K0 = 2 * Math.PI * frequencyHz / RfConstants.SpeedOfLight;
         SourceInterface = sourceInterface;
-        PhiImages = shielded ? MultiLayerImages.PhiImagesShielded(stackup, sourceInterface!.Value)
+        PhiImages = ungrounded ? MultiLayerImages.PhiImagesUngrounded(stackup, sourceOrTop)
+            : shielded ? MultiLayerImages.PhiImagesShielded(stackup, sourceInterface!.Value)
             : sourceInterface is int mp
             ? MultiLayerImages.PhiImagesInterior(stackup, mp)
             : MultiLayerImages.PhiImages(stackup);
-        GaImages = shielded ? MultiLayerImages.GaImagesShielded(stackup, sourceInterface!.Value)
+        GaImages = ungrounded ? MultiLayerImages.GaImagesUngrounded()
+            : shielded ? MultiLayerImages.GaImagesShielded(stackup, sourceInterface!.Value)
             : sourceInterface is int mg
             ? MultiLayerImages.GaImagesInterior(stackup, mg)
             : MultiLayerImages.GaImages(stackup);
-        _poles = (shielded
+        _poles = (ungrounded
+            ? SurfaceWavePoles.FindUngrounded(stackup, K0, sourceOrTop)
+            : shielded
             ? SurfaceWavePoles.FindShielded(stackup, K0, sourceInterface!.Value)
             : SurfaceWavePoles.Find(stackup, K0, sourceInterface)).ToArray();
 
@@ -165,7 +178,10 @@ public sealed class MultiLayerKernelTable
     /// <summary>The Sommerfeld remainder at ρ — the interior-source variant when this table is
     /// built for a covered patch, else the top-source one.</summary>
     private (Complex A, Complex Phi) Remainder(double rho, int refinement = 1) =>
-        IsShielded
+        IsUngrounded
+            ? SommerfeldIntegrator.RemainderMultiLayerUngrounded(
+                Stackup, K0, _poles, GaImages, PhiImages, rho, SourceInterface ?? Stackup.Layers.Count - 1, refinement)
+        : IsShielded
             ? SommerfeldIntegrator.RemainderMultiLayerShielded(
                 Stackup, K0, _poles, GaImages, PhiImages, rho, SourceInterface!.Value, refinement)
         : SourceInterface is int m
