@@ -21,8 +21,8 @@ public sealed class PcbBoardReader
     /// <summary>Everything one copper layer contributes, computed independently per
     /// layer and stitched back in file order so ids and warnings stay deterministic.</summary>
     private sealed record LayerResult(int LayerOrder, LayerImage Image,
-        IReadOnlyList<CopperPad> Pads, List<TraceCenterline> Centerlines, List<NetLabel> Labels,
-        bool Negative,
+        IReadOnlyList<CopperPad> Pads, IReadOnlyList<CopperPad> PadCandidates,
+        List<TraceCenterline> Centerlines, List<NetLabel> Labels, bool Negative,
         long ParseMs, long ImageMs, long ExtractMs, int OpCount, int PolarityFlips);
 
     public PcbBoard Read(string archivePath)
@@ -88,12 +88,13 @@ public sealed class PcbBoardReader
                         long imageMs = sw.ElapsedMilliseconds;
                         sw.Restart();
                         var layerPads = PadExtractor.Extract(doc, layerOrder);
+                        var candidates = PadExtractor.DrillCandidates(doc, layerOrder);
                         // Centerlines must be captured HERE, while the parsed document
                         // exists — the polygon union destroys them, and the document is
                         // not retained.
                         var lines = Inductance.TraceSegmenter.Centerlines(doc, layerOrder).ToList();
                         long extractMs = sw.ElapsedMilliseconds;
-                        results[i] = new LayerResult(layerOrder, image, layerPads, lines,
+                        results[i] = new LayerResult(layerOrder, image, layerPads, candidates, lines,
                             NetNamer.Labels(doc, layerOrder), doc.IsNegative,
                             parseMs, imageMs, extractMs, doc.Ops.Count, CountPolarityFlips(doc));
                     }
@@ -168,6 +169,19 @@ public sealed class PcbBoardReader
         }
 
         long drillsMs = stageTimer.ElapsedMilliseconds;
+
+        // Copper that is not a pad-sized flash — a G36 region, a flash over the size limit —
+        // is a pad where a plated drill sits at its centre: a through-hole or via pad the CAD
+        // wrote as a contour or a large aperture. Without this the via there stitches nothing.
+        foreach (var r in results)
+        {
+            var confirmed = PadExtractor.ConfirmedByDrills(r.PadCandidates, vias);
+            if (confirmed.Count == 0) continue;
+            pads.AddRange(confirmed);
+            warnings.Add($"Layer L{r.LayerOrder}: {confirmed.Count} drilled pad(s) drawn as regions or " +
+                         $"flashes over {PadExtractor.PadSizeMax * 1e3:g3} mm, taken as pads because a plated " +
+                         "drill sits at their centre.");
+        }
 
         stageTimer.Restart();
         var nets = NetExtractor.Extract(islands, vias, pads,

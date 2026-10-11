@@ -644,7 +644,12 @@ public sealed partial class GerberParser
         {
             CloseContour();
             if (RegionContours.Count > 0)
-                Ops.Add(new RegionOp(RegionContours.ToList(), Polarity) { Net = ObjectNet });
+                Ops.Add(new RegionOp(RegionContours.ToList(), Polarity)
+                {
+                    // A region can be a pad (a custom or rounded shape the CAD wrote as a
+                    // contour), and then it carries its pin like a flash does.
+                    Net = ObjectNet, ComponentRef = ObjectComponent, Pin = ObjectPin
+                });
             RegionContours.Clear();
             InRegion = false;
         }

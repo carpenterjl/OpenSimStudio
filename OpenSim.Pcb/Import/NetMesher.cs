@@ -641,13 +641,36 @@ public sealed class NetMesher
         for (int k = 0; k < netPads.Count; k++)
         {
             int faceId = PcbMeshGenerator.PadFaceBase + k;
-            if (tagged.Contains(faceId))
-                electrodes.Add(new PadElectrode(faceId, netPads[k].Center, netPads[k].LayerOrder)
-                {
-                    ComponentRef = netPads[k].ComponentRef, Pin = netPads[k].Pin
-                });
+            if (!tagged.Contains(faceId))
+            {
+                // A face is tagged to the first pad that covers it, so a pad drawn twice in the
+                // same place (a named pin over an unnamed flash) has no faces of its own. It is
+                // the same copper: it takes its twin's faces and keeps its own name (PCB-17).
+                int twin = DuplicateOf(netPads, k);
+                if (twin < 0 || !tagged.Contains(PcbMeshGenerator.PadFaceBase + twin)) continue;
+                faceId = PcbMeshGenerator.PadFaceBase + twin;
+            }
+            electrodes.Add(new PadElectrode(faceId, netPads[k].Center, netPads[k].LayerOrder)
+            {
+                ComponentRef = netPads[k].ComponentRef, Pin = netPads[k].Pin
+            });
         }
         return electrodes;
+    }
+
+    /// <summary>The first earlier pad on the same layer with the same centre (to 1 µm) and the
+    /// same area (to 1 %), or −1.</summary>
+    private static int DuplicateOf(IReadOnlyList<CopperPad> pads, int k)
+    {
+        var pad = pads[k];
+        double area = pad.Shape.Area();
+        for (int j = 0; j < k; j++)
+        {
+            var other = pads[j];
+            if (other.LayerOrder != pad.LayerOrder || (other.Center - pad.Center).Length > 1e-6) continue;
+            if (Math.Abs(other.Shape.Area() - area) <= 0.01 * area) return j;
+        }
+        return -1;
     }
 
     private static Body BuildBody(CopperNet net, FeMesh mesh, NetMeshOptions options) => new()

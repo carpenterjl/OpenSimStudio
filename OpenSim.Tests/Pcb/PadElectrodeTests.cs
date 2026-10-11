@@ -160,6 +160,23 @@ public class PadElectrodeTests
     }
 
     [Fact]
+    public void APadDrawnTwice_IsAnElectrodeUnderBothNames()
+    {
+        // An unnamed flash and the named pin over it, same place, same size: faces go to the
+        // first pad that covers them, so the pin had no electrode (PCB-17's last case). It is
+        // the same copper — both electrodes are those faces, each under its own name.
+        var (net, pads) = TraceWithPads();
+        pads.Add(new CopperPad(1, pads[0].Center, pads[0].Shape, pads[0].Size) { ComponentRef = "J1", Pin = "1" });
+        var result = new NetMesher().MeshNet(net, pads, new NetMeshOptions { TargetEdgeLength = 0.4e-3 });
+
+        Assert.Equal(3, result.Pads.Count);
+        var pin = Assert.Single(result.Pads, p => p.ComponentRef == "J1");
+        Assert.Equal("1", pin.Pin);
+        Assert.Equal(result.Pads[0].FaceId, pin.FaceId);
+        Assert.Equal(pads[0].Shape.Area(), TaggedArea(result.Body.Mesh!, pin.FaceId), Snap(pads[0].Shape));
+    }
+
+    [Fact]
     public void OnAMultiLayerNet_EachPadFaceIsItsPad()
     {
         // The same check through the multi-layer path: copper on L1 and L2, a pad on each.

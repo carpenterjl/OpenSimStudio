@@ -349,6 +349,76 @@ public class TraceCapacitanceTests
         Assert.Contains(result.Assumptions, a => a.Contains("parallel-plate"));
     }
 
+    /// <summary>The static capacitance of a flat sheet at height h over a ground plane in air —
+    /// a 3-D charge solve independent of the extractor: square cells of side s with constant
+    /// charge, collocated at their centres, each cell's potential (and its image's) in closed form
+    /// over two triangles. The sheet is a union of axis-aligned rectangles on the s grid.</summary>
+    private static double SheetCapacitanceInAir((double X0, double Y0, double X1, double Y1)[] rects,
+        double h, double s)
+    {
+        var cells = new List<(double X, double Y)>();
+        for (double x = rects.Min(r => r.X0) + s / 2; x < rects.Max(r => r.X1); x += s)
+            for (double y = rects.Min(r => r.Y0) + s / 2; y < rects.Max(r => r.Y1); y += s)
+                if (rects.Any(r => x > r.X0 && x < r.X1 && y > r.Y0 && y < r.Y1)) cells.Add((x, y));
+        int n = cells.Count;
+        var m = new OpenSim.Core.Numerics.ComplexDenseMatrix(n, n);
+        for (int i = 0; i < n; i++)
+        {
+            var r = new OpenSim.Core.Numerics.Vector3D(cells[i].X, cells[i].Y, h);
+            for (int j = 0; j < n; j++)
+            {
+                double sum = 0;
+                foreach (double z in new[] { h, -h })
+                {
+                    var (x, y, q) = (cells[j].X, cells[j].Y, s / 2);
+                    var a = new OpenSim.Core.Numerics.Vector3D(x - q, y - q, z);
+                    var b = new OpenSim.Core.Numerics.Vector3D(x + q, y - q, z);
+                    var c = new OpenSim.Core.Numerics.Vector3D(x + q, y + q, z);
+                    var d = new OpenSim.Core.Numerics.Vector3D(x - q, y + q, z);
+                    double v = OpenSim.Rf.Surface.TrianglePotentials.Integrals(a, b, c, r).I0
+                               + OpenSim.Rf.Surface.TrianglePotentials.Integrals(a, c, d, r).I0;
+                    sum += z > 0 ? v : -v;
+                }
+                m[i, j] = sum / (4 * Math.PI * Epsilon0);
+            }
+        }
+        var charge = OpenSim.Core.Numerics.ComplexLu.Factor(m)
+            .Solve(Enumerable.Repeat(System.Numerics.Complex.One, n).ToArray());
+        return charge.Sum(v => v.Real) * s * s;
+    }
+
+    [Theory]
+    [InlineData(0.6e-3)]
+    [InlineData(1.0e-3)]
+    public void PadTerm_IsLow_AgainstA3DStaticSolve(double side)
+    {
+        // FU-6 (audit PCB-18: "the pad plate term double counts"). The trace term does run to the
+        // pad's centre, so that length is counted under the pad as well — but the plate term has
+        // no fringing, and in air at w = h the fringing is worth more than the overlap. What the
+        // extractor adds for a square pad at the end of a trace, against what the pad adds in a
+        // 3-D static solve (cells of w/4; w/2, w/3 and w/4 agree within 2 %): 15.9 fF of 25.9 at
+        // 0.6 mm, 44.3 of 66.8 at 1 mm. The term is low, not doubled.
+        double w = 0.2e-3, h = 0.2e-3, run = 1.2e-3;
+        var stackup = new PcbStackupSettings
+        {
+            CopperThickness = 0.1e-6,
+            DielectricGapThicknesses = new[] { h },
+            DielectricGapPermittivities = new[] { 1.0 },
+            DielectricGapLossTangents = new[] { 0.0 },
+        };
+        var line = new[] { new TraceCenterline(1, new Point2(-run, 0), new Point2(0, 0), w) };
+        var pad = new CopperPad(1, new Point2(0, 0), Rect(-side / 2, -side / 2, side / 2, side / 2), side);
+        var (bare, bareNet) = OneNetBoard(line, stackup: stackup);
+        var (padded, paddedNet) = OneNetBoard(line, new[] { pad }, stackup);
+        double extracted = TraceCapacitanceExtractor.Extract(padded, paddedNet).TotalFarads
+                           - TraceCapacitanceExtractor.Extract(bare, bareNet).TotalFarads;
+
+        var trace = (-run, -w / 2, 0.0, w / 2);
+        double solved = SheetCapacitanceInAir(new[] { trace, (-side / 2, -side / 2, side / 2, side / 2) }, h, w / 4)
+                        - SheetCapacitanceInAir(new[] { trace }, h, w / 4);
+        Assert.InRange(extracted / solved, 0.5, 0.9);
+    }
+
     // ------------------------------------------------------------------
     // Typed failures — never a garbage number.
     // ------------------------------------------------------------------

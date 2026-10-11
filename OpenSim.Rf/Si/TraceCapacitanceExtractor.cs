@@ -56,9 +56,9 @@ public sealed record TraceCapacitanceResult(
 /// for same-width runs; corner effects are ignored and SAID so (the PEEC arcs-as-chords
 /// class of assumption).
 ///
-/// <para>Pads add a parallel-plate term ε₀εr·A/h (polygon area over the same gap) — a
-/// stated no-fringing lower bound; ignoring pads silently would misread short pad-heavy
-/// nets. Other nets are absent from the model (trace + infinite reference plane only),
+/// <para>Pads add a parallel-plate term ε₀εr·A/h (polygon area over the same gap) — no
+/// fringing, so a low estimate even though the trace length into the pad counts twice;
+/// ignoring pads silently would misread short pad-heavy nets. Other nets are absent from the model (trace + infinite reference plane only),
 /// via barrels carry no capacitance, and a pour/region net (no centerlines) is a typed
 /// failure — an area sheet needs an area model, and a garbage number is worse than none.</para>
 /// </summary>
@@ -136,9 +136,10 @@ public static class TraceCapacitanceExtractor
         foreach (var g in groups) traceFarads += g.TotalFarads;
 
         // Pads: parallel-plate ε₀εr·A/h to each reference plane of the pad's layer (in
-        // series through the gaps in between). An ESTIMATE, not a bound: no fringing (which
-        // would add), and the trace term already counts the centerline length that runs to
-        // each pad's centre (which the pad's own area counts again).
+        // series through the gaps in between). An ESTIMATE, and a low one: there is no fringing,
+        // and the trace term also counts the centerline length that runs to each pad's centre,
+        // but the fringing outweighs that overlap — in air at w = h the term is 62–66 % of what
+        // a 3-D static solve says the pad adds (FU-6, audit PCB-18).
         // Pads on a layer with no plane under them are counted and NAMED, never
         // silently dropped (the Gerber warn-not-silent rule).
         double padFarads = 0;
@@ -172,8 +173,9 @@ public static class TraceCapacitanceExtractor
                 + "shielding by neighbours is not modeled and the number is the isolated-net "
                 + "capacitance to those planes.",
             $"Pads add parallel-plate ε₀εr·A/h terms to each plane ({padCount} pads) — no "
-                + "fringing, and overlapping the trace length that already runs to each pad's "
-                + "centre: an estimate of the pad contribution, not a bound.",
+                + "fringing, while the trace length run to each pad's centre is counted too. The "
+                + "missing fringing outweighs that overlap: the pad term is low (in air, a trace as "
+                + "wide as its height: 62–66 % of what a pad adds in a 3-D static solve).",
         };
         if (duplicatesDropped > 0)
             assumptions.Add($"{duplicatesDropped} coincident duplicate draw(s) collapsed "
