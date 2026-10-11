@@ -85,6 +85,15 @@ public sealed class MultiLayerKernelTable
                 + "give a source interface below the top layer.", nameof(sourceInterface));
         IsShielded = shielded;
         if (shielded && ungrounded) throw new ArgumentException("A stack cannot be both shielded and ungrounded.");
+        if (stackup.HasLossyGround && (shielded || ungrounded))
+            throw new ArgumentException(shielded
+                ? "A lossy ground is modelled under an open stack only; between two planes both would be lossy, which is not."
+                : "An ungrounded stack has no ground to be lossy.", nameof(stackup));
+        if (stackup.HasLossyGround && stackup.Layers.All(l => l.RelativePermittivity <= 1))
+            throw new ArgumentException(
+                "A lossy ground under air alone guides a surface wave whose pole sits within (Z_s/η₀)²·k₀ of the "
+                + "k₀ branch point, which this kernel's pole extraction does not represent; give the stack a "
+                + "dielectric layer.", nameof(stackup));
         IsUngrounded = ungrounded;
         int sourceOrTop = sourceInterface ?? stackup.Layers.Count - 1;
         var stopwatch = Stopwatch.StartNew();

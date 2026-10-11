@@ -51,7 +51,7 @@ internal static class SurfaceWavePoles
         double kMax = k0 * Math.Sqrt(epsMax);
         var poles = new List<SurfaceWavePole>();
         if (kMax <= k0) return poles;   // all air: no surface waves, image theory is exact.
-        bool lossy = stackup.Layers.Any(l => l.LossTangent > 0);
+        bool lossy = stackup.Layers.Any(l => l.LossTangent > 0) || stackup.HasLossyGround;
 
         foreach (bool isTm in new[] { true, false })
         {

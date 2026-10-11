@@ -35,7 +35,7 @@ public sealed partial class SurfaceMomSolver
     /// <summary>Kernel facts every consumer must surface next to layered results.</summary>
     public static IReadOnlyList<string> LayeredAssumptions { get; } = new[]
     {
-        "Zero-thickness sheet; a perfect conductor unless a sheet surface impedance is given, which adds its ohmic loss (the ground plane stays perfect).",
+        "Zero-thickness sheet; a perfect conductor unless a sheet surface impedance is given, which adds its ohmic loss — along free edges that of an edge of the sheet's thickness when one is given (the ground plane is perfect unless a multi-layer stackup gives it a conductivity).",
         "A grounded dielectric stackup (one or more layers, per-layer εr/tanδ) on an infinite PEC ground plane; all metal coplanar at a single interface — the slab top, or buried under a dielectric cover of any εr (a covered patch).",
         "Rigorous layered-media Green's function (MPIE, direct Sommerfeld integration) — surface waves included; only TM0/TE modes above cutoff are extracted into the power ledger.",
         "No vias; delta-gap voltage feed across an interior mesh edge, so Zin is the impedance in SERIES at that gap, not an impedance to ground (a coaxial probe feed is a separate solve with its own vertical current — SolveProbeFed).",
@@ -119,7 +119,7 @@ public sealed partial class SurfaceMomSolver
             rhs[e] = portSigns[i] * gapVolts * surface.Edges[e].Length;
         }
 
-        if (SheetImpedance is { } sheet) SheetLoss.AddTo(z, surface, sheet(frequencyHz));
+        if (SheetImpedance is { } sheet) SheetLoss.AddTo(z, surface, sheet(frequencyHz), SheetEdge, frequencyHz);
         var currents = ComplexLu.Factor(z).Solve(rhs);
         Complex portCurrent = Complex.Zero;
         for (int i = 0; i < port.EdgeBases.Count; i++)

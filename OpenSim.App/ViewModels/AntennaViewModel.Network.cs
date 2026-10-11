@@ -33,9 +33,29 @@ public partial class AntennaViewModel
 
     /// <summary>Sheet metal with copper loss instead of a perfect conductor (edge-fed sheet
     /// solves only).</summary>
-    [ObservableProperty] private bool _conductorLoss;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MetalPropertiesEnabled))]
+    private bool _conductorLoss;
     [ObservableProperty] private double _metalConductivity = 5.8e7;
     [ObservableProperty] private double _metalThicknessUm = 35;
+
+    /// <summary>The ground plane under a substrate as an impedance boundary of the panel's metal
+    /// (FU-37) instead of a perfect conductor: it absorbs, and the surface waves decay into it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MetalPropertiesEnabled))]
+    private bool _groundLoss;
+
+    public bool MetalPropertiesEnabled => ConductorLoss || GroundLoss;
+
+    /// <summary>The stackup with the panel's lossy ground, or unchanged when the ground is perfect.</summary>
+    private OpenSim.Rf.Layered.LayeredStackup WithPanelGround(OpenSim.Rf.Layered.LayeredStackup stackup) =>
+        GroundLoss && MetalConductivity > 0 && MetalThicknessUm > 0
+            ? stackup with
+            {
+                GroundConductivitySiemensPerMeter = MetalConductivity,
+                GroundThicknessMeters = MetalThicknessUm * 1e-6,
+            }
+            : stackup;
 
     [ObservableProperty] private string _sParameterResult = "";
     [ObservableProperty] private ImageSource? _smithImage;
@@ -54,6 +74,13 @@ public partial class AntennaViewModel
         if (!(sigma > 0 && thickness > 0)) return null;
         return f => SheetLoss.CopperSheet(f, sigma, thickness, bothFaces: !overGround);
     }
+
+    /// <summary>The sheet's free edges as the edges of metal of the panel's thickness (FU-37), so the
+    /// heat along them does not grow with the mesh; null for perfect metal.</summary>
+    private SheetEdge? SheetEdgeModel() =>
+        ConductorLoss && MetalConductivity > 0 && MetalThicknessUm > 0
+            ? new SheetEdge(MetalThicknessUm * 1e-6, MetalConductivity)
+            : null;
 
     /// <summary>The surface impedance of a round wire or probe tube of the panel's metal (a
     /// skin-deep wall, any thickness), or null for perfect metal.</summary>

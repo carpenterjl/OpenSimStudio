@@ -87,6 +87,15 @@ internal static class SurfaceWaveDispersion
         double k0Sq = k0 * k0;
         Complex a = isTm ? Complex.One : Complex.Zero;
         Complex b = isTm ? Complex.Zero : Complex.One;
+        if (stackup.HasLossyGround)
+        {
+            // The impedance ground's rows as a starting state (FU-37): TE A = (Z_s/jωµ₀)·A′, so
+            // (A, B) = (Z_s/jωµ₀, 1); TM A′ = jωε₀ε_r0·Z_s·A and B = A′/ε_r0, so (A, B) = (1, jωε₀Z_s).
+            double omega = k0 * RfConstants.SpeedOfLight;
+            Complex zs = stackup.GroundSurfaceImpedance(omega);
+            if (isTm) b = new Complex(0, omega * RfConstants.Eps0) * zs;
+            else a = zs / new Complex(0, omega * RfConstants.Mu0);
+        }
         foreach (var layer in stackup.Layers)
         {
             double t = layer.ThicknessMeters;
@@ -514,11 +523,14 @@ internal static class SurfaceWaveDispersion
 
     // ------------------------------------------------------------------ loss continuation
 
-    /// <summary>The stackup with every loss tangent multiplied by <paramref name="fraction"/>
-    /// (0 ⇒ the lossless twin).</summary>
+    /// <summary>The stackup with every loss tangent and the ground's surface impedance multiplied
+    /// by <paramref name="fraction"/> (0 ⇒ the lossless twin on a perfect ground).</summary>
     internal static LayeredStackup WithLossFraction(LayeredStackup stackup, double fraction) =>
-        new(stackup.Layers.Select(l => new LayeredStackup.Layer(
-            l.RelativePermittivity, l.LossTangent * fraction, l.ThicknessMeters)).ToArray());
+        stackup.WithLayers(stackup.Layers.Select(l => new LayeredStackup.Layer(
+            l.RelativePermittivity, l.LossTangent * fraction, l.ThicknessMeters)).ToArray()) with
+        {
+            GroundLossFraction = stackup.GroundLossFraction * fraction
+        };
 
     /// <summary>Lossless roots closer than this (relative to k₀) form a CLUSTER: below it the
     /// roundoff floor of Newton on D (≈ ε_mach·|D|/|D′|, and |D′| ∝ the separation) exceeds a

@@ -44,7 +44,7 @@ internal static partial class TransmissionLineGreens
         var teSol = ComplexLu.Factor(teM).Solve(teRhs);
         Complex c = teSol[cIdx];
         var axAt = AxAtInterfaces(teSol, sp.Phi, c);
-        var (tmM, tmRhs, _) = TmSystem(sp, kz0, axAt, c);
+        var (tmM, tmRhs, _) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
         var tmSol = ComplexLu.Factor(tmM).Solve(tmRhs);
         return AssembleField(stackup, sp, kz0, teSol, tmSol, z);
     }
@@ -71,7 +71,7 @@ internal static partial class TransmissionLineGreens
             var resTe = MatrixResidue(teM, teDeriv, teRhs);
             Complex resC = resTe[cIdx];
             var resAx = AxAtInterfaces(resTe, sp.Phi, resC);
-            var (tmM, resB, _) = TmSystem(sp, kz0, resAx, resC);
+            var (tmM, resB, _) = TmSystem(sp, kz0, resAx, resC, AxAtGround(resTe, sp));
             var resTm = ComplexLu.Factor(tmM).Solve(resB);
             return AssembleField(stackup, sp, kz0, resTe, resTm, z);
         }
@@ -81,7 +81,7 @@ internal static partial class TransmissionLineGreens
             var teSol = ComplexLu.Factor(teM).Solve(teRhs);
             Complex c = teSol[cIdx];
             var axAt = AxAtInterfaces(teSol, sp.Phi, c);
-            var (tmM, tmRhs, _) = TmSystem(sp, kz0, axAt, c);
+            var (tmM, tmRhs, _) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
             var resTm = MatrixResidue(tmM, MatrixDerivative(stackup, k0, kp, tm: true), tmRhs);
             var zeroTe = new Complex[teSol.Length];
             return AssembleField(stackup, sp, kz0, zeroTe, resTm, z);

@@ -121,8 +121,8 @@ public sealed partial class SurfaceMomSolver
     /// <summary>Facts every consumer of a pin-array result must show next to it.</summary>
     public static IReadOnlyList<string> PinArrayAssumptions { get; } = new[]
     {
-        "Zero-thickness sheet and pins; perfect conductors unless a sheet or wire surface impedance is given, which adds the sheet's and each tube's ohmic loss (the ground plane stays perfect).",
-        "A grounded layered stackup (infinite PEC ground); all sheet metal at one interface. Metal on two levels joined by a via is not modelled.",
+        "Zero-thickness sheet and pins; perfect conductors unless a sheet or wire surface impedance is given, which adds the sheet's and each tube's ohmic loss — along free edges that of an edge of the sheet's thickness when one is given (the ground plane is perfect unless a multi-layer stackup gives it a conductivity).",
+        "A grounded layered stackup (an infinite ground, perfect or of the stackup's conductivity); all sheet metal at one interface. Metal on two levels joined by a via is not modelled.",
         "Each pin is a thin tube from the ground to the sheet, attached by the 1/ρ junction mode at a mesh vertex; a port pin is driven by a delta gap at its base, a shorting pin's base is welded to the ground.",
         "Pins' attachment fans must not touch; the tube-to-tube coupling uses the axis spacing.",
         "The far field and surface-wave power of a pin array (LayeredFarField with the pins) add every tube's vertical leg and junction coherently, each tube at its own position, for any port excitation."
@@ -276,7 +276,7 @@ public sealed partial class SurfaceMomSolver
             }
 
         // Ohmic loss: the sheet's surface impedance on the RWG block, each pin's on its tube.
-        SheetLoss.AddTo(z, surface, SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero);
+        SheetLoss.AddTo(z, surface, SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero, SheetEdge, frequencyHz);
         if (WireSurfaceImpedance?.Invoke(frequencyHz) is { } wireZ && wireZ != Complex.Zero)
             for (int i = 0; i < pins.Count; i++)
             {

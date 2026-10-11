@@ -136,12 +136,16 @@
             <CheckBox x:Name="ConductorLossCheck" Content="Metal loss (sheet, probe and wires)"
                       IsChecked="{Binding Antenna.ConductorLoss}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
-                      ToolTip="The metal gets the surface impedance of the given conductivity instead of being a perfect conductor: sheets of the given thickness, wires and the probe tube as skin-deep round conductors. The ground plane stays a perfect conductor."/>
+                      ToolTip="The metal gets the surface impedance of the given conductivity instead of being a perfect conductor: sheets of the given thickness, wires and the probe tube as skin-deep round conductors. Along a sheet's free edges the loss is that of an edge of the given thickness, so it does not grow as the mesh is refined. The ground plane has its own box below."/>
+            <CheckBox x:Name="GroundLossCheck" Content="Ground plane loss (substrate solves)"
+                      IsChecked="{Binding Antenna.GroundLoss}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
+                      ToolTip="The ground plane under a substrate becomes an impedance boundary of the given conductivity and thickness instead of a perfect conductor: it absorbs, and the surface waves decay into it. Solves go through the multi-layer Green's function; the power ledger integrates the ground's heat over the plane for sheet currents."/>
             <UniformGrid Columns="2">
                 <Label Content="Metal σ [S/m]"/>
-                <TextBox Text="{Binding Antenna.MetalConductivity}" IsEnabled="{Binding Antenna.ConductorLoss}"/>
+                <TextBox Text="{Binding Antenna.MetalConductivity}" IsEnabled="{Binding Antenna.MetalPropertiesEnabled}"/>
                 <Label Content="Metal thickness [µm]"/>
-                <TextBox Text="{Binding Antenna.MetalThicknessUm}" IsEnabled="{Binding Antenna.ConductorLoss}"/>
+                <TextBox Text="{Binding Antenna.MetalThicknessUm}" IsEnabled="{Binding Antenna.MetalPropertiesEnabled}"/>
                 <Label Content="Reference impedance [Ω]"/>
                 <TextBox x:Name="ReferenceOhmsBox" Text="{Binding Antenna.ReferenceOhms}"/>
             </UniformGrid>

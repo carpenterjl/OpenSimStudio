@@ -199,7 +199,7 @@ public sealed partial class SurfaceMomSolver
                         Put(Index(i, n), Index(k, n2), value);
                     }
             }
-        SheetLoss.AddTo(z, surface, SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero);
+        SheetLoss.AddTo(z, surface, SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero, SheetEdge, frequencyHz);
 
         var signs = ports.Select(p => PortSigns(surface, p)).ToArray();
         var lu = ComplexLu.Factor(z, MaxDegreeOfParallelism);

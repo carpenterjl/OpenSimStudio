@@ -1429,6 +1429,12 @@ public partial class AntennaViewModel : ObservableObject
         surface = grid.Structure;
         port = grid.Port!;
         warnings = grid.Warnings;
+        // A lossy ground lives in the multi-layer Green's function only (the single-slab closed
+        // forms are PEC-backed), so a single slab goes there as a one-layer stack (FU-37).
+        if (substrate is not null && GroundLoss)
+            layered = layered is { } given
+                ? given with { Stackup = WithPanelGround(given.Stackup) }
+                : new LayeredSpec(WithPanelGround(OpenSim.Rf.Layered.LayeredStackup.FromSubstrate(substrate)), null);
         return true;
     }
 
@@ -1456,7 +1462,7 @@ public partial class AntennaViewModel : ObservableObject
             int maxSamples = Math.Max(points, 30);
             var (sweep, (display, displayHeat), rational) = await Task.Run(() =>
             {
-                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, WireSurfaceImpedance = tubeLoss };
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, SheetEdge = SheetEdgeModel(), WireSurfaceImpedance = tubeLoss };
                 if (adaptive)
                 {
                     // Each round's frequencies are chosen from the interpolant through the
@@ -1553,7 +1559,7 @@ public partial class AntennaViewModel : ObservableObject
                         {
                             var checkSolver = new OpenSim.Rf.Surface.SurfaceMomSolver
                             {
-                                SheetImpedance = sheet, WireSurfaceImpedance = tubeLoss
+                                SheetImpedance = sheet, SheetEdge = SheetEdgeModel(), WireSurfaceImpedance = tubeLoss
                             };
                             var z = meshes.Select(m => SolveSurfacePoint(checkSolver, m.Surface, m.Port, frequency,
                                 m.Substrate, m.Probe, m.Layered, new List<string>()).InputImpedance).ToList();
@@ -1618,7 +1624,7 @@ public partial class AntennaViewModel : ObservableObject
         LayeredSpec? layered, List<string> timing)
     {
         double SheetHeat(OpenSim.Rf.Surface.SurfaceMomSolution s) => solver.SheetImpedance is { } sheet
-            ? OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, s.EdgeCurrents, sheet(frequencyHz))
+            ? OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, s.EdgeCurrents, sheet(frequencyHz), solver.SheetEdge, frequencyHz)
             : 0;
         if (layered is { } spec)
         {
@@ -1799,7 +1805,7 @@ public partial class AntennaViewModel : ObservableObject
             var wireLoss = WireLossModel();
             var (sweep, display) = await Task.Run(() =>
             {
-                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, WireSurfaceImpedance = wireLoss };
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, SheetEdge = SheetEdgeModel(), WireSurfaceImpedance = wireLoss };
                 // The feed is the delta gap at the CONTACT — the attachment basis is a legal feed
                 // and is what a monopole standing on a finite ground plane means.
                 int feed = OpenSim.Rf.Surface.SurfaceMomSolver.AttachmentFeedBasis(surface, wire);
@@ -1863,7 +1869,7 @@ public partial class AntennaViewModel : ObservableObject
             var wireLoss = WireLossModel();
             var (pattern, solution, inputPower) = await Task.Run(() =>
             {
-                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, WireSurfaceImpedance = wireLoss };
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, SheetEdge = SheetEdgeModel(), WireSurfaceImpedance = wireLoss };
                 int feed = OpenSim.Rf.Surface.SurfaceMomSolver.AttachmentFeedBasis(surface, wire);
                 var solved = solver.SolveWireAttached(surface, wire, frequency, feed);
                 double pin = 0.5 * (System.Numerics.Complex.One / solved.InputImpedance).Real;
@@ -1978,9 +1984,10 @@ public partial class AntennaViewModel : ObservableObject
             var sheet = SheetModel(overGround: substrate is not null || surface.Ground is not null);
             var tubeLoss = WireLossModel();
             double probeHeat = 0;  // the probe-fed solve's own ledger: sheet and tube
+            double? groundHeat = null;  // a lossy ground's heat, integrated over the plane (sheet solves)
             var (pattern, solution, surfaceWavePower, inputPower) = await Task.Run(() =>
             {
-                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, WireSurfaceImpedance = tubeLoss };
+                var solver = new OpenSim.Rf.Surface.SurfaceMomSolver { SheetImpedance = sheet, SheetEdge = SheetEdgeModel(), WireSurfaceImpedance = tubeLoss };
                 if (layered is { } spec)
                 {
                     // The multi-layer (Stage F) far field: horizontal RWG currents radiating
@@ -2005,6 +2012,7 @@ public partial class AntennaViewModel : ObservableObject
                     }
                     var mlSolved = solver.Solve(surface, mlTable, port);
                     double mlPin = 0.5 * (System.Numerics.Complex.One / mlSolved.InputImpedance).Real;
+                    groundHeat = OpenSim.Rf.Layered.GroundPlaneLoss.Watts(surface, mlTable, mlSolved);
                     return (OpenSim.Rf.Layered.LayeredFarField.Compute(surface, mlTable, mlSolved),
                         mlSolved,
                         OpenSim.Rf.Layered.LayeredFarField.SurfaceWavePowerWatts(surface, mlTable, mlSolved),
@@ -2057,16 +2065,22 @@ public partial class AntennaViewModel : ObservableObject
                 // rest is dielectric loss — named, with the efficiency and gain it implies.
                 double heat = probe is not null ? probeHeat
                     : sheet is null ? 0
-                    : OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, solution.EdgeCurrents, sheet(frequency));
+                    : OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, solution.EdgeCurrents, sheet(frequency), SheetEdgeModel(), frequency);
+                bool lossyGround = layered?.Stackup.HasLossyGround == true;
                 FieldResult += "; " + OpenSim.Rf.Layered.PowerLedger.Describe(inputPower,
                     pattern.TotalRadiatedPowerWatts, surfaceWavePower,
-                    substrate.LossTangent, pattern.MaxDirectivity, heat);
+                    substrate.LossTangent, pattern.MaxDirectivity, heat,
+                    lossyGround, lossyGround ? groundHeat : null);
+                if (lossyGround && groundHeat is null)
+                    FieldResult += probe is not null
+                        ? " (the ground's heat is integrated for sheet currents only; a probe's tube is not in that integral)"
+                        : " (the ground's heat was not integrated: the sheet is too large against the substrate height for the plane integral)";
             }
             else if (substrate is null && sheet is not null)
             {
                 // Free space with lossy metal: what is not radiated is heat in the sheet.
                 double input = 0.5 * (System.Numerics.Complex.One / solution.InputImpedance).Real;
-                double heat = OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, solution.EdgeCurrents, sheet(frequency));
+                double heat = OpenSim.Rf.Surface.SheetLoss.OhmicPower(surface, solution.EdgeCurrents, sheet(frequency), SheetEdgeModel(), frequency);
                 double efficiency = pattern.TotalRadiatedPowerWatts / input;
                 FieldResult += $"; radiation efficiency {efficiency:p1}, gain "
                     + $"{10 * Math.Log10(Math.Max(efficiency * pattern.MaxDirectivity, 1e-300)):g3} dBi; conductor loss "
@@ -2099,6 +2113,13 @@ public partial class AntennaViewModel : ObservableObject
                 $"Substrate: εr = {substrate.RelativePermittivity:g3}, tanδ = {substrate.LossTangent:g3}, " +
                 $"thickness {substrate.ThicknessMeters * 1e3:g4} mm; the reported power ledger counts " +
                 "only the extracted surface-wave modes (TM0 always; higher modes above cutoff).");
+            if (layered is { } groundSpec && groundSpec.Stackup.HasLossyGround)
+                lines.Insert(2,
+                    $"Lossy ground plane: σ = {groundSpec.Stackup.GroundConductivitySiemensPerMeter:g3} S/m, "
+                    + $"{groundSpec.Stackup.GroundThicknessMeters * 1e6:g3} µm thick, as an impedance (Leontovich) "
+                    + "boundary inside the layered Green's function: valid while the skin depth is small against "
+                    + "the substrate height and the metal's features. The surface waves decay into it, so their "
+                    + "power is the ground's heat; the ledger integrates that heat over the plane for sheet currents.");
             // Covered patch: name the cover so the downward resonance shift is not a surprise.
             if (layered is { SourceInterface: not null } spec && spec.Stackup.Layers.Count > 1)
             {

@@ -83,7 +83,7 @@ internal static partial class TransmissionLineGreens
 
         // ---- The vertical TM solve: the homogeneous line with ONE source row. A z-directed
         // current excites no A_x at all, so every ε-contrast shunt source vanishes with it.
-        var (tmM, tmRhs, _) = TmSystem(sp, kz0, new Complex[n], Complex.Zero);
+        var (tmM, tmRhs, _) = TmSystem(sp, kz0, new Complex[n], Complex.Zero, Complex.Zero);
         tmRhs[VerticalSourceRow(m, n)] = -2 * RfConstants.Mu0 / epsBelow;
         var verticalTm = ComplexLu.Factor(tmM).Solve(tmRhs);
         var zeroTe = new Complex[2 * n + 1];
@@ -95,7 +95,7 @@ internal static partial class TransmissionLineGreens
         var teSol = ComplexLu.Factor(teM).Solve(teRhs);
         Complex c = teSol[cIdx];
         var axAt = AxAtInterfaces(teSol, sp.Phi, c);
-        var (tmH, tmHRhs, _) = TmSystem(sp, kz0, axAt, c);
+        var (tmH, tmHRhs, _) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
         var tmH_Sol = ComplexLu.Factor(tmH).Solve(tmHRhs);
         var horizontal = AssembleField(split, sp, kz0, teSol, tmH_Sol, z);
         Complex gTe = horizontal.GA, d1GTe = horizontal.DzA, kPhi = horizontal.Phi;
@@ -126,7 +126,8 @@ internal static partial class TransmissionLineGreens
         // halves are the same material), which is exactly what keeps the kink at the source out
         // of the sum.
         var axPrime = SourceHeightShunts(split, sp, k0, kRho, kz0, zPrime, residue: false);
-        var (tmD, tmDRhs, _) = TmSystem(sp, kz0, axPrime, axPrime[n - 1]);
+        Complex groundShunt = GroundSourceHeightShunt(split, sp, kz0, m, AxAtGround(teSol, sp));
+        var (tmD, tmDRhs, _) = TmSystem(sp, kz0, axPrime, axPrime[n - 1], groundShunt);
         var derivativeTm = ComplexLu.Factor(tmD).Solve(tmDRhs);
         var (_, _, dzPrimeAz, dzDzPrimeAz, _, _) = Profile(split, sp, kz0, zeroTe, derivativeTm, z);
 
@@ -207,7 +208,7 @@ internal static partial class TransmissionLineGreens
         if (isTm)
         {
             var tmDeriv = MatrixDerivative(split, k0, kp, tm: true);
-            var (tmM, tmRhs, _) = TmSystem(sp, kz0, new Complex[n], Complex.Zero);
+            var (tmM, tmRhs, _) = TmSystem(sp, kz0, new Complex[n], Complex.Zero, Complex.Zero);
             tmRhs[VerticalSourceRow(m, n)] = -2 * RfConstants.Mu0 / sp.Eps[m];
             var resVertical = MatrixResidue(tmM, tmDeriv, tmRhs);
             var (_, _, resAzCl, resDzAzCl, epsAt, kzAt) =
@@ -216,7 +217,14 @@ internal static partial class TransmissionLineGreens
             // The TE line is regular at a TM pole, so the derivative system’s shunt sources are
             // ordinary values and only its MATRIX is singular.
             var axPrime = SourceHeightShunts(split, sp, k0, kp, kz0, zPrime, residue: false);
-            var (tmD, tmDRhs, _) = TmSystem(sp, kz0, axPrime, axPrime[n - 1]);
+            Complex groundShunt = Complex.Zero;
+            if (sp.LossyGround)
+            {
+                var (teM, teRhs, _) = m == n - 1 ? TeSystem(sp, kz0) : TeSystemInterior(sp, kz0, m);
+                groundShunt = GroundSourceHeightShunt(split, sp, kz0, m,
+                    AxAtGround(ComplexLu.Factor(teM).Solve(teRhs), sp));
+            }
+            var (tmD, tmDRhs, _) = TmSystem(sp, kz0, axPrime, axPrime[n - 1], groundShunt);
             var resDeriv = MatrixResidue(tmD, tmDeriv, tmDRhs);
             var (_, _, resDzPrimeAz, resDzDzPrimeAz, _, _) =
                 Profile(split, sp, kz0, zeroTe, resDeriv, z);
@@ -239,7 +247,8 @@ internal static partial class TransmissionLineGreens
             Complex resD2GTe = DzAxResidue(splitZ, k0, kp, kz0, mz, zPrime);
 
             var resAxPrime = SourceHeightShunts(split, sp, k0, kp, kz0, zPrime, residue: true);
-            var (tmD, tmDRhs, _) = TmSystem(sp, kz0, resAxPrime, resAxPrime[n - 1]);
+            Complex resGroundShunt = GroundSourceHeightShunt(split, sp, kz0, m, AxAtGround(resTe, sp));
+            var (tmD, tmDRhs, _) = TmSystem(sp, kz0, resAxPrime, resAxPrime[n - 1], resGroundShunt);
             var resDeriv = ComplexLu.Factor(tmD).Solve(tmDRhs);   // M regular, RHS = Res(b)
             var (_, _, resDzPrimeAz, resDzDzPrimeAz, _, _) =
                 Profile(split, sp, kz0, zeroTe, resDeriv, z);
@@ -271,6 +280,43 @@ internal static partial class TransmissionLineGreens
                 : DzAx(split, sp, kz0, i, zPrime);
         }
         return shunts;
+    }
+
+    /// <summary>
+    /// The ground's shunt in the source-height-derivative TM system (FU-37): ∂_z′A_x(0; z′), which
+    /// the impedance ground's TM row carries as −A_x(0) and the PEC never sees. No interface sits at
+    /// z = 0 to source the swapped read-out from, so it comes from separability instead: with the
+    /// ground below the source, A_x(0; z′) = u(0)v(z′)/W, hence ∂_z′A_x(0; z′) = A_x(0; z′)·v′(z′)/v(z′),
+    /// and v′/v — the logarithmic derivative of the solution that decays above the stack — is shot
+    /// down from the top as a Riccati ratio (<see cref="UpperLogDerivative"/>), which needs neither
+    /// the ground nor the source and stays finite where u or the Wronskian vanishes. Passed the
+    /// residue of A_x(0) at a TE pole it returns the residue (v′/v is regular there).
+    /// </summary>
+    private static Complex GroundSourceHeightShunt(LayeredStackup split, LayerSpectral sp, Complex kz0,
+        int m, Complex axGround) =>
+        !sp.LossyGround || axGround == Complex.Zero ? Complex.Zero
+            : axGround * UpperLogDerivative(split, sp, kz0, m);
+
+    /// <summary>v′/v at interface <paramref name="m"/> for the TE solution that decays into the air
+    /// above: −jk_z0 at the top, then layer by layer down, r_b = (r_t + k_z·T)/(1 − r_t·T/k_z) with
+    /// T = tan(k_z t) = −j(1 − e)/(1 + e), e = e^{−2jk_z t} (|e| ≤ 1 on the Im(k_z) ≤ 0 branch), and
+    /// numerator and denominator multiplied through by 1 + e so neither overflows nor divides by
+    /// zero where the tangent is infinite.</summary>
+    private static Complex UpperLogDerivative(LayeredStackup split, LayerSpectral sp, Complex kz0, int m)
+    {
+        int n = split.Layers.Count;
+        var j = Complex.ImaginaryOne;
+        Complex r = -j * kz0;
+        for (int i = n - 1; i > m; i--)
+        {
+            Complex kz = sp.Kz[i];
+            double t = split.Layers[i].ThicknessMeters;
+            Complex e = Complex.Exp(-2 * j * kz * t);
+            // (1 + e)·T/k_z → 2t as k_z → 0.
+            Complex scaledTanOverK = kz == Complex.Zero ? 2 * t : -j * (1 - e) / kz;
+            r = (r * (1 + e) - j * kz * (1 - e)) / ((1 + e) - r * scaledTanOverK);
+        }
+        return r;
     }
 
     /// <summary>The geometry a (z, z′) pair implies: the stack split so the source sits on an

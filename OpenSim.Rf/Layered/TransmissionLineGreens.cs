@@ -33,8 +33,19 @@ namespace OpenSim.Rf.Layered;
 internal static partial class TransmissionLineGreens
 {
     /// <summary>The per-k_ρ layer quantities the recursion is built from: complex
-    /// permittivity, vertical wavenumber, and the reduced (decaying) per-layer phase.</summary>
-    internal readonly record struct LayerSpectral(Complex[] Eps, Complex[] Kz, Complex[] Phi);
+    /// permittivity, vertical wavenumber, and the reduced (decaying) per-layer phase — and the
+    /// ground's two impedance coefficients (both zero on the PEC ground):
+    /// <see cref="GroundTe"/> = Z_s/(jωµ₀) and <see cref="GroundTm"/> = jωε₀·Z_s.</summary>
+    internal readonly record struct LayerSpectral(Complex[] Eps, Complex[] Kz, Complex[] Phi)
+    {
+        /// <summary>Z_s/(jωµ₀): the TE ground row is A_x(0) − GroundTe·∂_zA_x(0) = 0.</summary>
+        public Complex GroundTe { get; init; }
+
+        /// <summary>jωε₀·Z_s: the TM ground row is ∂_zã_z(0) − ε_r0·GroundTm·ã_z(0) = −A_x(0).</summary>
+        public Complex GroundTm { get; init; }
+
+        public bool LossyGround => GroundTe != Complex.Zero;
+    }
 
     internal static LayerSpectral Spectral(LayeredStackup stackup, double k0, Complex kRho)
     {
@@ -50,12 +61,56 @@ internal static partial class TransmissionLineGreens
             kz[i] = SpectralKernels.Kz(eps[i] * k0Sq, kRho);
             phi[i] = ReducedPhase(kz[i] * layer.ThicknessMeters);
         }
-        return new LayerSpectral(eps, kz, phi);
+        if (!stackup.HasLossyGround) return new LayerSpectral(eps, kz, phi);
+        double omega = k0 * RfConstants.SpeedOfLight;
+        Complex zs = stackup.GroundSurfaceImpedance(omega);
+        return new LayerSpectral(eps, kz, phi)
+        {
+            GroundTe = zs / new Complex(0, omega * RfConstants.Mu0),
+            GroundTm = new Complex(0, omega * RfConstants.Eps0) * zs,
+        };
     }
 
+    /// <summary>
+    /// The ground's TE row (FU-37). On the PEC A_x(0) = 0. On an impedance ground E_t = Z_s ẑ × H
+    /// (ẑ out of the conductor): with E = −jωA + ∇(∇·A)/(jωµε) and H = ∇×A/µ, the y-component
+    /// gives ∇·A = jωεZ_s·A_z, and putting that in the x-component leaves
+    /// A_x(0) = (Z_s/jωµ₀)·∂_zA_x(0). In the reduced basis A_x(0) = P⁺ + φP⁻ and
+    /// ∂_zA_x(0) = −jk_z P⁺ + jk_z φP⁻, so the row is P⁺(1 + jk_z·g) + φP⁻(1 − jk_z·g), g = Z_s/jωµ₀.
+    /// </summary>
+    private static void GroundTeRow(ComplexDenseMatrix m, LayerSpectral sp)
+    {
+        if (!sp.LossyGround) { m[0, 0] = 1; m[0, 1] = sp.Phi[0]; return; }        // A_x = 0
+        Complex jkg = Complex.ImaginaryOne * sp.Kz[0] * sp.GroundTe;
+        m[0, 0] = 1 + jkg;
+        m[0, 1] = sp.Phi[0] * (1 - jkg);
+    }
+
+    /// <summary>
+    /// The ground's TM row (FU-37), with its right-hand side. On the PEC ∂_zã_z(0) = 0. On an
+    /// impedance ground the same ∇·A = jωεZ_s·A_z, with A_z = −jk_x·ã_z and ∇·A = −jk_x(A_x + ∂_zã_z),
+    /// reads ∂_zã_z(0) − jωε₀ε_r0·Z_s·ã_z(0) = −A_x(0): the divergence read-out, which the PEC holds
+    /// at zero, is jωεZ_s·ã_z on the impedance ground. A vertical current has no A_x and the row
+    /// is homogeneous.
+    /// </summary>
+    private static Complex GroundTmRow(ComplexDenseMatrix m, LayerSpectral sp, Complex axGround)
+    {
+        if (!sp.LossyGround) { m[0, 0] = -1; m[0, 1] = sp.Phi[0]; return Complex.Zero; }   // ∂_zã_z = 0
+        Complex jkz = Complex.ImaginaryOne * sp.Kz[0];
+        Complex b = sp.Eps[0] * sp.GroundTm;
+        m[0, 0] = -jkz - b;
+        m[0, 1] = sp.Phi[0] * (jkz - b);
+        return -axGround;
+    }
+
+    /// <summary>A_x at the ground (z = 0) from solved TE unknowns: zero on the PEC, and the TM
+    /// ground row's source on an impedance ground.</summary>
+    internal static Complex AxAtGround(Complex[] teSol, LayerSpectral sp) =>
+        sp.LossyGround ? teSol[0] + sp.Phi[0] * teSol[1] : Complex.Zero;
+
     /// <summary>The TE (A_x) dense system in the reduced basis: value + derivative
-    /// continuity, PEC Dirichlet at the ground, HED source jump at the top. Unknowns
-    /// [P_0^+, P_0^-, …, C]; C at index 2n. Decoupled from A_z.</summary>
+    /// continuity, the ground row (PEC Dirichlet, or the impedance ground's Robin row), HED
+    /// source jump at the top. Unknowns [P_0^+, P_0^-, …, C]; C at index 2n. Decoupled from A_z.</summary>
     internal static (ComplexDenseMatrix M, Complex[] Rhs, int CIdx) TeSystem(
         LayerSpectral sp, Complex kz0)
     {
@@ -65,7 +120,7 @@ internal static partial class TransmissionLineGreens
         var m = new ComplexDenseMatrix(size, size);
         var rhs = new Complex[size];
         int row = 0;
-        m[row, 0] = 1; m[row, 1] = phi[0]; row++;                       // ground A_x = 0
+        GroundTeRow(m, sp); row++;
         for (int i = 0; i < n - 1; i++)
         {
             int a = 2 * i, b = 2 * (i + 1);
@@ -80,11 +135,13 @@ internal static partial class TransmissionLineGreens
     }
 
     /// <summary>The TM (A_z) dense system in the reduced basis: A_z continuity, open at the
-    /// ground (∂_zA_z = 0), radiation above, driven by the shunt source A_x(h)(1/ε_below −
-    /// 1/ε_above) at every interface. Unknowns [Q_0^+, Q_0^-, …, S]; S at index 2n. The
-    /// right-hand side needs the TE interface values <paramref name="axAt"/> and top C.</summary>
+    /// ground (∂_zA_z = 0; on an impedance ground its Robin row, driven by A_x there), radiation
+    /// above, driven by the shunt source A_x(h)(1/ε_below − 1/ε_above) at every interface.
+    /// Unknowns [Q_0^+, Q_0^-, …, S]; S at index 2n. The right-hand side needs the TE interface
+    /// values <paramref name="axAt"/>, top C, and A_x at the ground <paramref name="axGround"/>
+    /// (<see cref="AxAtGround"/>; zero on the PEC).</summary>
     internal static (ComplexDenseMatrix M, Complex[] Rhs, int SIdx) TmSystem(
-        LayerSpectral sp, Complex kz0, Complex[] axAt, Complex c)
+        LayerSpectral sp, Complex kz0, Complex[] axAt, Complex c, Complex axGround)
     {
         var (eps, kz, phi) = sp;
         int n = kz.Length, size = 2 * n + 1, sIdx = 2 * n, t = 2 * (n - 1);
@@ -92,7 +149,7 @@ internal static partial class TransmissionLineGreens
         var m = new ComplexDenseMatrix(size, size);
         var rhs = new Complex[size];
         int row = 0;
-        m[row, 0] = -1; m[row, 1] = phi[0]; row++;                     // ground ∂_zA_z = 0
+        rhs[row] = GroundTmRow(m, sp, axGround); row++;
         for (int i = 0; i < n - 1; i++)
         {
             int a = 2 * i, b = 2 * (i + 1);
@@ -132,7 +189,7 @@ internal static partial class TransmissionLineGreens
         Complex c = teSol[cIdx];
         var axAt = AxAtInterfaces(teSol, sp.Phi, c);
 
-        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
         Complex s = ComplexLu.Factor(tmM).Solve(tmRhs)[sIdx];
 
         var j = Complex.ImaginaryOne;
@@ -159,7 +216,7 @@ internal static partial class TransmissionLineGreens
         var m0 = new ComplexDenseMatrix(size, size);
         var rhs = new Complex[size];
         int row = 0;
-        m0[row, 0] = 1; m0[row, 1] = phi[0]; row++;                       // ground A_x = 0
+        GroundTeRow(m0, sp); row++;
         for (int i = 0; i < n - 1; i++)
         {
             int a = 2 * i, b = 2 * (i + 1);
@@ -220,7 +277,7 @@ internal static partial class TransmissionLineGreens
         Complex c = teSol[cIdx];
         var axAt = AxAtInterfaces(teSol, sp.Phi, c);
 
-        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
         var tmSol = ComplexLu.Factor(tmM).Solve(tmRhs);
         Complex s = tmSol[sIdx];
 
@@ -276,9 +333,30 @@ internal static partial class TransmissionLineGreens
         var teSol = ComplexLu.Factor(teM).Solve(teRhs);
         Complex c = teSol[cIdx];
         var axAt = AxAtInterfaces(teSol, sp.Phi, c);
-        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+        var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
         Complex s = ComplexLu.Factor(tmM).Solve(tmRhs)[sIdx];
         return (c, s / c);
+    }
+
+    /// <summary>The two ground amplitudes the tangential magnetic field at the ground is made of
+    /// (FU-37), for a horizontal current at interface <paramref name="m"/>: ∂_zA_x(0) from the TE
+    /// solve and ã_z(0) from the TM solve, per unit current in the table's Sommerfeld normalization.
+    /// H_t(0) = [(∂_zA_x + k_ρ²ã_z)·J̃_∥·(ẑ × k̂) − ∂_zA_x·J̃_⊥·k̂]/(2µ₀), which is the ground's
+    /// surface current.</summary>
+    internal static (Complex DzAx, Complex Az) GroundAmplitudes(
+        LayeredStackup stackup, double k0, Complex kRho, Complex kz0, int m)
+    {
+        int n = stackup.Layers.Count;
+        var sp = Spectral(stackup, k0, kRho);
+        var (teM, teRhs, cIdx) = m == n - 1 ? TeSystem(sp, kz0) : TeSystemInterior(sp, kz0, m);
+        var teSol = ComplexLu.Factor(teM).Solve(teRhs);
+        Complex c = teSol[cIdx];
+        var axAt = AxAtInterfaces(teSol, sp.Phi, c);
+        var (tmM, tmRhs, _) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
+        var tmSol = ComplexLu.Factor(tmM).Solve(tmRhs);
+        var j = Complex.ImaginaryOne;
+        Complex dzAx = -j * sp.Kz[0] * teSol[0] + j * sp.Kz[0] * sp.Phi[0] * teSol[1];
+        return (dzAx, tmSol[0] + sp.Phi[0] * tmSol[1]);
     }
 
     /// <summary>The TE surface-wave characteristic function: its zeros are the TE poles (of
@@ -327,7 +405,7 @@ internal static partial class TransmissionLineGreens
             var resX = MatrixResidue(teM, MatrixDerivative(stackup, k0, kp, tm: false), teRhs);
             Complex resC = resX[cIdx];
             var resAx = AxAtInterfaces(resX, sp.Phi, resC);
-            var (tmM, resB, sIdx) = TmSystem(sp, kz0, resAx, resC);   // M regular, RHS = Res(b)
+            var (tmM, resB, sIdx) = TmSystem(sp, kz0, resAx, resC, AxAtGround(resX, sp));   // M regular, RHS = Res(b)
             Complex resS = ComplexLu.Factor(tmM).Solve(resB)[sIdx];
             return (resC, (resC - j * kz0 * resS) / normFactor);
         }
@@ -337,7 +415,7 @@ internal static partial class TransmissionLineGreens
             var teSol = ComplexLu.Factor(teM).Solve(teRhs);
             Complex c = teSol[cIdx];
             var axAt = AxAtInterfaces(teSol, sp.Phi, c);
-            var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+            var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
             Complex resS = MatrixResidue(tmM, MatrixDerivative(stackup, k0, kp, tm: true), tmRhs)[sIdx];
             return (Complex.Zero, -j * kz0 * resS / normFactor);
         }
@@ -376,7 +454,7 @@ internal static partial class TransmissionLineGreens
             var resX = MatrixResidue(teM, MatrixDerivativeTeInterior(stackup, k0, kp, m), teRhs);
             Complex resC = resX[cIdx];
             var resAx = AxAtInterfaces(resX, sp.Phi, resC);
-            var (tmM, resB, sIdx) = TmSystem(sp, kz0, resAx, resC);
+            var (tmM, resB, sIdx) = TmSystem(sp, kz0, resAx, resC, AxAtGround(resX, sp));
             var resTm = ComplexLu.Factor(tmM).Solve(resB);
             Complex resAxm = resAx[m];
             return (resAxm, (resAxm + DAzAbove(resTm, resTm[sIdx])) / norm);
@@ -387,7 +465,7 @@ internal static partial class TransmissionLineGreens
             var teSol = ComplexLu.Factor(teM).Solve(teRhs);
             Complex c = teSol[cIdx];
             var axAt = AxAtInterfaces(teSol, sp.Phi, c);
-            var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c);
+            var (tmM, tmRhs, sIdx) = TmSystem(sp, kz0, axAt, c, AxAtGround(teSol, sp));
             var resTm = MatrixResidue(tmM, MatrixDerivative(stackup, k0, kp, tm: true), tmRhs);
             return (Complex.Zero, DAzAbove(resTm, resTm[sIdx]) / norm);
         }
@@ -497,7 +575,7 @@ internal static partial class TransmissionLineGreens
             var kz0 = SpectralKernels.Kz(k0 * k0, kRho);
             int n = sp.Kz.Length;
             var dummy = new Complex[n];
-            return tm ? TmSystem(sp, kz0, dummy, Complex.Zero).M : TeSystem(sp, kz0).M;
+            return tm ? TmSystem(sp, kz0, dummy, Complex.Zero, Complex.Zero).M : TeSystem(sp, kz0).M;
         }
         var plus = Build(kp + delta);
         var minus = Build(kp - delta);

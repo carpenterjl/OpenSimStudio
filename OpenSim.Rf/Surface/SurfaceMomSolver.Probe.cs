@@ -140,7 +140,7 @@ public sealed partial class SurfaceMomSolver
         // current bases (Z_s per square over the circumference 2πa, so Z_s/2πa per metre).
         Complex sheet = SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero;
         Complex tube = (WireSurfaceImpedance?.Invoke(frequencyHz) ?? Complex.Zero) / (2 * Math.PI * probe.RadiusMeters);
-        SheetLoss.AddTo(z, surface, sheet);
+        SheetLoss.AddTo(z, surface, sheet, SheetEdge, frequencyHz);
         var tubeMass = TubeMass(tubeNodes, nEdges, jIndex);
         if (tube != Complex.Zero)
             foreach (var (m, n, value) in tubeMass) z[m, n] += tube * value;
@@ -172,7 +172,7 @@ public sealed partial class SurfaceMomSolver
             new SurfaceMomSolution(frequencyHz, gapVolts / baseCurrent, edgeCurrents),
             tubeCurrents, rawEdgeCurrents, tubeNodes)
         {
-            OhmicLossWatts = SheetLoss.OhmicPower(surface, rawEdgeCurrents, sheet) + 0.5 * tube.Real * tubeSquared
+            OhmicLossWatts = SheetLoss.OhmicPower(surface, rawEdgeCurrents, sheet, SheetEdge, frequencyHz) + 0.5 * tube.Real * tubeSquared
         };
     }
 

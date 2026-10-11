@@ -115,7 +115,7 @@ public sealed partial class SurfaceMomSolver
         // Ohmic loss: the sheet's surface impedance on its RWG block, the wire's on its bases.
         Complex sheet = SheetImpedance?.Invoke(frequencyHz) ?? Complex.Zero;
         Complex wireZ = WireSurfaceImpedance?.Invoke(frequencyHz) ?? Complex.Zero;
-        SheetLoss.AddTo(z, surface, sheet);
+        SheetLoss.AddTo(z, surface, sheet, SheetEdge, frequencyHz);
         var wireLoss = ThinWireMomSolver.LossMass(wire);
         if (wireZ != Complex.Zero)
             foreach (var (p, q, w) in wireLoss) z[wireIndex[p], wireIndex[q]] += wireZ * w;
@@ -145,7 +145,7 @@ public sealed partial class SurfaceMomSolver
             edgeCurrents, wireCurrents, rawEdgeCurrents, junction.IncidenceDegrees)
         {
             FanFluxMismatch = junction.Fan.OuterFluxMismatch,
-            OhmicLossWatts = SheetLoss.OhmicPower(surface, rawEdgeCurrents, sheet)
+            OhmicLossWatts = SheetLoss.OhmicPower(surface, rawEdgeCurrents, sheet, SheetEdge, frequencyHz)
                              + 0.5 * wireZ.Real * ThinWireMomSolver.Squared(wireLoss, b => x[wireIndex[b]])
         };
     }

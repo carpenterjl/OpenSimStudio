@@ -4,7 +4,8 @@ namespace OpenSim.Rf.Layered;
 
 /// <summary>
 /// A general grounded multi-layer stackup for the RF layered-media Green's function:
-/// an infinite PEC ground at z = 0, then an ordered list of dielectric layers stacked
+/// an infinite ground at z = 0 (PEC, or an impedance boundary of finite conductivity —
+/// <see cref="GroundConductivitySiemensPerMeter"/>), then an ordered list of dielectric layers stacked
 /// upward (index 0 sits on the ground), free space above the top layer. The metal /
 /// source plane sits at the TOP of the stack, z = <see cref="TotalThicknessMeters"/>
 /// — the same "all metal coplanar at the slab top" contract as <see cref="SubstrateStackup"/>,
@@ -55,6 +56,67 @@ public sealed record LayeredStackup
             throw new ArgumentException("A stackup needs at least one dielectric layer.", nameof(layers));
         Layers = layers.ToArray();
     }
+
+    /// <summary>Conductivity of the ground plane [S/m]; +∞ (the default) is the PEC ground. A finite
+    /// value makes the ground an impedance (Leontovich) boundary, E_t = Z_s·n̂ × H with
+    /// <see cref="GroundSurfaceImpedance"/>: it absorbs, the surface waves it guides decay, and
+    /// their poles leave the real axis (FU-37).</summary>
+    public double GroundConductivitySiemensPerMeter
+    {
+        get => _groundConductivity;
+        init => _groundConductivity = value > 0 ? value
+            : throw new ArgumentOutOfRangeException(nameof(GroundConductivitySiemensPerMeter),
+                "The ground conductivity must be positive (+∞ is the perfect ground).");
+    }
+    private readonly double _groundConductivity = double.PositiveInfinity;
+
+    /// <summary>Thickness of the ground copper [m]; +∞ (the default) is a ground many skin depths
+    /// thick. A finite value carries the current through the thickness at low frequency (the DC
+    /// sheet resistance) with no field behind the plane.</summary>
+    public double GroundThicknessMeters
+    {
+        get => _groundThickness;
+        init => _groundThickness = value > 0 ? value
+            : throw new ArgumentOutOfRangeException(nameof(GroundThicknessMeters),
+                "The ground thickness must be positive (+∞ is a thick ground).");
+    }
+    private readonly double _groundThickness = double.PositiveInfinity;
+
+    /// <summary>The factor the loss continuation scales the ground's surface impedance by, as it
+    /// scales every loss tangent (<see cref="SurfaceWaveDispersion.WithLossFraction"/>); 1 is the
+    /// physical ground.</summary>
+    internal double GroundLossFraction { get; init; } = 1;
+
+    /// <summary>True when the ground is an impedance boundary rather than PEC.</summary>
+    public bool HasLossyGround => double.IsFinite(GroundConductivitySiemensPerMeter) && GroundLossFraction > 0;
+
+    /// <summary>The ground's surface impedance at angular frequency <paramref name="omega"/> [Ω]:
+    /// (k/σ)·coth(k·t) with k = (1 + j)/δ — (1 + j)/(σδ) for a thick ground, 1/(σt) at low
+    /// frequency for a thin one (the field behind the plane is zero, as under an infinite ground).
+    /// Zero for the PEC ground.</summary>
+    public Complex GroundSurfaceImpedance(double omega)
+    {
+        if (!HasLossyGround) return Complex.Zero;
+        double sigma = GroundConductivitySiemensPerMeter;
+        Complex k = Complex.Sqrt(new Complex(0, omega * RfConstants.Mu0 * sigma));
+        Complex coth;
+        if (double.IsPositiveInfinity(GroundThicknessMeters)) coth = Complex.One;
+        else
+        {
+            Complex kt = k * GroundThicknessMeters;
+            coth = kt.Magnitude < 1e-3 ? 1 / kt + kt / 3 : 1 / Complex.Tanh(kt);
+        }
+        return GroundLossFraction * k / sigma * coth;
+    }
+
+    /// <summary>The same ground under another list of layers (a split, a loss fraction) — every
+    /// stackup derived from this one carries its ground.</summary>
+    internal LayeredStackup WithLayers(IReadOnlyList<Layer> layers) => new(layers)
+    {
+        GroundConductivitySiemensPerMeter = GroundConductivitySiemensPerMeter,
+        GroundThicknessMeters = GroundThicknessMeters,
+        GroundLossFraction = GroundLossFraction,
+    };
 
     /// <summary>Total dielectric height — the z of the top (metal) plane above the ground.</summary>
     public double TotalThicknessMeters => Layers.Sum(l => l.ThicknessMeters);
@@ -114,7 +176,7 @@ public sealed record LayeredStackup
         split.Add(new Layer(material.RelativePermittivity, material.LossTangent, z - below));
         split.Add(new Layer(material.RelativePermittivity, material.LossTangent, heights[host] - z));
         for (int i = host + 1; i < Layers.Count; i++) split.Add(Layers[i]);
-        return (new LayeredStackup(split), host);
+        return (WithLayers(split), host);
     }
 
     /// <summary>The single-slab stackup as a one-layer list — the bridge that keeps the
@@ -162,8 +224,9 @@ public sealed record LayeredStackup
         });
 
     /// <summary>True when this stackup is a single slab — the fast path that dispatches to
-    /// the pinned single-slab closed form instead of the general TLGF recursion.</summary>
-    public bool IsSingleSlab => Layers.Count == 1;
+    /// the pinned single-slab closed form instead of the general TLGF recursion. A lossy ground is
+    /// not a single slab in this sense: the closed forms are PEC-backed.</summary>
+    public bool IsSingleSlab => Layers.Count == 1 && !HasLossyGround;
 
     /// <summary>The equivalent <see cref="SubstrateStackup"/> for the single-slab case
     /// (throws otherwise) — used by the fast path to reach the pinned closed forms.</summary>
@@ -171,8 +234,8 @@ public sealed record LayeredStackup
     {
         if (!IsSingleSlab)
             throw new InvalidOperationException(
-                "AsSubstrate is only valid for a single-layer stackup; this stackup has "
-                + $"{Layers.Count} layers.");
+                "AsSubstrate is only valid for a single-layer stackup on a perfect ground; this stackup has "
+                + $"{Layers.Count} layers" + (HasLossyGround ? " and a lossy ground." : "."));
         var l = Layers[0];
         return new SubstrateStackup(l.RelativePermittivity, l.LossTangent, l.ThicknessMeters);
     }
