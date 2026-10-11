@@ -424,6 +424,31 @@ public class SurfaceMomSolverTests
              new Vector3D(1.9 * s, 0.9 * s, 0)), 1e-6);
     }
 
+    [Theory]
+    [InlineData(1.0 / 10, 1e-6)]
+    [InlineData(1.0 / 30, 1e-6)]
+    [InlineData(1.0 / 100, 3e-6)]
+    public void ThinImageMoments_MatchTheOracle(double depthOverEdge, double tolerance)
+    {
+        // FU-5 (audit RF-9): a layered solve's image track integrates each pair against the
+        // source triangle shifted down by 2d. On a thin substrate that image sits a small
+        // fraction of an element below the test triangle, and the static integrand varies on
+        // the scale of 2d along the image's edges, and (e^{−jkR}−1)/R has a near-kink of that
+        // width — the NEAR rules left 3e-5 to 1e-4 here, amplified by the primary-minus-image
+        // cancellation (a/2d) in the patch. At a hundredth the smooth remainder's two
+        // subdivision levels leave 1.3e-6 (the oracle's three, 1e-7; checked against five).
+        double s = Lambda / 20;
+        var p = (T0, new Vector3D(s, 0, 0), new Vector3D(0.4 * s, 0.8 * s, 0));
+        var below = new Vector3D(0, 0, -depthOverEdge * s);
+        foreach (var q in new[]
+        {
+            p,
+            (new Vector3D(s, 0, 0), T0, new Vector3D(0.6 * s, -0.9 * s, 0)),
+            (T0, new Vector3D(-s, -0.1 * s, 0), new Vector3D(-0.4 * s, -0.9 * s, 0)),
+        })
+            AssertOracleGate(p, (q.Item1 + below, q.Item2 + below, q.Item3 + below), tolerance);
+    }
+
     [Fact]
     public void FarMoments_MatchTheOracle()
     {

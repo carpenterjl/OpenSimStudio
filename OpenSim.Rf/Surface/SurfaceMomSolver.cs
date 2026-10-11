@@ -376,12 +376,15 @@ public sealed partial class SurfaceMomSolver
         // against the oracle). Two 1:4 subdivision levels per triangle (256 panel
         // pairs) push the kink error below the static machinery's — these pair classes
         // are O(N), so the cost is bounded. Plain NEAR pairs never touch the kink and
-        // keep the single 7×7 rule.
+        // keep the single 7×7 rule — except a pair in parallel planes close above one
+        // another (a thin substrate's image), where R's near-kink of the height's width lies
+        // inside the domain and the single rule left 3e-5 to 1e-4 (FU-5).
         var (l1, l2, l3, w) = TriangleQuadrature.Rule(5);
-        var pPanels = shared is null
+        bool kinked = shared is not null || InParallelPlanes(pVerts, qVerts);
+        var pPanels = !kinked
             ? new[] { (pa, pb, pc) }
             : Split((pa, pb, pc)).SelectMany(Split).ToArray();
-        var qPanels = shared is null
+        var qPanels = !kinked
             ? new[] { (qa, qb, qc) }
             : Split((qa, qb, qc)).SelectMany(Split).ToArray();
         Complex m11 = default, m12 = default, m13 = default;
@@ -445,7 +448,20 @@ public sealed partial class SurfaceMomSolver
         // Distance from a point to the singular set.
         Func<Vector3D, double> distance;
         int maxDepth;
-        if (shared is null)
+        if (shared is null && InParallelPlanes(triangle, source))
+        {
+            // NEAR, in a parallel plane (an image below a thin substrate, a level above): over
+            // Q's interior the potential is smooth along P at any height — it varies on the
+            // scale of the height only near Q's EDGES, so the panels refine toward those. The
+            // refinement stops by itself once panels are smaller than the height; the depth only
+            // bounds it. Depth 2 toward all of Q, with the single smooth-remainder rule, left
+            // 4e-5 against the oracle at a height of a tenth of an edge and 1e-4 at a hundredth
+            // (FU-5; most of it was the smooth remainder's, see SingularMoments).
+            distance = r => Math.Min(DistanceToSegment(r, source.A, source.B),
+                Math.Min(DistanceToSegment(r, source.B, source.C), DistanceToSegment(r, source.C, source.A)));
+            maxDepth = 9;
+        }
+        else if (shared is null)
         {
             // NEAR: the set is triangle Q (edges + interior). Depth 2 is the measured
             // sweet spot: 5e-7 against the oracle at half-a-diameter separation, and
@@ -494,6 +510,16 @@ public sealed partial class SurfaceMomSolver
             }
             yield return t;
         }
+    }
+
+    /// <summary>P and Q in parallel planes a non-zero distance apart (relative to their size).</summary>
+    private static bool InParallelPlanes((Vector3D A, Vector3D B, Vector3D C) p, (Vector3D A, Vector3D B, Vector3D C) q)
+    {
+        var nP = Vector3D.Cross(p.B - p.A, p.C - p.A);
+        var nQ = Vector3D.Cross(q.B - q.A, q.C - q.A);
+        if (Vector3D.Cross(nP, nQ).Length > 1e-9 * nP.Length * nQ.Length) return false;
+        double height = Math.Abs(Vector3D.Dot(q.A - p.A, nP)) / nP.Length;
+        return height > 1e-9 * Math.Max(Diameter(p), Diameter(q));
     }
 
     private static double DistanceToTriangle(Vector3D r, (Vector3D A, Vector3D B, Vector3D C) t)
