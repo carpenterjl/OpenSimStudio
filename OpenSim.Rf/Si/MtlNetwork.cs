@@ -208,6 +208,52 @@ public sealed record MtlGroupSection : MtlSectionBase
     }
 }
 
+/// <summary>
+/// FU-29 — lumped two-ports at one point of the routes, one per conductor and uncoupled: a trace's
+/// corner (<see cref="CornerNetwork"/>) on the nets that turn there, an exact identity on the rest.
+/// It takes no length; the route's path length is in the line sections on either side.
+/// </summary>
+public sealed record MtlLumpedSection : MtlSectionBase
+{
+    private readonly CornerNetwork?[] _corners;
+
+    public MtlLumpedSection(IReadOnlyList<CornerNetwork?> perLine)
+    {
+        if (perLine is null || perLine.Count == 0)
+            throw new ArgumentException("A lumped section needs at least one conductor.", nameof(perLine));
+        _corners = perLine.ToArray();
+    }
+
+    public IReadOnlyList<CornerNetwork?> Corners => _corners;
+
+    public override int ConductorCount => _corners.Length;
+
+    public override double LongestLengthMeters => 0;
+
+    internal override double DelaySeconds(double frequencyHz) => 0;
+
+    internal override ComplexDenseMatrix Chain(double frequencyHz)
+    {
+        int n = _corners.Length;
+        var total = new ComplexDenseMatrix(2 * n, 2 * n);
+        for (int i = 0; i < n; i++)
+        {
+            if (_corners[i] is not { } corner)
+            {
+                total[i, i] = Complex.One;
+                total[n + i, n + i] = Complex.One;
+                continue;
+            }
+            var block = corner.Abcd(frequencyHz);
+            total[i, i] = block[0, 0];
+            total[i, n + i] = block[0, 1];
+            total[n + i, i] = block[1, 0];
+            total[n + i, n + i] = block[1, 1];
+        }
+        return total;
+    }
+}
+
 /// <summary>Per-line linear terminations: a Thevenin driver resistance at the near end
 /// and an R∥C receiver at the far end (R may be PositiveInfinity for an open).</summary>
 public sealed record LineTermination(

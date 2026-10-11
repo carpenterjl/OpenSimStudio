@@ -297,23 +297,29 @@ public static class LayoutRuleChecker
                 if (entering.Count < 2) continue;
                 int first = entering.Keys.First(), last = entering.Keys.Last();
 
-                // Stubs.
-                int viaTop = via.FromLayer > 0 && via.ToLayer > 0 ? Math.Min(via.FromLayer, via.ToLayer) : 1;
-                int viaBottom = via.FromLayer > 0 && via.ToLayer > 0
-                    ? Math.Max(via.FromLayer, via.ToLayer) : index.LayerCount;
-                foreach (var (upper, lower, side) in new[]
-                         { (viaTop, first, "above"), (last, viaBottom, "below") })
+                // Stubs: the plated barrel past the outermost layers the signal uses — the drill's
+                // span less what back-drills took away; a back-drilled end leaves the stub its
+                // fabrication spec allows past the last layer kept.
+                var (viaTop, viaBottom) = via.PlatedSpan(index.LayerCount) ?? (first, last);
+                double residual = via.BackdrillMaxStubMeters ?? 0;
+                foreach (var (upper, lower, side, drilled) in new[]
+                         {
+                             (viaTop, first, "above", via.IsBackdrilled(viaTop - 1)),
+                             (last, viaBottom, "below", via.IsBackdrilled(viaBottom + 1)),
+                         })
                 {
-                    if (upper >= lower) continue;
-                    double stub = Span(upper, lower);
-                    if (stub <= options.MaxStubMeters) continue;
-                    double resonance = C0 / (4 * stub * Math.Sqrt(MeanPermittivity(upper, lower)));
+                    double stub = (upper < lower ? Span(upper, lower) : 0) + (drilled ? residual : 0);
+                    if (stub <= options.MaxStubMeters || stub <= 0) continue;
+                    int far = side == "above" ? Math.Max(1, upper - (drilled ? 1 : 0)) : Math.Min(index.LayerCount, lower + (drilled ? 1 : 0));
+                    double resonance = C0 / (4 * stub * Math.Sqrt(MeanPermittivity(Math.Min(upper, far), Math.Max(lower, far))));
                     findings.Add(new LayoutFinding(LayoutFindingKind.ViaStub, LayoutSeverity.Warning, name,
                         first, via.Position, stub,
                         $"{name}: the via at ({via.Position.X * 1e3:f2}, {via.Position.Y * 1e3:f2}) mm carries the "
                         + $"signal between L{first} and L{last} and leaves a {stub * 1e3:g3} mm stub {side} "
-                        + $"(L{upper} to L{lower}). Quarter-wave frequency of the bare barrel "
-                        + $"{resonance / 1e9:g3} GHz; pad capacitance lowers it."));
+                        + (upper < lower ? $"(L{upper} to L{lower}" : "(")
+                        + (drilled ? $"{(upper < lower ? ", then " : "")}the {residual * 1e3:g3} mm the back-drill's spec allows past L{(side == "above" ? viaTop : viaBottom)})" : ")")
+                        + $". Quarter-wave frequency of the bare barrel {resonance / 1e9:g3} GHz; pad capacitance lowers it."
+                        + (board.CarriesBackdrills ? "" : " The board file carries no back-drill data: if this via is back-drilled, the stub is shorter.")));
                 }
 
                 // Reference change between the outermost two layers the signal uses here.

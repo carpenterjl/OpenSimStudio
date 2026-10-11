@@ -21,6 +21,11 @@ internal sealed record BoardSubstrate(
     /// <summary>The copper layer(s) the line returns through: one for a microstrip, the upper
     /// then the lower for a stripline.</summary>
     public IReadOnlyList<int> PlaneLayers { get; init; } = Array.Empty<int>();
+
+    /// <summary>The board copper layer each interface of <see cref="Stackup"/> is (the top of each
+    /// of its layers, ground-up): where a trace on another layer of the same cross-section lies
+    /// (FU-29, broadside coupling).</summary>
+    public IReadOnlyList<int> InterfaceLayers { get; init; } = Array.Empty<int>();
 }
 
 /// <summary>
@@ -145,7 +150,7 @@ internal static class BoardReferencePlanes
                 + $"Dielectric ({stackup.Source}) below the trace: {Describe(below.AsEnumerable().Reverse())}; "
                 + $"above: {Describe(above)}. Both planes are taken as infinite and solid, and "
                 + "coupling to any other layer is out of scope by construction.")
-            { PlaneLayers = new[] { planeAbove, planeBelow } };
+            { PlaneLayers = new[] { planeAbove, planeBelow }, InterfaceLayers = below.Concat(above).ToArray() };
         }
 
         // One plane. Build ground-up from it: the gaps between plane and trace, then the
@@ -182,8 +187,14 @@ internal static class BoardReferencePlanes
                     : "; air on the other side.")
                 + " Coupling to any other layer is out of scope by construction.";
 
+        // Gap g lies between copper g and g + 1: built up from a plane below, its top is copper g;
+        // built down from a plane above (the stack turned over), its far face is copper g + 1.
         return new BoardSubstrate(new LayeredStackup(layers), between.Count - 1, TopGround: false,
-            PlatePerArea(between), note) { PlaneLayers = new[] { plane } };
+            PlatePerArea(between), note)
+        {
+            PlaneLayers = new[] { plane },
+            InterfaceLayers = between.Concat(beyond).Select(g => isBelow ? g : g + 1).ToArray(),
+        };
     }
 
     /// <summary>Copper layers of the board: what the islands show, or what the file's

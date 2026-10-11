@@ -141,6 +141,10 @@ public partial class SignalIntegrityViewModel : ObservableObject
     /// strips of effective width (<see cref="RlgcModel.SideWalls"/>).</summary>
     [ObservableProperty] private bool _sideWallSolve;
 
+    /// <summary>Carry each corner of the board routes as the lumped network it adds (FU-29), solved
+    /// once per corner shape by the layered moment method — seconds to minutes each, so off by default.</summary>
+    [ObservableProperty] private bool _cornerDiscontinuities;
+
     private RlgcModel BoardModel() =>
         RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio) with { SideWalls = SideWallSolve };
 
@@ -296,10 +300,18 @@ public partial class SignalIntegrityViewModel : ObservableObject
             var lines = report.Pairs.Take(ListedLines).Select(p => p.Describe()).ToList();
             if (report.Pairs.Count > ListedLines)
                 lines.Add($"… and {report.Pairs.Count - ListedLines} more in the log.");
+            if (report.ViaPairs.Count > 0)
+            {
+                lines.Add($"{report.ViaPairs.Count} pair(s) coupled through vias in a shared plane pair, worst first:");
+                lines.AddRange(report.ViaPairs.Take(ListedLines).Select(p => p.Describe()));
+                if (report.ViaPairs.Count > ListedLines)
+                    lines.Add($"… and {report.ViaPairs.Count - ListedLines} more in the log.");
+            }
             CrosstalkScanResult = string.Join(Environment.NewLine,
                 new[] { head }.Concat(lines).Concat(report.Notes));
             _log.Append($"SI crosstalk scan: {head}");
             foreach (var p in report.Pairs) _log.Append("  " + p.Describe());
+            foreach (var p in report.ViaPairs) _log.Append("  " + p.Describe());
         }
         catch (Exception ex)
         {
@@ -467,6 +479,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                     SwapEnds = SwapBoardEnds,
                     DriverPoints = driverPoints,
                     Model = model,
+                    CornerDiscontinuities = CornerDiscontinuities,
                 }));
             if (extraction.FailureReason is not null)
             {
@@ -485,7 +498,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
             var widths = string.Join(", ", signals.Select(t => $"{t.WidthMeters * 1e3:g3}"));
             BoardExtractionResult =
                 $"{LineCount} coupled conductors, coupled length = {extraction.CoupledLengthMeters * 1e3:g4} mm "
-                + $"in {extraction.Sections.Count(s => s.Coupled is not null)} section(s), routed lengths ["
+                + $"in {extraction.Sections.Count(s => s.Coupled is not null)} section(s)"
+                + (CornerDiscontinuities ? $", {extraction.Sections.Sum(s => s.Corners?.Count(c => c is not null) ?? 0)} corner(s) as lumped networks" : "")
+                + ", routed lengths ["
                 + string.Join(", ", extraction.RoutedLengthsMeters.Select(l => $"{l * 1e3:g4}"))
                 + $"] mm, widths [{widths}] mm, near end of {selected[0].Label} at ("
                 + $"{extraction.NearEnds[0].X * 1e3:g4}, {extraction.NearEnds[0].Y * 1e3:g4}) mm"

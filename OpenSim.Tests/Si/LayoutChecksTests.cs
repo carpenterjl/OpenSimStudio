@@ -62,9 +62,15 @@ public class LayoutChecksTests
                 Math.Max(x0, x1) + h, Math.Max(y0, y1) + h));
         }
 
-        public Builder Via(string net, double x, double y, int[] layers, int from = 0, int to = 0)
+        public bool CarriesBackdrills { get; set; }
+
+        public Builder Via(string net, double x, double y, int[] layers, int from = 0, int to = 0,
+            ulong backdrilled = 0, double? maxStub = null)
         {
-            var via = new Via(new Point2(x, y), 0.3e-3, true, from, to);
+            var via = new Via(new Point2(x, y), 0.3e-3, true, from, to)
+            {
+                BackdrilledLayers = backdrilled, BackdrillMaxStubMeters = maxStub
+            };
             _vias.Add(via);
             if (!_netVias.ContainsKey(net)) { _netIslands[net] = new(); _netVias[net] = new(); _order.Add(net); }
             _netVias[net].Add(new ViaBridge(via, layers));
@@ -94,6 +100,7 @@ public class LayoutChecksTests
             Layers = Array.Empty<BoardLayer>(),
             Warnings = Array.Empty<string>(),
             TraceCenterlines = _traces,
+            CarriesBackdrills = CarriesBackdrills,
         };
     }
 
@@ -260,6 +267,32 @@ public class LayoutChecksTests
         // A blind via that stops at L3 has none; nor has a stub under the limit.
         Assert.Empty(Check(Board(1, 3).Copper("GND", 6, Rect(-5e-3, -10e-3, 45e-3, 10e-3)), options).Findings);
         Assert.Empty(Check(board, options with { MaxStubMeters = 1.5e-3 }).Findings);
+        // A Gerber-like board cannot say whether the via is back-drilled, and the finding says so.
+        Assert.Contains("no back-drill data", stub.Message);
+    }
+
+    [Fact]
+    public void ABackDrilledVia_LeavesOnlyTheStubItsSpecAllows()
+    {
+        // The same through via, back-drilled from the bottom up to L4 (L4–L6 lose their plating),
+        // its spec allowing 0.1 mm past L3: under the 0.5 mm limit, no finding; with a 50 µm limit,
+        // that 0.1 mm is the stub, said to be the back-drill's.
+        Builder Board(ulong drilled, double? maxStub) => new Builder { CarriesBackdrills = true }
+            .Trace("SIG", 1, 0, 0, 20e-3, 0).Trace("SIG", 3, 20e-3, 0, 40e-3, 0)
+            .Via("SIG", 20e-3, 0, new[] { 1, 3 }, backdrilled: drilled, maxStub: maxStub)
+            .Copper("GND", 2, Rect(-5e-3, -10e-3, 45e-3, 10e-3))
+            .Copper("GND", 6, Rect(-5e-3, -10e-3, 45e-3, 10e-3));
+        var options = new LayoutCheckOptions { Stackup = Stackup(5, gap: 0.3e-3), MaxStubMeters = 0.5e-3 };
+        const ulong l4To6 = 0b111000;
+        Assert.Empty(Check(Board(l4To6, 0.1e-3), options).Findings);
+        var stub = Assert.Single(Check(Board(l4To6, 0.1e-3), options with { MaxStubMeters = 50e-6 }).Findings);
+        Assert.Equal(LayoutFindingKind.ViaStub, stub.Kind);
+        Assert.Equal(0.1e-3, stub.MeasureMeters, 1e-12);
+        Assert.Contains("back-drill's spec allows", stub.Message);
+        Assert.DoesNotContain("no back-drill data", stub.Message);
+        // Drilled only to L5: the barrel still runs to L4, a stub of one gap and the allowance.
+        var shorter = Assert.Single(Check(Board(0b110000, 0.1e-3), options with { MaxStubMeters = 50e-6 }).Findings);
+        Assert.Equal(0.3e-3 + 0.1e-3, shorter.MeasureMeters, 1e-12);
     }
 
     [Fact]
@@ -323,6 +356,97 @@ public class LayoutChecksTests
         Assert.Equal(near, pair.NearEnd, 1e-6 * near);
         Assert.Equal(Math.Abs(far) * length / options.RiseTimeSeconds, pair.FarEnd, 1e-6 * pair.FarEnd);
         Assert.True(pair.FarEnd > 0.01);
+    }
+
+    [Fact]
+    public void TracesOneOverTheOther_AreABroadsidePair_AndAPlaneBetweenThemShieldsThem()
+    {
+        // FU-29: A on L3 and B on L4, 0.1 mm apart in plan, between ground planes on L2 and L5 — a
+        // broadside pair, priced with each trace on its own interface of the L2–L5 stripline: the
+        // same coefficients as that cross-section by hand.
+        const double length = 40e-3, offset = 0.1e-3;
+        var plane = Rect(-5e-3, -10e-3, 45e-3, 10e-3);
+        var board = new Builder()
+            .Trace("A", 3, 0, 0, length, 0).Trace("B", 4, 0, offset, length, offset)
+            .Copper("GND", 2, plane).Copper("GND", 5, plane).Build();
+        var pair = Assert.Single(CrosstalkScan.Run(board, ScanOptions(4)).Pairs);
+        _output.WriteLine(pair.Describe());
+        var run = Assert.Single(pair.Runs);
+        Assert.True(run.Broadside);
+        Assert.Equal((3, 4), (run.Layer, run.LayerB));
+        Assert.Equal(offset - W, run.EdgeGapMeters, 1e-12);             // they overlap in plan
+        Assert.Null(pair.NotPriced);
+        Assert.Contains("broadside", pair.Describe());
+        // Ground-up from L5: the gaps L4–L5, L3–L4, L2–L3, so L4 is interface 0 and L3 interface 1.
+        var stack = new LayeredStackup(Enumerable.Repeat(new LayeredStackup.Layer(4.0, 0, 0.2e-3), 3).ToArray());
+        var expected = CrosstalkScan.Coefficients(BroadsideExtractor.Extract(stack, true, new[]
+        {
+            new LayeredTrace(TraceCrossSection.Copper(0, W), 1), new LayeredTrace(TraceCrossSection.Copper(offset, W), 0)
+        }));
+        Assert.Equal(expected.Near, run.NearEndCoupling, 1e-9 * expected.Near);
+        Assert.True(run.NearEndCoupling > 0.1, "a pair this close one over the other couples strongly");
+
+        // B moved to L5 under a plane on L4: they meet only through the plane, and are no pair.
+        var shielded = new Builder()
+            .Trace("A", 3, 0, 0, length, 0).Trace("B", 5, 0, offset, length, offset)
+            .Copper("GND", 2, plane).Copper("GND", 4, plane).Copper("GND", 6, plane).Build();
+        Assert.Empty(CrosstalkScan.Run(shielded, ScanOptions(5)).Pairs);
+    }
+
+    [Fact]
+    public void TwoViasThroughOnePlanePair_CoupleThroughIt_AndStitchingViasShortItOut()
+    {
+        // FU-29: A and B each change from L1 to L4 through a via, 4 mm apart, across the L2/L3 pair
+        // of 40 × 30 mm ground planes. Without a via joining the planes the pair is a floating
+        // capacitor and couples them strongly; the scan's number is the plane-pair solve's own
+        // |Z21| between those two ports. A ring of stitching vias round them shorts it out.
+        var plane = Rect(0, 0, 40e-3, 30e-3);
+        Builder Board(bool stitched)
+        {
+            var b = new Builder()
+                .Trace("A", 1, 2e-3, 15e-3, 18e-3, 15e-3).Trace("A", 4, 18e-3, 15e-3, 38e-3, 15e-3)
+                .Via("A", 18e-3, 15e-3, new[] { 1, 4 })
+                .Trace("B", 1, 2e-3, 20e-3, 22e-3, 20e-3).Trace("B", 4, 22e-3, 20e-3, 38e-3, 20e-3)
+                .Via("B", 22e-3, 20e-3, new[] { 1, 4 })
+                .Copper("GND", 2, plane).Copper("GND", 3, plane);
+            if (stitched)
+                for (int k = 0; k < 8; k++)
+                {
+                    var (sin, cos) = Math.SinCos(2 * Math.PI * k / 8);
+                    b.Via("GND", 20e-3 + 6e-3 * cos, 17.5e-3 + 6e-3 * sin, new[] { 2, 3 });
+                }
+            return b;
+        }
+        var options = ScanOptions(3) with { MaxEdgeGapMeters = 1e-4 };
+        var open = Assert.Single(CrosstalkScan.Run(Board(false).Build(), options).ViaPairs);
+        _output.WriteLine(open.Describe());
+        Assert.Equal(("A", "B"), (open.NetA, open.NetB));
+        Assert.Equal((2, 3), (open.UpperPlane, open.LowerPlane));
+
+        var stackup = Stackup(3);
+        var direct = new OpenSim.Rf.Pdn.PlanePair(new OpenSim.Rf.Pdn.PlanePairSpec
+        {
+            Shape = new[] { plane },
+            SeparationMeters = 0.2e-3,
+            RelativePermittivity = 4.0,
+            LossTangent = 0,
+            UpperCopperThicknessMeters = stackup.CopperThicknessOf(2),
+            LowerCopperThicknessMeters = stackup.CopperThicknessOf(3),
+            Ports = new[]
+            {
+                new OpenSim.Rf.Pdn.PlanePort("A", new Point2(18e-3, 15e-3), 0.15e-3),
+                new OpenSim.Rf.Pdn.PlanePort("B", new Point2(22e-3, 20e-3), 0.15e-3),
+            },
+            MaxFrequencyHz = 0.35 / options.RiseTimeSeconds,
+        }).Impedance(open.FrequencyHz)[0, 1].Magnitude;
+        // The same solve on the cleaned outline (its vertices re-ordered, so the mesh differs by a hair).
+        Assert.Equal(direct, open.TransferOhms, 1e-5 * direct);
+        Assert.Equal(open.TransferOhms / 100, open.Fraction, 1e-12);
+
+        var stitched = Assert.Single(CrosstalkScan.Run(Board(true).Build(), options).ViaPairs);
+        _output.WriteLine(stitched.Describe());
+        Assert.True(stitched.TransferOhms < 0.2 * open.TransferOhms,
+            "eight vias joining the planes round the two must cut the coupling through them");
     }
 
     [Fact]

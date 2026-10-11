@@ -654,6 +654,16 @@ public class Ipc2581Tests
         var bridge = Assert.Single(net.StitchingVias);
         Assert.Equal(new[] { 3, 6 }, bridge.Layers);
         Assert.Contains(board.Notes, n => n.Contains("severed"));
+
+        // FU-29: the via itself says so — the plating is gone from L1 and L2, the barrel left runs
+        // L3–L6, and the spec's 0.1 mm stub allowance rides along for the stub check.
+        var via = board.Vias.Single();
+        Assert.True(board.CarriesBackdrills);
+        Assert.True(via.IsBackdrilled(1) && via.IsBackdrilled(2) && !via.IsBackdrilled(3));
+        Assert.False(via.Reaches(2));
+        Assert.True(via.Reaches(3));
+        Assert.Equal((3, 6), via.PlatedSpan(6));
+        Assert.Equal(0.1e-3, via.BackdrillMaxStubMeters!.Value, 12);
     }
 
     [Fact]

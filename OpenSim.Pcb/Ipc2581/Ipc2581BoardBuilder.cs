@@ -142,9 +142,9 @@ public sealed class Ipc2581BoardBuilder
             for (int h = 0; h < net.Holes.Count; h++)
             {
                 var hole = net.Holes[h];
-                var via = new Via(hole.Position, hole.Diameter, hole.Plated);
+                var (severed, maxStub) = SeveredOrders(backdrills, hole, ref severedVias);
+                var via = BoardVia(hole, orderByName, conductors.Count, severed, maxStub);
                 vias.Add(via);
-                var severed = SeveredOrders(backdrills, hole, ref severedVias);
                 if (isNoNet)
                 {
                     // No-Net vias stitch geometrically (NetExtractor) — a fully severed
@@ -217,7 +217,8 @@ public sealed class Ipc2581BoardBuilder
             Warnings = warnings,
             Notes = notes,
             Stackup = BuildStackup(source, notes),
-            TraceCenterlines = centerlines
+            TraceCenterlines = centerlines,
+            CarriesBackdrills = true,
         };
     }
 
@@ -340,9 +341,28 @@ public sealed class Ipc2581BoardBuilder
         return layers.Count >= 2 ? new ViaBridge(via, layers) : null;
     }
 
-    /// <summary>One prepared backdrill: position, radius, and the conductor orders it
-    /// severs (its span minus the spec's MUST_NOT_CUT layers).</summary>
-    private sealed record PreparedBackdrill(Point2 Position, double Radius, HashSet<int> Severed);
+    /// <summary>One prepared backdrill: position, radius, the conductor orders it
+    /// severs (its span minus the spec's MUST_NOT_CUT layers), and the stub its spec allows.</summary>
+    private sealed record PreparedBackdrill(Point2 Position, double Radius, HashSet<int> Severed, double? MaxStub);
+
+    /// <summary>The board's via for a hole (FU-29): its drill span (0/0 when it runs through the
+    /// whole board, the through-via convention) and the layers back-drills took the plating from.</summary>
+    private static Via BoardVia(Ipc2581Hole hole, Dictionary<string, int> orderByName, int conductorCount,
+        HashSet<int>? severed, double? maxStub)
+    {
+        int spanFrom = orderByName.TryGetValue(hole.SpanFrom, out int f) ? f : 1;
+        int spanTo = orderByName.TryGetValue(hole.SpanTo, out int t) ? t : conductorCount;
+        if (spanFrom > spanTo) (spanFrom, spanTo) = (spanTo, spanFrom);
+        bool through = spanFrom <= 1 && spanTo >= conductorCount;
+        ulong mask = 0;
+        foreach (int order in severed ?? Enumerable.Empty<int>())
+            if (order is >= 1 and <= 64) mask |= 1UL << (order - 1);
+        return new Via(hole.Position, hole.Diameter, hole.Plated, through ? 0 : spanFrom, through ? 0 : spanTo)
+        {
+            BackdrilledLayers = mask,
+            BackdrillMaxStubMeters = mask != 0 ? maxStub : null,
+        };
+    }
 
     private static List<PreparedBackdrill> PrepareBackdrills(Ipc2581Board source,
         Dictionary<string, int> orderByName, int conductorCount, List<string> warnings)
@@ -361,25 +381,28 @@ public sealed class Ipc2581BoardBuilder
                     warnings.Add($"IPC-2581: backdrill spec '{bd.Spec!.Name}' protects layer " +
                                  $"'{name}' inside its own drill span; the layer is kept connected.");
             if (severed.Count > 0)
-                prepared.Add(new PreparedBackdrill(bd.Position, bd.Diameter / 2, severed));
+                prepared.Add(new PreparedBackdrill(bd.Position, bd.Diameter / 2, severed, bd.Spec?.MaxStubLengthMeters));
         }
         return prepared;
     }
 
     /// <summary>The conductor orders every backdrill coincident with this hole severs
-    /// (null when untouched). Coincidence = the barrel center inside the backdrill bore.</summary>
-    private static HashSet<int>? SeveredOrders(List<PreparedBackdrill> backdrills,
+    /// (null when untouched), and the largest stub their specs allow. Coincidence = the barrel
+    /// center inside the backdrill bore.</summary>
+    private static (HashSet<int>? Severed, double? MaxStub) SeveredOrders(List<PreparedBackdrill> backdrills,
         Ipc2581Hole hole, ref int severedVias)
     {
         HashSet<int>? severed = null;
+        double? maxStub = null;
         foreach (var bd in backdrills)
         {
             if ((bd.Position - hole.Position).Length > bd.Radius) continue;
             severed ??= new HashSet<int>();
             severed.UnionWith(bd.Severed);
+            if (bd.MaxStub is double stub) maxStub = Math.Max(maxStub ?? 0, stub);
         }
         if (severed is not null && hole.Plated) severedVias++;
-        return severed;
+        return (severed, maxStub);
     }
 
     /// <summary>

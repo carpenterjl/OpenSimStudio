@@ -68,6 +68,11 @@ public sealed record BoardCoupledOptions
     /// <summary>Total board thickness [m], split across gaps, when the board has no
     /// per-gap thickness list. Default 1.6 mm.</summary>
     public double DefaultBoardThicknessMeters { get; init; } = 1.6e-3;
+
+    /// <summary>Carry each corner of a route as the lumped network it adds to the path length
+    /// (FU-29, <see cref="CornerExtractor"/>: solved once per corner shape by the layered moment
+    /// method, seconds to minutes each). Off: a bend is its path length only.</summary>
+    public bool CornerDiscontinuities { get; init; }
 }
 
 /// <summary>One section of a board route's cascade, in near → far order: a coupled
@@ -89,6 +94,11 @@ public sealed record BoardRouteSection(
     /// <summary>For a lead section, the single-trace cross-section each net runs this piece
     /// at (its width here); null takes <see cref="BoardCoupledResult.LeadCrossSections"/>.</summary>
     public IReadOnlyList<CoupledLineCrossSection>? LeadSections { get; init; }
+
+    /// <summary>A point of the routes where some nets turn a corner (FU-29): per net its corner's
+    /// network, null for a net that does not turn here. Such a section has neither a coupled
+    /// cross-section nor lead lengths.</summary>
+    public IReadOnlyList<CornerNetwork?>? Corners { get; init; }
 }
 
 /// <summary>
@@ -157,6 +167,8 @@ public sealed record BoardCoupledResult(
                     ? new MtlGroupSection(coupled, group, nets)
                     : coupled);
             }
+            else if (s.Corners is { } corners)
+                sections.Add(new MtlLumpedSection(corners));
             else
                 sections.Add(new MtlLeadSection(s.LeadLengthsMeters!
                     .Select((l, i) => (Of(s.LeadSections?[i] ?? LeadCrossSections[i]), l))
@@ -517,6 +529,35 @@ public static class BoardCoupledExtractor
             leadSections[i] = LeadSection(i, routes[i].DominantWidth, routes[i].Chain[0].LayerOrder);
         }
 
+        // FU-29: each net's corners — where two runs on one layer meet at an angle — as the lumped
+        // network the corner adds to its path length, solved for this board's cross-section of the
+        // layer and the trace's width, and placed in the cascade at its path position.
+        var corners = new List<(double Path, CornerNetwork Network)>[n];
+        var cornerShapes = new HashSet<(int Layer, long Width, long Degrees)>();
+        int cornerCount = 0, hairpins = 0;
+        for (int i = 0; i < n; i++)
+        {
+            corners[i] = new();
+            if (!options.CornerDiscontinuities) continue;
+            var runs = routes[i].Runs;
+            for (int r = 0; r + 1 < runs.Count; r++)
+            {
+                if (runs[r].Layer != runs[r + 1].Layer || runs[r].Extent <= 0 || runs[r + 1].Extent <= 0) continue;
+                double cos = Point2.Dot(Unit(runs[r].B - runs[r].A), Unit(runs[r + 1].B - runs[r + 1].A));
+                double degrees = Math.Round(Math.Acos(Math.Clamp(cos, -1, 1)) * 180 / Math.PI);
+                if (degrees < options.AngleToleranceDegrees) continue;
+                if (degrees >= 150) { hairpins++; continue; }
+                var substrate = substrates[runs[r].Layer];
+                double width = Math.Min(runs[r].Width, runs[r + 1].Width);
+                var corner = CornerExtractor.Cached(substrate.Stackup, substrate.MetalInterface, substrate.TopGround,
+                    width, degrees);
+                corners[i].Add((runs[r].PathStart + runs[r].PathLength, corner));
+                cornerShapes.Add((runs[r].Layer, (long)Math.Round(width * 1e7), (long)degrees));
+                cornerCount++;
+            }
+        }
+        var nextCorner = new int[n];
+
         // The cascade, near → far. Before each stretch its own nets run on alone to where it
         // starts; the others wait for a lead of their own (uncoupled pieces of different nets
         // do not interact, so where they sit in the cascade does not matter).
@@ -525,28 +566,49 @@ public static class BoardCoupledExtractor
         var position = new double[n];
         void AddLead(Func<int, double> until, Func<int, bool> moves)
         {
-            var pieces = new List<(double Width, int Layer, double Length)>[n];
+            // Per net, in route order: the lead's pieces and the corners between them.
+            var items = new List<(double Width, int Layer, double Length, CornerNetwork? Corner)>[n];
             for (int i = 0; i < n; i++)
             {
-                pieces[i] = moves(i) ? Pieces(routes[i], position[i], until(i), slack) : new();
-                leadTotals[i] += pieces[i].Sum(p => p.Length);
-                if (moves(i)) position[i] = Math.Max(position[i], until(i));
+                items[i] = new();
+                if (!moves(i)) continue;
+                double from = position[i], to = until(i);
+                while (nextCorner[i] < corners[i].Count && corners[i][nextCorner[i]].Path <= to + slack)
+                {
+                    var (path, turn) = corners[i][nextCorner[i]++];
+                    double at = Math.Clamp(path, from, Math.Max(from, to));
+                    foreach (var p in Pieces(routes[i], from, at, slack)) items[i].Add((p.Width, p.Layer, p.Length, null));
+                    items[i].Add((0, 0, 0, turn));
+                    from = at;
+                }
+                foreach (var p in Pieces(routes[i], from, to, slack)) items[i].Add((p.Width, p.Layer, p.Length, null));
+                leadTotals[i] += items[i].Sum(p => p.Length);
+                position[i] = Math.Max(position[i], to);
             }
-            int count = pieces.Max(p => p.Count);
+            int count = items.Max(p => p.Count);
             for (int j = 0; j < count; j++)
             {
                 var lengths = new double[n];
                 var sections = new CoupledLineCrossSection[n];
+                var lumped = new CornerNetwork?[n];
                 for (int i = 0; i < n; i++)
                 {
-                    lengths[i] = j < pieces[i].Count ? pieces[i][j].Length : 0;
-                    sections[i] = j < pieces[i].Count ? LeadSection(i, pieces[i][j].Width, pieces[i][j].Layer) : leadSections[i];
+                    if (j < items[i].Count && items[i][j].Corner is { } corner)
+                    {
+                        lumped[i] = corner;
+                        sections[i] = leadSections[i];
+                        continue;
+                    }
+                    lengths[i] = j < items[i].Count ? items[i][j].Length : 0;
+                    sections[i] = j < items[i].Count ? LeadSection(i, items[i][j].Width, items[i][j].Layer) : leadSections[i];
                 }
                 if (lengths.Any(l => l > 0))
                     cascade.Add(new BoardRouteSection(null, 0, lengths)
                     {
                         LeadSections = sections
                     });
+                if (lumped.Any(c => c is not null))
+                    cascade.Add(new BoardRouteSection(null, 0, null) { Corners = lumped });
             }
         }
         for (int k = 0; k < kept.Count; k++)
@@ -626,8 +688,18 @@ public static class BoardCoupledExtractor
             assumptions.Add(coupledText + "; the rest of each route ("
                 + string.Join(", ", leadTotals.Select(l => $"{l * 1e3:g3} mm")) + ") is CASCADED in "
                 + "route order as uncoupled single-trace lead sections (their own R, L and C to the "
-                + "plane at the width each piece is drawn at; a bend is carried as its path length, with no "
-                + "corner discontinuity and no coupling between a net's own legs).");
+                + "plane at the width each piece is drawn at; "
+                + (options.CornerDiscontinuities
+                    ? "each corner as its path length and the lumped network it adds, "
+                    : "a bend is carried as its path length, with no corner discontinuity and ")
+                + "no coupling between a net's own legs).");
+        if (options.CornerDiscontinuities && cornerCount > 0)
+            assumptions.Add($"{cornerCount} corner(s) of {cornerShapes.Count} shape(s) are carried as lumped T networks "
+                + "(series L, shunt C) at the corner point, each solved once by the layered moment method on the board's "
+                + "own cross-section — a bent strip against two straight lengths of it between the same ports, de-embedded "
+                + "to the corner. Copper at a corner is the two draws with round ends. A coupled pair turning together is "
+                + "two single-trace corners; the coupling at the corner itself is not modelled."
+                + (hairpins > 0 ? $" {hairpins} turn(s) of 150° or more (hairpins) carry their path length only." : ""));
         }
         assumptions.Add("Routed length in the network: "
             + string.Join(", ", Enumerable.Range(0, n).Select(i =>

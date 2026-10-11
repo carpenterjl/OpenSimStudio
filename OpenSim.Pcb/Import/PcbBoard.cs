@@ -34,9 +34,34 @@ public sealed record CopperIsland(
 /// <param name="ToLayer">Last copper layer the hole reaches.</param>
 public sealed record Via(Point2 Position, double Diameter, bool Plated, int FromLayer = 0, int ToLayer = 0)
 {
-    /// <summary>Whether the hole passes through copper layer <paramref name="layerOrder"/>.</summary>
-    public bool Reaches(int layerOrder) =>
-        FromLayer <= 0 || ToLayer <= 0 || (layerOrder >= FromLayer && layerOrder <= ToLayer);
+    /// <summary>Copper layers a back-drill took the plating away from, bit k − 1 for layer k (FU-29):
+    /// the barrel no longer joins them, and what is left of it ends at the last layer kept. Zero for
+    /// a via no back-drill touched, or a board whose file cannot say (Gerber).</summary>
+    public ulong BackdrilledLayers { get; init; }
+
+    /// <summary>The longest stub the back-drill's fabrication spec leaves past the last layer kept [m]
+    /// (IPC-2581 MAX_STUB_LENGTH); null when the spec gives none.</summary>
+    public double? BackdrillMaxStubMeters { get; init; }
+
+    public bool IsBackdrilled(int layerOrder) =>
+        layerOrder is >= 1 and <= 64 && (BackdrilledLayers & (1UL << (layerOrder - 1))) != 0;
+
+    /// <summary>Whether the plated barrel reaches copper layer <paramref name="layerOrder"/>: the
+    /// drill passes through it and no back-drill removed the plating there.</summary>
+    public bool Reaches(int layerOrder) => !IsBackdrilled(layerOrder) &&
+        (FromLayer <= 0 || ToLayer <= 0 || (layerOrder >= FromLayer && layerOrder <= ToLayer));
+
+    /// <summary>The first and last copper layers the plated barrel still reaches, on a board of
+    /// <paramref name="layerCount"/> layers: the drill's span less what back-drills removed from its
+    /// ends. Null when nothing of the barrel is left.</summary>
+    public (int Top, int Bottom)? PlatedSpan(int layerCount)
+    {
+        int top = FromLayer > 0 && ToLayer > 0 ? Math.Min(FromLayer, ToLayer) : 1;
+        int bottom = FromLayer > 0 && ToLayer > 0 ? Math.Max(FromLayer, ToLayer) : layerCount;
+        while (top <= bottom && IsBackdrilled(top)) top++;
+        while (bottom >= top && IsBackdrilled(bottom)) bottom--;
+        return top <= bottom ? (top, bottom) : null;
+    }
 }
 
 /// <summary>
@@ -116,6 +141,10 @@ public sealed class PcbBoard
     /// <summary>Informational: absent data defaulted, summaries, timings — never a sign
     /// that declared content was lost. Empty for readers that predate the split (Gerber).</summary>
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+
+    /// <summary>The source format can say which vias are back-drilled (IPC-2581); false for Gerber
+    /// sets, whose drill files carry no back-drill, so a via there may be back-drilled unknown to us.</summary>
+    public bool CarriesBackdrills { get; init; }
 
     /// <summary>
     /// The physical stackup read from the source file (per-layer copper and per-gap

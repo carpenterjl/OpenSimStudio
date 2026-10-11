@@ -163,6 +163,10 @@
                               IsChecked="{Binding SignalIntegrity.SwapBoardEnds}"
                               Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"
                               ToolTip="The near end is where the first selected net's route starts; tick to drive from its other end. Applies at the next extraction — the result line states the near-end position."/>
+                    <CheckBox Content="Corners as lumped networks (slow)"
+                              IsChecked="{Binding SignalIntegrity.CornerDiscontinuities}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"
+                              ToolTip="Each corner of the routes is carried as the series L and shunt C it adds to its path length, solved once per corner shape (width, layer, angle) by the layered moment method on the board's own cross-section — seconds to minutes per shape. Off: a corner is its path length only."/>
                     <Button x:Name="SiBoardExtractButton" Content="Extract coupled section from nets"
                             Command="{Binding SignalIntegrity.ExtractFromBoardNetsCommand}"
                             Margin="0,3,0,0"/>

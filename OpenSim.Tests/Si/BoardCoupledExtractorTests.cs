@@ -127,6 +127,61 @@ public class BoardCoupledExtractorTests
     }
 
     [Fact]
+    public void CornersOfTheRoutes_AreLumpedNetworksAtTheirPlaceInTheCascade()
+    {
+        // FU-29: two nets run together for 30 mm, then turn apart at right angles — NET1 up, NET2
+        // down — for 15 mm each. With corners on, each net's turn is the corner network the
+        // layered moment method gives this cross-section, at the end of the coupled stretch; off,
+        // the cascade is what it was.
+        Polygon2 L(double y, double turn) => turn > 0
+            ? new(new[] { new Point2(0, y - W / 2), new Point2(30e-3 + W / 2, y - W / 2), new Point2(30e-3 + W / 2, y + turn),
+                new Point2(30e-3 - W / 2, y + turn), new Point2(30e-3 - W / 2, y + W / 2), new Point2(0, y + W / 2) })
+            : new(new[] { new Point2(0, y - W / 2), new Point2(30e-3 - W / 2, y - W / 2), new Point2(30e-3 - W / 2, y + turn),
+                new Point2(30e-3 + W / 2, y + turn), new Point2(30e-3 + W / 2, y + W / 2), new Point2(0, y + W / 2) });
+        var islands = new List<CopperIsland>
+        {
+            new(0, 1, "L1", L(Pitch, 15e-3)), new(1, 1, "L1", L(0, -15e-3)),
+            new(2, 2, "L2", Rect(-100e-3, -100e-3, 100e-3, 100e-3)),
+        };
+        var nets = new List<CopperNet>
+        {
+            new(1, new[] { islands[0] }) { Name = "NET1" }, new(2, new[] { islands[1] }) { Name = "NET2" },
+        };
+        var board = new PcbBoard
+        {
+            Outline = Array.Empty<Polygon2>(), Islands = islands, Pads = Array.Empty<CopperPad>(), Vias = Array.Empty<Via>(),
+            Nets = nets, Layers = Array.Empty<BoardLayer>(), Warnings = Array.Empty<string>(),
+            TraceCenterlines = new[]
+            {
+                new TraceCenterline(1, new Point2(0, Pitch), new Point2(30e-3, Pitch), W),
+                new TraceCenterline(1, new Point2(30e-3, Pitch), new Point2(30e-3, Pitch + 15e-3), W),
+                new TraceCenterline(1, new Point2(0, 0), new Point2(30e-3, 0), W),
+                new TraceCenterline(1, new Point2(30e-3, 0), new Point2(30e-3, -15e-3), W),
+            },
+            Stackup = new PcbStackupSettings
+            {
+                DielectricGapThicknesses = new[] { H }, DielectricGapPermittivities = new[] { EpsR },
+                DielectricGapLossTangents = new[] { TanD },
+            },
+        };
+        var plain = BoardCoupledExtractor.Extract(board, nets);
+        var cornered = BoardCoupledExtractor.Extract(board, nets, new BoardCoupledOptions { CornerDiscontinuities = true });
+        Assert.Null(cornered.FailureReason);
+        Assert.DoesNotContain(plain.Sections, s => s.Corners is not null);
+        var turn = Assert.Single(cornered.Sections, s => s.Corners is not null);
+        Assert.All(turn.Corners!, c => Assert.NotNull(c));
+        var expected = CornerExtractor.Cached(new LayeredStackup(new[] { new LayeredStackup.Layer(EpsR, TanD, H) }), 0, false, W, 90);
+        Assert.Equal(expected, turn.Corners![0]);
+        Assert.Equal(expected, turn.Corners![1]);
+        // In the cascade right after the coupled stretch, and the routed lengths untouched.
+        int at = cornered.Sections.ToList().IndexOf(turn);
+        Assert.NotNull(cornered.Sections[at - 1].Coupled);
+        Assert.Equal(plain.RoutedLengthsMeters, cornered.RoutedLengthsMeters);
+        Assert.Contains(cornered.Assumptions, a => a.Contains("corner(s) of 1 shape(s)"));
+        Assert.Equal(plain.Sections.Count + 1, cornered.Sections.Count);
+    }
+
+    [Fact]
     public void PartialOverlap_SetsCoupledLength_AndReportsLeads()
     {
         // NET1 spans x 0..40 mm, NET2 x 10..50 mm → 30 mm overlap, 10 mm lead each.
