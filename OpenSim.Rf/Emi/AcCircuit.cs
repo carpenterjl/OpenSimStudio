@@ -124,7 +124,7 @@ public sealed record AcSolution(double FrequencyHz, IReadOnlyDictionary<string, 
 /// the integral of v(t)·e^{−jnω₀t} has a closed form, so a trapezoid's edges are resolved however
 /// short they are against the period.
 /// </summary>
-public sealed class PiecewiseLinearWaveform
+public sealed class PiecewiseLinearWaveform : IPeriodicWaveform
 {
     private readonly (double T, double V)[] _points;
 
@@ -162,6 +162,41 @@ public sealed class PiecewiseLinearWaveform
 
     /// <summary>The mean value (n = 0).</summary>
     public double Mean => Coefficient(0).Real;
+
+    /// <summary>The straight pieces (t₀, t₁, v₀, v₁), the last one wrapping to the first
+    /// point one period later.</summary>
+    public IReadOnlyList<(double T0, double T1, double V0, double V1)> Segments
+    {
+        get
+        {
+            var list = new List<(double, double, double, double)>(_points.Length);
+            for (int i = 0; i < _points.Length; i++)
+            {
+                var (t0, v0) = _points[i];
+                var (t1, v1) = i + 1 < _points.Length ? _points[i + 1] : (_points[0].T + Period, _points[0].V);
+                list.Add((t0, t1, v0, v1));
+            }
+            return list;
+        }
+    }
+
+    /// <summary>The steepest rising piece — a switching waveform's turn-on edge — as its
+    /// step (v₁ − v₀), duration and the time it ends (within the period); null when nothing
+    /// rises.</summary>
+    public (double Step, double Duration, double EndTime)? SteepestRise
+    {
+        get
+        {
+            (double Step, double Duration, double EndTime)? best = null;
+            double bestSlope = 0;
+            foreach (var (t0, t1, v0, v1) in Segments)
+            {
+                double slope = (v1 - v0) / (t1 - t0);
+                if (slope > bestSlope) { bestSlope = slope; best = (v1 - v0, t1 - t0, t1 >= Period ? t1 - Period : t1); }
+            }
+            return best;
+        }
+    }
 
     /// <summary>Two-sided coefficient c_n = (1/T)∫v(t)e^{−jnω₀t}dt; the one-sided amplitude of
     /// harmonic n ≥ 1 is 2|c_n|.</summary>

@@ -168,10 +168,24 @@ public static class LoopExtraction
     /// <param name="planeZ">(zLo, zHi) of the plane's copper in the chain's z frame.</param>
     public static LoopExtractionResult ChainOverPlane(IReadOnlyList<TraceSegment3D> chain,
         IReadOnlyList<Polygon2> planeShape, (double zLo, double zHi) planeZ, IReadOnlyList<double> frequenciesHz,
+        LoopExtractionOptions? options = null, CancellationToken cancellationToken = default) =>
+        LoopOverPlane(chain, Array.Empty<TraceSegment3D>(), planeShape, planeZ, frequenciesHz, options, cancellationToken);
+
+    /// <summary>
+    /// A loop closed through a plane or pour in two legs: <paramref name="outbound"/> runs from
+    /// the port's positive terminal to the plane (its last segment ends on the plane — a via
+    /// barrel, or a trace whose end is tied to the copper under it), the plane carries the
+    /// current to where <paramref name="inbound"/> leaves it and runs back to the port's
+    /// negative terminal. An empty inbound leg is <see cref="ChainOverPlane"/>: the port sits
+    /// between the outbound start and the plane under it. The plane is meshed around both legs.
+    /// </summary>
+    public static LoopExtractionResult LoopOverPlane(IReadOnlyList<TraceSegment3D> outbound, IReadOnlyList<TraceSegment3D> inbound,
+        IReadOnlyList<Polygon2> planeShape, (double zLo, double zHi) planeZ, IReadOnlyList<double> frequenciesHz,
         LoopExtractionOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= new LoopExtractionOptions();
-        if (chain.Count == 0) throw new InvalidOperationException("The trace chain is empty.");
+        if (outbound.Count == 0) throw new InvalidOperationException("The trace chain is empty.");
+        var chain = outbound.Concat(inbound).ToList();
         double planeMid = 0.5 * (planeZ.zLo + planeZ.zHi), planeThickness = planeZ.zHi - planeZ.zLo;
         double height = chain.Where(s => Math.Abs(s.Direction.Z) < 1e-6)
             .Select(s => Math.Abs(s.Start.Z - planeMid) - planeThickness / 2 - s.Thickness / 2)
@@ -191,14 +205,23 @@ public static class LoopExtraction
         pitch = Math.Max(pitch, Math.Sqrt(area / options.MaxPlaneNodes));
 
         var model = new PeecModel();
-        var (start, end) = Add(model, chain, FinestSkinDepth(frequenciesHz, options), options);
+        double delta = FinestSkinDepth(frequenciesHz, options);
+        var (start, end) = Add(model, outbound, delta, options);
         var grid = model.AddPlane(copper, planeMid, planeThickness, pitch, options.ConductivitySiemensPerMeter);
-        Point2 startXy = new(chain[0].Start.X, chain[0].Start.Y), endXy = new(chain[^1].End.X, chain[^1].End.Y);
-        if (grid.DistanceTo(startXy) > 2 * grid.PitchMeters || grid.DistanceTo(endXy) > 2 * grid.PitchMeters)
+        Point2 endXy = new(outbound[^1].End.X, outbound[^1].End.Y);
+        Point2 returnXy = inbound.Count > 0 ? new(inbound[0].Start.X, inbound[0].Start.Y) : new(outbound[0].Start.X, outbound[0].Start.Y);
+        if (grid.DistanceTo(returnXy) > 2 * grid.PitchMeters || grid.DistanceTo(endXy) > 2 * grid.PitchMeters)
             throw new InvalidOperationException(
                 "The plane has no copper under an end of the chain, so the current has nowhere to return from there.");
         model.AddShort(end, grid.NodeNear(endXy));
-        model.AddPort("loop", start, grid.NodeNear(startXy));
+        if (inbound.Count > 0)
+        {
+            var (back, negative) = Add(model, inbound, delta, options);
+            model.AddShort(grid.NodeNear(returnXy), back);
+            model.AddPort("loop", start, negative);
+        }
+        else
+            model.AddPort("loop", start, grid.NodeNear(returnXy));
 
         var notes = Common.ToList();
         notes.Add($"Return through the plane's copper within {margin * 1e3:g3} mm of the chain, meshed at "
@@ -209,10 +232,50 @@ public static class LoopExtraction
             notes.Add($"The plane grid ({grid.PitchMeters * 1e3:g3} mm) is coarser than the trace's height above it "
                 + $"({height * 1e3:g3} mm): the return cannot gather under the trace as tightly as it would, and the "
                 + "high-frequency inductance is over-stated.");
-        notes.Add("The chain is joined to the plane ideally under its far end and seen between its near end and the "
-            + "plane under it: the vias that make those connections are not in the loop.");
+        notes.Add(inbound.Count > 0
+            ? "The outbound leg's end and the inbound leg's start are joined to the plane ideally under them; the port "
+              + "is between the outbound start and the inbound end."
+            : "The chain is joined to the plane ideally under its far end and seen between its near end and the "
+              + "plane under it: the vias that make those connections are not in the loop.");
         return new LoopExtractionResult(model.PortNames, model.Solve(frequenciesHz, false, cancellationToken),
             model.FilamentCount, notes);
+    }
+
+    /// <summary>The area of a loop made of the chain and its return in the plane directly beneath:
+    /// each horizontal segment's length times its height above the plane's facing surface
+    /// (barrels, vertical, enclose nothing by themselves).</summary>
+    public static double AreaOverPlane(IReadOnlyList<TraceSegment3D> chain, (double zLo, double zHi) planeZ)
+    {
+        double planeMid = 0.5 * (planeZ.zLo + planeZ.zHi);
+        double area = 0;
+        foreach (var s in chain.Where(s => Math.Abs(s.Direction.Z) < 1e-6))
+        {
+            double surface = s.Start.Z >= planeMid ? planeZ.zHi : planeZ.zLo;
+            area += s.Length * Math.Abs(s.Start.Z - surface);
+        }
+        return area;
+    }
+
+    /// <summary>The area the polygon of a chain and its return enclose in plan view (the
+    /// shoelace formula over the chain's points followed by the return's, taken far end
+    /// first).</summary>
+    public static double AreaBetween(IReadOnlyList<TraceSegment3D> chain, IReadOnlyList<TraceSegment3D> returnChain)
+    {
+        var points = new List<Point2>();
+        foreach (var s in chain) points.Add(new Point2(s.Start.X, s.Start.Y));
+        points.Add(new Point2(chain[^1].End.X, chain[^1].End.Y));
+        bool forward = (returnChain[0].Start - chain[^1].End).Length <= (returnChain[^1].End - chain[^1].End).Length;
+        var back = forward ? returnChain : returnChain.Reverse().Select(s => s with { Start = s.End, End = s.Start }).ToList();
+        foreach (var s in back) points.Add(new Point2(s.Start.X, s.Start.Y));
+        points.Add(new Point2(back[^1].End.X, back[^1].End.Y));
+        double twice = 0;
+        for (int i = 0; i < points.Count; i++)
+        {
+            var a = points[i];
+            var b = points[(i + 1) % points.Count];
+            twice += a.X * b.Y - b.X * a.Y;
+        }
+        return 0.5 * Math.Abs(twice);
     }
 }
 
