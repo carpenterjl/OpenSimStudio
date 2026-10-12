@@ -17,10 +17,10 @@ public sealed record GerberParseOptions
 /// AD (C/R/O with optional holes, polygon P, %AM% macros with expressions — evaluated
 /// at AD time), G01/G02/G03 with G75 arcs, D01/D02/D03, regions G36/G37, polarity
 /// LPD/LPC, step-repeat %SR% (replayed at block close), comments, and M02. Attributes
-/// (TF/TA/TO/TD) never change the image. Two kinds are kept: <c>TF.FilePolarity</c>, on
-/// the document, and the X2 object attributes <c>TO.N</c>, <c>TO.P</c> and <c>TO.C</c>
-/// (net, component pin, component), on every object created while they are in force.
-/// Anything genuinely unknown fails loudly. All coordinates
+/// (TF/TA/TO/TD) never change the image. Two kinds are kept: <c>TF.FilePolarity</c> (or the
+/// deprecated <c>%IPNEG*%</c>), on the document, and the X2 object attributes <c>TO.N</c>,
+/// <c>TO.P</c> and <c>TO.C</c> (net, component pin, component), on every object created
+/// while they are in force. Anything genuinely unknown fails loudly. All coordinates
 /// are converted to meters.
 /// </summary>
 public sealed partial class GerberParser
@@ -161,9 +161,11 @@ public sealed partial class GerberParser
         }
         else if (first.StartsWith("LN", StringComparison.Ordinal) || first.StartsWith("IP", StringComparison.Ordinal))
         {
-            // Deprecated layer name / image polarity 'IPPOS' — no image effect for positive.
+            // Deprecated layer name / image polarity. 'IPPOS' has no image effect; 'IPNEG' is
+            // the RS-274X way of saying what X2 says with TF.FilePolarity,Negative: the file
+            // draws where the material is absent (FU-22).
             if (first == "IPNEG")
-                throw new InvalidDataException("Negative image polarity (%IPNEG%) is not supported.");
+                state.Negative = true;
         }
         else
         {
@@ -583,7 +585,7 @@ public sealed partial class GerberParser
         public Point2 Current;
         public bool InRegion;
         public bool Ended;
-        public bool Negative;                                                // %TF.FilePolarity,Negative
+        public bool Negative;                                                // %TF.FilePolarity,Negative or %IPNEG%
         public bool SingleQuadrant;                                          // G74 in force
         public string? ObjectNet, ObjectComponent, ObjectPin;                // %TO.N / .P / .C in force
 

@@ -17,13 +17,18 @@ public static class NetNamer
 {
     /// <summary>One label per attributed object of a positive copper layer: a flash at
     /// its centre, a draw at the middle of its first segment, a region just inside its
-    /// first contour edge.</summary>
+    /// first contour edge.
+    /// <para>
+    /// A negative file's objects are clearances, so the name on one is the net of the hole
+    /// it clears, not of the plane around it — unless the hole joins the plane. A thermal
+    /// relief does: its centre is copper, tied to the plane through the spokes, so the
+    /// relief's net IS the plane's. Its flash centre is the label; an antipad's centre is
+    /// cleared copper, where <see cref="Apply"/> finds no island and the label is dropped.
+    /// Strokes and regions on a negative file (plane splits, cutouts) name nothing (FU-22).
+    /// </para></summary>
     public static List<NetLabel> Labels(GerberDocument document, int layerOrder)
     {
         var labels = new List<NetLabel>();
-        // A negative file's objects are clearances: the name on one is the net of the
-        // hole, not of the plane around it.
-        if (document.IsNegative) return labels;
         foreach (var op in document.Ops)
         {
             if (op.Net is not { } name || op.Polarity != GerberPolarity.Dark) continue;
@@ -32,10 +37,11 @@ public static class NetNamer
                 case FlashOp flash:
                     labels.Add(new NetLabel(layerOrder, flash.Position, name));
                     break;
-                case DrawOp { Path.Count: >= 2 } draw:
+                case DrawOp { Path.Count: >= 2 } draw when !document.IsNegative:
                     labels.Add(new NetLabel(layerOrder, (draw.Path[0] + draw.Path[1]) * 0.5, name));
                     break;
-                case RegionOp { Contours.Count: > 0 } region when InteriorPoint(region.Contours[0]) is { } inside:
+                case RegionOp { Contours.Count: > 0 } region
+                    when !document.IsNegative && InteriorPoint(region.Contours[0]) is { } inside:
                     labels.Add(new NetLabel(layerOrder, inside, name));
                     break;
             }

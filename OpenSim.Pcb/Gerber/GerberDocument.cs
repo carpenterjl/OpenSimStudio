@@ -87,9 +87,15 @@ public sealed class GerberDocument
     public required IReadOnlyList<string> Warnings { get; init; }
 
     /// <summary>
-    /// The file declares <c>%TF.FilePolarity,Negative*%</c>: its ops draw where material
-    /// is ABSENT (a plane's antipads and thermal reliefs). The copper is the board
-    /// outline minus the image of <see cref="Ops"/>; no op is a pad or a trace.
+    /// The file is a negative image: it declares <c>%TF.FilePolarity,Negative*%</c> or
+    /// <c>%IPNEG*%</c>, or the board reader judged an undeclared plane layer to be one
+    /// (<see cref="AsNegative"/>). Its ops draw where material is ABSENT (a plane's antipads
+    /// and thermal reliefs). The copper is the board outline minus the image of
+    /// <see cref="Ops"/>; no op is a pad or a trace.
     /// </summary>
     public bool IsNegative { get; init; }
+
+    /// <summary>The same document read as a negative image.</summary>
+    public GerberDocument AsNegative() =>
+        IsNegative ? this : new GerberDocument { Apertures = Apertures, Ops = Ops, Warnings = Warnings, IsNegative = true };
 }

@@ -22,7 +22,7 @@ public sealed class PcbBoardReader
     /// layer and stitched back in file order so ids and warnings stay deterministic.</summary>
     private sealed record LayerResult(int LayerOrder, LayerImage Image,
         IReadOnlyList<CopperPad> Pads, IReadOnlyList<CopperPad> PadCandidates,
-        List<TraceCenterline> Centerlines, List<NetLabel> Labels, bool Negative,
+        List<TraceCenterline> Centerlines, List<NetLabel> Labels, bool Negative, string? PolarityNote,
         long ParseMs, long ImageMs, long ExtractMs, int OpCount, int PolarityFlips);
 
     public PcbBoard Read(string archivePath)
@@ -54,6 +54,13 @@ public sealed class PcbBoardReader
             return result;
         });
 
+        // The drilled holes come first: a plane layer that states no polarity is judged
+        // against them (an antipad or a thermal relief sits on its hole).
+        stageTimer.Restart();
+        var drillWarnings = new List<string>();
+        var vias = ReadVias(layers, byName, drillWarnings);
+        long drillsMs = stageTimer.ElapsedMilliseconds;
+
         // Copper layers are mutually independent: parse + polygonize in parallel, then
         // assemble strictly in layer order so island ids, pads, centerlines and warning
         // lines come out bitwise-identical to a sequential run.
@@ -83,6 +90,15 @@ public sealed class PcbBoardReader
                         long parseMs = sw.ElapsedMilliseconds;
                         sw.Restart();
                         var image = new LayerImageBuilder(_ops).Build(doc);
+                        // A plane layer with no polarity statement may still be a negative
+                        // plane (plain RS-274X Protel/Altium output); the drawing decides.
+                        string? polarityNote = null;
+                        if (!doc.IsNegative && layer.Type == GerberLayerType.CopperPlane)
+                        {
+                            var (negative, note) = UndeclaredNegativePlane.Judge(doc, image, outlineTask.Result, vias);
+                            polarityNote = note;
+                            if (negative) doc = doc.AsNegative();
+                        }
                         if (doc.IsNegative)
                             image = InvertWithinOutline(image, outlineTask.Result);
                         long imageMs = sw.ElapsedMilliseconds;
@@ -95,7 +111,7 @@ public sealed class PcbBoardReader
                         var lines = Inductance.TraceSegmenter.Centerlines(doc, layerOrder).ToList();
                         long extractMs = sw.ElapsedMilliseconds;
                         results[i] = new LayerResult(layerOrder, image, layerPads, candidates, lines,
-                            NetNamer.Labels(doc, layerOrder), doc.IsNegative,
+                            NetNamer.Labels(doc, layerOrder), doc.IsNegative, polarityNote,
                             parseMs, imageMs, extractMs, doc.Ops.Count, CountPolarityFlips(doc));
                     }
                     catch (Exception ex)
@@ -135,40 +151,16 @@ public sealed class PcbBoardReader
             warnings.Add($"Layer {layer.FileName}: {r.Image.Polygons.Count} copper islands, {r.Pads.Count} pads " +
                          $"(parse {r.ParseMs} ms, copper image {r.ImageMs} ms over {r.OpCount} ops / " +
                          $"{r.PolarityFlips} polarity flips, pads+centerlines {r.ExtractMs} ms).");
+            if (r.PolarityNote is not null)
+                warnings.Add(r.Negative
+                    ? $"Layer {layer.FileName}: no polarity statement, read as a NEGATIVE plane because " +
+                      $"{r.PolarityNote}. State %TF.FilePolarity in the file to override this."
+                    : $"Layer {layer.FileName}: no polarity statement; {r.PolarityNote}.");
             if (r.Negative)
                 warnings.Add($"Layer {layer.FileName}: negative-polarity plane — copper is the board outline " +
                              "minus the drawn clearances; a via joins it where its centre lies in that copper.");
         }
-
-        // Vias from drill layers. Plated or not, and the layer span of a blind or buried
-        // drill, come from the file's FileFunction attribute; only a file without one is
-        // judged by its name.
-        // Routed slots are NOT vias: a via is a circular plated bore, and plated-slot
-        // layer stitching is not modeled — say so rather than misrepresent connectivity.
-        stageTimer.Restart();
-        var vias = new List<Via>();
-        foreach (var drill in layers.Where(l => l.Type == GerberLayerType.Drill))
-        {
-            var (plated, fromLayer, toLayer, fromAttribute) =
-                GerberLayerClassifier.DrillFunction(drill.FileName, byName[drill.FileName]);
-            if (!fromAttribute)
-                warnings.Add($"Layer {drill.FileName}: no FileFunction attribute — holes taken as " +
-                             $"{(plated ? "plated" : "non-plated")} from the file name, through the whole board.");
-            else if (fromLayer > 0)
-                warnings.Add($"Layer {drill.FileName}: {(plated ? "plated" : "non-plated")} holes " +
-                             $"between copper layers {fromLayer} and {toLayer} only.");
-            var features = DrillExtractor.Extract(byName[drill.FileName]);
-            foreach (var h in features.Holes)
-                vias.Add(new Via(h.Center, h.Diameter, plated, fromLayer, toLayer));
-            if (features.Warnings is not null)
-                foreach (string w in features.Warnings)
-                    warnings.Add($"Layer {drill.FileName}: {w}");
-            if (features.Slots.Count > 0)
-                warnings.Add($"Layer {drill.FileName}: {features.Slots.Count} slot(s) parsed; slots are " +
-                             "subtracted from the board domain but do not stitch copper layers.");
-        }
-
-        long drillsMs = stageTimer.ElapsedMilliseconds;
+        warnings.AddRange(drillWarnings);
 
         // Copper that is not a pad-sized flash — a G36 region, a flash over the size limit —
         // is a pad where a plated drill sits at its centre: a through-hole or via pad the CAD
@@ -254,6 +246,40 @@ public sealed class PcbBoardReader
                          "by the file name; placed between the top and bottom layers in file order — " +
                          "check the layer order before trusting any multi-layer result.");
         return (ordered, orders);
+    }
+
+    /// <summary>
+    /// Vias from the drill layers. Plated or not, and the layer span of a blind or buried
+    /// drill, come from the file's FileFunction attribute; only a file without one is judged
+    /// by its name. Routed slots are NOT vias: a via is a circular plated bore, and
+    /// plated-slot layer stitching is not modeled — say so rather than misrepresent
+    /// connectivity.
+    /// </summary>
+    private static List<Via> ReadVias(IReadOnlyList<BoardLayer> layers, Dictionary<string, string> byName,
+        List<string> warnings)
+    {
+        var vias = new List<Via>();
+        foreach (var drill in layers.Where(l => l.Type == GerberLayerType.Drill))
+        {
+            var (plated, fromLayer, toLayer, fromAttribute) =
+                GerberLayerClassifier.DrillFunction(drill.FileName, byName[drill.FileName]);
+            if (!fromAttribute)
+                warnings.Add($"Layer {drill.FileName}: no FileFunction attribute — holes taken as " +
+                             $"{(plated ? "plated" : "non-plated")} from the file name, through the whole board.");
+            else if (fromLayer > 0)
+                warnings.Add($"Layer {drill.FileName}: {(plated ? "plated" : "non-plated")} holes " +
+                             $"between copper layers {fromLayer} and {toLayer} only.");
+            var features = DrillExtractor.Extract(byName[drill.FileName]);
+            foreach (var h in features.Holes)
+                vias.Add(new Via(h.Center, h.Diameter, plated, fromLayer, toLayer));
+            if (features.Warnings is not null)
+                foreach (string w in features.Warnings)
+                    warnings.Add($"Layer {drill.FileName}: {w}");
+            if (features.Slots.Count > 0)
+                warnings.Add($"Layer {drill.FileName}: {features.Slots.Count} slot(s) parsed; slots are " +
+                             "subtracted from the board domain but do not stitch copper layers.");
+        }
+        return vias;
     }
 
     /// <summary>
