@@ -37,6 +37,12 @@ public partial class ThermalPartRow : ObservableObject
 
     /// <summary>Case top to ambient through a heatsink [K/W]; 0 = bare case top in air.</summary>
     [ObservableProperty] private double _heatsinkKelvinPerWatt;
+
+    /// <summary>Heat capacity of the junction [J/K] (a transient); 0 = none.</summary>
+    [ObservableProperty] private double _junctionCapacity;
+
+    /// <summary>Heat capacity of the case [J/K] (a transient); 0 = none.</summary>
+    [ObservableProperty] private double _caseCapacity;
 }
 
 /// <summary>
@@ -57,6 +63,14 @@ public partial class PcbViewModel
 
     /// <summary>Board element size for the thermal mesh [mm]; 0 = automatic.</summary>
     [ObservableProperty] private double _thermalEdgeMm;
+
+    /// <summary>Conductance from the enclosure's air to the outside [W/K] (a through-flow's
+    /// ṁ·c_p, or the walls'); 0 = open air, the parts and the board see the ambient directly.</summary>
+    [ObservableProperty] private double _enclosureConductance;
+
+    /// <summary>The enclosure's air as the parts' and the board's surroundings, when a conductance is given.</summary>
+    private EnclosureAir? Enclosure() =>
+        EnclosureConductance > 0 ? new EnclosureAir { ConductanceToAmbient = EnclosureConductance } : null;
 
     private void ClearThermalParts()
     {
@@ -128,7 +142,8 @@ public partial class PcbViewModel
                     row.Part.PadExtent is null ? row.Part.RotationDegrees : 0),
                 PowerWatts = row.PowerWatts, ThetaJc = row.ThetaJc, ThetaJb = row.ThetaJb,
                 CaseToAmbient = row.HeatsinkKelvinPerWatt > 0 ? row.HeatsinkKelvinPerWatt : null,
-                CaseFilmCoefficient = CaseFilmCoefficient
+                CaseFilmCoefficient = CaseFilmCoefficient,
+                JunctionCapacity = Math.Max(0, row.JunctionCapacity), CaseCapacity = Math.Max(0, row.CaseCapacity)
             });
         }
         return components;
@@ -156,7 +171,7 @@ public partial class PcbViewModel
             ViaPlatingThickness = ViaPlatingMicrons * 1e-6,
             TraceDirections = traceDirections
         };
-        return (new PowerRailViewModel.BoardThermalContext(_board, options, parts), null);
+        return (new PowerRailViewModel.BoardThermalContext(_board, options, parts, Enclosure()), null);
     }
 
     [RelayCommand]
@@ -208,7 +223,7 @@ public partial class PcbViewModel
                 var m = BoardThermalMesher.Mesh(board, components, options);
                 return (m, ComponentThermalAnalysis.Solve(m, new ComponentThermalSetup
                 {
-                    Components = components, Environment = environment
+                    Components = components, Environment = environment, Air = Enclosure()
                 }));
             });
 

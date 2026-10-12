@@ -73,8 +73,9 @@ public partial class PowerRailViewModel : ObservableObject
     [ObservableProperty] private string _railResult = "";
     [ObservableProperty] private string _railAssumptions = "";
 
-    /// <summary>The board, its thermal options and parts for the whole-board thermal body.</summary>
-    public sealed record BoardThermalContext(PcbBoard Board, BoardThermalOptions Options, IReadOnlyList<ThermalComponent> Parts);
+    /// <summary>The board, its thermal options, parts and (when enclosed) air for the whole-board thermal body.</summary>
+    public sealed record BoardThermalContext(PcbBoard Board, BoardThermalOptions Options, IReadOnlyList<ThermalComponent> Parts,
+        EnclosureAir? Air = null);
 
     /// <summary>Set by the PCB panel: (trace directions, with the parts) → the board's thermal
     /// context, or the reason there is none.</summary>
@@ -268,7 +269,8 @@ public partial class PowerRailViewModel : ObservableObject
                 return RailThermalAnalysis.Solve(mesh, net, new RailThermalSetup
                 {
                     Rail = setup, Copper = copper, Laminate = laminate, Environment = environment,
-                    Board = board, Components = context?.Parts ?? Array.Empty<ThermalComponent>(), Cooling = cooling
+                    Board = board, Components = context?.Parts ?? Array.Empty<ThermalComponent>(), Air = context?.Air,
+                    Cooling = cooling
                 });
             });
             Show(report.Rail, report.Describe());
@@ -347,7 +349,7 @@ public partial class PowerRailViewModel : ObservableObject
                 return RailThermalAnalysis.SolveTransient(mesh, net, new RailThermalSetup
                 {
                     Rail = setup, Copper = copper, Laminate = laminate, Environment = environment,
-                    Board = board, Components = context?.Parts ?? Array.Empty<ThermalComponent>()
+                    Board = board, Components = context?.Parts ?? Array.Empty<ThermalComponent>(), Air = context?.Air
                 }, settings);
             });
             Show(report.Rail, report.Describe());
@@ -355,6 +357,8 @@ public partial class PowerRailViewModel : ObservableObject
             foreach (string line in report.Solution.Log) _log.Append($"Rail transient: {line}");
             foreach (var (time, loss, peak) in report.Solution.History)
                 _log.Append($"Rail transient: t = {time:g4} s, loss {loss * 1e3:g4} mW, hottest copper {peak - 273.15:f2} °C");
+            foreach (var part in report.Components)
+                ResultLines.Add($"{part.RefDes}: junction {part.JunctionKelvin - 273.15:f1} °C at the end.");
             // The frames are on the thermal body: shown when that is the net's own mesh.
             if (context is null)
                 _session.RaiseResultsProduced(report.Solution.Thermal.Fields, preferFieldName: "Temperature",

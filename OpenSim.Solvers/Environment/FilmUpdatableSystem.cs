@@ -45,11 +45,18 @@ internal sealed class FilmUpdatableSystem
     private readonly double[] _prescribedWork;         // that value plus this iterate's film
     private readonly CorrectionTerm[] _correctionTerms;
     private readonly double[] _triangleArea;
-    private readonly StampSlot[] _slots;               // 9 per boundary triangle, row-major (i, j)
+    private readonly StampSlot[] _slots;               // per boundary triangle: 9 row-major (i, j), then the 7 air entries
+    private readonly int _stride;                      // 9, or 16 with an air unknown
+
+    /// <summary>Slots per triangle: the 3×3 Robin block on its nodes.</summary>
+    private const int RobinSlots = 9;
+
+    /// <summary>With an air unknown: (node, air) ×3, (air, node) ×3, (air, air).</summary>
+    private const int AirSlots = 7;
 
     private FilmUpdatableSystem(FeMesh mesh, ConstrainedSystemSolver.ReducedSystem system,
         double[] baseValues, double[] basePrescribedValues, CorrectionTerm[] correctionTerms,
-        double[] triangleArea, StampSlot[] slots)
+        double[] triangleArea, StampSlot[] slots, int stride)
     {
         _mesh = mesh;
         _system = system;
@@ -59,6 +66,7 @@ internal sealed class FilmUpdatableSystem
         _correctionTerms = correctionTerms;
         _triangleArea = triangleArea;
         _slots = slots;
+        _stride = stride;
     }
 
     /// <summary>The reduced system, holding whatever film was last applied.</summary>
@@ -73,16 +81,31 @@ internal sealed class FilmUpdatableSystem
     /// this adds no position — but relying on that would make the sparsity depend on a property
     /// of the mesh that nothing checks.
     /// </para>
+    /// <para>
+    /// With <paramref name="airDof"/> the film drives toward that unknown (an enclosure's air
+    /// node of a thermal network) instead of a fixed ambient: every triangle also couples its
+    /// nodes to that column (−h·A/3 each way) and adds h·A on its diagonal, so the pattern
+    /// holds those positions too and <see cref="Apply"/> rewrites them with the film.
+    /// </para>
     /// </summary>
     public static FilmUpdatableSystem Prepare(CsrMatrix baseMatrix, FeMesh mesh,
-        IReadOnlyDictionary<int, double> prescribed)
+        IReadOnlyDictionary<int, double> prescribed, int? airDof = null)
     {
         var pattern = new SparseMatrixBuilder(baseMatrix.RowCount, baseMatrix.ColumnCount);
         for (int row = 0; row < baseMatrix.RowCount; row++)
             for (int k = baseMatrix.RowPointers[row]; k < baseMatrix.RowPointers[row + 1]; k++)
                 pattern.Add(row, baseMatrix.ColumnIndices[k], baseMatrix.Values[k]);
         foreach (var triangle in mesh.BoundaryTriangles)
+        {
             ScalarDiffusionAssembler.AddRobinSurface(pattern, mesh, triangle, 0.0);
+            if (airDof is not { } air) continue;
+            foreach (int node in new[] { triangle.A, triangle.B, triangle.C })
+            {
+                pattern.Add(node, air, 0.0);
+                pattern.Add(air, node, 0.0);
+            }
+            pattern.Add(air, air, 0.0);
+        }
 
         var full = pattern.Build();
         var system = ConstrainedSystemSolver.Reduce(full, prescribed, allowUnconstrained: true);
@@ -113,9 +136,22 @@ internal sealed class FilmUpdatableSystem
 
         // Resolve every stamp position once.
         int count = mesh.BoundaryTriangles.Count;
+        int stride = airDof is null ? RobinSlots : RobinSlots + AirSlots;
         var areas = new double[count];
-        var slots = new StampSlot[count * 9];
+        var slots = new StampSlot[count * stride];
         Span<int> nodes = stackalloc int[3];
+
+        StampSlot Slot(int rowDof, int columnDof)
+        {
+            int r = system.FreeIndexOf(rowDof);
+            // A prescribed ROW has no equation in the reduced system, so nothing this entry
+            // contributes is ever read.
+            if (r < 0) return new StampSlot(-1, -1);
+            int c = system.FreeIndexOf(columnDof);
+            return c >= 0
+                ? new StampSlot(system.Reduced.IndexOf(r, c), -1)
+                : new StampSlot(-1, slotOfEntry[(rowDof, columnDof)]);
+        }
 
         for (int t = 0; t < count; t++)
         {
@@ -125,26 +161,18 @@ internal sealed class FilmUpdatableSystem
 
             for (int i = 0; i < 3; i++)
                 for (int j = 0; j < 3; j++)
-                {
-                    int rowDof = nodes[i], columnDof = nodes[j];
-                    int r = system.FreeIndexOf(rowDof);
-                    if (r < 0)
-                    {
-                        // A prescribed ROW has no equation in the reduced system, so nothing
-                        // this entry contributes is ever read.
-                        slots[t * 9 + i * 3 + j] = new StampSlot(-1, -1);
-                        continue;
-                    }
-
-                    int c = system.FreeIndexOf(columnDof);
-                    slots[t * 9 + i * 3 + j] = c >= 0
-                        ? new StampSlot(system.Reduced.IndexOf(r, c), -1)
-                        : new StampSlot(-1, slotOfEntry[(rowDof, columnDof)]);
-                }
+                    slots[t * stride + i * 3 + j] = Slot(nodes[i], nodes[j]);
+            if (airDof is not { } air) continue;
+            for (int i = 0; i < 3; i++)
+            {
+                slots[t * stride + RobinSlots + i] = Slot(nodes[i], air);
+                slots[t * stride + RobinSlots + 3 + i] = Slot(air, nodes[i]);
+            }
+            slots[t * stride + RobinSlots + 6] = Slot(air, air);
         }
 
         var updatable = new FilmUpdatableSystem(mesh, system, baseValues,
-            basePrescribedValues.ToArray(), correctionTerms.ToArray(), areas, slots);
+            basePrescribedValues.ToArray(), correctionTerms.ToArray(), areas, slots, stride);
         updatable.RebuildCorrection();
         return updatable;
     }
@@ -166,17 +194,23 @@ internal sealed class FilmUpdatableSystem
             double a12 = h * _triangleArea[t] / 12.0;
             for (int i = 0; i < 3; i++)
                 for (int j = 0; j < 3; j++)
-                {
-                    double value = i == j ? 2 * a12 : a12;
-                    var slot = _slots[t * 9 + i * 3 + j];
-                    if (slot.ValueIndex >= 0)
-                        _system.Reduced.Values[slot.ValueIndex] += value;
-                    else if (slot.PrescribedSlot >= 0)
-                        _prescribedWork[slot.PrescribedSlot] += value;
-                }
+                    Add(_slots[t * _stride + i * 3 + j], i == j ? 2 * a12 : a12);
+            if (_stride == RobinSlots) continue;
+            // Toward the air unknown: −h·A/3 between each node and the air, h·A on the air.
+            double third = h * _triangleArea[t] / 3.0;
+            for (int i = 0; i < 6; i++) Add(_slots[t * _stride + RobinSlots + i], -third);
+            Add(_slots[t * _stride + RobinSlots + 6], h * _triangleArea[t]);
         }
 
         RebuildCorrection();
+    }
+
+    private void Add(StampSlot slot, double value)
+    {
+        if (slot.ValueIndex >= 0)
+            _system.Reduced.Values[slot.ValueIndex] += value;
+        else if (slot.PrescribedSlot >= 0)
+            _prescribedWork[slot.PrescribedSlot] += value;
     }
 
     /// <summary>

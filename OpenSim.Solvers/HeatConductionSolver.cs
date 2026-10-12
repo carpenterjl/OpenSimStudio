@@ -47,8 +47,9 @@ public sealed class HeatConductionSolver : ISolver
         ValidatePrescribedFilm(input);
         ScalarSolverHelpers.ValidateConductivityTensor(input);
         EnvironmentBoundaryModel.ValidateMaterials(input);
+        var networks = ThermalNetworkTerms.Validate(input);
         if (!input.BoundaryConditions.Any(bc => bc is FixedTemperature or Convection)
-            && !EnvironmentCouples(input) && !PrescribedFilmCouples(input))
+            && !EnvironmentCouples(input) && !PrescribedFilmCouples(input) && !(networks?.AnchorsMesh ?? false))
             throw new InvalidOperationException(
                 "At least one fixed temperature or convection condition is required; " +
                 "with only heat inflows the temperature level is undetermined.");
@@ -74,7 +75,7 @@ public sealed class HeatConductionSolver : ISolver
             foreach (var contact in input.ThermalContacts)
                 contact.Validate(input.Mesh.NodeCount);
 
-        RequireAnchoredComponents(input);
+        RequireAnchoredComponents(input, networks);
     }
 
     /// <summary>
@@ -82,23 +83,27 @@ public sealed class HeatConductionSolver : ISolver
     /// a temperature anchor. Without one, that piece's block is singular: only the assembly's
     /// heat balance is determined, not its level. An assembly makes this easy to hit (a body
     /// that touches nothing and carries no condition), so it is a named failure rather than a
-    /// CG that fails to converge.
+    /// CG that fails to converge. A thermal network anchors the faces it is attached to when
+    /// it reaches a fixed temperature itself.
     /// </summary>
-    private static void RequireAnchoredComponents(SolveInput input)
+    private static void RequireAnchoredComponents(SolveInput input, ThermalNetworkTerms? networks)
     {
         var anchored = new HashSet<int>();
         foreach (var bc in input.BoundaryConditions)
             if (bc is FixedTemperature or Convection)
                 anchored.UnionWith(input.Mesh.GetScopeNodes(bc));
+        if (networks is not null) anchored.UnionWith(networks.AnchoredMeshNodes());
 
         // An environment that exchanges heat anchors every exterior face it is allowed to
-        // act on — which is every face the user did not claim for themselves.
+        // act on — which is every face the user did not claim for themselves (a network
+        // driving the environment toward its own node reaches a fixed temperature, checked).
         if (EnvironmentCouples(input))
         {
             var claimed = new HashSet<int>();
             foreach (var bc in input.BoundaryConditions)
                 if (bc is FixedTemperature or HeatFlux or Convection)
                     claimed.UnionWith(bc.FaceIds);
+            claimed.UnionWith(ThermalNetwork.AttachedFaceIds(input.ThermalNetworks));
             foreach (var triangle in input.Mesh.BoundaryTriangles)
             {
                 if (claimed.Contains(triangle.FaceId)) continue;
@@ -201,12 +206,16 @@ public sealed class HeatConductionSolver : ISolver
             foreach (var t in mesh.GetFaceTriangles(convection.FaceIds))
                 robin.Add(new ScalarDiffusionAssembler.RobinTerm(t, convection.Coefficient));
         var conduction = assembler.AssembleStiffness(robin, input.ThermalContacts, cancellationToken);
+        // Lumped networks (parts, an enclosure's air) are unknowns after the mesh's nodes.
+        var networks = ThermalNetworkTerms.Build(input, log);
+        if (networks is not null) conduction = networks.Augment(conduction);
         log.Add($"Assembled {conduction.RowCount} DOF system, {conduction.NonZeroCount} non-zeros" +
                 (robin.Count > 0 ? $" including {robin.Count} convective surface triangles." : "."));
         LogContacts(input, log);
 
         progress?.Report(new SolverProgress("Applying boundary conditions", 0.25));
         var loads = ScalarSolverHelpers.AssembleThermalLoads(input, log);
+        if (networks is not null) loads = networks.AugmentLoads(loads, _ => 1.0);
 
         var prescribed = new Dictionary<int, double>();
         foreach (var temperature in input.BoundaryConditions.OfType<FixedTemperature>())
@@ -216,10 +225,11 @@ public sealed class HeatConductionSolver : ISolver
                 prescribed[node] = temperature.Kelvin;
             log.Add($"Temperature '{temperature.Name}': {temperature.Kelvin:g4} K on {nodes.Count} nodes.");
         }
+        networks?.AddPrescribed(prescribed);
 
         progress?.Report(new SolverProgress("Solving linear system", 0.35));
         var environment = EnvironmentBoundaryModel.Build(input, log);
-        double[] temperatureField;
+        double[] solution;
         SurfaceFilmModel? film = null;
         if (input.PrescribedFilm is { } prescribedFilm)
         {
@@ -234,21 +244,27 @@ public sealed class HeatConductionSolver : ISolver
             log.Add($"Prescribed film ({film.Origin}): {film.WettedCount} wetted triangles; " +
                     $"CG converged in {result.Iterations.Iterations} iterations " +
                     $"(residual {result.Iterations.ResidualNorm:g3}).");
-            temperatureField = result.Displacements;
+            solution = result.Displacements;
         }
         else if (environment is null)
         {
             var result = ConstrainedSystemSolver.Solve(conduction, loads, prescribed,
-                cancellationToken: cancellationToken, allowUnconstrained: robin.Count > 0);
+                cancellationToken: cancellationToken, allowUnconstrained: robin.Count > 0 || networks is not null);
             log.Add($"Conjugate gradient converged in {result.Iterations.Iterations} iterations " +
                     $"(residual {result.Iterations.ResidualNorm:g3}).");
-            temperatureField = result.Displacements;
+            solution = result.Displacements;
         }
         else
         {
-            (temperatureField, film) = SolveWithEnvironment(input, environment, conduction, loads,
-                prescribed, log, progress, cancellationToken);
+            (solution, film) = SolveWithEnvironment(input, environment, conduction, loads,
+                prescribed, networks, log, progress, cancellationToken);
         }
+        var temperatureField = networks is null ? solution : networks.MeshPart(solution);
+        var states = networks?.States(solution, _ => 1.0);
+        if (states is not null)
+            foreach (var state in states)
+                log.Add($"Thermal network '{state.Network}': " + string.Join(", ",
+                    state.Nodes.Select((n, i) => $"{n} {state.Kelvin[i]:F2} K")) + ".");
 
         progress?.Report(new SolverProgress("Recovering heat flux", 0.85));
         var flux_ = new Vector3D[mesh.ElementCount];
@@ -270,7 +286,7 @@ public sealed class HeatConductionSolver : ISolver
             fields.Add(new NodalScalarField("Film coefficient", "W/(m²·K)",
                 EnvironmentThermalTerms.NodalFilmField(mesh, film)));
 
-        return new SolveOutput { Fields = fields, Log = log };
+        return new SolveOutput { Fields = fields, Log = log, Networks = states };
     }
 
     /// <summary>
@@ -289,13 +305,13 @@ public sealed class HeatConductionSolver : ISolver
     /// </summary>
     private static (double[] Temperature, SurfaceFilmModel Film) SolveWithEnvironment(
         SolveInput input, EnvironmentBoundaryModel environment, CsrMatrix conduction,
-        double[] loads, IReadOnlyDictionary<int, double> prescribed, List<string> log,
-        IProgress<SolverProgress>? progress, CancellationToken cancellationToken)
+        double[] loads, IReadOnlyDictionary<int, double> prescribed, ThermalNetworkTerms? networks,
+        List<string> log, IProgress<SolverProgress>? progress, CancellationToken cancellationToken)
     {
         var mesh = input.Mesh;
         // Start from the ambient: the film coefficients are least extreme there, so the
         // first iterate never over-drives the surface exchange.
-        var temperature = new double[mesh.NodeCount];
+        var temperature = new double[conduction.RowCount];
         Array.Fill(temperature, input.Environment!.AmbientTemperature);
         foreach (var (node, value) in prescribed)
             temperature[node] = value;
@@ -307,19 +323,23 @@ public sealed class HeatConductionSolver : ISolver
 
         // Reduced ONCE. Only the surface film moves between iterates, and it writes to the
         // same entries every time, so the whole-matrix rebuild and re-reduction this loop used
-        // to do per iterate collapse to rewriting those entries.
-        var updatable = FilmUpdatableSystem.Prepare(conduction, mesh, prescribed);
+        // to do per iterate collapse to rewriting those entries. With a network's node as the
+        // environment's ambient (an enclosure's air) the film couples to that column as well,
+        // and the slots hold those positions too.
+        var updatable = FilmUpdatableSystem.Prepare(conduction, mesh, prescribed, networks?.AirDof);
         var cg = new ConjugateGradientSolver { Tolerance = 1e-10 };
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             iteration++;
-            film = environment.Evaluate(temperature, tangent: true);
+            double? air = networks?.AirDof is not null ? networks.AirTemperature(temperature) : null;
+            film = environment.Evaluate(temperature, tangent: true, ambientTemperature: air);
             updatable.Apply(film);
-
-            var rhs = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
             var system = updatable.System;
+            var rhs = networks is null
+                ? EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film)
+                : networks.WithFilmLoads(loads, film, air ?? 0);
             var free = system.Restrict(temperature);       // warm start from the last iterate
             var iterations = cg.Solve(system.Reduced, system.ReduceLoads(rhs), free,
                 ConjugateGradientSolver.BuildJacobiPreconditioner(system.Reduced),
@@ -349,7 +369,8 @@ public sealed class HeatConductionSolver : ISolver
         }
 
         // What is reported and displayed is the film as it IS at the converged state.
-        film = environment.Evaluate(temperature);
+        film = environment.Evaluate(temperature,
+            ambientTemperature: networks?.AirDof is not null ? networks.AirTemperature(temperature) : null);
         log.Add($"Environment: converged in {iteration} nonlinear iterations " +
                 $"(last change {change:g3} K, {totalIterations} CG iterations total).");
         var (minFilm, maxFilm) = film.CoefficientRange();

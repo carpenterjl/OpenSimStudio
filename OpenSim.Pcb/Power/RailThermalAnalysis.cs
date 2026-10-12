@@ -60,8 +60,12 @@ public sealed record RailThermalSetup
     public BoardThermalMesh? Board { get; init; }
 
     /// <summary>The parts on <see cref="Board"/>, in the order it was meshed with, with their
-    /// losses and two-resistor models.</summary>
+    /// losses and two-resistor (or compact) models.</summary>
     public IReadOnlyList<ThermalComponent> Components { get; init; } = Array.Empty<ThermalComponent>();
+
+    /// <summary>The enclosure's air as a node the parts and the board breathe
+    /// (<see cref="EnclosureAir"/>); null = the environment's ambient. With <see cref="Board"/> only.</summary>
+    public EnclosureAir? Air { get; init; }
 }
 
 /// <summary>The electro-thermal result of a rail: both rail reports and the temperatures.</summary>
@@ -99,6 +103,9 @@ public sealed record RailThermalReport
     /// <summary>The parts' temperatures, hottest junction first (with a whole-board model).</summary>
     public IReadOnlyList<ComponentTemperature> Components { get; init; } = Array.Empty<ComponentTemperature>();
 
+    /// <summary>The enclosure air's temperature [K]; null without an enclosure.</summary>
+    public double? AirKelvin { get; init; }
+
     /// <summary>The thermal lines, then the corrected rail's own.</summary>
     public IReadOnlyList<string> Describe()
     {
@@ -110,6 +117,7 @@ public sealed record RailThermalReport
             $"({oneWay:f1} K without the resistivity feedback; {Iterations} passes).",
             $"Copper loss {Rail.CopperLossWatts * 1e3:g4} mW hot, {ColdRail.CopperLossWatts * 1e3:g4} mW cold."
         };
+        if (AirKelvin is { } air) lines.Add($"Enclosure air {air - 273.15:f1} °C.");
         foreach (var hot in Rail.Sinks)
         {
             var cold = ColdRail.Sinks.First(s => s.Name == hot.Name);
@@ -132,6 +140,13 @@ public sealed record RailThermalTransientReport
     public required double StartKelvin { get; init; }
     public required IReadOnlyList<string> Assumptions { get; init; }
 
+    /// <summary>The parts' temperatures at the last step, hottest junction first (with a
+    /// whole-board model); every stored frame of <see cref="Solution"/> carries the network's state.</summary>
+    public IReadOnlyList<ComponentTemperature> Components { get; init; } = Array.Empty<ComponentTemperature>();
+
+    /// <summary>The enclosure air's temperature at the last step [K]; null without an enclosure.</summary>
+    public double? AirKelvin { get; init; }
+
     public IReadOnlyList<string> Describe()
     {
         var history = Solution.History;
@@ -147,6 +162,9 @@ public sealed record RailThermalTransientReport
             double lastStep = peak - history[^2].PeakKelvin;
             lines.Add($"The last step added {lastStep:g3} K ({(peak > StartKelvin ? lastStep / (peak - StartKelvin) * 100 : 0):f2} % of the rise).");
         }
+        if (Components.Count > 0)
+            lines.Add($"Hottest junction {Components[0].JunctionKelvin - 273.15:f1} °C ({Components[0].RefDes}) at the end" +
+                      (AirKelvin is { } air ? $"; enclosure air {air - 273.15:f1} °C." : "."));
         return lines;
     }
 }
@@ -167,7 +185,7 @@ public static class RailThermalAnalysis
 {
     /// <summary>The coupled study's input for a rail: materials, terminals, the thermal body
     /// (the net's mesh or the whole board) and its conditions, parts included.</summary>
-    private static (ElectroThermalInput Input, ComponentThermalAnalysis.PartNetwork[]? Parts, double PartsAmbient,
+    private static (ElectroThermalInput Input, ComponentThermalAnalysis.Wiring? Parts,
         Material Copper, bool HasLaminate) Prepare(NetMesher.Result mesh, RailThermalSetup setup)
     {
         var fe = mesh.Body.Mesh ?? throw new InvalidOperationException("The net has no mesh.");
@@ -200,18 +218,22 @@ public static class RailThermalAnalysis
                     throw new InvalidOperationException(
                         $"The net's copper on L{layer} does not stand where the board's L{layer} does: mesh the net with " +
                         "the board (NetMesher.MeshNetOnBoard) and the same stackup, so its heat lands in the right layer.");
-        var conditions = setup.ThermalConditions;
-        ComponentThermalAnalysis.PartNetwork[]? parts = null;
-        double partsAmbient = 0;
-        if (board is not null && setup.Components.Count > 0)
+        if (board is null && setup.Air is not null)
+            throw new InvalidOperationException("The enclosure air goes with the whole-board thermal body; mesh the board for it.");
+        if (setup.Cooling is not null && setup.Air is { CoolsTheBoard: true })
+            throw new InvalidOperationException(
+                "With CFD cooling the air around the board is solved as a fluid; the enclosure air node stands in for the " +
+                "environment's film. Set CoolsTheBoard false to keep it for the parts' case tops only, or drop the CFD cooling.");
+        ComponentThermalAnalysis.Wiring? parts = null;
+        if (board is not null && (setup.Components.Count > 0 || setup.Air is not null))
         {
-            // The parts' footprints exchange heat with the board as their eliminated
-            // two-resistor networks (see ComponentThermalAnalysis).
-            var built = ComponentThermalAnalysis.Conditions(board, new ComponentThermalSetup
+            // The parts and the enclosure's air as one lumped network on the board mesh,
+            // solved with it (see ComponentThermalAnalysis).
+            parts = ComponentThermalAnalysis.Prepare(board, new ComponentThermalSetup
             {
-                Components = setup.Components, Environment = setup.Environment, BoardConditions = setup.ThermalConditions
+                Components = setup.Components, Environment = setup.Environment, BoardConditions = setup.ThermalConditions,
+                Air = setup.Air
             });
-            (conditions, parts, partsAmbient) = (built.Conditions, built.Network, built.Ambient);
         }
         var input = new ElectroThermalInput
         {
@@ -225,12 +247,24 @@ public static class RailThermalAnalysis
             Material = copper,
             RegionMaterials = regions,
             Terminals = terminals,
-            ThermalConditions = conditions,
+            ThermalConditions = setup.ThermalConditions,
             Environment = setup.Environment,
+            ThermalNetworks = parts?.Network is { } network ? new[] { network } : null,
             Cooling = setup.Cooling,
             Tolerance = setup.Tolerance
         };
-        return (input, parts, partsAmbient, copper, hasLaminate);
+        return (input, parts, copper, hasLaminate);
+    }
+
+    /// <summary>The parts' temperatures (hottest junction first) and the enclosure air from a
+    /// network state; none without a network.</summary>
+    private static (IReadOnlyList<ComponentTemperature> Parts, double? Air) PartsOf(RailThermalSetup setup,
+        ComponentThermalAnalysis.Wiring? wiring, IReadOnlyList<ThermalNetworkState>? states)
+    {
+        if (wiring?.Network is null || states is null) return (Array.Empty<ComponentTemperature>(), null);
+        var state = states.First(s => s.Network == ComponentThermalAnalysis.NetworkName);
+        var parts = ComponentThermalAnalysis.Temperatures(setup.Board!, setup.Components, wiring, state).Parts;
+        return (parts, wiring.Air == ComponentThermalAnalysis.AirNode ? state.Of(ComponentThermalAnalysis.AirNode) : null);
     }
 
     public static RailThermalReport Solve(NetMesher.Result mesh, CopperNet net, RailThermalSetup setup,
@@ -238,7 +272,7 @@ public static class RailThermalAnalysis
         CancellationToken cancellationToken = default)
     {
         var fe = mesh.Body.Mesh ?? throw new InvalidOperationException("The net has no mesh.");
-        var (input, parts, partsAmbient, copper, hasLaminate) = Prepare(mesh, setup);
+        var (input, parts, copper, hasLaminate) = Prepare(mesh, setup);
         var board = setup.Board;
         var solution = ElectroThermalStudy.Solve(input, progress, cancellationToken);
 
@@ -272,9 +306,7 @@ public static class RailThermalAnalysis
             }
         }
 
-        IReadOnlyList<ComponentTemperature> partTemperatures = parts is null
-            ? Array.Empty<ComponentTemperature>()
-            : ComponentThermalAnalysis.Temperatures(board!, setup.Components, parts, solution.Temperature, partsAmbient).Parts;
+        var (partTemperatures, air) = PartsOf(setup, parts, solution.Networks);
 
         var assumptions = new List<string>
         {
@@ -285,7 +317,11 @@ public static class RailThermalAnalysis
                 ? "the whole board is the thermal body: every layer's copper as its share of the board's elements, so " +
                   "planes and other nets spread the heat" +
                   (board.Conductivity is not null ? ", trace copper conducting along its traces and across them in series" : "") +
-                  (setup.Components.Count > 0 ? $", and {setup.Components.Count} part(s) on their two-resistor models" : "") +
+                  (setup.Components.Count > 0 ? $", and {setup.Components.Count} part(s) as lumped networks solved with it (two-resistor or compact models)" : "") +
+                  (setup.Air is { } enclosure
+                      ? $", the enclosure's air one node losing {enclosure.ConductanceToAmbient:g3} W/K to the outside" +
+                        (enclosure.CoolsTheBoard ? " that the board's environment cools to" : " that only the parts' tops see")
+                      : "") +
                   "; this net's copper carries the current explicitly and its heat goes to the board elements that hold it"
                 : hasLaminate
                 ? "only this net's copper is in the mesh — no other nets, planes or components to spread or " +
@@ -317,7 +353,8 @@ public static class RailThermalAnalysis
             Log = solution.Log,
             Fields = solution.Fields,
             Solution = solution,
-            Components = partTemperatures
+            Components = partTemperatures,
+            AirKelvin = air
         };
     }
 
@@ -334,23 +371,29 @@ public static class RailThermalAnalysis
     {
         if (setup.Cooling is not null)
             throw new InvalidOperationException("A coupled transient is cooled by the environment or the conditions given; the CFD cooling is steady.");
-        var (input, _, _, copper, _) = Prepare(mesh, setup);
+        var (input, parts, copper, _) = Prepare(mesh, setup);
         var solution = ElectroThermalStudy.SolveTransient(input, settings, progress, cancellationToken);
         var rail = RailAnalysis.Report(mesh, net, setup.Rail, solution.Electrical, solution.ElementConductivity,
             temperatureCorrected: true);
+        var (partTemperatures, air) = PartsOf(setup, parts, solution.Thermal.Networks);
         var assumptions = new List<string>
         {
             $"transient from {settings.InitialTemperature - 273.15:f1} °C everywhere, backward Euler in steps of {settings.TimeStep:g3} s; " +
             "each step's copper loss is solved at that step's own temperatures",
             $"copper resistivity linear in temperature (α = {copper.ResistivityTemperatureCoefficient ?? 0:g3} /K)",
             setup.Board is not null
-                ? "the whole board is the thermal body (copper of every layer as its share of the elements)"
+                ? "the whole board is the thermal body (copper of every layer as its share of the elements)" +
+                  (setup.Components.Count > 0
+                      ? $", with {setup.Components.Count} part(s) as lumped networks whose junctions and cases store heat as their capacities say"
+                      : "") +
+                  (setup.Air is not null ? ", and the enclosure's air as a node" : "")
                 : "the net's own mesh is the thermal body"
         };
         assumptions.AddRange(rail.Assumptions);
         return new RailThermalTransientReport
         {
-            Solution = solution, Rail = rail, StartKelvin = settings.InitialTemperature, Assumptions = assumptions
+            Solution = solution, Rail = rail, StartKelvin = settings.InitialTemperature, Assumptions = assumptions,
+            Components = partTemperatures, AirKelvin = air
         };
     }
 

@@ -51,6 +51,10 @@ public sealed record ElectroThermalInput
     /// conditions above do not claim.</summary>
     public EnvironmentSettings? Environment { get; init; }
 
+    /// <summary>Lumped thermal networks on the thermal mesh (the parts on their footprints,
+    /// an enclosure's air); see <see cref="ThermalNetwork"/>.</summary>
+    public IReadOnlyList<ThermalNetwork>? ThermalNetworks { get; init; }
+
     /// <summary>
     /// The heat solve of every pass, when it is not the steady conduction solve with the
     /// environment's correlation film: a conjugate CFD solve, for one. It is handed the
@@ -121,6 +125,10 @@ public sealed record ElectroThermalResult
     /// <summary>Joule heat the thermal model received in the last pass [W] — the copper loss,
     /// kept exactly by the transfer.</summary>
     public required double HeatIntoThermalWatts { get; init; }
+
+    /// <summary>The thermal networks' converged state (parts' junctions, an enclosure's air);
+    /// null without networks.</summary>
+    public IReadOnlyList<ThermalNetworkState>? Networks { get; init; }
 
     public required IReadOnlyList<string> Log { get; init; }
 }
@@ -229,6 +237,7 @@ public static class ElectroThermalStudy
                 ElementThermalConductivity = model.Conductivity,
                 BoundaryConditions = Input.ThermalConditions,
                 Environment = Input.Environment,
+                ThermalNetworks = Input.ThermalNetworks,
                 ElementHeatSource = source
             }
             : new SolveInput
@@ -238,6 +247,7 @@ public static class ElectroThermalStudy
                 RegionMaterials = Input.RegionMaterials,
                 BoundaryConditions = Input.ThermalConditions,
                 Environment = Input.Environment,
+                ThermalNetworks = Input.ThermalNetworks,
                 ElementHeatSource = source
             };
     }
@@ -408,6 +418,7 @@ public static class ElectroThermalStudy
             Fields = fields,
             ThermalFields = thermalFields,
             HeatIntoThermalWatts = heatWatts,
+            Networks = heat.Networks,
             Log = log
         };
     }

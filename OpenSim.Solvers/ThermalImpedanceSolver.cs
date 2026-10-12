@@ -12,6 +12,11 @@ public sealed record ThermalProbe
     public required string Name { get; init; }
     public Vector3D? Position { get; init; }
     public IReadOnlyList<int>? FaceIds { get; init; }
+
+    /// <summary>A node of one of the solve's thermal networks (a part's junction): the
+    /// network's name and the node's.</summary>
+    public string? Network { get; init; }
+    public string? Node { get; init; }
 }
 
 public sealed record ThermalImpedanceSettings
@@ -147,13 +152,18 @@ public static class ThermalImpedanceSolver
                 throw new InvalidOperationException($"Boundary condition '{bc.Name}' does not apply to a thermal solve.");
             BoundaryScope.Validate(bc, mesh);
         }
+        ThermalNetworkTerms.Validate(input);
         var log = new List<string>();
+        // Lumped networks (a part's junction and case, an enclosure's air) are unknowns
+        // after the mesh's nodes; their node powers are sources like any other.
+        var networks = ThermalNetworkTerms.Build(input, log);
 
         // Sources: the heat flows and the volumetric source, as they stand.
         var (sources, _) = ScalarSolverHelpers.AssembleThermalLoadParts(input, new List<string>());
+        if (networks is not null) sources = networks.AugmentLoads(sources, _ => 1.0);
         double power = sources.Sum();
         if (!(Math.Abs(power) > 0))
-            throw new InvalidOperationException("Thermal impedance needs a heat source: a heat flow condition or a volumetric source.");
+            throw new InvalidOperationException("Thermal impedance needs a heat source: a heat flow condition, a volumetric source or a network node's power.");
 
         // Conduction with the convection conditions; an environment as the film it settles to.
         var assembler = ScalarDiffusionAssembler.Thermal(input);
@@ -162,17 +172,27 @@ public static class ThermalImpedanceSolver
             foreach (var t in mesh.GetFaceTriangles(convection.FaceIds))
                 robin.Add(new ScalarDiffusionAssembler.RobinTerm(t, convection.Coefficient));
         var conduction = assembler.AssembleStiffness(robin, input.ThermalContacts, cancellationToken);
-        bool anchored = robin.Count > 0 || input.BoundaryConditions.Any(bc => bc is FixedTemperature);
+        if (networks is not null) conduction = networks.Augment(conduction);
+        bool anchored = robin.Count > 0 || input.BoundaryConditions.Any(bc => bc is FixedTemperature) || (networks?.HasFixed ?? false);
         if (input.Environment is not null)
         {
             progress?.Report(new SolverProgress("Steady state for the surface coefficients", 0.02));
             var steady = new HeatConductionSolver().Solve(input with { TransientThermal = null }, null, cancellationToken);
             var steadyTemperature = ((Core.Results.NodalScalarField)steady.Fields.First(f => f.Name == "Temperature")).Values;
-            var film = EnvironmentBoundaryModel.Build(input, new List<string>())!.Evaluate(steadyTemperature);
-            conduction = EnvironmentThermalTerms.WithFilm(conduction, mesh, film);
+            double? air = null;
+            if (networks?.AirDof is not null)
+            {
+                var owner = input.ThermalNetworks!.First(n => n.EnvironmentAmbientNode is not null);
+                air = steady.Networks!.First(s => s.Network == owner.Name).Of(owner.EnvironmentAmbientNode!);
+            }
+            var film = EnvironmentBoundaryModel.Build(input, new List<string>())!.Evaluate(steadyTemperature, ambientTemperature: air);
+            conduction = networks is null
+                ? EnvironmentThermalTerms.WithFilm(conduction, mesh, film)
+                : networks.WithFilm(conduction, film);
             var (low, high) = film.CoefficientRange();
             log.Add($"Environment ({input.Environment.Describe()}): surface coefficients held at their steady values, " +
-                    $"{low:g3} … {high:g3} W/(m²·K). The curve is the response about that state.");
+                    $"{low:g3} … {high:g3} W/(m²·K)" + (air is { } airKelvin ? $", the enclosure air at {airKelvin:F2} K" : "") +
+                    ". The curve is the response about that state.");
             anchored = true;
         }
 
@@ -180,21 +200,23 @@ public static class ThermalImpedanceSolver
         foreach (var fixedTemperature in input.BoundaryConditions.OfType<FixedTemperature>())
             foreach (int node in mesh.GetScopeNodes(fixedTemperature))
                 prescribed[node] = 0;
+        networks?.AddPrescribed(prescribed, zero: true);
         var reduced = ConstrainedSystemSolver.Reduce(conduction, prescribed, allowUnconstrained: true);
         var k = reduced.Reduced;
         int free = reduced.FreeCount;
         var load = reduced.ReduceLoads(sources);
 
-        var capacity = assembler.AssembleLumpedMass(el =>
+        IReadOnlyList<double> capacity = assembler.AssembleLumpedMass(el =>
         {
             var m = input.MaterialOf(el);
             return m.Density * m.SpecificHeat!.Value;
         }, cancellationToken).GetDiagonal();
+        if (networks is not null) capacity = networks.AugmentDiagonal(capacity);
         var mass = reduced.Restrict(capacity);
 
         // Probes as weights over the nodes.
-        var probeList = probes is { Count: > 0 } ? probes : DefaultProbes(input);
-        var weights = probeList.Select(p => ProbeWeights(mesh, p)).ToList();
+        var probeList = probes is { Count: > 0 } ? probes : DefaultProbes(input, networks);
+        var weights = probeList.Select(p => ProbeWeights(mesh, p, networks)).ToList();
 
         // Step matrix A = M + d·h·K on K's pattern, rewritten each step.
         var diagonalIndex = new int[free];
@@ -308,18 +330,33 @@ public static class ThermalImpedanceSolver
         };
     }
 
-    /// <summary>Without probes: the mean over the heated faces, or the hottest place a
-    /// volumetric source has (its own elements' mean).</summary>
-    private static IReadOnlyList<ThermalProbe> DefaultProbes(SolveInput input)
+    /// <summary>Without probes: the network nodes that dissipate (a part's junction), else
+    /// the mean over the heated faces, else the hottest place a volumetric source has (its
+    /// own elements' mean).</summary>
+    private static IReadOnlyList<ThermalProbe> DefaultProbes(SolveInput input, ThermalNetworkTerms? networks)
     {
+        if (networks is not null)
+        {
+            var powered = networks.PoweredNodes()
+                .Select(p => new ThermalProbe { Name = $"{p.Network}: {p.Node}", Network = p.Network, Node = p.Node }).ToList();
+            if (powered.Count > 0) return powered;
+        }
         var faces = input.BoundaryConditions.OfType<HeatFlux>().SelectMany(f => f.FaceIds).Distinct().ToList();
         if (faces.Count > 0) return new[] { new ThermalProbe { Name = "heated faces (mean)", FaceIds = faces } };
         return new[] { new ThermalProbe { Name = "heated volume (mean)" } };
     }
 
-    private static List<(int Node, double Weight)> ProbeWeights(FeMesh mesh, ThermalProbe probe)
+    private static List<(int Node, double Weight)> ProbeWeights(FeMesh mesh, ThermalProbe probe, ThermalNetworkTerms? networks)
     {
         var weights = new Dictionary<int, double>();
+        if (probe.Network is not null || probe.Node is not null)
+        {
+            if (probe.Network is null || probe.Node is null)
+                throw new InvalidOperationException($"Probe '{probe.Name}': a network probe names both the network and the node.");
+            if (networks is null)
+                throw new InvalidOperationException($"Probe '{probe.Name}': the solve has no thermal networks.");
+            return networks.ProbeWeights(probe.Network, probe.Node).ToList();
+        }
         if (probe.FaceIds is { Count: > 0 } faces)
         {
             double total = 0;

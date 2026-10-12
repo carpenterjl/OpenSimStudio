@@ -1,5 +1,6 @@
 using System.Globalization;
 using OpenSim.Core.Geometry2D;
+using OpenSim.Core.Interfaces;
 using OpenSim.Pcb.Import;
 
 namespace OpenSim.Pcb.Thermal;
@@ -9,7 +10,9 @@ namespace OpenSim.Pcb.Thermal;
 /// it dissipates, and the datasheet's two resistances — junction to case top (θJC) and
 /// junction to board (θJB). The junction is one node; heat leaves it down through θJB into
 /// the footprint and up through θJC to the case top, and from there to the air (a film on
-/// the case top) or into a heatsink.
+/// the case top) or into a heatsink. With capacities the junction and the case store heat
+/// (a transient, a pulsed load); with a <see cref="CompactModel"/> the package is the
+/// vendor's multi-node network instead of the two resistors.
 /// </summary>
 public sealed record ThermalComponent
 {
@@ -25,11 +28,27 @@ public sealed record ThermalComponent
     /// <summary>Dissipated power [W].</summary>
     public double PowerWatts { get; init; }
 
+    /// <summary>How the power varies in a transient (a pulse train, a table of scales). Null:
+    /// constant, or the transient's own profile when it has one.</summary>
+    public PowerProfile? PowerProfile { get; init; }
+
     /// <summary>Junction to case top [K/W].</summary>
     public double ThetaJc { get; init; }
 
     /// <summary>Junction to board [K/W].</summary>
     public double ThetaJb { get; init; }
+
+    /// <summary>Heat capacity of the junction (die and what warms with it) [J/K]; 0 = the
+    /// junction follows the board and the case at once.</summary>
+    public double JunctionCapacity { get; init; }
+
+    /// <summary>Heat capacity of the case (the package body) [J/K].</summary>
+    public double CaseCapacity { get; init; }
+
+    /// <summary>A multi-node package model in place of θJC and θJB (<see cref="CompactThermalModel"/>);
+    /// its nodes carry their own capacities, so <see cref="JunctionCapacity"/> and
+    /// <see cref="CaseCapacity"/> must then be zero.</summary>
+    public CompactThermalModel? CompactModel { get; init; }
 
     /// <summary>
     /// Case top to ambient [K/W] when something other than bare air takes the heat — a
@@ -60,10 +79,26 @@ public sealed record ThermalComponent
     {
         if (ThetaJc < 0 || ThetaJb < 0 || double.IsNaN(ThetaJc) || double.IsNaN(ThetaJb))
             throw new InvalidOperationException($"{RefDes}: θJC and θJB cannot be negative.");
+        if (double.IsInfinity(ThetaJc) || double.IsInfinity(ThetaJb))
+            throw new InvalidOperationException($"{RefDes}: θJC and θJB must be finite (an open path is a very large resistance, not an infinite one).");
         if (CaseToAmbient is < 0)
             throw new InvalidOperationException($"{RefDes}: the case-to-ambient resistance cannot be negative.");
+        if (!(JunctionCapacity >= 0) || !(CaseCapacity >= 0) || double.IsInfinity(JunctionCapacity) || double.IsInfinity(CaseCapacity))
+            throw new InvalidOperationException($"{RefDes}: the heat capacities cannot be negative.");
+        if (double.IsNaN(PowerWatts) || double.IsInfinity(PowerWatts))
+            throw new InvalidOperationException($"{RefDes}: the power is not a number.");
+        PowerProfile?.Validate();
         if (Footprint.Area() <= 0)
             throw new InvalidOperationException($"{RefDes}: the footprint has no area.");
+        if (CompactModel is { } model)
+        {
+            model.Validate(RefDes);
+            if (JunctionCapacity != 0 || CaseCapacity != 0)
+                throw new InvalidOperationException($"{RefDes}: with a compact model the nodes carry their own capacities; leave the junction and case capacities at zero.");
+            if (CaseToAmbient is { } given && !double.IsPositiveInfinity(given)
+                && model.Nodes.Count(n => n.Role == CompactNodeRole.Exposed) > 1)
+                throw new InvalidOperationException($"{RefDes}: a heatsink resistance goes on one exposed node; the model has several — give each its area and leave the heatsink out, or merge them.");
+        }
     }
 }
 

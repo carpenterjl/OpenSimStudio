@@ -559,6 +559,8 @@ public static class ConjugateHeatStudy
         foreach (var bc in input.BoundaryConditions)
             if (bc is FixedTemperature or HeatFlux or Convection)
                 claimed.UnionWith(bc.FaceIds);
+        // A face a thermal network is attached to (a part's footprint) is not wetted by the air.
+        claimed.UnionWith(ThermalNetwork.AttachedFaceIds(input.ThermalNetworks));
         return claimed;
     }
 

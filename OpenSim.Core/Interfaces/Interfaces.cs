@@ -80,6 +80,14 @@ public sealed record SolveInput
     public IReadOnlyList<ContactInterface>? ElectricalContacts { get; init; }
 
     /// <summary>
+    /// Lumped thermal networks solved with the mesh (<see cref="ThermalNetwork"/>): parts
+    /// on their footprints, heatsinks, an enclosure's air. Their nodes are unknowns beside
+    /// the mesh's, reported in <see cref="SolveOutput.Networks"/>. Consumed by the thermal
+    /// solvers; null leaves every path as it was.
+    /// </summary>
+    public IReadOnlyList<ThermalNetwork>? ThermalNetworks { get; init; }
+
+    /// <summary>
     /// What surrounds the bodies (vacuum / still fluid / moving fluid). When set, the
     /// thermal solvers add convection and radiation on every exterior face the user has
     /// NOT claimed with a condition of their own, with film coefficients that depend on
@@ -186,6 +194,10 @@ public sealed record SolveOutput
 
     /// <summary>The frame axis caption for the UI ("Time", "Mode", "Frequency"); null when <see cref="Frames"/> is null.</summary>
     public string? FrameAxis { get; init; }
+
+    /// <summary>The thermal networks' node temperatures and heat flows in the default
+    /// frame's state (<see cref="SolveInput.ThermalNetworks"/>); null when the solve had none.</summary>
+    public IReadOnlyList<ThermalNetworkState>? Networks { get; init; }
 }
 
 /// <summary>A physics solver. All solvers consume the same mesh and produce standard result fields.</summary>

@@ -107,6 +107,9 @@ public sealed class EnvironmentBoundaryModel
         foreach (var bc in input.BoundaryConditions)
             if (bc is FixedTemperature or HeatFlux or Convection)
                 claimed.UnionWith(bc.FaceIds);
+        // A face a thermal network is attached to (a part's footprint) faces the network,
+        // not the surroundings.
+        claimed.UnionWith(ThermalNetwork.AttachedFaceIds(input.ThermalNetworks));
         int userClaimed = claimed.Count;
         if (resolvedFaceIds is not null) claimed.UnionWith(resolvedFaceIds);
 
@@ -185,18 +188,22 @@ public sealed class EnvironmentBoundaryModel
     /// exchange at the temperature they are evaluated at, so a converged iteration
     /// satisfies the same nonlinear equations either way; the lagged factored form
     /// diverges once the surface is hotter than 1.84× the ambient, the tangent does not.</param>
-    public SurfaceFilmModel Evaluate(IReadOnlyList<double> nodalTemperature, bool tangent = false)
+    /// <param name="ambientTemperature">The temperature the surroundings are at for this
+    /// evaluation [K] — an enclosure's air node at its current iterate
+    /// (<see cref="ThermalNetwork.EnvironmentAmbientNode"/>). Null: the environment's own ambient.</param>
+    public SurfaceFilmModel Evaluate(IReadOnlyList<double> nodalTemperature, bool tangent = false,
+        double? ambientTemperature = null)
     {
         var coefficients = new double[_mesh.BoundaryTriangles.Count];
         Array.Fill(coefficients, double.NaN);
+        double ambient = ambientTemperature ?? _environment.AmbientTemperature;
         double[]? references = null;
         if (tangent)
         {
             references = new double[coefficients.Length];
-            Array.Fill(references, _environment.AmbientTemperature);
+            Array.Fill(references, ambient);
         }
 
-        double ambient = _environment.AmbientTemperature;
         double gravity = _environment.Gravity.Length;
         double speed = _environment.FlowSpeed;
 

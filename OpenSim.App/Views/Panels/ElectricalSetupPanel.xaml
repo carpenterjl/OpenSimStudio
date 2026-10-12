@@ -230,7 +230,7 @@
 
             <!-- Step 7: junction temperatures of the board's parts (two-resistor models on the whole board) -->
             <TextBlock Text="7. Component temperatures" FontWeight="Bold" Margin="0,8,0,2"/>
-            <TextBlock Text="Per part: power [W], θJC and θJB [K/W] from the datasheet, contact size [mm], heatsink [K/W] (0 = bare case). Parts at 0 W are left out. The whole board is meshed with its copper; the Thermal workspace's environment cools it."
+            <TextBlock Text="Per part: power [W], θJC and θJB [K/W] from the datasheet, contact size [mm], heatsink [K/W] (0 = bare case), junction and case heat capacities [J/K] for the rail transient (0 = none). Parts at 0 W are left out. The whole board is meshed with its copper and the parts are solved with it as lumped networks; the Thermal workspace's environment cools it."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
             <UniformGrid Columns="2">
                 <Button Content="Parts from the board" Command="{Binding Pcb.ListThermalPartsCommand}"
@@ -251,6 +251,8 @@
                                     <ColumnDefinition Width="40"/>
                                     <ColumnDefinition Width="40"/>
                                     <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="36"/>
+                                    <ColumnDefinition Width="36"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
@@ -261,6 +263,10 @@
                                 <TextBox Grid.Column="5" Text="{Binding HeightMm}" ToolTip="Contact height along y [mm]"/>
                                 <TextBox Grid.Column="6" Text="{Binding HeatsinkKelvinPerWatt}"
                                          ToolTip="Case top to ambient through a heatsink [K/W]; 0 = bare case top in air."/>
+                                <TextBox Grid.Column="7" Text="{Binding JunctionCapacity}"
+                                         ToolTip="Heat capacity of the junction [J/K], for the rail transient; 0 = none."/>
+                                <TextBox Grid.Column="8" Text="{Binding CaseCapacity}"
+                                         ToolTip="Heat capacity of the case [J/K], for the rail transient; 0 = none."/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -272,6 +278,9 @@
                          ToolTip="Convection and radiation together on a bare case top. A setting, not computed."/>
                 <Label Content="Board element [mm] (0 = auto)"/>
                 <TextBox Text="{Binding Pcb.ThermalEdgeMm}"/>
+                <Label Content="Enclosure air → outside [W/K] (0 = open air)"/>
+                <TextBox Text="{Binding Pcb.EnclosureConductance}"
+                         ToolTip="The enclosure's air as one node the parts' tops and the board breathe: its conductance to the outside — a through-flow's ṁ·c_p, or the walls'. 0: the parts and the board see the ambient directly."/>
             </UniformGrid>
             <Button Content="Solve component temperatures" Command="{Binding Pcb.SolveComponentTemperaturesCommand}"/>
             <TextBlock Text="{Binding Pcb.ComponentResult}" TextWrapping="Wrap"

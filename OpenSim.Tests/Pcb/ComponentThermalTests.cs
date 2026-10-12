@@ -1,7 +1,9 @@
 using OpenSim.Core.Geometry2D;
+using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
 using OpenSim.Core.Results;
+using OpenSim.Solvers;
 using OpenSim.Pcb.Extrude;
 using OpenSim.Pcb.Import;
 using OpenSim.Pcb.Meshing2D;
@@ -271,12 +273,17 @@ public class ComponentThermalTests
         Assert.Equal(c.ToBoardWatts, report.IntoBoardWatts, 12);
         Assert.True(c.ToBoardWatts > c.FromTopWatts, "a part on a metal plate sends most of its heat down");
 
-        // The board resistance seen by this part, from one run, predicts another run exactly
-        // (the board is linear): Q_b = (T_a + P·R_top − T_a) / (θJB + R_top + R_board).
+        // The board resistance seen by this part, from one run, predicts another run
+        // (the board is linear): Q_b = (T_a + P·R_top − T_a) / (θJB + R_top + R_board). Since
+        // FU-26 the junction is one isothermal node over a uniform film 1/(θJB·A), so the
+        // footprint's flux pattern — and with it the resistance the mean board temperature
+        // defines — moves a little with θJB: measured 3.6e-7 of Q_b between θJB = 8 and 25
+        // on this near-isothermal patch (it was exact with the distributed source).
         double top = 3 + caseToAir;
         double boardResistance = (c.BoardKelvin - ambient) / c.ToBoardWatts;
         var other = Run(25).Components.Single();
-        Assert.Equal(power * top / (25 + top + boardResistance), other.ToBoardWatts, 6);
+        double predicted = power * top / (25 + top + boardResistance);
+        Assert.Equal(predicted, other.ToBoardWatts, predicted * 1e-6);
 
         // Cut off from the board, the junction sits on the top path alone.
         var isolated = Run(1e9).Components.Single();
@@ -507,6 +514,247 @@ public class ComponentThermalTests
         Assert.Equal(30e-6, sized.Footprint.Area(), 12);
 
         Assert.Throws<InvalidOperationException>(() => ComponentPlacement.ReadPlacementFile("nothing here\n1 2 3\n", out _));
+    }
+
+    // ---------------- FU-26: networks — the enclosure's air, compact models, time ----------------
+
+    private static EnvironmentSettings StillAir(double ambient) => new() { AmbientTemperature = ambient, IncludeRadiation = false };
+
+    /// <summary>A 50 mm board with a copper plane on L2 and two powered parts, under still air.
+    /// (A steady solve of a thin-copper board mesh costs a second or two of CG per Picard
+    /// iterate — the copper/laminate contrast — so these tests keep the mesh coarse.)</summary>
+    private static (BoardThermalMesh Mesh, ThermalComponent[] Parts) TwoPartBoard(double edge = 2.5e-3,
+        double junctionCapacity = 0, double caseCapacity = 0, PowerProfile? profile = null)
+    {
+        var outline = Rect(0, 0, 50e-3, 50e-3);
+        var islands = new[] { new CopperIsland(0, 2, "L2", Rect(-1e-3, -1e-3, 51e-3, 51e-3)) };
+        var parts = new[]
+        {
+            new ThermalComponent
+            {
+                RefDes = "U1", Footprint = Rect(12e-3, 20e-3, 20e-3, 28e-3), PowerWatts = 1.0, ThetaJc = 6, ThetaJb = 9,
+                CaseFilmCoefficient = 12, JunctionCapacity = junctionCapacity, CaseCapacity = caseCapacity, PowerProfile = profile
+            },
+            new ThermalComponent
+            {
+                RefDes = "Q2", Footprint = Rect(30e-3, 22e-3, 36e-3, 28e-3), PowerWatts = 0.4, ThetaJc = 4, ThetaJb = 20,
+                CaseFilmCoefficient = 12, JunctionCapacity = junctionCapacity, CaseCapacity = caseCapacity
+            }
+        };
+        return (BoardThermalMesher.Mesh(Board(outline, islands), parts, Options(Fr4, edge)), parts);
+    }
+
+    [Fact]
+    public void EnclosureAir_WarmsByWhatThePartsAndTheBoardGiveIt()
+    {
+        const double ambient = 300, vent = 0.25;
+        var (mesh, parts) = TwoPartBoard();
+        ComponentThermalReport Run(EnclosureAir? air) => ComponentThermalAnalysis.Solve(mesh, new ComponentThermalSetup
+        {
+            Components = parts, Environment = StillAir(ambient), Air = air
+        });
+        var open = Run(null);
+        var enclosed = Run(new EnclosureAir { ConductanceToAmbient = vent });
+        var topsOnly = Run(new EnclosureAir { ConductanceToAmbient = vent, CoolsTheBoard = false });
+        _out.WriteLine(string.Join("\n", enclosed.Describe()));
+        _out.WriteLine(string.Join("\n", topsOnly.Describe()));
+        _out.WriteLine(string.Join("\n", enclosed.Log));
+
+        // Everything the parts dissipate ends in the air and leaves through the vent.
+        double power = parts.Sum(p => p.PowerWatts);
+        Assert.Null(open.AirKelvin);
+        Assert.Equal(power / vent, enclosed.AirKelvin!.Value - ambient, power / vent * 1e-5);
+        // With the board on the outside air, only the case tops warm the enclosure.
+        double fromTops = topsOnly.Components.Sum(c => c.FromTopWatts);
+        Assert.Equal(fromTops / vent, topsOnly.AirKelvin!.Value - ambient, fromTops / vent * 1e-5);
+        Assert.True(fromTops > 0 && fromTops < power);
+        // Every junction is hotter in the enclosure, by about the air's rise when the board breathes it.
+        foreach (var part in open.Components)
+        {
+            double inside = enclosed.Components.First(c => c.RefDes == part.RefDes).JunctionKelvin;
+            double tops = topsOnly.Components.First(c => c.RefDes == part.RefDes).JunctionKelvin;
+            Assert.InRange(inside - part.JunctionKelvin, 0.7 * (power / vent), 1.3 * (power / vent));
+            Assert.True(tops > part.JunctionKelvin && tops < inside);
+        }
+        Assert.Contains(enclosed.Assumptions, a => a.Contains("ENCLOSURE AIR"));
+        Assert.Contains(enclosed.Log, l => l.Contains("drives toward 'air'"));
+
+        // The air needs an environment to cool the board through, and a conductance.
+        Assert.Throws<InvalidOperationException>(() => ComponentThermalAnalysis.Solve(mesh, new ComponentThermalSetup
+        {
+            Components = parts, AmbientKelvin = ambient, BoardConditions = new BoundaryCondition[] { Film(10, ambient, 0, 1) },
+            Air = new EnclosureAir { ConductanceToAmbient = vent }
+        }));
+        Assert.Throws<InvalidOperationException>(() => Run(new EnclosureAir { ConductanceToAmbient = 0 }));
+    }
+
+    [Fact]
+    public void CompactModel_IsTheVendorsNetwork()
+    {
+        // A compact model wired like the two resistors gives the two-resistor answer; two board
+        // nodes in parallel are one; two exposed nodes at one temperature are one with the summed area.
+        var (mesh, parts) = TwoPartBoard();
+        var u1 = parts[0];
+        double caseArea = u1.CaseArea;
+        // A given film on the board (no environment iteration): the identities below are the
+        // network's, not the cooling's.
+        ComponentTemperature Run(ThermalComponent part) => ComponentThermalAnalysis.Solve(mesh, new ComponentThermalSetup
+        {
+            Components = new[] { part, parts[1] }, AmbientKelvin = 300,
+            BoardConditions = new BoundaryCondition[] { Film(10, 300, 0, 1) }
+        }).Components.First(c => c.RefDes == "U1");
+
+        var twoResistor = Run(u1);
+        var sameAsTwoResistor = Run(u1 with
+        {
+            ThetaJc = 0, ThetaJb = 0,
+            CompactModel = new CompactThermalModel
+            {
+                Source = "the two resistors as a model",
+                Nodes = new[]
+                {
+                    new CompactThermalNode("junction", CompactNodeRole.Junction),
+                    new CompactThermalNode("top", CompactNodeRole.Exposed),
+                    new CompactThermalNode("bottom", CompactNodeRole.Board)
+                },
+                Resistors = new[] { new CompactThermalResistor("junction", "top", 6), new CompactThermalResistor("junction", "bottom", 9) }
+            }
+        });
+        _out.WriteLine($"two resistors: Tj {twoResistor.JunctionKelvin:f4}; as a compact model: {sameAsTwoResistor.JunctionKelvin:f4}");
+        Assert.Equal(twoResistor.JunctionKelvin, sameAsTwoResistor.JunctionKelvin, 1e-6);
+        Assert.Equal(twoResistor.CaseKelvin, sameAsTwoResistor.CaseKelvin, 1e-6);
+        Assert.Equal(twoResistor.ToBoardWatts, sameAsTwoResistor.ToBoardWatts, 1e-7);
+        Assert.Equal(twoResistor.FromTopWatts, sameAsTwoResistor.FromTopWatts, 1e-7);
+        Assert.Equal(new[] { "junction", "top", "bottom" }, sameAsTwoResistor.Nodes.Select(n => n.Node));
+
+        var split = Run(u1 with
+        {
+            ThetaJc = 0, ThetaJb = 0,
+            CompactModel = new CompactThermalModel
+            {
+                Nodes = new[]
+                {
+                    new CompactThermalNode("junction", CompactNodeRole.Junction),
+                    new CompactThermalNode("top", CompactNodeRole.Exposed) { ExposedAreaSquareMeters = 0.5 * caseArea },
+                    new CompactThermalNode("side", CompactNodeRole.Exposed) { ExposedAreaSquareMeters = 0.5 * caseArea },
+                    new CompactThermalNode("bottom", CompactNodeRole.Board),
+                    new CompactThermalNode("leads", CompactNodeRole.Board),
+                    new CompactThermalNode("inner", CompactNodeRole.Internal)
+                },
+                Resistors = new[]
+                {
+                    new CompactThermalResistor("junction", "inner", 2),      // θJC = 2 + 8 ∥ 8 = 6
+                    new CompactThermalResistor("inner", "top", 8),
+                    new CompactThermalResistor("inner", "side", 8),
+                    new CompactThermalResistor("junction", "bottom", 18),    // 18 ∥ 18 = 9
+                    new CompactThermalResistor("junction", "leads", 18)
+                }
+            }
+        });
+        // top and side are alike (equal resistances from the same node, equal areas), so they
+        // sit at one temperature and the film on A/2 + A/2 is the film on A: the same part as before.
+        Assert.Equal(twoResistor.JunctionKelvin, split.JunctionKelvin, 1e-6);
+        Assert.Equal(twoResistor.FromTopWatts, split.FromTopWatts, 1e-7);
+        Assert.Equal(twoResistor.ToBoardWatts, split.ToBoardWatts, 1e-7);
+        Assert.Equal(split.Nodes.First(n => n.Node == "top").Kelvin, split.Nodes.First(n => n.Node == "side").Kelvin, 1e-9);
+        Assert.Equal(split.Nodes.First(n => n.Node == "bottom").Kelvin, split.BoardKelvin, 1e-9);
+
+        // Refusals name the part.
+        var noBoard = new CompactThermalModel
+        {
+            Nodes = new[] { new CompactThermalNode("junction", CompactNodeRole.Junction), new CompactThermalNode("top", CompactNodeRole.Exposed) },
+            Resistors = new[] { new CompactThermalResistor("junction", "top", 1) }
+        };
+        Assert.Contains("U1", Assert.Throws<InvalidOperationException>(() => Run(u1 with { CompactModel = noBoard })).Message);
+        Assert.Throws<InvalidOperationException>(() => Run(u1 with { CompactModel = noBoard, JunctionCapacity = 1 }));
+    }
+
+    [Fact]
+    public void Transient_TheJunctionStoresHeatFirst_AndSettlesOnTheSteadyState()
+    {
+        const double ambient = 300, cj = 0.02, cCase = 0.5;
+        var (mesh, parts) = TwoPartBoard(junctionCapacity: cj, caseCapacity: cCase);
+        var setup = new ComponentThermalSetup { Components = parts, Environment = StillAir(ambient) };
+        var steady = ComponentThermalAnalysis.Solve(mesh, setup);
+        // The board's own time constant is minutes; 3000 s in 150 s steps ends on the steady state.
+        var transient = ComponentThermalAnalysis.SolveTransient(mesh, setup, new TransientThermalSettings
+        {
+            InitialTemperature = ambient, TimeStep = 150, Duration = 3000
+        });
+        _out.WriteLine(string.Join("\n", transient.Describe()));
+        var junction = transient.JunctionHistory("U1");
+        for (int i = 1; i < junction.Count; i++) Assert.True(junction[i].Kelvin >= junction[i - 1].Kelvin - 1e-9);
+        double steadyRise = steady.Components.First(c => c.RefDes == "U1").JunctionKelvin - ambient;
+        Assert.Equal(steadyRise, junction[^1].Kelvin - ambient, steadyRise * 2e-3);
+        Assert.Equal(transient.Components.First(c => c.RefDes == "U1").JunctionKelvin, junction[^1].Kelvin);
+
+        // Fine steps at the start: the junction's first step is its own capacity filling,
+        // T₁ − T₀ ≤ P·Δt/C_j, and most of it when Δt ≪ C_j·θ.
+        var early = ComponentThermalAnalysis.SolveTransient(mesh, setup, new TransientThermalSettings
+        {
+            InitialTemperature = ambient, TimeStep = 0.01, Duration = 0.1, OutputStride = 1
+        }).JunctionHistory("U1");
+        double firstStep = early[1].Kelvin - ambient, bound = parts[0].PowerWatts * 0.01 / cj;
+        _out.WriteLine($"first 10 ms: junction +{firstStep:f4} K (adiabatic bound {bound:f4} K)");
+        Assert.InRange(firstStep / bound, 0.8, 1.0);
+        Assert.Contains(transient.Assumptions, a => a.Contains("backward Euler"));
+    }
+
+    [Fact]
+    public void ThermalImpedance_OfAPart_IsItsThetaJa_AndPredictsStepAndPulse()
+    {
+        const double ambient = 300, cj = 0.05, cCase = 0.3;
+        var (mesh, parts) = TwoPartBoard(edge: 2.5e-3, junctionCapacity: cj, caseCapacity: cCase);
+        // The curve is U1 alone; the steady θJA it ends at is U1 alone on this board too.
+        var alone = parts.Select(p => p.RefDes == "U1" ? p : p with { PowerWatts = 0 }).ToArray();
+        var setup = new ComponentThermalSetup { Components = alone, Environment = StillAir(ambient) };
+        var impedance = ComponentThermalAnalysis.ThermalImpedance(mesh, setup, "U1", new ThermalImpedanceSettings
+        {
+            StartTime = 1e-3, EndTime = 1e4, PointsPerDecade = 10
+        });
+        var steady = ComponentThermalAnalysis.Solve(mesh, setup).Components.First(c => c.RefDes == "U1");
+        _out.WriteLine($"U1: θJA {impedance.ThetaJa:f4} K/W from the curve, {steady.ThetaJa:f4} steady; " +
+                       $"Z_th {impedance.Junction.At(0.1):f3} at 0.1 s, {impedance.Junction.At(10):f3} at 10 s, {impedance.Junction.KelvinPerWatt[^1]:f3} at the end");
+        Assert.Equal(steady.ThetaJa, impedance.ThetaJa, steady.ThetaJa * 1e-4);
+        Assert.NotNull(impedance.Case);
+        Assert.True(impedance.Case!.SteadyKelvinPerWatt < impedance.ThetaJa);
+        Assert.Equal(1.0, impedance.PowerWatts);
+
+        // The same step by the transient (backward Euler, 20 ms steps): the two agree on the
+        // junction's rise at every stored time once a few steps are in.
+        var step = ComponentThermalAnalysis.SolveTransient(mesh, setup, new TransientThermalSettings
+        {
+            InitialTemperature = ambient, TimeStep = 0.02, Duration = 20, OutputStride = 25
+        }).JunctionHistory("U1");
+        double worst = 0;
+        foreach (var (time, kelvin) in step.Skip(1))
+        {
+            double rise = kelvin - ambient, predicted = impedance.Junction.At(time) * parts[0].PowerWatts;
+            worst = Math.Max(worst, Math.Abs(rise / predicted - 1));
+        }
+        _out.WriteLine($"step: transient vs Z_th worst {worst * 100:f2} % over {step.Count - 1} stored times");
+        Assert.True(worst < 0.02, $"worst {worst * 100:f2} %");
+
+        // A pulsed load, 1 s period at 30 %: the transient with the part's own profile against
+        // superposition of the curve, at the end of an on-time and of an off-time.
+        var pulse = PowerProfile.Pulse(period: 1.0, dutyCycle: 0.3);
+        var pulsedParts = alone.Select(p => p.RefDes == "U1" ? p with { PowerProfile = pulse } : p).ToArray();
+        var pulsed = ComponentThermalAnalysis.SolveTransient(mesh, setup with { Components = pulsedParts }, new TransientThermalSettings
+        {
+            InitialTemperature = ambient, TimeStep = 0.01, Duration = 10, OutputStride = 10
+        });
+        var history = pulsed.JunctionHistory("U1");
+        var onEnd = history.First(h => Math.Abs(h.Time - 9.3) < 1e-9);
+        var offEnd = history.First(h => Math.Abs(h.Time - 10.0) < 1e-9);
+        double onPredicted = impedance.Junction.RiseAt(9.3, pulse, parts[0].PowerWatts);
+        double offPredicted = impedance.Junction.RiseAt(10.0, pulse, parts[0].PowerWatts);
+        _out.WriteLine($"pulse: end of on-time {onEnd.Kelvin - ambient:f3} K (superposition {onPredicted:f3}), " +
+                       $"end of off-time {offEnd.Kelvin - ambient:f3} K ({offPredicted:f3})");
+        Assert.InRange((onEnd.Kelvin - ambient) / onPredicted, 0.97, 1.03);
+        Assert.InRange((offEnd.Kelvin - ambient) / offPredicted, 0.97, 1.03);
+        Assert.True(onEnd.Kelvin > offEnd.Kelvin);
+
+        Assert.Throws<InvalidOperationException>(() => ComponentThermalAnalysis.ThermalImpedance(mesh, setup, "U7"));
     }
 
     [Fact]

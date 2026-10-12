@@ -15,4 +15,7 @@ public sealed record ResultFrame(string Label, double Value, IReadOnlyList<IResu
 
     /// <summary>Optional per-frame scalars (label → value), e.g. "|Z| (Ω)" and "Phase (°)" at one frequency.</summary>
     public IReadOnlyDictionary<string, double>? Summary { get; init; }
+
+    /// <summary>The thermal networks' state at this frame; null when the solve had none.</summary>
+    public IReadOnlyList<ThermalNetworkState>? Networks { get; init; }
 }

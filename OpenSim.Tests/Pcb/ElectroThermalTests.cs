@@ -500,6 +500,51 @@ public class ElectroThermalTests
     }
 
     [Fact]
+    public void APartInAnEnclosure_WarmsTheAirTheRailSees()
+    {
+        // FU-26: the enclosure's air as a node of the rail's thermal body. The board keeps its
+        // film to the outside here (CoolsTheBoard false), so only the part's case top warms
+        // the air: G_vent·(T_air − T_amb) is what left the top.
+        var (net, pads, options, board) = TraceOnBoard();
+        var mesh = new NetMesher().MeshNetOnBoard(net, pads, options, board);
+        var part = new ThermalComponent
+        {
+            RefDes = "U9", Footprint = ComponentPlacement.Rectangle(new Point2(20e-3, 14e-3), 4e-3, 4e-3),
+            PowerWatts = 0.3, ThetaJb = 20, ThetaJc = 5, OnTop = true, CaseFilmCoefficient = 15, JunctionCapacity = 0.05
+        };
+        var parts = new[] { part };
+        var air = new EnclosureAir { ConductanceToAmbient = 0.05, CoolsTheBoard = false };
+        var thermalBoard = BoardMesh(WholeBoard(net), true, parts);
+        RailThermalSetup Setup() => new()
+        {
+            Rail = TraceRail(mesh, 4.0), Copper = Copper, Laminate = Fr4,
+            ThermalConditions = new BoundaryCondition[]
+            {
+                new Convection { Name = "air", FaceIds = new[] { 0, 1 }, Coefficient = FilmH, AmbientTemperature = Air }
+            },
+            Board = thermalBoard, Components = parts, Air = air, Tolerance = 1e-4
+        };
+        var report = RailThermalAnalysis.Solve(mesh, net, Setup());
+        var junction = Assert.Single(report.Components);
+        _output.WriteLine(string.Join("\n", report.Describe()));
+        Assert.NotNull(report.AirKelvin);
+        Assert.Equal(junction.FromTopWatts / air.ConductanceToAmbient, report.AirKelvin!.Value - Air, junction.FromTopWatts / air.ConductanceToAmbient * 1e-4);
+        Assert.True(report.AirKelvin > Air && junction.JunctionKelvin > report.AirKelvin);
+        Assert.Contains(report.Assumptions, a => a.Contains("enclosure's air"));
+
+        // The coupled transient carries the parts too: two steps, the junction between the start and the steady value.
+        var transient = RailThermalAnalysis.SolveTransient(mesh, net, Setup(), new TransientThermalSettings
+        {
+            InitialTemperature = Air, TimeStep = 5, Duration = 10
+        });
+        var moving = Assert.Single(transient.Components);
+        _output.WriteLine(string.Join("\n", transient.Describe()));
+        Assert.InRange(moving.JunctionKelvin, Air + 0.1, junction.JunctionKelvin);
+        Assert.NotNull(transient.AirKelvin);
+        Assert.NotNull(transient.Solution.Thermal.Frames![^1].Networks);
+    }
+
+    [Fact]
     public void TheRailTransient_RisesToTheSteadyAnswer()
     {
         // The board's time constant is about 2.6 J/K over 0.019 W/K, some 140 s. Twenty steps

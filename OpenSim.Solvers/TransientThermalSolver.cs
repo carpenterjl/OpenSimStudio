@@ -83,6 +83,7 @@ public sealed class TransientThermalSolver : ISolver
         ScalarSolverHelpers.ValidateConductivityTensor(input);
         EnvironmentBoundaryModel.ValidateMaterials(input);
         HeatConductionSolver.ValidatePrescribedFilm(input);
+        ThermalNetworkTerms.Validate(input);
 
         // No anchoring requirement here, unlike the steady solver: M/Δt regularizes every
         // step, so a body that only stores and receives heat is perfectly well-posed.
@@ -109,6 +110,11 @@ public sealed class TransientThermalSolver : ISolver
                 robin.Add(new ScalarDiffusionAssembler.RobinTerm(t, convection.Coefficient));
         // Contacts enter the conduction matrix only: an interface exchanges heat, it stores none.
         var conduction = assembler.AssembleStiffness(robin, input.ThermalContacts, cancellationToken);
+        // Lumped networks (parts with their capacities, an enclosure's air) are unknowns
+        // after the mesh's nodes, in the conduction and the capacity matrix alike.
+        var networks = ThermalNetworkTerms.Build(input, log);
+        if (networks is not null) conduction = networks.Augment(conduction);
+        int dofs = conduction.RowCount;
         Func<int, double> capacity = el =>
         {
             var m = input.MaterialOf(el);
@@ -122,6 +128,7 @@ public sealed class TransientThermalSolver : ISolver
         var mass = lumped
             ? assembler.AssembleLumpedMass(capacity, cancellationToken)
             : assembler.AssembleMass(capacity, cancellationToken);
+        if (networks is not null) mass = networks.AugmentMass(mass);
         if (lumped && settings.Capacity == ThermalCapacity.Automatic)
             log.Add($"Heat capacity: LUMPED. The time step {dt:g3} s is below {monotoneStep:g3} s " +
                     $"(h²/6α of the {tightest}), where the consistent capacity matrix lets a node " +
@@ -136,7 +143,7 @@ public sealed class TransientThermalSolver : ISolver
 
         // System matrix of one backward-Euler step: A = M/Δt + K (SPD; the capacity term
         // regularizes it even without any Dirichlet/Robin condition).
-        var systemBuilder = new SparseMatrixBuilder(mesh.NodeCount, mesh.NodeCount);
+        var systemBuilder = new SparseMatrixBuilder(dofs, dofs);
         AddScaled(systemBuilder, mass, 1.0 / dt);
         AddScaled(systemBuilder, conduction, 1.0);
         var system = systemBuilder.Build();
@@ -158,19 +165,33 @@ public sealed class TransientThermalSolver : ISolver
         // A power profile scales the heat flows and the volumetric source step by step; the
         // convection conditions' ambient terms are not sources and stay as they are. Each
         // step takes the profile's MEAN over the step, so the energy put in is the
-        // profile's own even when a pulse edge falls inside a step.
+        // profile's own even when a pulse edge falls inside a step. A network node's power
+        // follows its own profile when it has one, the solve's otherwise.
         var profile = settings.PowerProfile is { Kind: not PowerProfileKind.Constant } varying ? varying : null;
         double[]? sourceLoads = null, ambientLoads = null, stepLoads = null;
         if (profile is not null)
         {
             (sourceLoads, ambientLoads) = ScalarSolverHelpers.AssembleThermalLoadParts(input, new List<string>());
-            stepLoads = new double[mesh.NodeCount];
             log.Add($"Power profile: {profile.Describe()}; each step uses its mean over the step.");
             if (dt > profile.ShortestInterval())
                 log.Add($"WARNING: the time step {dt:g3} s is longer than the profile's shortest interval " +
                         $"({profile.ShortestInterval():g3} s): the energy is right but the ripple within a " +
                         "pulse is not resolved. Use a step several times shorter than the pulse.");
         }
+        bool varyingPowers = false;
+        if (networks is not null)
+        {
+            constantLoads = networks.AugmentLoads(constantLoads, null);
+            if (sourceLoads is not null) sourceLoads = networks.AugmentLoads(sourceLoads, null);
+            if (ambientLoads is not null) ambientLoads = networks.AugmentLoads(ambientLoads, null);
+            varyingPowers = networks.PoweredNodes().Any() && (profile is not null || networks.HasProfiles);
+            if (!varyingPowers) networks.AddPowers(constantLoads, _ => 1.0);
+            else if (networks.HasProfiles)
+                log.Add("Network node powers follow their own profiles, each step at the profile's mean over the step.");
+        }
+        if (profile is not null || varyingPowers) stepLoads = new double[dofs];
+        Func<ThermalNetworkNode, double> ScaleOver(double from, double to) =>
+            node => (node.PowerProfile ?? profile)?.Mean(from, to) ?? 1.0;
 
         // A prescribed film is FIXED over the whole transient (the frozen-flow contract of
         // the conjugate study): fold its Robin terms into the step matrix and loads once,
@@ -204,19 +225,23 @@ public sealed class TransientThermalSolver : ISolver
                 prescribed[node] = temperature.Kelvin;
             log.Add($"Temperature '{temperature.Name}': {temperature.Kelvin:g4} K on {nodes.Count} nodes.");
         }
+        networks?.AddPrescribed(prescribed);
         var reduced = ConstrainedSystemSolver.Reduce(system, prescribed, allowUnconstrained: true);
 
-        // Initial state: uniform, except nodes held at their prescribed values.
-        var temperature_ = new double[mesh.NodeCount];
+        // Initial state: uniform (network nodes included), except nodes held at their prescribed values.
+        var temperature_ = new double[dofs];
         Array.Fill(temperature_, settings.InitialTemperature);
         foreach (var (node, value) in prescribed)
             temperature_[node] = value;
 
         var environment = EnvironmentBoundaryModel.Build(input, log);
-        var film = filmSchedule?.Invoke(0, 0.0, temperature_) ?? prescribedFilm ?? environment?.Evaluate(temperature_);
+        double? AirOf(IReadOnlyList<double> state) => networks?.AirDof is not null ? networks.AirTemperature(state) : null;
+        var film = filmSchedule?.Invoke(0, 0.0, temperature_) ?? prescribedFilm
+                   ?? environment?.Evaluate(temperature_, ambientTemperature: AirOf(temperature_));
+        var frameScale = ScaleOver(0, 0);
         var frames = new List<ResultFrame>
         {
-            MakeFrame(0.0, temperature_, mesh, assembler, input, film)
+            MakeFrame(0.0, temperature_, mesh, assembler, input, film, networks, frameScale)
         };
         var cg = new ConjugateGradientSolver
         {
@@ -230,12 +255,14 @@ public sealed class TransientThermalSolver : ISolver
         double[] reducedInvDiag = ConjugateGradientSolver.BuildJacobiPreconditioner(reduced.Reduced);
 
         // The film paths reduce ONCE too, and rewrite only the entries the film touches. Built
-        // lazily: a run with neither a schedule nor an environment must not pay for it.
+        // lazily: a run with neither a schedule nor an environment must not pay for it. An
+        // environment driving toward a network's unknown (an enclosure's air) couples the
+        // film to that column, which the slots hold as well.
         FilmUpdatableSystem? updatable = filmSchedule is not null || environment is not null
-            ? FilmUpdatableSystem.Prepare(system, mesh, prescribed)
+            ? FilmUpdatableSystem.Prepare(system, mesh, prescribed, environment is not null ? networks?.AirDof : null)
             : null;
-        var massTimesT = new double[mesh.NodeCount];
-        var fullRhs = new double[mesh.NodeCount];
+        var massTimesT = new double[dofs];
+        var fullRhs = new double[dofs];
         long totalIterations = 0;
         long nonlinearIterations = 0;
         long couplingIterations = 0;
@@ -245,11 +272,17 @@ public sealed class TransientThermalSolver : ISolver
             cancellationToken.ThrowIfCancellationRequested();
             mass.Multiply(temperature_, massTimesT);
             double[] loads = constantLoads;
-            if (profile is not null)
+            if (stepLoads is not null)
             {
-                double scale = profile.Mean((n - 1) * dt, n * dt);
-                for (int i = 0; i < stepLoads!.Length; i++)
-                    stepLoads[i] = ambientLoads![i] + scale * sourceLoads![i];
+                if (profile is not null)
+                {
+                    double scale = profile.Mean((n - 1) * dt, n * dt);
+                    for (int i = 0; i < stepLoads.Length; i++)
+                        stepLoads[i] = ambientLoads![i] + scale * sourceLoads![i];
+                }
+                else Array.Copy(constantLoads, stepLoads, dofs);
+                frameScale = ScaleOver((n - 1) * dt, n * dt);
+                if (varyingPowers) networks!.AddPowers(stepLoads, frameScale);
                 loads = stepLoads;
             }
 
@@ -288,10 +321,13 @@ public sealed class TransientThermalSolver : ISolver
                 }
                 else
                 {
-                    film = environment.Evaluate(iterate, tangent: true);
+                    double? air = AirOf(iterate);
+                    film = environment.Evaluate(iterate, tangent: true, ambientTemperature: air);
                     updatable!.Apply(film);
                     stepSystem = updatable.System;
-                    var filmLoads = EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film);
+                    var filmLoads = networks is null
+                        ? EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film)
+                        : networks.WithFilmLoads(loads, film, air ?? 0);
                     for (int i = 0; i < fullRhs.Length; i++)
                         fullRhs[i] = massTimesT[i] / dt + filmLoads[i];
                 }
@@ -354,8 +390,8 @@ public sealed class TransientThermalSolver : ISolver
                 // The film shown is the film as it IS at this state (the step was solved
                 // with radiation's Newton tangent, a different pair of numbers for the
                 // same exchange).
-                if (environment is not null) film = environment.Evaluate(temperature_);
-                frames.Add(MakeFrame(n * dt, temperature_, mesh, assembler, input, film));
+                if (environment is not null) film = environment.Evaluate(temperature_, ambientTemperature: AirOf(temperature_));
+                frames.Add(MakeFrame(n * dt, temperature_, mesh, assembler, input, film, networks, frameScale));
             }
             progress?.Report(new SolverProgress($"Time step {n}/{steps}", 0.05 + 0.95 * n / steps));
         }
@@ -376,8 +412,13 @@ public sealed class TransientThermalSolver : ISolver
             foreach (string note in environment.DrainNotes())
                 log.Add("  " + note);
         }
-        double min = temperature_.Min(), max = temperature_.Max();
+        var meshFinal = networks is null ? temperature_ : networks.MeshPart(temperature_);
+        double min = meshFinal.Min(), max = meshFinal.Max();
         log.Add($"Final temperature range: {min:g4} … {max:g4} K.");
+        if (frames[^1].Networks is { } finalStates)
+            foreach (var state in finalStates)
+                log.Add($"Thermal network '{state.Network}' at the end: " + string.Join(", ",
+                    state.Nodes.Select((name, i) => $"{name} {state.Kelvin[i]:F2} K")) + ".");
 
         progress?.Report(new SolverProgress("Done", 1.0));
         return new SolveOutput
@@ -386,6 +427,7 @@ public sealed class TransientThermalSolver : ISolver
             Log = log,
             Frames = frames,
             FrameAxis = "Time",
+            Networks = frames[^1].Networks,
             Summary = new Dictionary<string, double>
             {
                 ["Final min temperature (K)"] = min,
@@ -457,7 +499,8 @@ public sealed class TransientThermalSolver : ISolver
     }
 
     private static ResultFrame MakeFrame(double time, double[] temperature, FeMesh mesh,
-        ScalarDiffusionAssembler assembler, SolveInput input, SurfaceFilmModel? film)
+        ScalarDiffusionAssembler assembler, SolveInput input, SurfaceFilmModel? film,
+        ThermalNetworkTerms? networks, Func<ThermalNetworkNode, double> powerScale)
     {
         // Flux recovery only for STORED frames — O(stored), not O(steps).
         var flux = new Vector3D[mesh.ElementCount];
@@ -468,7 +511,7 @@ public sealed class TransientThermalSolver : ISolver
         var (fluxNodal, fluxSides) = ScalarSolverHelpers.NodalAverageWithSides(mesh, flux, groups, groupNames);
         var fields = new List<IResultField>
         {
-            new NodalScalarField("Temperature", "K", (double[])temperature.Clone()),
+            new NodalScalarField("Temperature", "K", networks is null ? (double[])temperature.Clone() : networks.MeshPart(temperature)),
             new NodalVectorField("Heat flux", "W/m²", fluxNodal, fluxSides)
         };
         // Present in EVERY frame of an environment run, so the frame field sets stay
@@ -476,7 +519,11 @@ public sealed class TransientThermalSolver : ISolver
         if (film is not null)
             fields.Add(new NodalScalarField("Film coefficient", "W/(m²·K)",
                 EnvironmentThermalTerms.NodalFilmField(mesh, film)));
-        return new ResultFrame($"t = {time:g4} s", time, fields) { Unit = "s" };
+        return new ResultFrame($"t = {time:g4} s", time, fields)
+        {
+            Unit = "s",
+            Networks = networks?.States(temperature, powerScale)
+        };
     }
 
     private static void AddScaled(SparseMatrixBuilder builder, CsrMatrix matrix, double scale)
