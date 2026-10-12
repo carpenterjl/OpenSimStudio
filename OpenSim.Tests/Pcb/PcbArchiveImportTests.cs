@@ -127,4 +127,57 @@ public class Cdt2DRobustnessTests
         Assert.True(cleaned.Count <= 5, "Near-duplicate and collinear points should be dropped.");
         Assert.True(Math.Abs(Polygon2.RingArea(cleaned)) > 40e-6, "The rectangle's area must be preserved.");
     }
+
+    private static List<Point2> Circle(double radius, int n) => Enumerable.Range(0, n)
+        .Select(i => new Point2(radius * Math.Cos(2 * Math.PI * i / n), radius * Math.Sin(2 * Math.PI * i / n)))
+        .ToList();
+
+    /// <summary>The farthest any original vertex lies from the cleaned ring's edges.</summary>
+    private static double Deviation(IReadOnlyList<Point2> original, IReadOnlyList<Point2> cleaned)
+    {
+        double worst = 0;
+        foreach (var p in original)
+        {
+            double nearest = double.MaxValue;
+            for (int i = 0; i < cleaned.Count; i++)
+            {
+                var a = cleaned[i];
+                var ab = cleaned[(i + 1) % cleaned.Count] - a;
+                double t = Math.Clamp(Point2.Dot(p - a, ab) / Point2.Dot(ab, ab), 0, 1);
+                nearest = Math.Min(nearest, (p - (a + ab * t)).Length);
+            }
+            worst = Math.Max(worst, nearest);
+        }
+        return worst;
+    }
+
+    [Fact]
+    public void PolygonCleaner_StaysWithinTheToleranceOfAFinelyTessellatedArc()
+    {
+        // FU-24: a 2 mm circle drawn with 0.5° steps (a CAD's own tessellation), cleaned at
+        // 10 µm. Each removal used to be judged against the last chord, not the ring, so the
+        // chords crept outward step by step: the circle came back as a 10-gon with a 93 µm
+        // sagitta and 6 % less area. Now no original vertex ends up farther from the cleaned
+        // ring than the tolerance, and the area loss is the sagitta's, about 0.5 %.
+        var circle = Circle(2e-3, 720);
+        var cleaned = PolygonCleaner.CleanRing(circle, PolygonCleaner.DefaultTolerance);
+
+        Assert.True(cleaned.Count < 100, $"{cleaned.Count} vertices left: the spur removal did nothing");
+        Assert.True(Deviation(circle, cleaned) <= PolygonCleaner.DefaultTolerance,
+            $"a vertex lies {Deviation(circle, cleaned) * 1e6:g3} µm off the cleaned ring");
+        double loss = 1 - Polygon2.RingArea(cleaned) / Polygon2.RingArea(circle);
+        Assert.InRange(loss, 0, 0.006);
+    }
+
+    [Fact]
+    public void PolygonCleaner_KeepsASmallRingsShape()
+    {
+        // A 0.25 mm pad drawn as a 24-gon: at the flat 10 µm it became an octagon, 9 % less
+        // area. The sagitta a small ring may lose is now relative to its size.
+        var pad = Circle(0.125e-3, 24);
+        var cleaned = PolygonCleaner.CleanRing(pad, PolygonCleaner.DefaultTolerance);
+
+        Assert.Equal(24, cleaned.Count);
+        Assert.Equal(Polygon2.RingArea(pad), Polygon2.RingArea(cleaned), Polygon2.RingArea(pad) * 0.005);
+    }
 }
