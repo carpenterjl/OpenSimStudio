@@ -14,18 +14,9 @@ public sealed record WireAttachedSolution(
     Complex[] EdgeCurrents, Complex[] WireCurrents, Complex[] RawEdgeCurrents,
     double IncidenceDegrees)
 {
-    /// <summary>How unevenly the junction's disc current meets the triangles that continue
-    /// it: the worst relative difference between the disc's flux density along a fan outer edge
-    /// and the uniform density the continuation assumes. About 0.17 on a regular mesh; above
-    /// <see cref="SkewedFanThreshold"/> the contact vertex sits close to one of its neighbours
-    /// and the omitted edge line charge is no longer small.</summary>
-    public double FanFluxMismatch { get; init; }
-
     /// <summary>Power turned to heat in the sheet and the wire [W] for peak-amplitude currents;
     /// 0 for perfect metal.</summary>
     public double OhmicLossWatts { get; init; }
-
-    public const double SkewedFanThreshold = 0.5;
 }
 
 /// <summary>
@@ -33,7 +24,7 @@ public sealed record WireAttachedSolution(
 /// junction unknown carrying the attachment mode across the contact,
 ///
 /// <code>
-///   J = wire-end half rooftop + D (the 1/ρ disc on the fan wedges)
+///   J = wire-end half rooftop + D (the ray current on the fan wedges, see AttachmentFan)
 ///       + Σᵢ γᵢ·(half-RWG on each wedge's outward neighbour),   γᵢ = θᵢ/(2π·lᵢ)
 /// </code>
 ///
@@ -144,7 +135,6 @@ public sealed partial class SurfaceMomSolver
         return new WireAttachedSolution(frequencyHz, gapVolts / feedCurrent,
             edgeCurrents, wireCurrents, rawEdgeCurrents, junction.IncidenceDegrees)
         {
-            FanFluxMismatch = junction.Fan.OuterFluxMismatch,
             OhmicLossWatts = SheetLoss.OhmicPower(surface, rawEdgeCurrents, sheet, SheetEdge, frequencyHz)
                              + 0.5 * wireZ.Real * ThinWireMomSolver.Squared(wireLoss, b => x[wireIndex[b]])
         };

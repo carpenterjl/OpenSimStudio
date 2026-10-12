@@ -251,17 +251,75 @@ public class JunctionQuadratureTests
     }
 
     [Fact]
-    public void OuterFluxMismatch_IsSeventeenPercentOnAnEquilateralFan_AndLargeOnASkewedOne()
+    public void ASkewedFan_GivesTheMonopoleOfARegularOne()
     {
-        // Hexagonal fan: every wedge equilateral. D·n against the uniform half-RWG density is
-        // +10.3 % at the foot of the perpendicular and −17.3 % at the edge ends.
-        var (hex, centre) = PolygonFan(6, 0.01);
-        Assert.Equal(1 - Math.Sqrt(3) / 2 * 3 / Math.PI, new AttachmentFan(hex, centre, 1e-4).OuterFluxMismatch, 9);
+        // FU-4 (WH-C), the plan's gate. The same quarter-wave monopole on the same 1λ plate at
+        // λ/12, once on the regular fan and once with the neighbour at +x pulled toward the feed —
+        // the outline and the feed point do not move, only the fan does. Half an element is the
+        // closest the mesh builder's snap puts a neighbour.
+        //
+        // The classical disc left a zero-net line charge along each wedge's outer edge, and the
+        // monopole's reactance fell with the skew (λ/8, λ/12, λ/16): −4.9, −4.1, −3.4 % at half an
+        // element, −11.4, −9.1, −7.3 % at a quarter. With the stream-function current: +1.2, +0.8,
+        // +0.6 % and +3.3, +2.1, +1.5 % — what is left shrinks with the element, the discretization
+        // of a squeezed mesh at the feed.
+        const double f = 300e6, lambda = 299792458.0 / f, height = 0.25 * lambda, cell = lambda / 12;
+        double radius = lambda / 2000;
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(lambda, lambda, cell, z: 0,
+            portFraction: 0, snapVertex: (0, 0));
+        Assert.True(grid.Structure is not null, grid.FailureReason);
+        var regular = grid.Structure!;
+        int neighbour = Enumerable.Range(0, regular.Vertices.Count).MinBy(i =>
+            (regular.Vertices[i] - new Vector3D(cell, 0, 0)).Length);
+        var wire = WireGridBuilder.Build(
+            new[] { new WireSegment(Vector3D.Zero, new Vector3D(0, 0, height), radius) },
+            maxElementLength: height / 10, attachmentPoint: Vector3D.Zero).Structure!;
+        var onRegular = new SurfaceMomSolver().SolveWireAttached(regular, wire, f, 0).InputImpedance;
 
-        // The same fan with its centre pulled to a fifth of the way from one rim vertex.
+        foreach (var (pull, band) in new[] { (0.5, 0.01), (0.25, 0.025) })
+        {
+            var vertices = regular.Vertices.ToList();
+            vertices[neighbour] = new Vector3D(pull * cell, 0, 0);
+            var skewed = new SurfaceStructure(vertices, regular.Triangles.ToList(), null);
+            var onSkewed = new SurfaceMomSolver().SolveWireAttached(skewed, wire, f, 0).InputImpedance;
+            _output.WriteLine($"pull {pull}: regular fan {onRegular}, skewed fan {onSkewed}");
+            Assert.InRange(onSkewed.Imaginary / onRegular.Imaginary, 1 - band, 1 + band);
+            Assert.InRange(onSkewed.Real / onRegular.Real, 0.99, 1.01);
+        }
+    }
+
+    [Fact]
+    public void TheJunctionCurrent_CrossesEveryOuterEdgeUniformly()
+    {
+        // The property that removes the line charge: on each wedge the disc's normal flux density
+        // across the outer edge is γ = θ/(2πl) all along it — the half-RWG's density on the other
+        // side — on an equilateral fan and on one with its centre pulled to a fifth of the way
+        // from a rim vertex (where the classical ρ̂/(2πρ) disc was off by more than 50 %).
+        var (hex, centre) = PolygonFan(6, 0.01);
         var vertices = hex.Vertices.ToList();
         vertices[0] = vertices[1] * 0.8;
         var skewed = new SurfaceStructure(vertices, hex.Triangles.ToList(), null);
-        Assert.True(new AttachmentFan(skewed, 0, 1e-4).OuterFluxMismatch > 0.5);
+        foreach (var surface in new[] { hex, skewed })
+        {
+            var fan = new AttachmentFan(surface, centre, 1e-4);
+            Assert.Equal(1.0, fan.Wedges.Sum(w => w.Angle) / (2 * Math.PI), 12);
+            foreach (var wedge in fan.Wedges)
+            {
+                var (a, b, c) = surface.Triangles[wedge.Triangle];
+                var (u, w) = a == centre ? (b, c) : b == centre ? (a, c) : (a, b);
+                var pu = surface.Vertices[u];
+                var pw = surface.Vertices[w];
+                var along = (pw - pu) * (1 / (pw - pu).Length);
+                var inward = fan.VertexPosition - pu - along * Vector3D.Dot(fan.VertexPosition - pu, along);
+                var outward = inward * (-1 / inward.Length);
+                foreach (double x in new[] { 0.02, 0.3, 0.5, 0.77, 0.98 })
+                {
+                    // Just inside the edge, so the point falls in the wedge.
+                    var r = pu + (pw - pu) * x - outward * 1e-12;
+                    double flux = Vector3D.Dot(fan.DiscCurrent(surface, r), outward);
+                    Assert.Equal(1.0, flux / wedge.Gamma, 6);
+                }
+            }
+        }
     }
 }

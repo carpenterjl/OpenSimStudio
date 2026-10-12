@@ -5,40 +5,38 @@ using OpenSim.Rf.Layered;
 namespace OpenSim.Rf.Surface;
 
 /// <summary>
-/// The attachment mode at a probe junction vertex v: the classical 1/ρ disc current
+/// The attachment mode at a probe junction vertex v. On each fan wedge (triangle v, u, w with
+/// angle θᵢ at v and outer edge u–w of length lᵢ) the current is the curl of a stream function,
+/// J = ∇ψ × ẑ, in the ray parametrization r′ = v + t·e(s), e(s) = (1−s)(u−v) + s(w−v):
 ///
-///   D(r) = ρ̂/(2πρ) on the fan triangles around v,
+///   ψ(s, t) = [(1 − t)·Δφ(s) + t·θᵢ·s] / 2π,
 ///
-/// whose divergence is EXACTLY δ²(v) — it cancels the tube current's endpoint delta
-/// identically, so the junction basis carries no point charge at any scale. (The
-/// vertex-anchored affine fan ρ_v = (r−v)/2Aᵢ was tried first per the plan and
-/// MEASURED unsound: with honest charge bookkeeping its unavoidable +δ(v) point
-/// charge has self-energy ~K_Φ(a)/(jω) — a ~0.04 pF series capacitor that choked the
-/// quasi-static feed to 0.20 pF against the physical 1.32 pF plate value; with the
-/// point term dropped, the power ledger read 1.8× at resonance. The 1/ρ fan is
-/// classical for a reason.)
+/// Δφ(s) the angle from u−v to e(s). Being a curl it has no divergence on the wedge, so it carries
+/// no charge there; ψ is constant along both radial edges, so no current crosses them; at the outer
+/// edge (t = 1) ψ is linear in s, so the current crosses it with the UNIFORM density γᵢ = θᵢ/(2πlᵢ)
+/// — the density of the half-RWG on the outward neighbour that takes it up — so it is continuous
+/// there too; and as t → 0 it is the classical isotropic disc ρ̂/(2πρ). Around v, ψ steps by
+/// Σθᵢ/2π = 1: the divergence is exactly δ²(v), cancelling the tube current's endpoint delta, so the
+/// junction basis carries no point charge. The half-RWG's ordinary −l/A divergence is where the
+/// junction current's charge accumulates.
 ///
-/// D is chargeless on the wedges, and its 1/ρ is cancelled by the polar measure
-/// (dS = ρ dρ dφ), so every D integral is an ordinary 2-D quadrature — in the ray
-/// parametrization r′ = v + t·e(s) the radial variable drops out of D dS′ entirely.
-/// Only the kernel's 1/R needs panelling when the test point is close; test points
-/// use the reduced ρ_eff = √(ρ² + a²) (the junction current physically rides the
-/// tube-top region of radius a). Across each wedge's OUTER edge D exits with flux
-/// θᵢ/2π (the wedge angle at v — closed form); a HALF-RWG on the outward neighbor
-/// absorbs it (βᵢ = ±θᵢ/(2π·lᵢ)), its normal flux vanishes on the neighbor's other
-/// edges (the (p⁻ − r) form is edge-parallel there), and its ordinary −l/A divergence
-/// is where the junction current's charge finally accumulates — standard pair-moment
-/// machinery, no new singular families.
+/// <para>In the ray variables (dS′ = t·|e′ × e| ds dt, e′ = w − u):
+///   J dS′ = (1/2π)·[((1 − t)φ′(s) + tθᵢ)·e(s) − t(θᵢs − Δφ(s))·e′] ds dt,   φ′ = |e′ × e|/|e|²,
+/// bounded and linear in t (<see cref="RayCurrent"/>), so every junction-current integral is an
+/// ordinary 2-D quadrature; only the kernel's 1/R needs panelling when the test point is close.
+/// Test points use the reduced ρ_eff = √(ρ² + a²) (the junction current physically rides the
+/// tube-top region of radius a).</para>
 ///
-/// <para><b>What is NOT matched.</b> The TOTAL flux through each outer edge is matched;
-/// its DISTRIBUTION along the edge is not. D leaves with normal component
-/// h/(2π(h² + x²)) (h the vertex's distance to the edge, x the position along it) and
-/// the half-RWG takes it up uniformly, θ/(2πl). The difference is a line charge of zero
-/// net along each outer edge, and it is omitted. On an equilateral wedge the two differ
-/// by +10 % at the foot and −17 % at the ends; on a strongly skewed fan (a vertex
-/// snapped close to a neighbour) by ±80 %. <see cref="OuterFluxMismatch"/> reports the
-/// worst case so a caller can warn; the Hwu–Wilton–Rao junction basis would remove
-/// it and is not implemented.</para>
+/// <para>FU-4 (audit WH-C). The classical disc alone (ψ = Δφ/2π) leaves the outer edge with density
+/// h/(2π(h² + x²)), not the half-RWG's uniform θ/(2πl): a line charge of zero net along each outer
+/// edge, which was omitted — +10 % / −17 % on an equilateral wedge, ±80 % with a vertex close to a
+/// neighbour, and a monopole's reactance 11 % low on such a fan. A purely radial current with the
+/// uniform edge density (ψ = θs/2π at every t) has no line charge either, but its 1/ρ part is no
+/// longer isotropic at v, which adds ln(b/a) inductance: 4 % on a regular mesh, 5 % on the skewed
+/// fan. The blend keeps both properties. (The vertex-anchored affine fan ρ_v = (r−v)/2Aᵢ was tried
+/// before any of these and MEASURED unsound: its +δ(v) point charge has self-energy ~K_Φ(a)/(jω), a
+/// ~0.04 pF series capacitor that choked the quasi-static feed to 0.20 pF against the physical
+/// 1.32 pF plate value.)</para>
 /// </summary>
 internal sealed class AttachmentFan
 {
@@ -73,12 +71,6 @@ internal sealed class AttachmentFan
     /// discrete junction-continuity identity the tests assert.</summary>
     public double TotalAngle { get; }
 
-    /// <summary>The worst relative difference, over every outer edge, between the disc's
-    /// normal flux density and the uniform density of the half-RWG that takes it up (see
-    /// the class remarks). 0.17 on an equilateral fan; above about 0.5 the fan is skewed
-    /// enough that the omitted line charge is no longer a small correction.</summary>
-    public double OuterFluxMismatch { get; }
-
     public AttachmentFan(SurfaceStructure surface, int vertex, double radiusFloor)
     {
         Vertex = vertex;
@@ -90,7 +82,6 @@ internal sealed class AttachmentFan
 
         var wedges = new List<Wedge>();
         double total = 0;
-        double mismatch = 0;
         for (int t = 0; t < surface.Triangles.Count; t++)
         {
             var (a, b, c) = surface.Triangles[t];
@@ -118,20 +109,6 @@ internal sealed class AttachmentFan
             double sign = rwg.PlusTriangle == t ? 1.0 : -1.0;
             double gamma = angle / (2 * Math.PI * rwg.Length);
 
-            // D·n along the outer edge against the half-RWG's uniform θ/(2πl): the ratio is
-            // h·l/(θ(h² + x²)), largest at the foot of the perpendicular (or the nearer end
-            // when the foot falls outside the edge) and smallest at the farther end.
-            var along = (surface.Vertices[w] - surface.Vertices[u]) * (1.0 / rwg.Length);
-            double xu = Vector3D.Dot(du, along), xw = Vector3D.Dot(dw, along);
-            double h = (du - along * xu).Length;
-            if (h > 0 && angle > 0)
-            {
-                double nearest = xu * xw <= 0 ? 0 : Math.Min(Math.Abs(xu), Math.Abs(xw));
-                double farthest = Math.Max(Math.Abs(xu), Math.Abs(xw));
-                double high = h * rwg.Length / (angle * (h * h + nearest * nearest));
-                double low = h * rwg.Length / (angle * (h * h + farthest * farthest));
-                mismatch = Math.Max(mismatch, Math.Max(Math.Abs(high - 1), Math.Abs(low - 1)));
-            }
             wedges.Add(new Wedge(t, edge, angle, gamma, sign, neighbor, neighborOpposite));
         }
         if (wedges.Count == 0)
@@ -149,7 +126,45 @@ internal sealed class AttachmentFan
                 + $"{total / (2 * Math.PI):g4}). Move the attachment inside the sheet.");
         Wedges = wedges;
         TotalAngle = total;
-        OuterFluxMismatch = mismatch;
+    }
+
+    /// <summary>J dS′ per ds dt at ray coordinates (s, t) of a wedge with edge vectors eu, ew from
+    /// v and angle θ (see the class remarks).</summary>
+    internal static Vector3D RayCurrent(Vector3D eu, Vector3D ew, double angle, double s, double t)
+    {
+        var e = eu * (1 - s) + ew * s;
+        var edge = ew - eu;
+        double cross = Vector3D.Cross(edge, e).Length;
+        double slope = cross / e.LengthSquared;
+        double turned = Math.Atan2(Vector3D.Cross(eu, e).Length, Vector3D.Dot(eu, e));
+        return (e * ((1 - t) * slope + t * angle) - edge * (t * (angle * s - turned))) * (1 / (2 * Math.PI));
+    }
+
+    /// <summary>The junction's fan current at a point of the fan, per unit junction coefficient
+    /// (<see cref="RayCurrent"/> over the measure t·|e′ × e|). Zero off the fan and at v.</summary>
+    public Vector3D DiscCurrent(SurfaceStructure surface, Vector3D r)
+    {
+        foreach (var wedge in Wedges)
+        {
+            var (a, b, c) = surface.Triangles[wedge.Triangle];
+            var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
+            var eu = surface.Vertices[u] - VertexPosition;
+            var ew = surface.Vertices[w] - VertexPosition;
+            var p = r - VertexPosition;
+            // Barycentric (t·(1−s), t·s) of p in the wedge's (eu, ew) frame.
+            var normal = Vector3D.Cross(eu, ew);
+            double area2 = normal.LengthSquared;
+            double alpha = Vector3D.Dot(Vector3D.Cross(p, ew), normal) / area2;
+            double beta = Vector3D.Dot(Vector3D.Cross(eu, p), normal) / area2;
+            double t = alpha + beta;
+            const double slack = 1e-12;
+            if (alpha < -slack || beta < -slack || t > 1 + slack || t <= 0) continue;
+            double s = beta / t;
+            var e = eu * (1 - s) + ew * s;
+            double measure = t * Vector3D.Cross(ew - eu, e).Length;
+            return RayCurrent(eu, ew, wedge.Angle, s, t) * (1 / measure);
+        }
+        return Vector3D.Zero;
     }
 
     /// <summary>The junction surface current's in-plane spectral transform per unit
@@ -161,26 +176,24 @@ internal sealed class AttachmentFan
     {
         Complex jx = Complex.Zero, jy = Complex.Zero;
         var (nodes, weights) = GaussLegendre.Rule(6, 0, 1);
-        // Disc D: ray r′ = v + t·e(s); D dS′ = e(s)·cross/(2π|e|²) ds dt (t cancels).
+        // Fan current: ray r′ = v + t·e(s), J dS′ = RayCurrent ds dt (see the class remarks).
         foreach (var wedge in Wedges)
         {
             var (a, b, c) = surface.Triangles[wedge.Triangle];
             var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
             var eu = surface.Vertices[u] - VertexPosition;
             var ew = surface.Vertices[w] - VertexPosition;
-            double cross = Vector3D.Cross(eu, ew - eu).Length;
             for (int si = 0; si < nodes.Length; si++)
             {
                 var e = eu * (1 - nodes[si]) + ew * nodes[si];
-                double scale = cross / (2 * Math.PI * e.LengthSquared);
                 for (int ti = 0; ti < nodes.Length; ti++)
                 {
                     var rPrime = VertexPosition + e * nodes[ti];
                     var (sinP, cosP) = Math.SinCos(kx * rPrime.X + ky * rPrime.Y);
                     var phase = new Complex(cosP, sinP);
-                    double weight = weights[si] * weights[ti] * scale;
-                    jx += weight * e.X * phase;
-                    jy += weight * e.Y * phase;
+                    var j = RayCurrent(eu, ew, wedge.Angle, nodes[si], nodes[ti]) * (weights[si] * weights[ti]);
+                    jx += j.X * phase;
+                    jy += j.Y * phase;
                 }
             }
         }
@@ -228,20 +241,18 @@ internal sealed class AttachmentFan
             var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
             var eu = surface.Vertices[u] - VertexPosition;
             var ew = surface.Vertices[w] - VertexPosition;
-            double cross = Vector3D.Cross(eu, ew - eu).Length;
             for (int si = 0; si < nodes.Length; si++)
             {
                 var e = eu * (1 - nodes[si]) + ew * nodes[si];
-                double scale = cross / (2 * Math.PI * e.LengthSquared);
                 for (int ti = 0; ti < nodes.Length; ti++)
                 {
                     var rPrime = VertexPosition + e * nodes[ti];
                     var (sinP, cosP) = Math.SinCos(k * Vector3D.Dot(direction, rPrime));
                     var phase = new Complex(cosP, sinP);
-                    double weight = weights[si] * weights[ti] * scale;
-                    jx += weight * e.X * phase;
-                    jy += weight * e.Y * phase;
-                    jz += weight * e.Z * phase;
+                    var j = RayCurrent(eu, ew, wedge.Angle, nodes[si], nodes[ti]) * (weights[si] * weights[ti]);
+                    jx += j.X * phase;
+                    jy += j.Y * phase;
+                    jz += j.Z * phase;
                 }
             }
         }
@@ -303,16 +314,15 @@ internal sealed class AttachmentFan
             var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
             var eu = surface.Vertices[u] - VertexPosition;
             var ew = surface.Vertices[w] - VertexPosition;
-            WedgePotential(kernel, eu, ew, r, 0, 1, 0, 1, 0, nodes, weights, resolve,
+            WedgePotential(kernel, eu, ew, wedge.Angle, r, 0, 1, 0, 1, 0, nodes, weights, resolve,
                 ref ax, ref ay);
         }
         return (ax, ay);
     }
 
-    /// <summary>One cell [s0, s1] × [t0, t1] of one wedge in the ray form r′ = v + t·e(s),
-    /// e(s) = (1−s)eu + s·ew: dS′ = t·|e × (ew−eu)| ds dt and D = e/(t·|e|²)/2π, so the t
-    /// cancels in D dS′ = e(s)·|e×(ew−eu)|/(2π|e(s)|²) ds dt.</summary>
-    private void WedgePotential(IRadialGaKernel kernel, Vector3D eu, Vector3D ew, Vector3D r,
+    /// <summary>One cell [s0, s1] × [t0, t1] of one wedge (angle θ at v) in the ray form
+    /// r′ = v + t·e(s), e(s) = (1−s)eu + s·ew, where J dS′ = RayCurrent ds dt.</summary>
+    private void WedgePotential(IRadialGaKernel kernel, Vector3D eu, Vector3D ew, double angle, Vector3D r,
         double s0, double s1, double t0, double t1, int depth,
         double[] nodes, double[] weights, double resolve, ref Complex ax, ref Complex ay)
     {
@@ -327,33 +337,32 @@ internal sealed class AttachmentFan
         {
             if (radial >= arc)
             {
-                WedgePotential(kernel, eu, ew, r, s0, s1, t0, tm, depth + 1, nodes, weights, resolve, ref ax, ref ay);
-                WedgePotential(kernel, eu, ew, r, s0, s1, tm, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+                WedgePotential(kernel, eu, ew, angle, r, s0, s1, t0, tm, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+                WedgePotential(kernel, eu, ew, angle, r, s0, s1, tm, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
             }
             else
             {
-                WedgePotential(kernel, eu, ew, r, s0, sm, t0, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
-                WedgePotential(kernel, eu, ew, r, sm, s1, t0, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+                WedgePotential(kernel, eu, ew, angle, r, s0, sm, t0, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
+                WedgePotential(kernel, eu, ew, angle, r, sm, s1, t0, t1, depth + 1, nodes, weights, resolve, ref ax, ref ay);
             }
             return;
         }
 
-        double cross = Vector3D.Cross(eu, ew - eu).Length;
         double cell = (s1 - s0) * (t1 - t0);
         for (int si = 0; si < nodes.Length; si++)
         {
             double sv = s0 + (s1 - s0) * nodes[si];
             var e = eu * (1 - sv) + ew * sv;
-            double scale = cell * cross / (2 * Math.PI * e.LengthSquared);
-            double wx = e.X * scale, wy = e.Y * scale;
             for (int ti = 0; ti < nodes.Length; ti++)
             {
-                var rPrime = VertexPosition + e * (t0 + (t1 - t0) * nodes[ti]);
+                double tv = t0 + (t1 - t0) * nodes[ti];
+                var rPrime = VertexPosition + e * tv;
                 double dx = r.X - rPrime.X, dy = r.Y - rPrime.Y;
                 double rhoEff = Math.Sqrt(dx * dx + dy * dy + _radiusFloor * _radiusFloor);
-                var weight = weights[si] * weights[ti] * kernel.EvaluateGa(rhoEff);
-                ax += wx * weight;
-                ay += wy * weight;
+                var weight = cell * weights[si] * weights[ti] * kernel.EvaluateGa(rhoEff);
+                var j = RayCurrent(eu, ew, angle, sv, tv);
+                ax += j.X * weight;
+                ay += j.Y * weight;
             }
         }
     }
@@ -401,7 +410,6 @@ internal sealed class AttachmentFan
             var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
             var eu = surface.Vertices[u] - VertexPosition;
             var ew = surface.Vertices[w] - VertexPosition;
-            double cross = Vector3D.Cross(eu, ew - eu).Length;
 
             // Radial panels: halving toward the vertex until a panel is inside the radius.
             double reach = Math.Min(eu.Length, ew.Length);
@@ -415,16 +423,18 @@ internal sealed class AttachmentFan
                 {
                     double sv = (sp + nodes[si]) / sPanels;
                     var e = eu * (1 - sv) + ew * sv;
-                    double scale = cross / (2 * Math.PI * e.LengthSquared) * weights[si] / sPanels;
+                    double scale = weights[si] / sPanels;
                     for (int tp = 0; tp + 1 < breaks.Count; tp++)
                     {
                         double tHigh = breaks[tp], tLow = breaks[tp + 1];
                         for (int ti = 0; ti < nodes.Length; ti++)
                         {
-                            var rPrime = VertexPosition + e * (tLow + (tHigh - tLow) * nodes[ti]);
+                            double tv = tLow + (tHigh - tLow) * nodes[ti];
+                            var rPrime = VertexPosition + e * tv;
                             var (ax, ay) = source.DiscPotential(kernel, surface, rPrime,
                                 innerOrder, innerResolve);
-                            sum += weights[ti] * (tHigh - tLow) * scale * (e.X * ax + e.Y * ay);
+                            var j = RayCurrent(eu, ew, wedge.Angle, sv, tv);
+                            sum += weights[ti] * (tHigh - tLow) * scale * (j.X * ax + j.Y * ay);
                         }
                     }
                 }

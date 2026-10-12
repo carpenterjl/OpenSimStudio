@@ -100,7 +100,7 @@ internal static class WireSurfaceCoupling
     }
 
     /// <summary>Mutual impedance between a wire basis and the attachment DISC
-    /// D(r′) = ρ̂/(2πρ) on the fan wedges, per unit junction coefficient.
+    /// D(r′) on the fan wedges (the ray current of AttachmentFan), per unit junction coefficient.
     ///
     /// <para><b>Vector term only, and that is bookkeeping, not an approximation.</b> D's
     /// divergence is exactly δ²(v), and that delta is spent cancelling the attached wire
@@ -181,15 +181,9 @@ internal static class WireSurfaceCoupling
                             : tb == fan.Vertex ? (ta, tc) : (ta, tb);
                         var eu = surface.Vertices[iu] - v0;
                         var ew = surface.Vertices[iw] - v0;
-                        double cross = Vector3D.Cross(eu, ew - eu).Length;
-
                         for (int ri = 0; ri < rayNodes.Length; ri++)
                         {
                             var e = eu * (1 - rayNodes[ri]) + ew * rayNodes[ri];
-                            double scale = cross / (2 * Math.PI * e.LengthSquared);
-                            double tangential = Vector3D.Dot(tHat, e) * scale;
-                            if (tangential == 0) continue;
-                            double wRay = rayWeights[ri] * tangential;
 
                             foreach (var (t0, t1) in tPanels)
                             {
@@ -197,7 +191,12 @@ internal static class WireSurfaceCoupling
                                 if (tSpan <= 0) continue;
                                 for (int ti = 0; ti < rayNodes.Length; ti++)
                                 {
-                                    var rp = v0 + e * (t0 + tSpan * rayNodes[ti]);
+                                    double tv = t0 + tSpan * rayNodes[ti];
+                                    double tangential = Vector3D.Dot(tHat,
+                                        AttachmentFan.RayCurrent(eu, ew, wedge.Angle, rayNodes[ri], tv));
+                                    if (tangential == 0) continue;
+                                    double wRay = rayWeights[ri] * tangential;
+                                    var rp = v0 + e * tv;
                                     var d = r - rp;
                                     double rEff = Math.Sqrt(d.LengthSquared + radius * radius);
                                     var (sin, cos) = Math.SinCos(k * rEff);

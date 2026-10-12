@@ -41,7 +41,7 @@ public static class LayeredFarField
 
     /// <summary>Probe-fed far field: the COMPLETE mixed current, each component once —
     /// the raw horizontal RWG patch currents, the junction's true horizontal current
-    /// (the 1/ρ disc + the half-RWG continuations, via <see cref="AttachmentFan.CurrentTransform"/>,
+    /// (the fan's ray current + the half-RWG continuations, via <see cref="AttachmentFan.CurrentTransform"/>,
     /// NOT the mesh-scale fold), and the vertical tube current (E_θ only). All three add
     /// COHERENTLY, which is what makes the probe power ledger close — the fold both
     /// over-radiated the half-RWGs and omitted the disc.</summary>
