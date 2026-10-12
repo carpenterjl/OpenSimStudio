@@ -46,6 +46,12 @@ public partial class ElectrodesViewModel : ObservableObject
     [ObservableProperty] private bool _driveWithCurrent;
     [ObservableProperty] private double _testCurrent = 1.0;
 
+    /// <summary>With current drive: the source pad is one equipotential terminal carrying the
+    /// current (what a metal pad is), so R is the terminal-to-terminal value a voltage drive
+    /// gives. Off, the current enters at uniform density over the pad and R = P/I² reads
+    /// above that by the spreading term where the pad feeds a trace from one side.</summary>
+    [ObservableProperty] private bool _equipotentialPad = true;
+
     // Lumped AC impedance estimate Z(f) = R + jωL (R from the DC test, L from PEEC).
     public ObservableCollection<ImpedancePoint> AcSweep { get; } = new();
     [ObservableProperty] private double _acFMin = 1e3;      // Hz
@@ -159,7 +165,11 @@ public partial class ElectrodesViewModel : ObservableObject
     {
         if (SourceFaceId is null || SinkFaceId is null) return null;
         BoundaryCondition source = DriveWithCurrent
-            ? new CurrentFlow { Name = "Source", FaceIds = new[] { SourceFaceId.Value }, TotalCurrent = TestCurrent }
+            ? new CurrentFlow
+            {
+                Name = "Source", FaceIds = new[] { SourceFaceId.Value }, TotalCurrent = TestCurrent,
+                Equipotential = EquipotentialPad
+            }
             : new VoltagePotential { Name = "Source", FaceIds = new[] { SourceFaceId.Value }, Volts = TestVoltage };
         return new[]
         {

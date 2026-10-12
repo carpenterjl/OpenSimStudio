@@ -83,6 +83,14 @@ public static class StudyRunner
 
         if (kind == "EnvironmentThermal")
             return SolveEnvironment(project, solids, settings, Lookup, log, progress, cancellationToken);
+        if (kind is "Electrical" or "AcElectrical" && solids.Count > 1 && settings.BodyName is null)
+        {
+            if (project.Assembly?.ElectricalContactConductance is { } joint)
+                return SolveElectricalAssembly(project, kind, solids, settings, joint, Lookup, log, progress, cancellationToken);
+            log($"The project has {solids.Count} bodies; solving '{solids[0].Name}' alone. Set the assembly's " +
+                "electrical contact conductance (S/m²) to solve them as one assembly joined at their contacts, " +
+                "or name one body with --body.");
+        }
 
         var body = settings.BodyName is null
             ? solids[0]
@@ -183,6 +191,50 @@ public static class StudyRunner
         string bodyNames = string.Join(" + ", bodies.Select(b => b.Name));
         var report = StudyReport.FromSolve(project.Name, bodyNames, "EnvironmentThermal", input, output);
         return new StudyRun("EnvironmentThermal", bodyNames, input, output, report);
+    }
+
+    /// <summary>
+    /// A DC or AC electrical solve of the whole assembly: the bodies merged, their joints
+    /// detected and given the project's electrical contact conductance, every body's
+    /// voltages and currents on the merged mesh (FU-27).
+    /// </summary>
+    private static StudyRun SolveElectricalAssembly(SimProject project, string kind, List<Body> bodies,
+        StudySettings settings, double jointConductance, Func<string, Material?> lookup, Action<string> log,
+        IProgress<SolverProgress>? progress, CancellationToken ct)
+    {
+        foreach (var body in bodies)
+        {
+            if (body.Mesh is null) throw new InvalidOperationException($"Body '{body.Name}' has no mesh.");
+            if (body.Material is null) throw new InvalidOperationException($"Body '{body.Name}' has no material.");
+            body.Material = lookup(body.Material.Name) ?? body.Material;
+        }
+        var detection = (project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
+        var merged = FeMeshAssembler.Assemble(bodies);
+        log($"Merged {bodies.Count} bodies: {merged.Mesh.NodeCount} nodes, {merged.Mesh.ElementCount} elements.");
+        var contacts = ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, log)
+            .Select(c => c.WithConductance(jointConductance)).ToList();
+        log($"Electrical joints: {contacts.Count} contact(s) at {jointConductance:g4} S/m².");
+        var input = new SolveInput
+        {
+            Mesh = merged.Mesh,
+            Material = bodies[0].Material!,
+            RegionMaterials = merged.RegionMaterials,
+            BoundaryConditions = merged.BoundaryConditions,
+            ElectricalContacts = contacts,
+            HarmonicElectric = kind == "AcElectrical"
+                ? new HarmonicElectricSettings
+                {
+                    MinFrequency = settings.MinFrequency, MaxFrequency = settings.MaxFrequency, PointCount = settings.PointCount
+                }
+                : null
+        };
+        ISolver solver = kind == "AcElectrical" ? new HarmonicElectricSolver() : new ElectricalConductionSolver();
+        solver.Validate(input);
+        var output = solver.Solve(input, progress, ct);
+        foreach (var line in output.Log) log(line);
+        string bodyNames = string.Join(" + ", bodies.Select(b => b.Name));
+        var report = StudyReport.FromSolve(project.Name, bodyNames, kind, input, output);
+        return new StudyRun(kind, bodyNames, input, output, report);
     }
 
     /// <summary>The scalar outputs of a run as a sweep sees them: the summary values, and

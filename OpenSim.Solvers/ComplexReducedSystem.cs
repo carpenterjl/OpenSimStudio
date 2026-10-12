@@ -22,7 +22,7 @@ internal sealed class ComplexReducedSystem
 {
     /// <summary>One prescribed-column contribution to a free row's right-hand side, in the
     /// order the reduction walks them.</summary>
-    private readonly record struct CorrectionTerm(int Row, double Real, double Imag, Complex Prescribed);
+    private readonly record struct CorrectionTerm(int Row, double Real, double Imag, Complex Prescribed, int Column);
 
     private readonly int[] _freeIndex;              // full DOF -> free index, -1 when prescribed
     private readonly IReadOnlyDictionary<int, Complex> _prescribed;
@@ -88,7 +88,7 @@ internal sealed class ComplexReducedSystem
                 else
                 {
                     correction.Add(new CorrectionTerm(r, real.Values[k], imag.Values[k],
-                        prescribed[col]));
+                        prescribed[col], col));
                 }
             }
         }
@@ -118,6 +118,34 @@ internal sealed class ComplexReducedSystem
             rhs[term.Row] -= new Complex(term.Real, omega * term.Imag) * term.Prescribed;
 
         return rhs;
+    }
+
+    /// <summary>
+    /// The reduced right-hand side with the prescribed DOFs at the values in
+    /// <paramref name="prescribedValues"/> (a full-length vector read at the prescribed
+    /// indices) instead of the values the system was reduced with. The staged AC solve
+    /// imposes the conductor potentials of stage one on stage two, and those change with
+    /// the frequency while the reduction — a property of the mesh and of WHICH nodes are
+    /// imposed — does not.
+    /// </summary>
+    public Complex[] LoadsAt(double omega, IReadOnlyList<Complex> fullLoads, IReadOnlyList<Complex> prescribedValues)
+    {
+        var rhs = new Complex[FreeCount];
+        for (int i = 0; i < _freeIndex.Length; i++)
+            if (_freeIndex[i] >= 0)
+                rhs[_freeIndex[i]] = fullLoads[i];
+        foreach (var term in _correction)
+            rhs[term.Row] -= new Complex(term.Real, omega * term.Imag) * prescribedValues[term.Column];
+        return rhs;
+    }
+
+    /// <summary>Re-inserts the given prescribed values around a free-DOF solution.</summary>
+    public Complex[] Expand(IReadOnlyList<Complex> freeSolution, IReadOnlyList<Complex> prescribedValues)
+    {
+        var full = new Complex[_freeIndex.Length];
+        for (int i = 0; i < _freeIndex.Length; i++)
+            full[i] = _freeIndex[i] >= 0 ? freeSolution[_freeIndex[i]] : prescribedValues[i];
+        return full;
     }
 
     /// <summary>The free entries of a full-length vector — a warm start from the previous

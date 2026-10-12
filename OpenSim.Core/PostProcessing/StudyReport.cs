@@ -230,7 +230,7 @@ public sealed record StudyReport
     private static string Describe(BoundaryCondition bc) => bc switch
     {
         VoltagePotential v => $"{Number(v.Volts)} V",
-        CurrentFlow c => $"{Number(c.TotalCurrent)} A",
+        CurrentFlow c => $"{Number(c.TotalCurrent)} A" + (c.Equipotential ? " (equipotential terminal)" : ""),
         FixedTemperature t => $"{Number(t.Kelvin)} K",
         HeatFlux q => $"{Number(q.TotalPower)} W",
         Convection h => $"h = {Number(h.Coefficient)} W/(m²·K), ambient {Number(h.AmbientTemperature)} K",

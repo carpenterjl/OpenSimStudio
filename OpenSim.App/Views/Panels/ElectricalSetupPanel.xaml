@@ -43,6 +43,10 @@
                 <TextBox Text="{Binding Electrodes.TestCurrent}"
                          IsEnabled="{Binding IsChecked, ElementName=CurrentDrive}"/>
             </UniformGrid>
+            <CheckBox Content="Source pad is one equipotential" IsChecked="{Binding Electrodes.EquipotentialPad}"
+                      IsEnabled="{Binding IsChecked, ElementName=CurrentDrive}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,2,0"
+                      ToolTip="Current drive: the source pad carries the current as one equipotential terminal (a metal pad), so R equals the voltage-drive value. Unchecked: the current enters at uniform density and R = P/I² includes the spreading term."/>
             <Button Content="Run electrical test" Command="{Binding Electrodes.RunElectricalTestCommand}"/>
             <TextBlock Text="{Binding Electrodes.ElectricalResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>

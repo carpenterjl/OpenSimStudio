@@ -464,11 +464,12 @@ public sealed class TransientThermalSolver : ISolver
         for (int e = 0; e < mesh.ElementCount; e++)
             flux[e] = ScalarDiffusionAssembler.HeatFlux(input, assembler, e, temperature);   // q = −K∇T
 
+        var groups = ScalarSolverHelpers.MaterialGroups(input, out var groupNames);
+        var (fluxNodal, fluxSides) = ScalarSolverHelpers.NodalAverageWithSides(mesh, flux, groups, groupNames);
         var fields = new List<IResultField>
         {
             new NodalScalarField("Temperature", "K", (double[])temperature.Clone()),
-            new NodalVectorField("Heat flux", "W/m²",
-                ScalarSolverHelpers.NodalAverage(mesh, flux, ScalarSolverHelpers.MaterialGroups(input)))
+            new NodalVectorField("Heat flux", "W/m²", fluxNodal, fluxSides)
         };
         // Present in EVERY frame of an environment run, so the frame field sets stay
         // identical and the UI keeps its selected field while scrubbing.

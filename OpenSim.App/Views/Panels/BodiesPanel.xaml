@@ -59,6 +59,9 @@
                 <Label Content="Gap tolerance [m]"/>
                 <TextBox x:Name="ContactGapToleranceBox" Text="{Binding Bodies.ContactGapTolerance}"
                          ToolTip="How far apart two surfaces may be and still count as touching. 0 = auto from the mesh size."/>
+                <Label Content="Contact G [S/m²]"/>
+                <TextBox x:Name="ElectricalContactConductanceBox" Text="{Binding Bodies.ElectricalContactConductance}"
+                         ToolTip="Electrical conductance per area of every detected joint (1 / (contact resistance × area)) for a DC or AC electrical solve of the whole assembly. 0 = not set: the electrical analyses then solve the active body alone. No default is assumed — a joint is far from ideal against copper at any value one could guess."/>
             </UniformGrid>
         </StackPanel>
     </GroupBox>

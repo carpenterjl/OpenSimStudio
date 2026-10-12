@@ -122,13 +122,22 @@ public sealed record VoltagePotential : BoundaryCondition
 }
 
 /// <summary>
-/// A total current [A] injected through the selected faces, distributed area-weighted
-/// over the face nodes so the resultant equals <see cref="TotalCurrent"/> exactly
-/// (positive flows into the body).
+/// A total current [A] injected through the selected faces (positive flows into the body).
+/// By default it enters at UNIFORM density: distributed area-weighted over the face nodes so
+/// the resultant equals <see cref="TotalCurrent"/> exactly, and the face is not an
+/// equipotential. With <see cref="Equipotential"/> the face is a terminal: one potential
+/// over the whole face, found by the solve, carrying the total current — what a metal pad
+/// or a bus bar's end is. The two agree where the current would be uniform anyway (the end
+/// of a bar) and differ where it crowds (a pad feeding a trace from one side).
 /// </summary>
 public sealed record CurrentFlow : BoundaryCondition
 {
     public required double TotalCurrent { get; init; }
+
+    /// <summary>The face is one equipotential terminal carrying <see cref="TotalCurrent"/>,
+    /// rather than a uniform-density injection. False — what every file written before the
+    /// option existed loads as — leaves the solve bitwise as it was.</summary>
+    public bool Equipotential { get; init; }
 }
 
 /// <summary>A prescribed temperature [K] on the selected faces (Dirichlet).</summary>

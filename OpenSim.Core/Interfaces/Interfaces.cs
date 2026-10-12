@@ -70,6 +70,16 @@ public sealed record SolveInput
     public IReadOnlyList<ContactInterface>? ThermalContacts { get; init; }
 
     /// <summary>
+    /// Optional inter-body ELECTRICAL contacts for an assembly merged by
+    /// <see cref="FeMeshAssembler"/>: the same detected interfaces, with
+    /// <see cref="ContactInterface.Conductance"/> read as the joint's electrical conductance
+    /// per area [S/m²] (the reciprocal of its contact resistance × area). Consumed by the DC
+    /// and AC electrical solvers; null (every single-body solve) leaves the assembled
+    /// matrices bitwise unchanged.
+    /// </summary>
+    public IReadOnlyList<ContactInterface>? ElectricalContacts { get; init; }
+
+    /// <summary>
     /// What surrounds the bodies (vacuum / still fluid / moving fluid). When set, the
     /// thermal solvers add convection and radiation on every exterior face the user has
     /// NOT claimed with a condition of their own, with film coefficients that depend on

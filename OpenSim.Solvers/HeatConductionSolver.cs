@@ -255,16 +255,16 @@ public sealed class HeatConductionSolver : ISolver
         for (int e = 0; e < mesh.ElementCount; e++)
             flux_[e] = ScalarDiffusionAssembler.HeatFlux(input, assembler, e, temperatureField);   // q = −K∇T
 
-        var groups = ScalarSolverHelpers.MaterialGroups(input);
+        var groups = ScalarSolverHelpers.MaterialGroups(input, out var groupNames);
         if (groups is not null)
             log.Add(ScalarSolverHelpers.InterfaceNote("heat flux"));
 
         progress?.Report(new SolverProgress("Done", 1.0));
+        var (fluxNodal, fluxSides) = ScalarSolverHelpers.NodalAverageWithSides(mesh, flux_, groups, groupNames);
         var fields = new List<IResultField>
         {
             new NodalScalarField("Temperature", "K", temperatureField),
-            new NodalVectorField("Heat flux", "W/m²",
-                ScalarSolverHelpers.NodalAverage(mesh, flux_, groups))
+            new NodalVectorField("Heat flux", "W/m²", fluxNodal, fluxSides)
         };
         if (film is not null)
             fields.Add(new NodalScalarField("Film coefficient", "W/(m²·K)",

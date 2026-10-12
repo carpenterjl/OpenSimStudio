@@ -35,6 +35,10 @@ public partial class BoundaryConditionsViewModel : ObservableObject
     [ObservableProperty] private double _voltageValue = 1.0;
     [ObservableProperty] private double _currentValue = 1.0;
 
+    /// <summary>A current flow added as an equipotential terminal (one potential over the
+    /// face, found by the solve) rather than a uniform-density injection.</summary>
+    [ObservableProperty] private bool _currentEquipotential;
+
     // Thermal boundary condition parameters
     [ObservableProperty] private double _temperatureValue = 300.0;
     [ObservableProperty] private double _heatPowerValue = 1.0;
@@ -153,9 +157,10 @@ public partial class BoundaryConditionsViewModel : ObservableObject
         if (!ValidateScopeSelection(allowZeroArea: false)) return;
         AddCondition(new CurrentFlow
         {
-            Name = $"Current {BoundaryConditions.Count + 1}",
+            Name = $"{(CurrentEquipotential ? "Terminal" : "Current")} {BoundaryConditions.Count + 1}",
             FaceIds = _session.SelectedFaces.ToList(),
-            TotalCurrent = CurrentValue
+            TotalCurrent = CurrentValue,
+            Equipotential = CurrentEquipotential
         });
     }
 

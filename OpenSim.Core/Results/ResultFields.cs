@@ -29,16 +29,67 @@ public interface IResultField
     double GetScalar(int index);
 }
 
+/// <summary>
+/// The per-material values of a nodal field at the nodes where materials meet. A nodal
+/// field holds ONE value per node, and the quantities it averages (current density, heat
+/// flux, power density) are discontinuous across a material interface — copper carries
+/// 10²¹ times the current density of the laminate it sits on at the same node. The node's
+/// single value is the side where the quantity is larger (said in the solver's log); this
+/// carries every side's own average for the nodes that have more than one, so a probe or
+/// an export can read the laminate's value where the copper's is shown.
+/// </summary>
+public sealed class InterfaceSides<T> where T : struct
+{
+    private readonly IReadOnlyDictionary<int, IReadOnlyList<(int Group, T Value)>> _sides;
+
+    public InterfaceSides(IReadOnlyList<string> materials,
+        IReadOnlyDictionary<int, IReadOnlyList<(int Group, T Value)>> sides)
+    {
+        Materials = materials;
+        _sides = sides;
+    }
+
+    /// <summary>The material of each group index, as named in the solve's materials.</summary>
+    public IReadOnlyList<string> Materials { get; }
+
+    /// <summary>How many nodes lie on a material interface.</summary>
+    public int Count => _sides.Count;
+
+    /// <summary>The interface nodes, ascending.</summary>
+    public IEnumerable<int> Nodes => _sides.Keys.OrderBy(n => n);
+
+    public bool IsInterface(int node) => _sides.ContainsKey(node);
+
+    /// <summary>Each material's own average at an interface node, in group order; empty at
+    /// a node that belongs to one material only.</summary>
+    public IReadOnlyList<(int Group, T Value)> At(int node) =>
+        _sides.TryGetValue(node, out var sides) ? sides : Array.Empty<(int, T)>();
+
+    /// <summary>One material's value at a node, or null when no element of that material
+    /// touches the node or the node is not on an interface.</summary>
+    public T? Of(int node, string material)
+    {
+        int group = -1;
+        for (int g = 0; g < Materials.Count; g++)
+            if (Materials[g] == material) { group = g; break; }
+        if (group < 0 || !_sides.TryGetValue(node, out var sides)) return null;
+        foreach (var (g, value) in sides)
+            if (g == group) return value;
+        return null;
+    }
+}
+
 /// <summary>A scalar field, one value per node.</summary>
 public sealed class NodalScalarField : IResultField
 {
     private readonly double[] _values;
 
-    public NodalScalarField(string name, string unit, double[] values)
+    public NodalScalarField(string name, string unit, double[] values, InterfaceSides<double>? sides = null)
     {
         Name = name;
         Unit = unit;
         _values = values;
+        Sides = sides;
     }
 
     public string Name { get; }
@@ -47,6 +98,10 @@ public sealed class NodalScalarField : IResultField
     public int Count => _values.Length;
     public double GetScalar(int index) => _values[index];
     public IReadOnlyList<double> Values => _values;
+
+    /// <summary>Per-material values at material-interface nodes, for a field that is
+    /// discontinuous there; null for a field that is continuous or single-material.</summary>
+    public InterfaceSides<double>? Sides { get; }
 }
 
 /// <summary>A vector field, one 3-vector per node; the mapped scalar is the magnitude.</summary>
@@ -54,11 +109,12 @@ public sealed class NodalVectorField : IResultField
 {
     private readonly Vector3D[] _values;
 
-    public NodalVectorField(string name, string unit, Vector3D[] values)
+    public NodalVectorField(string name, string unit, Vector3D[] values, InterfaceSides<Vector3D>? sides = null)
     {
         Name = name;
         Unit = unit;
         _values = values;
+        Sides = sides;
     }
 
     public string Name { get; }
@@ -68,6 +124,10 @@ public sealed class NodalVectorField : IResultField
     public double GetScalar(int index) => _values[index].Length;
     public Vector3D GetVector(int index) => _values[index];
     public IReadOnlyList<Vector3D> Values => _values;
+
+    /// <summary>Per-material values at material-interface nodes, for a field that is
+    /// discontinuous there; null for a field that is continuous or single-material.</summary>
+    public InterfaceSides<Vector3D>? Sides { get; }
 }
 
 /// <summary>A scalar field, one value per element (e.g. power density).</summary>

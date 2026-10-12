@@ -303,11 +303,51 @@ public class HarmonicElectricBenchmarks
     }
 
     // ------------------------------------------------------------------
-    // Validation: the σ-spread ban must fire for conductor+dielectric composites and
-    // point at the alternatives; other bad inputs get actionable messages.
+    // Current drive through an equipotential terminal: the drive face is one potential
+    // carrying the current — the voltage drive's discrete problem with the roles of V and
+    // I swapped — so Z equals the voltage drive's to solver precision, where the uniform
+    // injection above differs by ~2 % (FU-27).
     // ------------------------------------------------------------------
     [Fact]
-    public void Validate_SigmaSpreadBanAndBadInputs_Throw()
+    public void EquipotentialCurrentDrive_EqualsTheVoltageDrive()
+    {
+        const double length = 0.02, cross = 0.01;
+        var mesh = MeshBox(length, cross, cross, 0.005);
+        double cornerHz = LossyDielectric.ElectricalConductivity!.Value
+                          / (2 * Math.PI * Epsilon0 * LossyDielectric.RelativePermittivity!.Value);
+
+        var byVoltage = new HarmonicElectricSolver().Solve(
+            PlateInput(mesh, LossyDielectric, cornerHz / 100, cornerHz * 100, 3));
+        var byTerminal = new HarmonicElectricSolver().Solve(new SolveInput
+        {
+            Mesh = mesh, Material = LossyDielectric,
+            BoundaryConditions = new BoundaryCondition[]
+            {
+                new CurrentFlow { Name = "Drive", FaceIds = new[] { 0 }, TotalCurrent = 2.5e-3, Equipotential = true },
+                new VoltagePotential { Name = "Ground", FaceIds = new[] { 1 }, Volts = 0 }
+            },
+            HarmonicElectric = new HarmonicElectricSettings
+            {
+                MinFrequency = cornerHz / 100, MaxFrequency = cornerHz * 100, PointCount = 3
+            }
+        });
+
+        for (int i = 0; i < 3; i++)
+        {
+            double zv = byVoltage.Frames![i].Summary!["|Z| (Ω)"];
+            Assert.Equal(zv, byTerminal.Frames![i].Summary!["|Z| (Ω)"], zv * 1e-9);
+            Assert.Equal(byVoltage.Frames[i].Summary!["Phase (°)"], byTerminal.Frames[i].Summary!["Phase (°)"], 1e-7);
+        }
+        Assert.Contains(byTerminal.Log, l => l.Contains("equipotential terminal"));
+    }
+
+    // ------------------------------------------------------------------
+    // Validation: a conductor+dielectric composite is accepted (it is staged — FU-27;
+    // it used to be refused for its admittivity spread); other bad inputs get actionable
+    // messages.
+    // ------------------------------------------------------------------
+    [Fact]
+    public void Validate_AcceptsACompositeAndRefusesBadInputs()
     {
         const double length = 0.02, cross = 0.01;
         var mesh = MeshBox(length, cross, cross, 0.005);
@@ -326,9 +366,7 @@ public class HarmonicElectricBenchmarks
         {
             RegionMaterials = new Dictionary<int, Material> { [1] = copper, [2] = LossyDielectric }
         };
-        var ex1 = Assert.Throws<InvalidOperationException>(() => solver.Validate(composite));
-        Assert.Contains("copper-only", ex1.Message);
-        Assert.Contains("R + jωL", ex1.Message);
+        solver.Validate(composite);
 
         var noSettings = PlateInput(mesh, LossyDielectric, 1e3, 1e6, 5) with { HarmonicElectric = null };
         var ex2 = Assert.Throws<InvalidOperationException>(() => solver.Validate(noSettings));

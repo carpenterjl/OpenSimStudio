@@ -13,6 +13,9 @@
                 <Label Content="Current [A]"/>
                 <TextBox Text="{Binding Conditions.CurrentValue}"/>
             </UniformGrid>
+            <CheckBox Content="Equipotential terminal" IsChecked="{Binding Conditions.CurrentEquipotential}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,2,0"
+                      ToolTip="One potential over the whole face, found by the solve, carrying the total current — a metal pad or a bus bar end. Unchecked: the current enters at uniform density and the face is not an equipotential."/>
             <Button Content="Add current flow" Command="{Binding Conditions.AddCurrentCommand}"/>
         </StackPanel>
     </GroupBox>

@@ -76,8 +76,17 @@ public partial class BodiesViewModel : ObservableObject
     /// 0 = auto from the mesh size.</summary>
     [ObservableProperty] private double _contactGapTolerance;
 
+    /// <summary>
+    /// Electrical conductance per area of every detected joint [S/m²] for a DC or AC
+    /// electrical solve of the assembly; 0 = not set, and the electrical analyses then run on
+    /// the active body alone. No stand-in value: a joint's resistance against a conductor's
+    /// is the user's to state (<see cref="AssemblySettings.ElectricalContactConductance"/>).
+    /// </summary>
+    [ObservableProperty] private double _electricalContactConductance;
+
     partial void OnContactConductanceChanged(double value) => PushAssemblySettings();
     partial void OnContactGapToleranceChanged(double value) => PushAssemblySettings();
+    partial void OnElectricalContactConductanceChanged(double value) => PushAssemblySettings();
 
     private void PushAssemblySettings()
     {
@@ -85,7 +94,8 @@ public partial class BodiesViewModel : ObservableObject
         _session.Project.Assembly = new AssemblySettings
         {
             ContactConductance = ContactConductance,
-            ContactGapTolerance = ContactGapTolerance
+            ContactGapTolerance = ContactGapTolerance,
+            ElectricalContactConductance = ElectricalContactConductance > 0 ? ElectricalContactConductance : null
         };
     }
 
@@ -98,6 +108,7 @@ public partial class BodiesViewModel : ObservableObject
         {
             ContactConductance = settings.ContactConductance;
             ContactGapTolerance = settings.ContactGapTolerance;
+            ElectricalContactConductance = settings.ElectricalContactConductance ?? 0;
         }
         finally { _syncing = false; }
     }

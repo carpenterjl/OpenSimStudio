@@ -19,13 +19,16 @@ public readonly record struct ContactStamp(
     double Weight);
 
 /// <summary>
-/// A detected thermal contact between two bodies of an assembly: the quadrature stamps that
-/// couple them and the interfacial conductance h_c [W/(m²·K)] applied across the gap
-/// (q = h_c·ΔT). Non-conformal touching bodies exchange NO heat without this — the merged
-/// mesh shares no nodes across bodies by design.
+/// A detected contact between two bodies of an assembly: the quadrature stamps that couple
+/// them and the interfacial conductance applied across the gap. In a thermal solve it is
+/// h_c [W/(m²·K)] with q = h_c·ΔT; in an electrical solve (<c>SolveInput.ElectricalContacts</c>)
+/// it is the joint's conductance per area [S/m²] with J = G·Δφ, the reciprocal of its contact
+/// resistance × area. Non-conformal touching bodies exchange NO heat or current without this —
+/// the merged mesh shares no nodes across bodies by design.
 ///
 /// The conductance lives on the interface, not in the detection settings, so re-solving with
-/// a different joint quality never re-runs detection.
+/// a different joint quality — or the same joint in the other physics — never re-runs
+/// detection (<see cref="WithConductance"/>).
 /// </summary>
 public sealed record ContactInterface
 {
@@ -38,7 +41,8 @@ public sealed record ContactInterface
     /// <summary>Jump stamps, in detection order (ascending source triangle, then vertex).</summary>
     public required IReadOnlyList<ContactStamp> Stamps { get; init; }
 
-    /// <summary>Interfacial conductance h_c [W/(m²·K)]; must be positive.</summary>
+    /// <summary>Interfacial conductance: h_c [W/(m²·K)] for a thermal contact, G [S/m²] for an
+    /// electrical one; must be positive.</summary>
     public required double Conductance { get; init; }
 
     /// <summary>
@@ -95,20 +99,20 @@ public sealed record ContactInterface
     {
         if (Conductance <= 0)
             throw new InvalidOperationException(
-                $"Thermal contact between bodies {BodyA} and {BodyB}: the contact conductance " +
-                $"must be positive (got {Conductance:g4} W/(m²·K)).");
+                $"Contact between bodies {BodyA} and {BodyB}: the contact conductance " +
+                $"must be positive (got {Conductance:g4}).");
         if (CoupledArea <= 0)
             throw new InvalidOperationException(
-                $"Thermal contact between bodies {BodyA} and {BodyB} has no coupled area.");
+                $"Contact between bodies {BodyA} and {BodyB} has no coupled area.");
         foreach (var s in Stamps)
         {
             if (s.Weight <= 0)
                 throw new InvalidOperationException(
-                    $"Thermal contact between bodies {BodyA} and {BodyB} carries a non-positive " +
+                    $"Contact between bodies {BodyA} and {BodyB} carries a non-positive " +
                     "quadrature weight; the coupling would not be positive semi-definite.");
             if (OutOfRange(s.Node0) || OutOfRange(s.Node1) || OutOfRange(s.Node2) || OutOfRange(s.Node3))
                 throw new InvalidOperationException(
-                    $"Thermal contact between bodies {BodyA} and {BodyB} references a node outside " +
+                    $"Contact between bodies {BodyA} and {BodyB} references a node outside " +
                     $"the mesh ({nodeCount} nodes) — it was detected on a different mesh.");
         }
 

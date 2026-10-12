@@ -72,6 +72,20 @@ public partial class SolveViewModel : ObservableObject
             await SolveConjugateAsync();
             return;
         }
+        if (_session.SelectedAnalysis.Kind is AnalysisType.Electrical or AnalysisType.AcElectrical)
+        {
+            var solids = _session.Bodies.Where(b => b.Role == BodyRole.Solid).ToList();
+            if (solids.Count > 1)
+            {
+                if (_session.Project.Assembly?.ElectricalContactConductance is { } joint)
+                {
+                    await SolveElectricalAssemblyAsync(_session.SelectedAnalysis.Kind, solids, joint);
+                    return;
+                }
+                _log.Append($"The project has {solids.Count} bodies; solving '{_session.Body.Name}' alone. Set " +
+                            "Contact G [S/m²] in the Bodies panel to solve them as one assembly joined at their contacts.");
+            }
+        }
 
         var body = _session.Body;
         if (body.Mesh is null)
@@ -239,6 +253,94 @@ public partial class SolveViewModel : ObservableObject
             _log.Append($"Validation: {ex.Message}");
             _session.StatusText = "Validation failed";
             return false;
+        }
+    }
+
+    /// <summary>
+    /// DC or AC electrical solve of the whole assembly (FU-27): the bodies merged, their
+    /// joints detected and given the project's electrical contact conductance, and every
+    /// body's voltages and currents applied on the merged mesh. The merge and the detection
+    /// are the environment solve's, reused from its cache; only the joint's meaning changes.
+    /// </summary>
+    private async Task SolveElectricalAssemblyAsync(AnalysisType kind, List<Body> bodies, double jointConductance)
+    {
+        if (!await MeshesPassTheAuditAsync(bodies)) return;
+        var detection = (_session.Project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
+        var solver = kind == AnalysisType.AcElectrical
+            ? _solvers.First(s => s is OpenSim.Solvers.HarmonicElectricSolver)
+            : _solvers.First(s => s is OpenSim.Solvers.ElectricalConductionSolver);
+
+        _session.IsBusy = true;
+        _session.StatusText = "Assembling…";
+        _session.ProgressFraction = 0;
+        var progress = new Progress<SolverProgress>(p =>
+        {
+            _session.StatusText = p.Stage;
+            _session.ProgressFraction = p.Fraction;
+        });
+
+        try
+        {
+            FeMeshAssembler.AssembledMesh assembled;
+            SolveInput input;
+            List<string> setup;
+            try
+            {
+                (assembled, input, setup) = await Task.Run(() =>
+                {
+                    var lines = new List<string>();
+                    var cache = _session.Assemblies;
+                    var merged = cache.Assemble(bodies);
+                    lines.Add($"Merged {bodies.Count} bodies: {merged.Mesh.NodeCount:N0} nodes, " +
+                              $"{merged.Mesh.ElementCount:N0} elements.");
+                    var contacts = cache.Contacts(detection,
+                            () => ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, lines.Add))
+                        .Select(c => c.WithConductance(jointConductance)).ToList();
+                    lines.Add($"Electrical joints: {contacts.Count} contact(s) at G = {jointConductance:g4} S/m².");
+                    var built = new SolveInput
+                    {
+                        Mesh = merged.Mesh,
+                        Material = bodies[0].Material!,
+                        RegionMaterials = merged.RegionMaterials,
+                        BoundaryConditions = merged.BoundaryConditions,
+                        ElectricalContacts = contacts,
+                        HarmonicElectric = kind == AnalysisType.AcElectrical
+                            ? new HarmonicElectricSettings
+                            {
+                                MinFrequency = AcMinFrequency,
+                                MaxFrequency = AcMaxFrequency,
+                                PointCount = AcPointCount
+                            }
+                            : null
+                    };
+                    solver.Validate(built);
+                    return (merged, built, lines);
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                _log.Append($"Validation: {ex.Message}");
+                _session.StatusText = "Validation failed";
+                return;
+            }
+            foreach (var line in setup) _log.Append(line);
+
+            var output = await Task.Run(() => solver.Solve(input, progress));
+            foreach (var line in output.Log)
+                _log.Append(line);
+
+            RememberRun(kind.ToString(), string.Join(" + ", bodies.Select(b => b.Name)), input, output);
+            _session.SetAssembledMesh(assembled);
+            _session.RaiseResultsProduced(output.Fields, analysis: kind,
+                frames: output.Frames, frameAxis: output.FrameAxis);
+            _session.StatusText = "Solve complete";
+            _log.Append("Solve complete. Select a result field to display.");
+        }
+        catch (Exception ex) { _session.ReportError(ex); }
+        finally
+        {
+            _session.IsBusy = false;
+            _session.ProgressFraction = 0;
         }
     }
 
