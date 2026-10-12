@@ -184,6 +184,34 @@ public class NetTopologyTests
     }
 
     [Fact]
+    public void ABridgeBar_IsNotLaidOverADrawnTrace()
+    {
+        // Two trace ends 4 mm apart in one pour: a bar closes the gap when the straight line
+        // between them is bare copper, not when a third trace of the net runs across it —
+        // that copper already carries the current there, and a bar over it would be a second
+        // conductor in the same metal (PCB-07's remaining check; FU-23).
+        var island = new[] { new CopperIsland(0, 1, "L1", Rect(-1, -6, 21, 6)) };
+        var ends = new List<TraceCenterline> { Trace(0, 0, 8, 0), Trace(12, 0, 20, 0) };
+        var pads = new[] { Pad(0, 0), Pad(20, 0) };
+
+        var bare = TraceChainBuilder.BuildGraph(ends, Array.Empty<ViaBridge>(), Options(), island);
+        Assert.Equal(1, bare.CopperBridges);
+        Assert.True(Rel(R(TraceResistanceNetwork.Solve(bare, pads, Sigma), 0, 1), BarR(20)) < 1e-12);
+
+        ends.Add(Trace(10, -5, 10, 5));
+        var crossed = TraceChainBuilder.BuildGraph(ends, Array.Empty<ViaBridge>(), Options(), island);
+        Assert.Equal(0, crossed.CopperBridges);
+        var pair = TraceResistanceNetwork.Solve(crossed, pads, Sigma).Pairs.Single(p => p.PadA == 0 && p.PadB == 1);
+        Assert.Null(pair.ResistanceOhms);
+        Assert.Contains("not connected", pair.Note);
+
+        // A bar that would run ALONG a trace is refused the same way: the third trace lies on
+        // the line between the two ends, 0.1 mm clear of each (no junction to split at).
+        ends[2] = Trace(8.1, 0, 11.9, 0);
+        Assert.Equal(0, TraceChainBuilder.BuildGraph(ends, Array.Empty<ViaBridge>(), Options(), island).CopperBridges);
+    }
+
+    [Fact]
     public void FreeEndsInOneIsland_AreNotBridgedAcrossAGapInTheCopper()
     {
         // A U-shaped island: two trace ends 3 mm apart face each other across the slot.
@@ -244,6 +272,30 @@ public class NetTopologyTests
         // The pour alone has no trace at all.
         var pourOnly = new GerberParser().Parse(Head + "G36*\n" + Outline + "G37*\nD11*\n" + Outline + "M02*");
         Assert.Empty(TraceSegmenter.Centerlines(pourOnly, 1));
+    }
+
+    [Fact]
+    public void PourOutlineStroke_DrawnWithItsOwnVertices_IsNotATrace()
+    {
+        // FU-23: the outline stroke need not reuse the region's vertices. A 10 × 10 mm pour
+        // with one rounded corner (r = 2 mm), stroked with a 0.2 mm pen: the bottom edge with
+        // an extra vertex, the corner arc in two unequal arcs (tessellated differently from
+        // the region's one arc), the right edge in two halves, and the top edge with the
+        // stroke's INNER edge on the region's edge (centreline 0.1 mm outside it). A trace
+        // 0.15 mm clear of the left edge is the only centerline.
+        const string Region = "G36*\nX0Y0D02*\nG01*\nX8000000Y0D01*\nG03*\nX10000000Y2000000I0J2000000D01*\n" +
+                              "G01*\nX10000000Y10000000D01*\nX0Y10000000D01*\nX0Y0D01*\nG37*\n";
+        var doc = new GerberParser().Parse(Head + Region + "D11*\n" +
+            "X0Y0D02*\nG01*\nX4000000Y0D01*\nX8000000Y0D01*\n" +                 // bottom: extra vertex
+            "G03*\nX9285575Y467911I0J2000000D01*\n" +                            // corner: 40° then 50°
+            "X10000000Y2000000I-1285575J1532089D01*\n" +
+            "G01*\nX10000000Y5000000D01*\nX10000000Y10000000D01*\n" +           // right: two halves
+            "X10000000Y10100000D02*\nX0Y10100000D01*\n" +                        // top: stroke edge on the region edge
+            "X-250000Y0D02*\nX-250000Y10000000D01*\nM02*");                      // 0.15 mm clear: a trace
+
+        var line = Assert.Single(TraceSegmenter.Centerlines(doc, 1));
+        Assert.Equal(-0.25e-3, line.Start.X, 12);
+        Assert.Equal(10e-3, line.Length, 12);
     }
 
     // ------------------------------------------------------------------

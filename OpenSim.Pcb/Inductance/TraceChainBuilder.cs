@@ -347,12 +347,14 @@ public static class TraceChainBuilder
     /// Closes trace → pad/fill → trace gaps: pairs of free (degree-1) chain endpoints
     /// from DIFFERENT connected pieces that sit inside the same copper island on the same
     /// layer are joined by a straight bar sized like the traces it connects, provided the
-    /// bar itself lies in that island. Being in one island proves only that the two ends
-    /// are connected SOMEHOW (every free end of a net on a layer is); the straight line
-    /// staying in copper is what makes a straight bar a fair model of it. Pairs are taken closest
-    /// first (deterministic); a terminal source/sink endpoint simply never finds an
-    /// unclaimed partner in its pad. Appends to <paramref name="segments"/> /
-    /// <paramref name="itemTolerances"/> and returns the number of bridges added.
+    /// bar itself lies in that island and crosses no drawn copper. Being in one island
+    /// proves only that the two ends are connected SOMEHOW (every free end of a net on a
+    /// layer is); the straight line staying in copper is what makes a straight bar a fair
+    /// model of it, and a line over another trace of the net is copper already in the model
+    /// (<see cref="CrossesDrawnCopper"/>). Pairs are taken closest first (deterministic); a
+    /// terminal source/sink endpoint simply never finds an unclaimed partner in its pad.
+    /// Appends to <paramref name="segments"/> / <paramref name="itemTolerances"/> and
+    /// returns the number of bridges added.
     /// </summary>
     private static int BridgeThroughCopper(List<TraceSegment3D> segments, List<double> itemTolerances,
         IReadOnlyList<CopperIsland> islands,
@@ -398,8 +400,10 @@ public static class TraceChainBuilder
                 bool sameIsland = islandZ.Any(entry =>
                     Math.Abs(entry.Z - pa.Z) <= 1e-12
                     && BarLiesIn(entry.Island.Shape, new Point2(pa.X, pa.Y), new Point2(pb.X, pb.Y)));
-                if (sameIsland)
-                    candidates.Add((gap, a, b));
+                if (!sameIsland) continue;
+                double reach = 0.25 * (segments[free[a]].Width + segments[free[b]].Width);
+                if (CrossesDrawnCopper(segments, free[a], free[b], pa, pb, reach)) continue;
+                candidates.Add((gap, a, b));
             }
         candidates.Sort((l, r) => l.Gap != r.Gap ? l.Gap.CompareTo(r.Gap) : (l.A, l.B).CompareTo((r.A, r.B)));
 
@@ -432,6 +436,66 @@ public static class TraceChainBuilder
             if (!Meshing2D.PlanarMesher.ContainsPoint(shape, a + (b - a) * ((double)k / samples)))
                 return false;
         return true;
+    }
+
+    /// <summary>
+    /// Whether a bar pa→pb of half-width <paramref name="reach"/> would overlap another
+    /// segment of the net on its layer along its interior: that copper already carries the
+    /// current there, and a bar over it would be a second conductor in the same metal
+    /// (PCB-07's "drawn copper already carrying the path"; FU-23) — a bar along a trace
+    /// halves its resistance, a bar across one bypasses a junction the split step did not
+    /// make. The bar's two end regions are left out (its incident traces meet it there) and
+    /// so are the two incident segments themselves. A via tube at the bar's layer counts as
+    /// the point it passes through.
+    /// </summary>
+    private static bool CrossesDrawnCopper(List<TraceSegment3D> segments,
+        int incidentA, int incidentB, Vector3D pa, Vector3D pb, double reach)
+    {
+        var d = pb - pa;
+        double length = d.Length;
+        if (length <= 2 * reach) return false;
+        var u = d * (1.0 / length);
+        var p = pa + u * reach;
+        var q = pb - u * reach;
+        var p2 = new Point2(p.X, p.Y);
+        var q2 = new Point2(q.X, q.Y);
+        for (int i = 0; i < segments.Count; i++)
+        {
+            if (i == incidentA || i == incidentB) continue;
+            var s = segments[i];
+            if (pa.Z < Math.Min(s.Start.Z, s.End.Z) - 1e-12 || pa.Z > Math.Max(s.Start.Z, s.End.Z) + 1e-12)
+                continue;                                       // not on the bar's layer
+            var c = new Point2(s.Start.X, s.Start.Y);
+            var e = new Point2(s.End.X, s.End.Y);
+            if (SegmentDistance(p2, q2, c, e) < reach + 0.5 * s.Width)   // the two half-widths overlap
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Shortest distance between the segments a–b and c–d.</summary>
+    private static double SegmentDistance(Point2 a, Point2 b, Point2 c, Point2 d)
+    {
+        var ab = b - a;
+        var cd = d - c;
+        double denominator = Point2.Cross(ab, cd);
+        if (Math.Abs(denominator) > 1e-15 * ab.Length * cd.Length)
+        {
+            double t = Point2.Cross(c - a, cd) / denominator;
+            double s = Point2.Cross(c - a, ab) / denominator;
+            if (t >= 0 && t <= 1 && s >= 0 && s <= 1) return 0;   // they cross
+        }
+        return Math.Min(Math.Min(PointToSegment(a, c, d), PointToSegment(b, c, d)),
+                        Math.Min(PointToSegment(c, a, b), PointToSegment(d, a, b)));
+    }
+
+    private static double PointToSegment(Point2 p, Point2 a, Point2 b)
+    {
+        var ab = b - a;
+        double len2 = Point2.Dot(ab, ab);
+        if (len2 < 1e-300) return (p - a).Length;
+        double t = Math.Clamp(Point2.Dot(p - a, ab) / len2, 0, 1);
+        return (p - (a + ab * t)).Length;
     }
 
     /// <summary>
