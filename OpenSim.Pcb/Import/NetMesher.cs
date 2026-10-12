@@ -249,15 +249,68 @@ public sealed class NetMesher
     }
 
     /// <summary>
-    /// Splits the faces along every pad outline, so each pad is a union of faces. Pads that
-    /// overlap are imprinted by the outline of their union; a face in the overlap belongs to
-    /// the first pad that covers it.
+    /// Splits the faces along every pad outline, so each pad is a union of faces. One boolean
+    /// with every pad as its clip imprints the outline of their union, which is every pad's
+    /// outline except where it runs inside another pad: a pad inside a larger one (a via land
+    /// in a through-hole pad) had no edge of its own and no faces (PCB-17). Such a pad is
+    /// imprinted on its own as well, through the faces its bounding box touches; pads that
+    /// overlap no other pad are left exactly as the one boolean made them. A face in an
+    /// overlap belongs to the smallest pad that covers it (<see cref="PcbMeshGenerator"/>).
     /// </summary>
     private static IReadOnlyList<Polygon2> ImprintPads(IReadOnlyList<Polygon2> faces,
         IReadOnlyList<Polygon2> padShapes, double cleanTol)
     {
         var pads = PolygonCleaner.Clean(padShapes, Math.Min(cleanTol, PadCleanTolerance)).ToList();
-        return pads.Count == 0 ? faces : SplitFaces(faces, pads);
+        if (pads.Count == 0) return faces;
+        faces = SplitFaces(faces, pads);
+
+        var boxes = pads.Select(p => Bounds(p.Outer)).ToList();
+        for (int k = 0; k < pads.Count; k++)
+        {
+            if (!OutlineRunsInsideAnotherPad(pads, boxes, k)) continue;
+            var one = new[] { pads[k] };
+            var split = new List<Polygon2>(faces.Count + 2);
+            foreach (var face in faces)
+            {
+                if (Overlap(Bounds(face.Outer), boxes[k])) split.AddRange(SplitFaces(new[] { face }, one));
+                else split.Add(face);
+            }
+            faces = split;
+        }
+        return faces;
+    }
+
+    /// <summary>Whether part of pad <paramref name="k"/>'s outline lies strictly inside another
+    /// pad: some pad j shares area with it and reaches beyond it. A twin drawn in the same
+    /// place does not (its outline is on the union's), nor does a pad lying inside k.</summary>
+    private static bool OutlineRunsInsideAnotherPad(IReadOnlyList<Polygon2> pads,
+        IReadOnlyList<(double MinX, double MinY, double MaxX, double MaxY)> boxes, int k)
+    {
+        var self = new[] { pads[k] };
+        for (int j = 0; j < pads.Count; j++)
+        {
+            if (j == k || !Overlap(boxes[k], boxes[j])) continue;
+            var other = Polygon2.OrientedRings(pads[j]).ToList();
+            if (Ops.Intersect(self, other).Sum(f => f.Area()) <= FaceAreaEpsilon) continue;
+            if (Ops.Difference(new[] { pads[j] }, Polygon2.OrientedRings(pads[k])).Sum(f => f.Area()) > FaceAreaEpsilon)
+                return true;
+        }
+        return false;
+    }
+
+    private static bool Overlap((double MinX, double MinY, double MaxX, double MaxY) a,
+        (double MinX, double MinY, double MaxX, double MaxY) b) =>
+        a.MaxX >= b.MinX && a.MinX <= b.MaxX && a.MaxY >= b.MinY && a.MinY <= b.MaxY;
+
+    private static (double MinX, double MinY, double MaxX, double MaxY) Bounds(IReadOnlyList<Point2> ring)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+        foreach (var p in ring)
+        {
+            minX = Math.Min(minX, p.X); maxX = Math.Max(maxX, p.X);
+            minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y);
+        }
+        return (minX, minY, maxX, maxY);
     }
 
     /// <summary>Cleaning tolerance for pad outlines [m]. The copper's tolerance (up to 10 µm)
@@ -643,11 +696,11 @@ public sealed class NetMesher
             int faceId = PcbMeshGenerator.PadFaceBase + k;
             if (!tagged.Contains(faceId))
             {
-                // A face is tagged to the first pad that covers it, so a pad drawn twice in the
-                // same place (a named pin over an unnamed flash) has no faces of its own. It is
-                // the same copper: it takes its twin's faces and keeps its own name (PCB-17).
-                int twin = DuplicateOf(netPads, k);
-                if (twin < 0 || !tagged.Contains(PcbMeshGenerator.PadFaceBase + twin)) continue;
+                // A face goes to one pad, so a pad drawn twice in the same place (a named pin
+                // over an unnamed flash) has no faces of its own. It is the same copper: it
+                // takes its twin's faces and keeps its own name (PCB-17).
+                int twin = TwinOf(netPads, k, tagged);
+                if (twin < 0) continue;
                 faceId = PcbMeshGenerator.PadFaceBase + twin;
             }
             electrodes.Add(new PadElectrode(faceId, netPads[k].Center, netPads[k].LayerOrder)
@@ -658,14 +711,16 @@ public sealed class NetMesher
         return electrodes;
     }
 
-    /// <summary>The first earlier pad on the same layer with the same centre (to 1 µm) and the
-    /// same area (to 1 %), or −1.</summary>
-    private static int DuplicateOf(IReadOnlyList<CopperPad> pads, int k)
+    /// <summary>The first other pad on the same layer with the same centre (to 1 µm) and the
+    /// same area (to 1 %) that has faces of its own, or −1. Either copy may be the one the
+    /// faces went to (the smaller by a hair wins them), so both directions are searched.</summary>
+    private static int TwinOf(IReadOnlyList<CopperPad> pads, int k, HashSet<int> tagged)
     {
         var pad = pads[k];
         double area = pad.Shape.Area();
-        for (int j = 0; j < k; j++)
+        for (int j = 0; j < pads.Count; j++)
         {
+            if (j == k || !tagged.Contains(PcbMeshGenerator.PadFaceBase + j)) continue;
             var other = pads[j];
             if (other.LayerOrder != pad.LayerOrder || (other.Center - pad.Center).Length > 1e-6) continue;
             if (Math.Abs(other.Shape.Area() - area) <= 0.01 * area) return j;

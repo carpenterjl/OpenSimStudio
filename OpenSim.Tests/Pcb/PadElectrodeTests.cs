@@ -176,6 +176,33 @@ public class PadElectrodeTests
         Assert.Equal(pads[0].Shape.Area(), TaggedArea(result.Body.Mesh!, pin.FaceId), Snap(pads[0].Shape));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APadInsideALargerPad_GivesEachItsOwnFaces(bool largerFirst)
+    {
+        // A 0.6 mm round land centred in the 2 × 1 mm pad at the trace's left end: the land is
+        // an edge of the mesh and takes the faces it covers, the larger pad keeps the copper
+        // around it, whichever order they were listed in. Before, the union's outline was
+        // imprinted and every face went to whichever pad came first (PCB-17's nested case).
+        var (net, pads) = TraceWithPads();
+        var larger = pads[0];
+        var land = Disc(1e-3, 0.5e-3, 0.3e-3, 24);
+        var inner = new CopperPad(1, larger.Center, land, 0.6e-3) { ComponentRef = "V1", Pin = "1" };
+        pads[0] = largerFirst ? larger : inner;
+        pads.Insert(1, largerFirst ? inner : larger);
+        var result = new NetMesher().MeshNet(net, pads, new NetMeshOptions { TargetEdgeLength = 0.4e-3 });
+
+        Assert.Equal(3, result.Pads.Count);
+        Assert.Equal(3, result.Pads.Select(p => p.FaceId).Distinct().Count());
+        var mesh = result.Body.Mesh!;
+        var landElectrode = Assert.Single(result.Pads, p => p.ComponentRef == "V1");
+        var largerElectrode = Assert.Single(result.Pads, p => p.ComponentRef is null && p.Center.X < 5e-3);
+        Assert.Equal(land.Area(), TaggedArea(mesh, landElectrode.FaceId), Snap(land));
+        Assert.Equal(larger.Shape.Area() - land.Area(), TaggedArea(mesh, largerElectrode.FaceId),
+            Snap(larger.Shape) + Snap(land));
+    }
+
     [Fact]
     public void OnAMultiLayerNet_EachPadFaceIsItsPad()
     {

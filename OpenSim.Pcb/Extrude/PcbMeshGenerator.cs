@@ -123,7 +123,7 @@ public sealed class PcbMeshGenerator
         if (elements.Count == 0)
             throw new InvalidOperationException("The stackup produced no elements for the given planar mesh.");
 
-        var boundary = ExtractBoundary(nodes, elements, nodePlanarVertex, pads);
+        var boundary = ExtractBoundary(nodes, elements, pads);
         return new FeMesh(nodes, elements, boundary, regionIds);
     }
 
@@ -163,8 +163,11 @@ public sealed class PcbMeshGenerator
     // ---------------- Boundary extraction and face tagging ----------------
 
     private static IReadOnlyList<BoundaryTriangle> ExtractBoundary(
-        List<Vector3D> nodes, List<Tet4> elements, List<int> nodePlanarVertex, IReadOnlyList<PadFace>? pads)
+        List<Vector3D> nodes, List<Tet4> elements, IReadOnlyList<PadFace>? pads)
     {
+        // A face inside several pads goes to the smallest (PCB-17: a via land inside a
+        // through-hole pad, a pin pad over a larger unnamed flash): its area decides, once.
+        var padAreas = pads?.Select(p => p.Shape.Area()).ToArray();
         // Faces used by exactly one tet are on the boundary; remember the opposite
         // (4th) vertex so the outward normal can be oriented.
         var faceUse = new Dictionary<(int, int, int), (int Count, int A, int B, int C, int Opp)>();
@@ -189,7 +192,7 @@ public sealed class PcbMeshGenerator
         {
             if (f.Count != 1) continue;
             var (a, b, c) = OrientOutward(nodes, f.A, f.B, f.C, f.Opp);
-            int faceId = ClassifyFace(nodes, a, b, c, pads);
+            int faceId = ClassifyFace(nodes, a, b, c, pads, padAreas);
             boundary.Add(new BoundaryTriangle(a, b, c, faceId));
         }
         return boundary;
@@ -209,9 +212,12 @@ public sealed class PcbMeshGenerator
     /// 0 = top (+z), 1 = bottom (−z), 2+bin = side wall grouped by outward normal direction
     /// (so the ends of a straight trace get distinct, selectable ids). A pad is tagged only
     /// on the exposed side and z it lives on, so on a multi-layer net a top-layer pad and a
-    /// bottom-layer pad don't claim each other's faces.
+    /// bottom-layer pad don't claim each other's faces. A face covered by several pads is the
+    /// smallest one's (the first of equals): a pad inside a larger pad is an electrode of its
+    /// own, and the larger pad's electrode is the copper around it.
     /// </summary>
-    private static int ClassifyFace(List<Vector3D> nodes, int a, int b, int c, IReadOnlyList<PadFace>? pads)
+    private static int ClassifyFace(List<Vector3D> nodes, int a, int b, int c,
+        IReadOnlyList<PadFace>? pads, double[]? padAreas)
     {
         var normal = Vector3D.Cross(nodes[b] - nodes[a], nodes[c] - nodes[a]).Normalized();
         bool up = normal.Z > 0.7, down = normal.Z < -0.7;
@@ -219,18 +225,21 @@ public sealed class PcbMeshGenerator
         {
             if (pads is not null)
             {
-                // The face's XYZ centroid is its location; tag it to a covering pad on the
-                // matching exposed side (up/down) at the matching z.
+                // The face's XYZ centroid is its location; tag it to the smallest covering
+                // pad on the matching exposed side (up/down) at the matching z.
                 var mid = (nodes[a] + nodes[b] + nodes[c]) * (1.0 / 3.0);
                 var p = new Point2(mid.X, mid.Y);
+                int best = -1;
                 for (int k = 0; k < pads.Count; k++)
                 {
                     var pad = pads[k];
                     if (pad.TopFacing != up) continue;
                     if (Math.Abs(mid.Z - pad.Z) > PadZTolerance) continue;
+                    if (best >= 0 && padAreas![k] >= padAreas[best]) continue;
                     if (PlanarMesher.ContainsPoint(new[] { pad.Shape }, p))
-                        return PadFaceBase + k;
+                        best = k;
                 }
+                if (best >= 0) return PadFaceBase + best;
             }
             return up ? 0 : 1;
         }
