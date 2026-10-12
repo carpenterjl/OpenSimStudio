@@ -29,7 +29,7 @@ namespace OpenSim.Rf.Layered;
 /// image distances regularize by diameter/50), so points within ~an element of the
 /// metal are surface-scale approximations, stated here rather than silently wrong.
 /// </summary>
-public static class LayeredFieldEvaluator
+public static partial class LayeredFieldEvaluator
 {
     public static FieldMap Evaluate(SurfaceStructure surface, LayeredKernelTable kernel,
         SurfaceMomSolution solution, IReadOnlyList<Vector3D> points,
@@ -181,8 +181,12 @@ public static class LayeredFieldEvaluator
 
     private static ((Complex X, Complex Y, Complex Z) E, (Complex X, Complex Y, Complex Z) H)
         FieldAt(SurfaceStructure surface,
-        SurfaceMomSolution solution, IRadialFieldKernel table, double omega, Vector3D point)
+        SurfaceMomSolution solution, IRadialFieldKernel table, double omega, Vector3D point,
+        IReadOnlyList<(Complex C, int Opposite)>[]? extra = null)
     {
+        // Each triangle's current is Σ C·(r − p_opposite) — its RWG supports (C = I·s·l/2A) and,
+        // for a probe-fed sheet, the junction's half-RWGs (FU-7) — and its charge Σ 2C/(−jω).
+        var terms = new List<(Complex C, int Opposite)>(4);
         var (l1, l2, l3, w) = TriangleQuadrature.Rule(5);
         var (gl, glw) = GaussLegendre.Rule(4);
         Complex ax = Complex.Zero, ay = Complex.Zero;
@@ -195,18 +199,21 @@ public static class LayeredFieldEvaluator
         for (int t = 0; t < surface.Triangles.Count; t++)
         {
             var supports = surface.TriangleSupports[t];
-            if (supports.Count == 0) continue;
+            double area = surface.TriangleAreas[t];
+            terms.Clear();
+            foreach (var (basis, sign, opposite) in supports)
+                terms.Add((solution.EdgeCurrents[basis] * (sign * surface.Edges[basis].Length / (2 * area)), opposite));
+            if (extra?[t] is { } more) terms.AddRange(more);
+            if (terms.Count == 0) continue;
             var (ia, ib, ic) = surface.Triangles[t];
             var va = surface.Vertices[ia];
             var vb = surface.Vertices[ib];
             var vc = surface.Vertices[ic];
-            double area = surface.TriangleAreas[t];
             double diameter = Math.Max((vb - va).Length,
                 Math.Max((vc - vb).Length, (va - vc).Length));
 
             Complex charge = Complex.Zero;
-            foreach (var (basis, sign, _) in supports)
-                charge += solution.EdgeCurrents[basis] * (sign * surface.Edges[basis].Length / area);
+            foreach (var (c, _) in terms) charge += 2 * c;
             charge /= -(Complex.ImaginaryOne * omega);   // continuity: q = −div J/(jω)
 
             bool near = (point - surface.TriangleCentroids[t]).Length < 2 * diameter;
@@ -226,10 +233,8 @@ public static class LayeredFieldEvaluator
                     double weight = w[i] * panelArea;
 
                     Complex jx = Complex.Zero, jy = Complex.Zero;
-                    foreach (var (basis, sign, opposite) in supports)
+                    foreach (var (c, opposite) in terms)
                     {
-                        Complex c = solution.EdgeCurrents[basis]
-                            * (sign * surface.Edges[basis].Length / (2 * area));
                         var rhoVec = source - surface.Vertices[opposite];
                         jx += c * rhoVec.X;
                         jy += c * rhoVec.Y;
@@ -282,10 +287,8 @@ public static class LayeredFieldEvaluator
 
                     // H_z tangential leg: J on the edge (linear), dotted with the tangent.
                     Complex jx = Complex.Zero, jy = Complex.Zero;
-                    foreach (var (basis, sign, opposite) in supports)
+                    foreach (var (c, opposite) in terms)
                     {
-                        Complex c = solution.EdgeCurrents[basis]
-                            * (sign * surface.Edges[basis].Length / (2 * area));
                         var rhoVec = source - surface.Vertices[opposite];
                         jx += c * rhoVec.X;
                         jy += c * rhoVec.Y;

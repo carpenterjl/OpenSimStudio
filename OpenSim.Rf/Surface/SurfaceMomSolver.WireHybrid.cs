@@ -59,7 +59,7 @@ public sealed partial class SurfaceMomSolver
         "Zero-thickness sheet and thin wire; perfect conductors unless a sheet or wire surface impedance is given, which adds their ohmic loss.",
         "Free space — no dielectric substrate and no image ground plane; a wire over a substrate is named future work.",
         "The sheet is planar and the wire ends ON one of its interior mesh vertices.",
-        "Classical 1/ρ attachment mode at the junction: the wire and disc endpoint deltas cancel exactly — no junction point charge.",
+        "Attachment mode at the junction: isotropic 1/ρ at the contact, crossing each fan triangle's outer edge evenly into the next triangle, so it carries no line charge; the wire and junction endpoint deltas cancel exactly — no junction point charge.",
         "The disc's flux is handed to the surrounding triangles in total, not point by point along each edge; the zero-net line charge this leaves is neglected (small on a regular mesh, reported when the contact vertex is badly placed).",
         "Thin-wire reduced kernel R = √(d² + a²); the attachment is refused below 10° of incidence, where the wire's tube overlaps the sheet.",
         "Delta-gap voltage feed at one wire basis (feeding the attachment basis is the monopole-over-a-finite-plate case)."

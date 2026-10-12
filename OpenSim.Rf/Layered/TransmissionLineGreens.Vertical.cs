@@ -352,6 +352,26 @@ internal static partial class TransmissionLineGreens
         return dzAx;
     }
 
+    /// <summary>The classical vertical potential Ã_z^cl(z_top, z′) at the top of the stack — the
+    /// multi-layer counterpart of <see cref="VerticalSpectralKernels.ClassicalAtTop"/> and the same
+    /// TM solve <see cref="EvaluateVertical(VerticalGeometry, double, Complex, Complex, double, double)"/>
+    /// starts from. Continuous at the top, so its region-0 continuation × e^{−jk_z0(z−z_top)} gives
+    /// the whole field of a vertical current element above the stack (FU-7).</summary>
+    internal static Complex ClassicalVerticalAtTop(LayeredStackup stackup, double k0, Complex kRho,
+        Complex kz0, double zPrime)
+    {
+        double zTop = stackup.TotalThicknessMeters;
+        var (split, m) = stackup.SplitAt(zPrime);
+        int n = split.Layers.Count;
+        var sp = Spectral(split, k0, kRho);
+        RefuseSourceOnAnInterface(sp, m, n, zPrime);
+        var (tmM, tmRhs, _) = TmSystem(sp, kz0, new Complex[n], Complex.Zero, Complex.Zero);
+        tmRhs[VerticalSourceRow(m, n)] = -2 * RfConstants.Mu0 / sp.Eps[m];
+        var verticalTm = ComplexLu.Factor(tmM).Solve(tmRhs);
+        var (_, _, azCl, _, _, _) = Profile(split, sp, kz0, new Complex[2 * n + 1], verticalTm, zTop);
+        return azCl;
+    }
+
     /// <summary>The TM row a vertical source at interface <paramref name="m"/> drives (the top
     /// plane’s radiation row, else that interface’s derivative-jump row).</summary>
     private static int VerticalSourceRow(int m, int n) => m == n - 1 ? 2 * n : 2 + 2 * m;

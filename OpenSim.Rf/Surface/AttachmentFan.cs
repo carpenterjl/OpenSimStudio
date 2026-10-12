@@ -367,6 +367,62 @@ internal sealed class AttachmentFan
         }
     }
 
+    /// <summary>The fan current as quadrature points (r′, J dS′) for a field point r at
+    /// <paramref name="height"/> above or below the sheet: each wedge's (s, t) square is split, longer
+    /// side first, until every cell is no larger than its distance to r (the rule
+    /// <see cref="WedgePotential"/> uses, with the height in the distance). For near-field maps (FU-7).</summary>
+    internal void ForEachCurrentPoint(SurfaceStructure surface, Vector3D r, double height,
+        Action<Vector3D, Vector3D> visit)
+    {
+        var (nodes, weights) = GaussLegendre.Rule(PotentialOrder, 0, 1);
+        foreach (var wedge in Wedges)
+        {
+            var (a, b, c) = surface.Triangles[wedge.Triangle];
+            var (u, w) = a == Vertex ? (b, c) : b == Vertex ? (a, c) : (a, b);
+            var eu = surface.Vertices[u] - VertexPosition;
+            var ew = surface.Vertices[w] - VertexPosition;
+            WedgeCells(eu, ew, wedge.Angle, r, height, 0, 1, 0, 1, 0, nodes, weights, visit);
+        }
+    }
+
+    private void WedgeCells(Vector3D eu, Vector3D ew, double angle, Vector3D r, double height,
+        double s0, double s1, double t0, double t1, int depth, double[] nodes, double[] weights,
+        Action<Vector3D, Vector3D> visit)
+    {
+        double sm = 0.5 * (s0 + s1), tm = 0.5 * (t0 + t1);
+        var em = eu * (1 - sm) + ew * sm;
+        double radial = em.Length * (t1 - t0);
+        double arc = (ew - eu).Length * (s1 - s0) * t1;
+        var centre = VertexPosition + em * tm;
+        double cx = r.X - centre.X, cy = r.Y - centre.Y;
+        double distance = Math.Sqrt(cx * cx + cy * cy + height * height + _radiusFloor * _radiusFloor);
+        if (Math.Max(radial, arc) > PotentialResolve * distance && depth < MaxSplitDepth)
+        {
+            if (radial >= arc)
+            {
+                WedgeCells(eu, ew, angle, r, height, s0, s1, t0, tm, depth + 1, nodes, weights, visit);
+                WedgeCells(eu, ew, angle, r, height, s0, s1, tm, t1, depth + 1, nodes, weights, visit);
+            }
+            else
+            {
+                WedgeCells(eu, ew, angle, r, height, s0, sm, t0, t1, depth + 1, nodes, weights, visit);
+                WedgeCells(eu, ew, angle, r, height, sm, s1, t0, t1, depth + 1, nodes, weights, visit);
+            }
+            return;
+        }
+        double cell = (s1 - s0) * (t1 - t0);
+        for (int si = 0; si < nodes.Length; si++)
+        {
+            double sv = s0 + (s1 - s0) * nodes[si];
+            var e = eu * (1 - sv) + ew * sv;
+            for (int ti = 0; ti < nodes.Length; ti++)
+            {
+                double tv = t0 + (t1 - t0) * nodes[ti];
+                visit(VertexPosition + e * tv, RayCurrent(eu, ew, angle, sv, tv) * (cell * weights[si] * weights[ti]));
+            }
+        }
+    }
+
     /// <summary>∬ D·D′ G_A — the disc's vector self term.
     ///
     /// <para>The outer rule must NOT share its nodes with the inner one. It once did (the same

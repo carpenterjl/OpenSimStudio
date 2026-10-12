@@ -33,8 +33,9 @@ public sealed partial class SurfaceMomSolver
         "An N-layer grounded stackup (per-layer εr, tanδ); ALL sheet metal coplanar at ONE interface — the top of the stack, or buried under a dielectric cover.",
         "Coaxial probe: a vertical tube from the ground plane to that metal interface, delta-gap driven at its BASE (a real port voltage against ground).",
         "Every internal dielectric interface below the metal is a tube node, so no current element straddles a material change; the probe's segment count is a TARGET for the whole tube and each layer takes at least one element, so a many-layer stack yields more elements than requested.",
-        "Classical 1/ρ attachment mode at the junction (the probe position is a mesh vertex); the tube and disc deltas cancel exactly — no junction point charge.",
-        "Far field and the power ledger add the tube's own vertical leg and the junction's exact transforms to the sheet currents; the surface-wave ledger sums the horizontal and vertical launches COHERENTLY (they excite the same mode)."
+        "Attachment mode at the junction (the probe position is a mesh vertex): isotropic 1/ρ at the probe, crossing each fan triangle's outer edge evenly into the next triangle, so it carries no line charge; the tube and junction deltas cancel exactly — no junction point charge.",
+        "Far field and the power ledger add the tube's own vertical leg and the junction's exact transforms to the sheet currents; the surface-wave ledger sums the horizontal and vertical launches COHERENTLY (they excite the same mode).",
+        "The near field (LayeredFieldEvaluator.EvaluateProbeFed) adds the tube and the junction's own currents to the sheet's; within about an element of the metal the sheet's part is a surface-scale approximation."
     };
 
     /// <summary>Solve a probe-fed sheet over a multi-layer grounded stackup. The metal plane is

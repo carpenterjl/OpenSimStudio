@@ -104,6 +104,62 @@ internal static class Bessel
         return (p, q);
     }
 
+    /// <summary>J₀(z) and J₁(z) for complex z with Re(z) ≥ 0 — the transform kernels on a
+    /// Sommerfeld path lifted off the real axis (FU-7's probe near field). Same strategy as the
+    /// real J₀: the ascending series below |z| = 14 (J₁ = (z/2)·Σ(−z²/4)ᵏ/(k!(k+1)!)), the
+    /// DLMF 10.17 Hankel asymptotics above, with a_k(ν) = a_{k−1}(4ν² − (2k−1)²)/(8k) and
+    /// ω = z − νπ/2 − π/4, truncated at the smallest term. On the real axis J₀ reproduces
+    /// <see cref="J0(double)"/>; J₁ is gated against −dJ₀/dz and the series/asymptotic crossover.</summary>
+    public static (Complex J0, Complex J1) J01(Complex z) =>
+        z.Magnitude < SeriesLimit ? J01Series(z) : J01Asymptotic(z);
+
+    internal static (Complex J0, Complex J1) J01Series(Complex z)
+    {
+        var q = -0.25 * z * z;
+        Complex t0 = 1, s0 = 1, t1 = 1, s1 = 1;
+        for (int k = 1; k < 80; k++)
+        {
+            t0 *= q / (k * (double)k);
+            t1 *= q / (k * (k + 1.0));
+            s0 += t0;
+            s1 += t1;
+            if (t0.Magnitude < 1e-18 * s0.Magnitude && t1.Magnitude < 1e-18 * s1.Magnitude) break;
+        }
+        return (s0, 0.5 * z * s1);
+    }
+
+    internal static (Complex J0, Complex J1) J01Asymptotic(Complex z)
+    {
+        var scale = Complex.Sqrt(2 / (Math.PI * z));
+        var (p0, q0) = HankelPq(z, 0);
+        var (p1, q1) = HankelPq(z, 1);
+        var w0 = z - Math.PI / 4;
+        var w1 = z - 3 * Math.PI / 4;
+        return (scale * (p0 * Complex.Cos(w0) - q0 * Complex.Sin(w0)),
+                scale * (p1 * Complex.Cos(w1) - q1 * Complex.Sin(w1)));
+    }
+
+    /// <summary>The DLMF 10.17 P and Q sums for order ν at complex z, truncated at the
+    /// smallest term.</summary>
+    private static (Complex P, Complex Q) HankelPq(Complex z, int nu)
+    {
+        Complex p = 1, q = 0, power = 1;
+        var invZ = 1 / z;
+        double a = 1, previous = double.MaxValue;
+        for (int k = 1; k <= 40; k++)
+        {
+            a *= (4.0 * nu * nu - (2 * k - 1.0) * (2 * k - 1.0)) / (8.0 * k);
+            power *= invZ;
+            var term = a * power;
+            double magnitude = term.Magnitude;
+            if (magnitude >= previous) break;
+            previous = magnitude;
+            if (k % 2 == 0) p += k % 4 == 0 ? term : -term;
+            else q += (k - 1) % 4 == 0 ? term : -term;
+        }
+        return (p, q);
+    }
+
     /// <summary>Modified Bessel K₀ for complex z with Re(z) ≥ 0 (principal branch).</summary>
     public static Complex K0(Complex z)
     {

@@ -99,6 +99,22 @@ internal static class VerticalSpectralKernels
         return (gzz, gxzIn, kPhiIn);
     }
 
+    /// <summary>The CLASSICAL vertical potential Ã_z^cl(d, z′) at the slab top — the TM-only,
+    /// gauge-free potential whose region-0 continuation × e^{−jk_z0(z−d)} gives the whole field
+    /// of a vertical current element above the slab (E from the Lorenz-gauge relations, H from
+    /// ∇×A). It is continuous at z = d, so the side does not matter; and it carries only the TM
+    /// denominator, where G̃_A^zz and G̃_A^xz each carry D̂_TE·D̂_TM and cancel the TE poles
+    /// only in their sum (FU-7).</summary>
+    internal static Complex ClassicalAtTop(
+        SubstrateStackup substrate, double k0, Complex kRho, Complex kz0, double zPrime)
+    {
+        GuardHeights(substrate, substrate.ThicknessMeters, zPrime);
+        var (_, kz1, _, dTm, _, _, _, d) = Common(substrate, k0, kRho, kz0);
+        var j = Complex.ImaginaryOne;
+        var (_, cZp) = SpectralKernels.ReducedTrig(kz1 * zPrime);
+        return -2 * j * RfConstants.Mu0 * cZp / dTm * Complex.Exp(-j * kz1 * (d - zPrime));
+    }
+
     /// <summary>Region 0 (z ≥ d): the z = d boundary values × e^{−jk_z0(z−d)}.</summary>
     private static (Complex GAzz, Complex GAxz, Complex KPhi) Region0(
         SubstrateStackup substrate, double k0, Complex kRho, Complex kz0, double z, double zPrime)

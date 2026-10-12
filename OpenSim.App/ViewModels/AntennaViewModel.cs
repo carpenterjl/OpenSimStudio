@@ -641,6 +641,13 @@ public partial class AntennaViewModel : ObservableObject
                     // Stage S9b — the multi-layer / covered-patch field kernels (TLGF per-z),
                     // sampled on the overlay plane above the (buried) metal.
                     var mlTable = BuildMultiLayerTable(surface, spec, frequency);
+                    if (probe is { } mlProbe)
+                    {
+                        // FU-7: the probe-fed map carries the tube and the junction's own currents.
+                        var fed = solver.SolveProbeFed(surface, mlTable, mlProbe);
+                        return (OpenSim.Rf.Layered.LayeredFieldEvaluator.EvaluateProbeFed(
+                            surface, mlTable, fed, mlProbe, points), fed.Surface);
+                    }
                     var mlSolved = SolveMultiLayer(solver, surface, mlTable, port, probe);
                     return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
                         surface, mlTable, mlSolved, points), mlSolved);
@@ -651,12 +658,16 @@ public partial class AntennaViewModel : ObservableObject
                     return (OpenSim.Rf.Surface.SurfaceFieldProbe.Evaluate(
                         surface, solvedFree, points), solvedFree);
                 }
-                // The Stage D layered field kernels (above-slab points); a probe-fed
-                // patch maps its sheet currents, like the near-field command.
+                // The Stage D layered field kernels (above-slab points); a probe-fed patch adds
+                // the tube and the junction's own currents (FU-7).
                 var table = BuildKernelTable(surface, substrate, frequency);
-                var solved = probe is { } p
-                    ? solver.SolveProbeFed(surface, table, p).Surface
-                    : solver.Solve(surface, table, port);
+                if (probe is { } p)
+                {
+                    var fed = solver.SolveProbeFed(surface, table, p);
+                    return (OpenSim.Rf.Layered.LayeredFieldEvaluator.EvaluateProbeFed(
+                        surface, table, fed, p, points), fed.Surface);
+                }
+                var solved = solver.Solve(surface, table, port);
                 return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
                     surface, table, solved, points), solved);
             });
@@ -723,9 +734,18 @@ public partial class AntennaViewModel : ObservableObject
                 // approached from one side rather than sat on exactly; either side is now
                 // well-defined (observation below a buried source was the A2 item).
                 var mlTable = BuildMultiLayerTable(surface, spec, frequency);
-                var mlSol = SolveMultiLayer(solver, surface, mlTable, port, probe);
-                evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
-                    surface, mlTable, mlSol, pts);
+                if (probe is { } mlProbe)
+                {
+                    var fed = solver.SolveProbeFed(surface, mlTable, mlProbe);
+                    evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.EvaluateProbeFed(
+                        surface, mlTable, fed, mlProbe, pts);
+                }
+                else
+                {
+                    var mlSol = SolveMultiLayer(solver, surface, mlTable, port, probe);
+                    evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
+                        surface, mlTable, mlSol, pts);
+                }
                 kernelNote = $"{spec.Stackup.Layers.Count}-layer TLGF kernels"
                     + (spec.SourceInterface is { } si
                         && si < spec.Stackup.Layers.Count - 1 ? " (buried metal)" : "");
@@ -739,10 +759,16 @@ public partial class AntennaViewModel : ObservableObject
             else
             {
                 var table = BuildKernelTable(surface, substrate, frequency);
-                var sol = probe is { } p
-                    ? solver.SolveProbeFed(surface, table, p).Surface
-                    : solver.Solve(surface, table, port);
-                evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(surface, table, sol, pts);
+                if (probe is { } p)
+                {
+                    var fed = solver.SolveProbeFed(surface, table, p);
+                    evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.EvaluateProbeFed(surface, table, fed, p, pts);
+                }
+                else
+                {
+                    var sol = solver.Solve(surface, table, port);
+                    evaluate = pts => OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(surface, table, sol, pts);
+                }
                 kernelNote = $"εr = {substrate.RelativePermittivity:g3} layered kernels";
             }
         }
@@ -1738,6 +1764,12 @@ public partial class AntennaViewModel : ObservableObject
                     // Points above the (buried) metal are mapped; the below-source half stays
                     // zero (the below-metal image ladder is a named follow-up).
                     var mlTable = BuildMultiLayerTable(surface, spec, frequency);
+                    if (probe is { } mlProbe)
+                    {
+                        var fed = solver.SolveProbeFed(surface, mlTable, mlProbe);
+                        return (OpenSim.Rf.Layered.LayeredFieldEvaluator.EvaluateProbeFed(
+                            surface, mlTable, fed, mlProbe, points), fed.Surface);
+                    }
                     var mlSolved = SolveMultiLayer(solver, surface, mlTable, port, probe);
                     return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
                         surface, mlTable, mlSolved, points), mlSolved);
@@ -1749,13 +1781,16 @@ public partial class AntennaViewModel : ObservableObject
                         solvedFree);
                 }
                 // The Stage D layered field kernels: per-z tables (in-slab AND
-                // above-slab points; at/below the ground E = 0 exactly). The probe-fed
-                // near field uses the patch sheet currents (the probe's own vertical
-                // field is a named follow-up, like its far-field surface-wave leg).
+                // above-slab points; at/below the ground E = 0 exactly). A probe-fed patch adds
+                // the tube and the junction's own currents (FU-7).
                 var table = BuildKernelTable(surface, substrate, frequency);
-                var solved = probe is { } p
-                    ? solver.SolveProbeFed(surface, table, p).Surface
-                    : solver.Solve(surface, table, port);
+                if (probe is { } p)
+                {
+                    var fed = solver.SolveProbeFed(surface, table, p);
+                    return (OpenSim.Rf.Layered.LayeredFieldEvaluator.EvaluateProbeFed(
+                        surface, table, fed, p, points), fed.Surface);
+                }
+                var solved = solver.Solve(surface, table, port);
                 return (OpenSim.Rf.Layered.LayeredFieldEvaluator.Evaluate(
                     surface, table, solved, points), solved);
             });
@@ -1770,9 +1805,9 @@ public partial class AntennaViewModel : ObservableObject
                           $"(1 V feed, {n}³ grid" +
                           (substrate is null ? "" : $", εr = {substrate.RelativePermittivity:g3} layered kernels") +
                           "; arrows are the t = 0 snapshot; the sheet is colored by log₁₀|J|)" +
-                          (probe is null ? "" : " The map is the field of the patch sheet currents only: " +
-                              "the coaxial probe's own vertical current is NOT included, so the field " +
-                              "within a few substrate thicknesses of the probe is incomplete.");
+                          (probe is null ? "" : " The map includes the coaxial probe's own current (the tube " +
+                              "and the junction). Within about an element of the metal the sheet's field is a " +
+                              "surface-scale approximation.");
             _log.Append($"Antenna: {FieldResult}");
         }
         catch (Exception ex) { FieldResult = $"Not computable: {ex.Message}"; }

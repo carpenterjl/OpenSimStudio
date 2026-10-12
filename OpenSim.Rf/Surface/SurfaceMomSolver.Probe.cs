@@ -63,8 +63,9 @@ public sealed partial class SurfaceMomSolver
         "Zero-thickness sheet and probe tube; ohmic loss only when the solver is given a sheet or a wire surface impedance (perfect metal otherwise), and the ground plane is perfect.",
         "One dielectric slab (εr, tanδ) on an infinite PEC ground; all sheet metal coplanar at the slab top.",
         "Coaxial probe: a vertical tube from ground to patch, delta-gap driven at its BASE (a real port voltage against ground).",
-        "Classical 1/ρ attachment mode at the junction (the probe position is a mesh vertex); the tube and disc deltas cancel exactly — no junction point charge.",
-        "Far field and the power ledger add the tube's own vertical leg and the junction's exact transforms to the sheet currents; the three add coherently."
+        "Attachment mode at the junction (the probe position is a mesh vertex): isotropic 1/ρ at the probe, crossing each fan triangle's outer edge evenly into the next triangle, so it carries no line charge; the tube and junction deltas cancel exactly — no junction point charge.",
+        "Far field and the power ledger add the tube's own vertical leg and the junction's exact transforms to the sheet currents; the three add coherently.",
+        "The near field (LayeredFieldEvaluator.EvaluateProbeFed) adds the tube and the junction's own currents to the sheet's; within about an element of the metal the sheet's part is a surface-scale approximation."
     };
 
     public ProbeFedSolution SolveProbeFed(SurfaceStructure surface, LayeredKernelTable kernel,
