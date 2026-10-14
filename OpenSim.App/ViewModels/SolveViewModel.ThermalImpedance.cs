@@ -21,6 +21,21 @@ public partial class SolveViewModel
     [ObservableProperty] private double _pulsePeriod = 1.0;          // s
     [ObservableProperty] private double _pulseDutyPercent = 50;
 
+    /// <summary>Heat capacity matrix of a transient: 0 automatic, 1 consistent, 2 lumped
+    /// (<see cref="ThermalCapacity"/>).</summary>
+    [ObservableProperty] private int _transientCapacityIndex;
+
+    /// <summary>Time integrator of a transient: 0 backward Euler, 1 TR-BDF2, 2 adaptive
+    /// (<see cref="TimeIntegrator"/>).</summary>
+    [ObservableProperty] private int _transientIntegratorIndex;
+
+    /// <summary>The adaptive integrator's error per step [K].</summary>
+    [ObservableProperty] private double _transientTolerance = 0.01;
+
+    /// <summary>Z_th from the full nonlinear transient instead of the linear model about
+    /// the steady state.</summary>
+    [ObservableProperty] private bool _zthNonlinear;
+
     [ObservableProperty] private double _zthStartTime = 1e-4;        // s
     [ObservableProperty] private double _zthEndTime = 100;           // s
 
@@ -34,6 +49,18 @@ public partial class SolveViewModel
     private ThermalImpedanceCurve? _zthCurve;
     private FosterFit? _zthFit;
     private CauerNetwork? _zthLadder;
+
+    /// <summary>The transient settings the panel asks for.</summary>
+    private TransientThermalSettings BuildTransientSettings() => new()
+    {
+        InitialTemperature = InitialTemperature,
+        Duration = TransientDuration,
+        TimeStep = TransientTimeStep,
+        PowerProfile = BuildPowerProfile(),
+        Capacity = (ThermalCapacity)Math.Clamp(TransientCapacityIndex, 0, 2),
+        Integrator = (TimeIntegrator)Math.Clamp(TransientIntegratorIndex, 0, 2),
+        Tolerance = TransientTolerance
+    };
 
     /// <summary>The profile the transient settings ask for; null = constant power.</summary>
     private PowerProfile? BuildPowerProfile() => PulsedPower
@@ -62,7 +89,7 @@ public partial class SolveViewModel
         }
         catch (Exception ex) { ZthResult = ex.Message; return; }
 
-        var settings = new ThermalImpedanceSettings { StartTime = ZthStartTime, EndTime = ZthEndTime };
+        var settings = new ThermalImpedanceSettings { StartTime = ZthStartTime, EndTime = ZthEndTime, Nonlinear = ZthNonlinear };
         int stages = Math.Max(0, ZthStages);
         _session.IsBusy = true;
         _session.StatusText = "Thermal impedance…";

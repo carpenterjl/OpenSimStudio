@@ -234,7 +234,7 @@ public sealed record StudyReport
         ElectricCharge q => $"{Number(q.TotalCharge)} C",
         FixedTemperature t => $"{Number(t.Kelvin)} K",
         HeatFlux q => $"{Number(q.TotalPower)} W",
-        Convection h => $"h = {Number(h.Coefficient)} W/(m²·K), ambient {Number(h.AmbientTemperature)} K",
+        Convection h => $"h = {Number(h.Coefficient)} W/(m²·K){(h.Profile is null ? "" : " (varying over the faces)")}, ambient {Number(h.AmbientTemperature)} K",
         ForceLoad f => $"{f.TotalForce} N",
         PressureLoad p => $"{Number(p.Magnitude)} Pa",
         FixedSupport => "fixed",

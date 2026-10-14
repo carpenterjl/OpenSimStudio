@@ -47,6 +47,7 @@ internal sealed class FilmUpdatableSystem
     private readonly double[] _triangleArea;
     private readonly StampSlot[] _slots;               // per boundary triangle: 9 row-major (i, j), then the 7 air entries
     private readonly int _stride;                      // 9, or 16 with an air unknown
+    private readonly StampSlot[] _extraSlots;          // the extra entries (a radiation exchange's node blocks)
 
     /// <summary>Slots per triangle: the 3×3 Robin block on its nodes.</summary>
     private const int RobinSlots = 9;
@@ -56,7 +57,7 @@ internal sealed class FilmUpdatableSystem
 
     private FilmUpdatableSystem(FeMesh mesh, ConstrainedSystemSolver.ReducedSystem system,
         double[] baseValues, double[] basePrescribedValues, CorrectionTerm[] correctionTerms,
-        double[] triangleArea, StampSlot[] slots, int stride)
+        double[] triangleArea, StampSlot[] slots, int stride, StampSlot[] extraSlots)
     {
         _mesh = mesh;
         _system = system;
@@ -67,6 +68,7 @@ internal sealed class FilmUpdatableSystem
         _triangleArea = triangleArea;
         _slots = slots;
         _stride = stride;
+        _extraSlots = extraSlots;
     }
 
     /// <summary>The reduced system, holding whatever film was last applied.</summary>
@@ -88,8 +90,11 @@ internal sealed class FilmUpdatableSystem
     /// holds those positions too and <see cref="Apply"/> rewrites them with the film.
     /// </para>
     /// </summary>
+    /// <param name="extra">Further entries rewritten on every <see cref="Apply"/> — a
+    /// surface-radiation exchange's node blocks — in the order their values will come.</param>
     public static FilmUpdatableSystem Prepare(CsrMatrix baseMatrix, FeMesh mesh,
-        IReadOnlyDictionary<int, double> prescribed, int? airDof = null)
+        IReadOnlyDictionary<int, double> prescribed, int? airDof = null,
+        IReadOnlyList<(int Row, int Column)>? extra = null)
     {
         var pattern = new SparseMatrixBuilder(baseMatrix.RowCount, baseMatrix.ColumnCount);
         for (int row = 0; row < baseMatrix.RowCount; row++)
@@ -106,6 +111,9 @@ internal sealed class FilmUpdatableSystem
             }
             pattern.Add(air, air, 0.0);
         }
+        if (extra is not null)
+            foreach (var (row, column) in extra)
+                pattern.Add(row, column, 0.0);
 
         var full = pattern.Build();
         var system = ConstrainedSystemSolver.Reduce(full, prescribed, allowUnconstrained: true);
@@ -171,8 +179,9 @@ internal sealed class FilmUpdatableSystem
             slots[t * stride + RobinSlots + 6] = Slot(air, air);
         }
 
+        var extraSlots = extra is null ? Array.Empty<StampSlot>() : extra.Select(e => Slot(e.Row, e.Column)).ToArray();
         var updatable = new FilmUpdatableSystem(mesh, system, baseValues,
-            basePrescribedValues.ToArray(), correctionTerms.ToArray(), areas, slots, stride);
+            basePrescribedValues.ToArray(), correctionTerms.ToArray(), areas, slots, stride, extraSlots);
         updatable.RebuildCorrection();
         return updatable;
     }
@@ -181,12 +190,16 @@ internal sealed class FilmUpdatableSystem
     /// Rewrites the system for a new film. Values start from the film-free base and take the
     /// same stamps, in the same order, that a rebuild would have applied.
     /// </summary>
-    public void Apply(SurfaceFilmModel film)
+    public void Apply(SurfaceFilmModel film) => Apply(film, null);
+
+    /// <summary>Rewrites the system for a new film (none: null) and new values of the
+    /// extra entries (parallel to the list given to <see cref="Prepare"/>; none: null).</summary>
+    public void Apply(SurfaceFilmModel? film, IReadOnlyList<double>? extraValues)
     {
         Array.Copy(_baseValues, _system.Reduced.Values, _baseValues.Length);
         Array.Copy(_basePrescribedValues, _prescribedWork, _prescribedWork.Length);
 
-        for (int t = 0; t < _mesh.BoundaryTriangles.Count; t++)
+        for (int t = 0; film is not null && t < _mesh.BoundaryTriangles.Count; t++)
         {
             double h = film.TriangleFilmCoefficient[t];
             if (double.IsNaN(h) || h == 0) continue;
@@ -201,6 +214,9 @@ internal sealed class FilmUpdatableSystem
             for (int i = 0; i < 6; i++) Add(_slots[t * _stride + RobinSlots + i], -third);
             Add(_slots[t * _stride + RobinSlots + 6], h * _triangleArea[t]);
         }
+        if (extraValues is not null)
+            for (int k = 0; k < _extraSlots.Length; k++)
+                if (extraValues[k] != 0) Add(_extraSlots[k], extraValues[k]);
 
         RebuildCorrection();
     }

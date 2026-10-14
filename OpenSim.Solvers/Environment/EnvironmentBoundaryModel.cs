@@ -50,10 +50,11 @@ public sealed class EnvironmentBoundaryModel
     private readonly BoundaryAdjacency _adjacency;
     private readonly List<SurfacePanel> _panels;
     private readonly double[] _exposed;
+    private readonly IReadOnlySet<int> _exchanged;
     private readonly SortedSet<string> _notes = new();
 
     private EnvironmentBoundaryModel(FeMesh mesh, EnvironmentSettings environment,
-        BoundaryAdjacency adjacency, List<SurfacePanel> panels, double[] exposed)
+        BoundaryAdjacency adjacency, List<SurfacePanel> panels, double[] exposed, IReadOnlySet<int> exchanged)
     {
         _mesh = mesh;
         _environment = environment;
@@ -61,6 +62,7 @@ public sealed class EnvironmentBoundaryModel
         _adjacency = adjacency;
         _panels = panels;
         _exposed = exposed;
+        _exchanged = exchanged;
     }
 
     /// <summary>Per boundary triangle, the fraction of its area open to the surroundings
@@ -169,7 +171,13 @@ public sealed class EnvironmentBoundaryModel
         if (buriedArea > 0)
             log.Add($"  {buriedArea:g4} m² of skin lies inside body-to-body contacts and takes no " +
                     "convection or radiation (it exchanges heat through the contact only).");
-        return new EnvironmentBoundaryModel(mesh, environment, adjacency, panels, exposed);
+        // Faces in a surface-radiation set radiate there, with their view factors; the
+        // environment keeps only its convection on them.
+        var exchanged = SurfaceRadiationExchange.TrianglesOf(input);
+        if (exchanged.Count > 0 && environment.IncludeRadiation)
+            log.Add($"  {exchanged.Count} triangle(s) radiate in a surface-radiation set: the environment convects from " +
+                    "them but does not radiate from them (view factor 1 to the ambient would count that exchange twice).");
+        return new EnvironmentBoundaryModel(mesh, environment, adjacency, panels, exposed, exchanged);
     }
 
     /// <summary>
@@ -230,7 +238,7 @@ public sealed class EnvironmentBoundaryModel
             foreach (int t in panel.TriangleIndices)
             {
                 double total = h;
-                if (radiates)
+                if (radiates && !_exchanged.Contains(t))
                 {
                     var bt = _mesh.BoundaryTriangles[t];
                     double local = Math.Max(1.0, (nodalTemperature[bt.A] + nodalTemperature[bt.B]

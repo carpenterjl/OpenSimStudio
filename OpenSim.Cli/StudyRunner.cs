@@ -14,6 +14,11 @@ public sealed record StudySettings
     public double InitialTemperature { get; init; } = 293.15;
     public double Duration { get; init; } = 10;
     public double TimeStep { get; init; } = 0.1;
+
+    /// <summary>Transient: the time integrator, its tolerance (adaptive) and the capacity matrix.</summary>
+    public TimeIntegrator Integrator { get; init; } = TimeIntegrator.BackwardEuler;
+    public double Tolerance { get; init; } = 0.01;
+    public ThermalCapacity Capacity { get; init; } = ThermalCapacity.Automatic;
     public double MinFrequency { get; init; } = 1e3;
     public double MaxFrequency { get; init; } = 1e8;
     public int PointCount { get; init; } = 15;
@@ -115,7 +120,8 @@ public static class StudyRunner
             TransientThermal = transient
                 ? new TransientThermalSettings
                 {
-                    InitialTemperature = settings.InitialTemperature, Duration = settings.Duration, TimeStep = settings.TimeStep
+                    InitialTemperature = settings.InitialTemperature, Duration = settings.Duration, TimeStep = settings.TimeStep,
+                    Integrator = settings.Integrator, Tolerance = settings.Tolerance, Capacity = settings.Capacity
                 }
                 : null,
             Modal = kind == "Modal" ? new ModalSettings { ModeCount = settings.ModeCount } : null,
@@ -188,7 +194,8 @@ public static class StudyRunner
                 ? null
                 : new TransientThermalSettings
                 {
-                    InitialTemperature = settings.InitialTemperature, Duration = settings.Duration, TimeStep = settings.TimeStep
+                    InitialTemperature = settings.InitialTemperature, Duration = settings.Duration, TimeStep = settings.TimeStep,
+                    Integrator = settings.Integrator, Tolerance = settings.Tolerance, Capacity = settings.Capacity
                 }
         };
         ISolver solver = settings.EnvironmentSteady ? new HeatConductionSolver() : new TransientThermalSolver();

@@ -33,6 +33,10 @@ public static partial class CliRunner
             --remesh            re-mesh every body with its stored settings
             --fields            also write every result field as CSV
             --duration S --step S --initial K        transient settings
+            --integrator be|trbdf2|adaptive          transient time integrator (TR-BDF2 and the
+                                                     adaptive step: linear models only)
+            --tolerance K                            adaptive: the error one step may add
+            --capacity auto|consistent|lumped        transient heat-capacity matrix
             --fmin HZ --fmax HZ --points N           AC sweep settings
             --modes N                                modal
             --open                                   electrostatic: open outer boundary (1/r
@@ -150,11 +154,26 @@ public static partial class CliRunner
                 : throw new UsageException($"--{key} needs a number, not '{s}'.")
             : fallback;
 
+    private static T Choice<T>(Dictionary<string, string> o, string key, T fallback, Dictionary<string, T> choices) =>
+        o.TryGetValue(key, out var s)
+            ? choices.TryGetValue(s.ToLowerInvariant(), out var v) ? v
+                : throw new UsageException($"--{key} takes {string.Join(", ", choices.Keys)}, not '{s}'.")
+            : fallback;
+
     private static StudySettings Settings(Dictionary<string, string> o) => new()
     {
         InitialTemperature = Number(o, "initial", 293.15),
         Duration = Number(o, "duration", 10),
         TimeStep = Number(o, "step", 0.1),
+        Integrator = Choice(o, "integrator", TimeIntegrator.BackwardEuler, new()
+        {
+            ["be"] = TimeIntegrator.BackwardEuler, ["trbdf2"] = TimeIntegrator.TrBdf2, ["adaptive"] = TimeIntegrator.Adaptive
+        }),
+        Tolerance = Number(o, "tolerance", 0.01),
+        Capacity = Choice(o, "capacity", ThermalCapacity.Automatic, new()
+        {
+            ["auto"] = ThermalCapacity.Automatic, ["consistent"] = ThermalCapacity.Consistent, ["lumped"] = ThermalCapacity.Lumped
+        }),
         MinFrequency = Number(o, "fmin", 1e3),
         MaxFrequency = Number(o, "fmax", 1e8),
         PointCount = (int)Number(o, "points", 15),

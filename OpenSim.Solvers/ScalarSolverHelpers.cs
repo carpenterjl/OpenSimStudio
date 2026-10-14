@@ -39,15 +39,15 @@ internal static class ScalarSolverHelpers
         foreach (var convection in input.BoundaryConditions.OfType<Convection>())
         {
             // RHS of the Robin term: h·T_amb·∫Nᵢ dA = h·T_amb·A/3 per triangle node.
-            foreach (var t in mesh.GetFaceTriangles(convection.FaceIds))
+            foreach (var (t, h) in ConvectionTerms.Triangles(mesh, convection))
             {
-                double share = convection.Coefficient * convection.AmbientTemperature
+                double share = h * convection.AmbientTemperature
                                * TriangleArea(mesh, t) / 3.0;
                 loads[t.A] += share;
                 loads[t.B] += share;
                 loads[t.C] += share;
             }
-            log.Add($"Convection '{convection.Name}': h = {convection.Coefficient:g4} W/(m²·K), " +
+            log.Add($"Convection '{convection.Name}': {ConvectionTerms.Describe(mesh, convection)}, " +
                     $"ambient {convection.AmbientTemperature:g4} K.");
         }
         if (input.ElementHeatSource is not null)

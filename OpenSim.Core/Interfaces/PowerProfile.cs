@@ -138,6 +138,28 @@ public sealed record PowerProfile
         return sum + Scales[^1] * (time - Times[^1]);
     }
 
+    /// <summary>The times in (0, <paramref name="until"/>) where the profile switches or
+    /// bends — pulse edges, table points — in rising order. A step that lands on them never
+    /// straddles a change.</summary>
+    public IEnumerable<double> Breakpoints(double until)
+    {
+        switch (Kind)
+        {
+            case PowerProfileKind.PulseTrain:
+                double on = DutyCycle * Period;
+                for (double start = Delay; start < until; start += Period)
+                {
+                    if (start > 0) yield return start;
+                    if (on > 0 && on < Period && start + on > 0 && start + on < until) yield return start + on;
+                }
+                break;
+            case PowerProfileKind.Table:
+                foreach (double time in Times)
+                    if (time > 0 && time < until) yield return time;
+                break;
+        }
+    }
+
     /// <summary>The shortest stretch the profile holds one state for [s] — what a time step
     /// has to be shorter than to follow it; infinite for a constant.</summary>
     public double ShortestInterval()

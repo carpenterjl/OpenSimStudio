@@ -139,6 +139,108 @@ public sealed record CauerNetwork(IReadOnlyList<double> Resistances, IReadOnlyLi
     }
 }
 
+/// <summary>
+/// A Foster model of several sources: Z_ij(t) = Σ_k R_k,ij·(1 − e^{−t/τ_k}) with one set of
+/// time constants for every entry. A self impedance has R ≥ 0; a mutual one starts flat
+/// (the heat takes time to arrive) and needs residues of both signs, so the mutual chains
+/// are a behavioural model, not a network of physical parts.
+/// </summary>
+public sealed record FosterMatrix(IReadOnlyList<string> Sources, IReadOnlyList<double> TimeConstants,
+    IReadOnlyList<double[,]> Residues)
+{
+    public int Stages => TimeConstants.Count;
+
+    /// <summary>Z[at, from](t) [K/W].</summary>
+    public double Impedance(int at, int from, double time)
+    {
+        double sum = 0;
+        for (int k = 0; k < Stages; k++) sum += Residues[k][at, from] * FosterNetwork.OneMinusExp(time / TimeConstants[k]);
+        return sum;
+    }
+
+    /// <summary>Z[at, from] at t → ∞ [K/W].</summary>
+    public double Steady(int at, int from) => Enumerable.Range(0, Stages).Sum(k => Residues[k][at, from]);
+
+    /// <summary>
+    /// SPICE subcircuit with one port per source: a current of P amperes into port p_k is
+    /// source k's power, and the port's voltage above <c>amb</c> its rise in kelvin (1 A = 1 W,
+    /// 1 V = 1 K). Each source's power passes a 0 V sense; a current-controlled source copies
+    /// it into a Foster chain per (at, from) pair; voltage-controlled sources in series add
+    /// the chains' voltages at each port.
+    /// </summary>
+    public string ToSpice(string name = "ZTH_MATRIX")
+    {
+        int n = Sources.Count;
+        var text = new StringBuilder();
+        text.AppendLine($"* Foster thermal impedance matrix, {n} sources, {Stages} shared time constants");
+        text.AppendLine("* 1 A = 1 W, 1 V = 1 K. Port p<k> carries source k's power and shows its rise above amb.");
+        text.AppendLine("* " + string.Join(", ", Sources.Select((s, i) => $"p{i + 1} = {s}")));
+        text.AppendLine("* Mutual chains hold negative elements: a behavioural model, not physical parts.");
+        text.AppendLine($".SUBCKT {name} {string.Join(" ", Enumerable.Range(1, n).Select(i => $"p{i}"))} amb");
+        for (int at = 0; at < n; at++)
+        {
+            text.AppendLine($"V{at + 1} p{at + 1} s{at + 1}_0 0");
+            for (int from = 0; from < n; from++)
+            {
+                string to = from == n - 1 ? "amb" : $"s{at + 1}_{from + 1}";
+                text.AppendLine($"E{at + 1}_{from + 1} s{at + 1}_{from} {to} c{at + 1}_{from + 1}_0 amb 1");
+            }
+        }
+        for (int at = 0; at < n; at++)
+            for (int from = 0; from < n; from++)
+            {
+                string chain = $"c{at + 1}_{from + 1}";
+                text.AppendLine($"F{at + 1}_{from + 1} amb {chain}_0 V{from + 1} 1");
+                var stages = Enumerable.Range(0, Stages).Where(k => Residues[k][at, from] != 0).ToList();
+                if (stages.Count == 0)
+                {
+                    text.AppendLine($"R{at + 1}_{from + 1}_0 {chain}_0 amb 1e-12");
+                    continue;
+                }
+                for (int s = 0; s < stages.Count; s++)
+                {
+                    int k = stages[s];
+                    string a = $"{chain}_{s}", b = s == stages.Count - 1 ? "amb" : $"{chain}_{s + 1}";
+                    double r = Residues[k][at, from];
+                    text.AppendLine($"R{at + 1}_{from + 1}_{s + 1} {a} {b} {FosterNetwork.Num(r)}");
+                    text.AppendLine($"C{at + 1}_{from + 1}_{s + 1} {a} {b} {FosterNetwork.Num(TimeConstants[k] / r)}");
+                }
+            }
+        text.AppendLine($".ENDS {name}");
+        return text.ToString();
+    }
+
+    /// <summary>The residues as a table: one row per time constant, one column per (at, from).</summary>
+    public string ToCsv()
+    {
+        int n = Sources.Count;
+        var text = new StringBuilder("tau [s]");
+        for (int at = 0; at < n; at++)
+            for (int from = 0; from < n; from++)
+                text.Append($",R {Sources[at]} <- {Sources[from]} [K/W]");
+        text.Append('\n');
+        for (int k = 0; k < Stages; k++)
+        {
+            text.Append(FosterNetwork.Num(TimeConstants[k]));
+            for (int at = 0; at < n; at++)
+                for (int from = 0; from < n; from++)
+                    text.Append(',').Append(FosterNetwork.Num(Residues[k][at, from]));
+            text.Append('\n');
+        }
+        return text.ToString();
+    }
+}
+
+/// <summary>A fitted matrix model; errors are fractions of √(Z_aa·Z_ff) at the end of
+/// each entry's curve (an entry's own scale: a small mutual entry is judged against the
+/// self impedances it sits between).</summary>
+public sealed record FosterMatrixFit(FosterMatrix Network, double WorstError, double RmsError)
+{
+    public string Describe() =>
+        $"{Network.Sources.Count}-source Foster matrix, {Network.Stages} shared time constants: worst error " +
+        $"{WorstError * 100:f2} %, rms {RmsError * 100:f2} %.";
+}
+
 /// <summary>A fitted network and how well it follows the curve.</summary>
 public sealed record FosterFit(FosterNetwork Network, double WorstError, double RmsError)
 {
@@ -327,6 +429,70 @@ public static class ThermalNetworkFit
     }
 
     /// <summary>
+    /// Fits a <see cref="FosterMatrix"/> to an impedance matrix. The time constants are
+    /// shared: those of each self impedance's own Foster fit, joined by a grid of two per
+    /// decade over the curves' span (a mutual entry rises later and more steeply than any
+    /// self one, and needs time constants of its own), neighbours closer than ×1.25 merged.
+    /// Each entry's residues are then a weighted least-squares solve on those time
+    /// constants — non-negative on the diagonal, of either sign off it.
+    /// </summary>
+    public static FosterMatrixFit FitFosterMatrix(ThermalImpedanceMatrix matrix)
+    {
+        int n = matrix.Sources.Count;
+        var times = matrix[0, 0].TimesSeconds;
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                if (!matrix[i, j].TimesSeconds.SequenceEqual(times))
+                    throw new ArgumentException("The matrix's curves must share their times.");
+        var candidates = new List<double>();
+        for (int i = 0; i < n; i++) candidates.AddRange(FitFoster(times, matrix[i, i].KelvinPerWatt).Network.TimeConstants);
+        for (double tau = times[0] / 3; tau <= times[^1] * 3; tau *= Math.Sqrt(10)) candidates.Add(tau);
+        candidates.Sort();
+        var taus = new List<double>();
+        foreach (double tau in candidates)
+            if (taus.Count == 0 || tau > 1.25 * taus[^1]) taus.Add(tau);
+
+        var finals = Enumerable.Range(0, n).Select(i => Math.Max(matrix[i, i].KelvinPerWatt[^1], 1e-300)).ToArray();
+        int m = times.Count;
+        var residues = taus.Select(_ => new double[n, n]).ToList();
+        double worst = 0, squares = 0;
+        long count = 0;
+        for (int at = 0; at < n; at++)
+            for (int from = 0; from < n; from++)
+            {
+                var curve = matrix[at, from].KelvinPerWatt;
+                double scale = Math.Sqrt(finals[at] * finals[from]);
+                var a = new double[m, taus.Count];
+                var b = new double[m];
+                for (int r = 0; r < m; r++)
+                {
+                    double w = 1 / (Math.Abs(curve[r]) + 0.02 * scale);
+                    b[r] = curve[r] * w;
+                    for (int k = 0; k < taus.Count; k++) a[r, k] = FosterNetwork.OneMinusExp(times[r] / taus[k]) * w;
+                }
+                var x = at == from
+                    ? NonNegativeLeastSquares.Solve(a, b)
+                    : NonNegativeLeastSquares.LeastSquares(a, b, Enumerable.Range(0, taus.Count).ToArray());
+                for (int k = 0; k < taus.Count; k++) residues[k][at, from] = x[k];
+                for (int r = 0; r < m; r++)
+                {
+                    double model = 0;
+                    for (int k = 0; k < taus.Count; k++) model += x[k] * FosterNetwork.OneMinusExp(times[r] / taus[k]);
+                    double error = (model - curve[r]) / scale;
+                    worst = Math.Max(worst, Math.Abs(error));
+                    squares += error * error;
+                    count++;
+                }
+            }
+
+        // Time constants no entry uses are dropped.
+        double largest = residues.Max(r => r.Cast<double>().Max(Math.Abs));
+        var kept = Enumerable.Range(0, taus.Count).Where(k => residues[k].Cast<double>().Any(v => Math.Abs(v) > 1e-12 * largest)).ToList();
+        var network = new FosterMatrix(matrix.Sources, kept.Select(k => taus[k]).ToList(), kept.Select(k => residues[k]).ToList());
+        return new FosterMatrixFit(network, worst, Math.Sqrt(squares / count));
+    }
+
+    /// <summary>
     /// The Cauer ladder with the same terminal impedance as a Foster network. Z(s) is a
     /// Stieltjes function, bᵀ(sI + Λ)⁻¹b with Λ = diag(1/τᵢ) and bᵢ² = Rᵢ/τᵢ; the Lanczos
     /// recursion started from b turns Λ into the tridiagonal matrix of the ladder, and the
@@ -505,7 +671,7 @@ internal static class NonNegativeLeastSquares
     }
 
     /// <summary>Unconstrained least squares on some columns, by Householder QR.</summary>
-    private static double[] LeastSquares(double[,] a, double[] b, int[] columns)
+    internal static double[] LeastSquares(double[,] a, double[] b, int[] columns)
     {
         int m = a.GetLength(0), n = columns.Length;
         var q = new double[m, n];

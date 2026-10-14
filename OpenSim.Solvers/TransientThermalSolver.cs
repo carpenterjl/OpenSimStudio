@@ -46,6 +46,29 @@ public sealed class TransientThermalSolver : ISolver
             throw new InvalidOperationException("The initial temperature must be positive (absolute kelvin).");
         if (settings.OutputStride < 0)
             throw new InvalidOperationException("The output stride cannot be negative.");
+        if (settings.InitialState is { } start)
+        {
+            if (start.NodalTemperature.Count != input.Mesh.NodeCount)
+                throw new InvalidOperationException(
+                    $"The initial state has {start.NodalTemperature.Count} temperatures but the mesh has {input.Mesh.NodeCount} nodes.");
+            foreach (double kelvin in start.NodalTemperature)
+                if (!(kelvin > 0) || double.IsInfinity(kelvin))
+                    throw new InvalidOperationException("Every initial temperature must be positive and finite (absolute kelvin).");
+        }
+        if (settings.Integrator != TimeIntegrator.BackwardEuler)
+        {
+            if (settings.Integrator == TimeIntegrator.Adaptive && !(settings.Tolerance > 0))
+                throw new InvalidOperationException("The adaptive integrator's tolerance must be positive.");
+            string? nonlinear = input.Environment is not null ? "an environment"
+                : input.PrescribedFilmSchedule is not null ? "a film schedule"
+                : input.ElementHeatSourceSchedule is not null ? "a heat-source schedule"
+                : input.SurfaceRadiation is { Count: > 0 } ? "surface-to-surface radiation"
+                : null;
+            if (nonlinear is not null)
+                throw new InvalidOperationException(
+                    $"The {(settings.Integrator == TimeIntegrator.Adaptive ? "adaptive" : "TR-BDF2")} integrator takes linear models only, " +
+                    $"and this one has {nonlinear}. Use backward Euler.");
+        }
         settings.PowerProfile?.Validate();
         if (input.ElementHeatSourceSchedule is not null && settings.PowerProfile is { Kind: not PowerProfileKind.Constant })
             throw new InvalidOperationException(
@@ -75,14 +98,13 @@ public sealed class TransientThermalSolver : ISolver
                     $"Boundary condition '{bc.Name}' ({bc.GetType().Name}) does not apply to a thermal solve. " +
                     "Use fixed temperatures, heat fluxes, or convection.");
             BoundaryScope.Validate(bc, input.Mesh);
-            if (bc is Convection { Coefficient: <= 0 } c)
-                throw new InvalidOperationException(
-                    $"Convection '{c.Name}': the heat transfer coefficient must be positive.");
+            if (bc is Convection c) ConvectionTerms.Validate(c);
         }
 
         ScalarSolverHelpers.ValidateConductivityTensor(input);
         EnvironmentBoundaryModel.ValidateMaterials(input);
         HeatConductionSolver.ValidatePrescribedFilm(input);
+        SurfaceRadiationExchange.Validate(input);
         ThermalNetworkTerms.Validate(input);
 
         // No anchoring requirement here, unlike the steady solver: M/Δt regularizes every
@@ -106,8 +128,8 @@ public sealed class TransientThermalSolver : ISolver
         var assembler = ScalarDiffusionAssembler.Thermal(input);
         var robin = new List<ScalarDiffusionAssembler.RobinTerm>();
         foreach (var convection in input.BoundaryConditions.OfType<Convection>())
-            foreach (var t in mesh.GetFaceTriangles(convection.FaceIds))
-                robin.Add(new ScalarDiffusionAssembler.RobinTerm(t, convection.Coefficient));
+            foreach (var (t, h) in ConvectionTerms.Triangles(mesh, convection))
+                robin.Add(new ScalarDiffusionAssembler.RobinTerm(t, h));
         // Contacts enter the conduction matrix only: an interface exchanges heat, it stores none.
         var conduction = assembler.AssembleStiffness(robin, input.ThermalContacts, cancellationToken);
         // Lumped networks (parts with their capacities, an enclosure's air) are unknowns
@@ -122,7 +144,15 @@ public sealed class TransientThermalSolver : ISolver
         };
         // Which capacity matrix: the consistent one is not monotone below Δt ≈ h²/(6α).
         var (monotoneStep, tightest) = MonotoneTimeStep(input);
-        bool belowBound = dt < monotoneStep;
+        // TR-BDF2's stages solve with M/(d·h) + K, d = 1 − 1/√2; the adaptive steps are not
+        // known in advance and start small, so they count as below the bound.
+        double effectiveStep = settings.Integrator switch
+        {
+            TimeIntegrator.TrBdf2 => TrBdf2Implicit * dt,
+            TimeIntegrator.Adaptive => 0,
+            _ => dt
+        };
+        bool belowBound = effectiveStep < monotoneStep;
         bool lumped = settings.Capacity == ThermalCapacity.Lumped
                       || (settings.Capacity == ThermalCapacity.Automatic && belowBound);
         var mass = lumped
@@ -130,14 +160,19 @@ public sealed class TransientThermalSolver : ISolver
             : assembler.AssembleMass(capacity, cancellationToken);
         if (networks is not null) mass = networks.AugmentMass(mass);
         if (lumped && settings.Capacity == ThermalCapacity.Automatic)
-            log.Add($"Heat capacity: LUMPED. The time step {dt:g3} s is below {monotoneStep:g3} s " +
-                    $"(h²/6α of the {tightest}), where the consistent capacity matrix lets a node " +
-                    "next to a heated one move the wrong way first.");
+            log.Add(settings.Integrator == TimeIntegrator.Adaptive
+                ? "Heat capacity: LUMPED. The adaptive steps are not known in advance and start small, and below " +
+                  $"{monotoneStep:g3} s (h²/6α of the {tightest}) the consistent capacity matrix lets a node next to a " +
+                  "heated one move the wrong way first."
+                : $"Heat capacity: LUMPED. The {(settings.Integrator == TimeIntegrator.TrBdf2 ? "TR-BDF2 stage step" : "time step")} " +
+                  $"{effectiveStep:g3} s is below {monotoneStep:g3} s " +
+                  $"(h²/6α of the {tightest}), where the consistent capacity matrix lets a node " +
+                  "next to a heated one move the wrong way first.");
         else if (lumped)
             log.Add("Heat capacity: lumped (as set).");
         else if (belowBound)
             log.Add($"WARNING: heat capacity is the consistent matrix (as set) and the time step " +
-                    $"{dt:g3} s is below {monotoneStep:g3} s (h²/6α of the {tightest}): nodal " +
+                    $"{effectiveStep:g3} s is below {monotoneStep:g3} s (h²/6α of the {tightest}): nodal " +
                     "temperatures next to a sudden change can overshoot their bounds by about 1 % " +
                     "of the change. Use the lumped capacity or a longer step.");
 
@@ -228,13 +263,23 @@ public sealed class TransientThermalSolver : ISolver
         networks?.AddPrescribed(prescribed);
         var reduced = ConstrainedSystemSolver.Reduce(system, prescribed, allowUnconstrained: true);
 
-        // Initial state: uniform (network nodes included), except nodes held at their prescribed values.
+        // Initial state: uniform (network nodes included), or the given field and network
+        // nodes, except nodes held at their prescribed values.
         var temperature_ = new double[dofs];
         Array.Fill(temperature_, settings.InitialTemperature);
+        if (settings.InitialState is { } start)
+        {
+            for (int i = 0; i < mesh.NodeCount; i++) temperature_[i] = start.NodalTemperature[i];
+            if (start.Networks is { } startNetworks && networks is not null) networks.ApplyStart(temperature_, startNetworks);
+            log.Add($"Initial state: the given field, {start.NodalTemperature.Min():g4} … {start.NodalTemperature.Max():g4} K" +
+                    (start.Networks is { Count: > 0 } ? ", network nodes as given." : "."));
+        }
         foreach (var (node, value) in prescribed)
             temperature_[node] = value;
 
         var environment = EnvironmentBoundaryModel.Build(input, log);
+        var radiation = SurfaceRadiationExchange.Build(input, log, cancellationToken);
+        var radiationValues = radiation is null ? null : new double[radiation.Pattern.Count];
         double? AirOf(IReadOnlyList<double> state) => networks?.AirDof is not null ? networks.AirTemperature(state) : null;
         var film = filmSchedule?.Invoke(0, 0.0, temperature_) ?? prescribedFilm
                    ?? environment?.Evaluate(temperature_, ambientTemperature: AirOf(temperature_));
@@ -248,6 +293,35 @@ public sealed class TransientThermalSolver : ISolver
             Tolerance = 1e-10,
             MaxIterations = Math.Max(4 * reduced.FreeCount, 1000)
         };
+
+        if (settings.Integrator != TimeIntegrator.BackwardEuler)
+        {
+            // The linear path (Validate refused every surface model that moves with the
+            // temperature): a fixed film is part of the conduction matrix, its loads are
+            // already in the constant and ambient loads.
+            double[] LoadsOver(double from, double to)
+            {
+                if (stepLoads is null) return constantLoads;
+                var result = new double[dofs];
+                if (profile is not null)
+                {
+                    double scale = profile.Mean(from, to);
+                    for (int i = 0; i < dofs; i++) result[i] = ambientLoads![i] + scale * sourceLoads![i];
+                }
+                else Array.Copy(constantLoads, result, dofs);
+                if (varyingPowers) networks!.AddPowers(result, ScaleOver(from, to));
+                return result;
+            }
+            var breakpoints = new List<double>();
+            double end = steps * dt;
+            if (profile is not null) breakpoints.AddRange(profile.Breakpoints(end));
+            if (input.ThermalNetworks is not null)
+                foreach (var node in input.ThermalNetworks.SelectMany(n => n.Nodes))
+                    if (node.PowerProfile is { } own) breakpoints.AddRange(own.Breakpoints(end));
+            var conductionWithFilm = prescribedFilm is null ? conduction : EnvironmentThermalTerms.WithFilm(conduction, mesh, prescribedFilm);
+            return SolveHigherOrder(input, settings, log, conductionWithFilm, mass, prescribed, temperature_, frames,
+                LoadsOver, ScaleOver, networks, assembler, film, breakpoints, progress, cancellationToken);
+        }
         // On the linear path every step solves the SAME reduced matrix, so its Jacobi
         // preconditioner is built once here instead of per step. A film or environment
         // refolds the matrix each pass and gets a fresh one; the numbers are identical
@@ -258,8 +332,8 @@ public sealed class TransientThermalSolver : ISolver
         // lazily: a run with neither a schedule nor an environment must not pay for it. An
         // environment driving toward a network's unknown (an enclosure's air) couples the
         // film to that column, which the slots hold as well.
-        FilmUpdatableSystem? updatable = filmSchedule is not null || environment is not null
-            ? FilmUpdatableSystem.Prepare(system, mesh, prescribed, environment is not null ? networks?.AirDof : null)
+        FilmUpdatableSystem? updatable = filmSchedule is not null || environment is not null || radiation is not null
+            ? FilmUpdatableSystem.Prepare(system, mesh, prescribed, environment is not null ? networks?.AirDof : null, radiation?.Pattern)
             : null;
         var massTimesT = new double[dofs];
         var fullRhs = new double[dofs];
@@ -313,7 +387,7 @@ public sealed class TransientThermalSolver : ISolver
                     for (int i = 0; i < fullRhs.Length; i++)
                         fullRhs[i] = massTimesT[i] / dt + scheduledLoads[i];
                 }
-                else if (environment is null)
+                else if (environment is null && radiation is null)
                 {
                     stepSystem = reduced;
                     for (int i = 0; i < fullRhs.Length; i++)
@@ -321,13 +395,17 @@ public sealed class TransientThermalSolver : ISolver
                 }
                 else
                 {
+                    // The environment's film and the radiation exchange, both linearized at
+                    // the latest iterate.
                     double? air = AirOf(iterate);
-                    film = environment.Evaluate(iterate, tangent: true, ambientTemperature: air);
-                    updatable!.Apply(film);
+                    film = environment?.Evaluate(iterate, tangent: true, ambientTemperature: air);
+                    var filmLoads = film is null ? (double[])loads.Clone()
+                        : networks is null
+                            ? EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film)
+                            : networks.WithFilmLoads(loads, film, air ?? 0);
+                    radiation?.Linearize(iterate, radiationValues!, filmLoads);
+                    updatable!.Apply(film, radiationValues);
                     stepSystem = updatable.System;
-                    var filmLoads = networks is null
-                        ? EnvironmentThermalTerms.WithFilmLoads(loads, mesh, film)
-                        : networks.WithFilmLoads(loads, film, air ?? 0);
                     for (int i = 0; i < fullRhs.Length; i++)
                         fullRhs[i] = massTimesT[i] / dt + filmLoads[i];
                 }
@@ -366,7 +444,7 @@ public sealed class TransientThermalSolver : ISolver
                     if (accepted(n, next) && sourceAccepted) break;
                     continue;
                 }
-                if (environment is null)
+                if (environment is null && radiation is null)
                 {
                     iterate = next;
                     if (sourceAccepted) break;
@@ -378,7 +456,7 @@ public sealed class TransientThermalSolver : ISolver
                 if (picard >= 2 && change < EnvironmentThermalTerms.Threshold(iterate) && sourceAccepted) break;
                 if (picard >= EnvironmentThermalTerms.MaxTransientIterations)
                     throw new InvalidOperationException(
-                        $"Time step {n}: the environment's surface coefficients did not settle " +
+                        $"Time step {n}: the {(environment is null ? "radiation exchange" : "environment's surface coefficients")} did not settle " +
                         $"after {picard} iterations (last change {change:g3} K). Reduce the time " +
                         "step — a step that moves the surface temperature far in one go makes the " +
                         "film coefficients chase it.");
@@ -402,6 +480,10 @@ public sealed class TransientThermalSolver : ISolver
         if (couplingIterations > 0)
             log.Add($"Film schedule: {couplingIterations} coupled solves over {steps} steps " +
                     $"({(double)couplingIterations / steps:F1} per step).");
+        if (environment is null && radiation is not null)
+            log.Add($"Surface radiation: {nonlinearIterations} nonlinear iterations over {steps} steps " +
+                    $"({(double)nonlinearIterations / steps:F1} per step).");
+        if (radiation is not null) log.AddRange(radiation.Describe(temperature_));
         if (environment is not null)
         {
             log.Add($"Environment: {nonlinearIterations} nonlinear iterations over {steps} steps " +
@@ -440,6 +522,195 @@ public sealed class TransientThermalSolver : ISolver
 
     /// <summary>Cap on the solves of one step when a heat-source schedule repeats it.</summary>
     private const int MaxSourceIterations = 60;
+
+    /// <summary>TR-BDF2's stage fraction γ = 2 − √2.</summary>
+    private static readonly double TrBdf2Stage = 2 - Math.Sqrt(2);
+
+    /// <summary>d = γ/2 = 1 − 1/√2: both stages solve with M + d·h·K.</summary>
+    private static readonly double TrBdf2Implicit = 1 - 1 / Math.Sqrt(2);
+
+    /// <summary>
+    /// The linear model stepped with TR-BDF2: a trapezoidal stage to t + γh, then BDF2 to
+    /// t + h, both with the matrix M + d·h·K. The trapezoid's load is the loads' mean over
+    /// its stage and BDF2's is set so the step takes in the loads' integral exactly, so a
+    /// pulse inside a step still delivers its energy. At a fixed step this is
+    /// the run; adaptive, every step is also taken as two half steps, the difference / 3 is
+    /// the local error of the pair (second order: the halves are 2² − 1 times closer), the
+    /// pair is kept when that is within the tolerance, and the next step is scaled by
+    /// 0.9·(tolerance/error)^⅓ (between ×0.2 and ×4). Adaptive steps land on every stored
+    /// frame's time and every edge of the power profiles.
+    /// </summary>
+    private static SolveOutput SolveHigherOrder(SolveInput input, TransientThermalSettings settings, List<string> log,
+        CsrMatrix conduction, CsrMatrix mass, IReadOnlyDictionary<int, double> prescribed, double[] start,
+        List<ResultFrame> frames, Func<double, double, double[]> loadsOver,
+        Func<double, double, Func<ThermalNetworkNode, double>> scaleOver, ThermalNetworkTerms? networks,
+        ScalarDiffusionAssembler assembler, SurfaceFilmModel? film, IReadOnlyList<double> breakpoints,
+        IProgress<SolverProgress>? progress, CancellationToken cancellationToken)
+    {
+        var mesh = input.Mesh;
+        double dt = settings.TimeStep;
+        var (steps, stride) = PlanSteps(settings);
+        double end = steps * dt;
+        bool adaptive = settings.Integrator == TimeIntegrator.Adaptive;
+
+        // Prescribed temperatures are constant in time, so their columns move to the loads
+        // of K only; M's reduced block is what multiplies the rates.
+        var stiffness = ConstrainedSystemSolver.Reduce(conduction, prescribed, allowUnconstrained: true);
+        var k = stiffness.Reduced;
+        var m = ConstrainedSystemSolver.Reduce(mass, prescribed, allowUnconstrained: true).Reduced;
+        int free = stiffness.FreeCount;
+        var cg = new ConjugateGradientSolver { Tolerance = 1e-11, MaxIterations = Math.Max(4 * free, 1000) };
+        var matrices = new Dictionary<double, (CsrMatrix Matrix, double[] InverseDiagonal)>();
+        (CsrMatrix Matrix, double[] InverseDiagonal) StepMatrix(double dh)
+        {
+            if (matrices.TryGetValue(dh, out var cached)) return cached;
+            if (matrices.Count > 8) matrices.Clear();
+            var builder = new SparseMatrixBuilder(free, free);
+            AddScaled(builder, m, 1.0);
+            AddScaled(builder, k, dh);
+            var matrix = builder.Build();
+            return matrices[dh] = (matrix, ConjugateGradientSolver.BuildJacobiPreconditioner(matrix));
+        }
+
+        var work = new double[free];
+        var mTheta = new double[free];
+        var mStage = new double[free];
+        var rhs = new double[free];
+        long iterations = 0;
+        double a = 1 / (TrBdf2Stage * (2 - TrBdf2Stage));
+        double b = (1 - TrBdf2Stage) * (1 - TrBdf2Stage) * a;
+        double[] Step(double t, double h, double[] theta)
+        {
+            double dh = TrBdf2Implicit * h;
+            var (matrix, inverseDiagonal) = StepMatrix(dh);
+            // Stage loads: the trapezoid takes the mean over its stage; BDF2's load is set so
+            // the step as a whole takes in exactly the loads' integral (with K = 0 the step
+            // gives h·(a·γ·f₁ + d·f₂), which must equal h·(γ·f̄₁ + (1 − γ)·f̄₂)). For a load
+            // varying linearly that is f at t + h, which is what BDF2 wants — second order
+            // kept — and a pulse edge inside the step still delivers its energy.
+            var first = stiffness.ReduceLoads(loadsOver(t, t + TrBdf2Stage * h));
+            var secondMean = stiffness.ReduceLoads(loadsOver(t + TrBdf2Stage * h, t + h));
+            var second = new double[free];
+            for (int i = 0; i < free; i++)
+                second[i] = ((TrBdf2Stage - a * TrBdf2Stage) * first[i] + (1 - TrBdf2Stage) * secondMean[i]) / TrBdf2Implicit;
+            k.Multiply(theta, work);
+            m.Multiply(theta, mTheta);
+            for (int i = 0; i < free; i++)
+                rhs[i] = mTheta[i] - dh * work[i] + TrBdf2Stage * h * first[i];
+            var stage = (double[])theta.Clone();
+            var one = cg.Solve(matrix, rhs, stage, inverseDiagonal, cancellationToken);
+            m.Multiply(stage, mStage);
+            for (int i = 0; i < free; i++)
+                rhs[i] = a * mStage[i] - b * mTheta[i] + dh * second[i];
+            var next = (double[])stage.Clone();
+            var two = cg.Solve(matrix, rhs, next, inverseDiagonal, cancellationToken);
+            if (!one.Converged || !two.Converged)
+                throw new InvalidOperationException(
+                    $"The step to t = {t + h:g4} s did not converge (residual {Math.Max(one.ResidualNorm, two.ResidualNorm):g3}). " +
+                    "Check materials and mesh quality.");
+            iterations += one.Iterations + two.Iterations;
+            return next;
+        }
+
+        var theta = stiffness.Restrict(start);
+        int accepted = 0, rejected = 0;
+        double shortest = double.PositiveInfinity, longest = 0, worstError = 0;
+        void Store(double time, double lastStep)
+        {
+            var full = stiffness.Expand(theta);
+            frames.Add(MakeFrame(time, full, mesh, assembler, input, film, networks, scaleOver(time - lastStep, time)));
+        }
+
+        if (!adaptive)
+        {
+            for (int n = 1; n <= steps; n++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                theta = Step((n - 1) * dt, dt, theta);
+                accepted++;
+                if (n % stride == 0 || n == steps) Store(n * dt, dt);
+                progress?.Report(new SolverProgress($"Time step {n}/{steps}", 0.05 + 0.95 * n / steps));
+            }
+            log.Add($"TR-BDF2: {steps} steps of Δt = {dt:g4} s to t = {end:g4} s ({iterations} CG iterations total); " +
+                    $"{frames.Count} frames stored.");
+        }
+        else
+        {
+            // Landing points: the stored frames' times and the profiles' edges.
+            var outputs = Enumerable.Range(1, steps).Where(n => n % stride == 0 || n == steps).Select(n => n * dt).ToList();
+            var targets = outputs.Concat(breakpoints.Where(x => x > 0 && x < end)).Distinct().OrderBy(x => x).ToList();
+            var stored = new HashSet<double>(outputs);
+            double tolerance = settings.Tolerance;
+            double t = 0, h = Math.Min(dt, end) / 8, minimum = end * 1e-10;
+            foreach (double target in targets)
+            {
+                double lastStep = 0;
+                while (target - t > 1e-12 * end)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    double step = Math.Min(h, target - t);
+                    bool clipped = step < h;
+                    var whole = Step(t, step, theta);
+                    var half = Step(t, 0.5 * step, theta);
+                    var pair = Step(t + 0.5 * step, 0.5 * step, half);
+                    double error = 0;
+                    for (int i = 0; i < free; i++) error = Math.Max(error, Math.Abs(pair[i] - whole[i]));
+                    error /= 3;
+                    double factor = error > 0 ? Math.Clamp(0.9 * Math.Cbrt(tolerance / error), 0.2, 4) : 4;
+                    if (error <= tolerance)
+                    {
+                        theta = pair;
+                        t = target - t - step <= 1e-12 * end ? target : t + step;
+                        accepted++;
+                        lastStep = step;
+                        shortest = Math.Min(shortest, step);
+                        longest = Math.Max(longest, step);
+                        worstError = Math.Max(worstError, error);
+                        h = clipped ? Math.Max(h, step * factor) : step * factor;
+                    }
+                    else
+                    {
+                        if (step <= minimum)
+                            throw new InvalidOperationException(
+                                $"The adaptive step fell to {step:g3} s at t = {t:g4} s with the error still {error:g3} K " +
+                                $"over the tolerance {tolerance:g3} K. Loosen the tolerance or use a fixed step.");
+                        rejected++;
+                        h = step * factor;
+                    }
+                }
+                if (stored.Contains(target)) Store(target, lastStep);
+                progress?.Report(new SolverProgress($"t = {t:g4} s", 0.05 + 0.95 * t / end));
+            }
+            log.Add($"Adaptive TR-BDF2: {accepted} steps accepted, {rejected} rejected, from {shortest:g3} s to " +
+                    $"{longest:g3} s, to t = {end:g4} s; tolerance {tolerance:g3} K per step (largest estimate " +
+                    $"{worstError:g3} K); {iterations} CG iterations; {frames.Count} frames stored.");
+        }
+
+        var final = stiffness.Expand(theta);
+        var meshFinal = networks is null ? final : networks.MeshPart(final);
+        double min = meshFinal.Min(), max = meshFinal.Max();
+        log.Add($"Final temperature range: {min:g4} … {max:g4} K.");
+        if (frames[^1].Networks is { } finalStates)
+            foreach (var state in finalStates)
+                log.Add($"Thermal network '{state.Network}' at the end: " + string.Join(", ",
+                    state.Nodes.Select((name, i) => $"{name} {state.Kelvin[i]:F2} K")) + ".");
+        progress?.Report(new SolverProgress("Done", 1.0));
+        return new SolveOutput
+        {
+            Fields = frames[^1].Fields,
+            Log = log,
+            Frames = frames,
+            FrameAxis = "Time",
+            Networks = frames[^1].Networks,
+            Summary = new Dictionary<string, double>
+            {
+                ["Final min temperature (K)"] = min,
+                ["Final max temperature (K)"] = max,
+                ["Time steps"] = accepted,
+                ["End time (s)"] = end
+            }
+        };
+    }
 
     /// <summary>The loads plus the consistent nodal loads q·V/4 of an element source.</summary>
     private static double[] WithSource(double[] loads, FeMesh mesh, IReadOnlyList<double> source)

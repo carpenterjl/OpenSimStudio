@@ -130,13 +130,7 @@ public partial class SolveViewModel : ObservableObject
             BoundaryConditions = conditions,
             RegionMaterials = regionMaterials,
             TransientThermal = transientRequested
-                ? new TransientThermalSettings
-                {
-                    InitialTemperature = InitialTemperature,
-                    Duration = TransientDuration,
-                    TimeStep = TransientTimeStep,
-                    PowerProfile = BuildPowerProfile()
-                }
+                ? BuildTransientSettings()
                 : null,
             Modal = kind == AnalysisType.Modal ? new ModalSettings { ModeCount = ModeCount } : null,
             HarmonicElectric = kind == AnalysisType.AcElectrical
@@ -414,13 +408,7 @@ public partial class SolveViewModel : ObservableObject
                         ThermalContacts = contacts,
                         Environment = environment,
                         TransientThermal = transient
-                            ? new TransientThermalSettings
-                            {
-                                InitialTemperature = InitialTemperature,
-                                Duration = TransientDuration,
-                                TimeStep = TransientTimeStep,
-                                PowerProfile = BuildPowerProfile()
-                            }
+                            ? BuildTransientSettings()
                             : null
                     };
                     solver.Validate(built);
@@ -564,13 +552,7 @@ public partial class SolveViewModel : ObservableObject
                         // Environment stays NULL on purpose: the conjugate study supplies
                         // the surface exchange itself through the prescribed film.
                         TransientThermal = transient
-                            ? new TransientThermalSettings
-                            {
-                                InitialTemperature = InitialTemperature,
-                                Duration = TransientDuration,
-                                TimeStep = TransientTimeStep,
-                                PowerProfile = BuildPowerProfile()
-                            }
+                            ? BuildTransientSettings()
                             : null
                     };
                     return (merged, built, lines);

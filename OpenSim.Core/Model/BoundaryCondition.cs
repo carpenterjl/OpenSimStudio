@@ -174,9 +174,63 @@ public sealed record HeatFlux : BoundaryCondition
 /// </summary>
 public sealed record Convection : BoundaryCondition
 {
-    /// <summary>Heat transfer coefficient h [W/(m²·K)].</summary>
+    /// <summary>Heat transfer coefficient h [W/(m²·K)]: everywhere on the faces, or with a
+    /// <see cref="Profile"/> the faces' mean (a developing boundary layer) or the base its
+    /// factors multiply.</summary>
     public required double Coefficient { get; init; }
 
     /// <summary>Ambient temperature [K].</summary>
     public required double AmbientTemperature { get; init; }
+
+    /// <summary>How h varies over the faces (a boundary layer growing along a board, the
+    /// wakes behind parts). Null: uniform, as it always was.</summary>
+    public ConvectionProfile? Profile { get; init; }
 }
+
+/// <summary>
+/// The variation of a convection coefficient over its faces, along a flow. Distance x is
+/// measured downstream of <see cref="LeadingEdge"/> along <see cref="FlowDirection"/>.
+/// The local coefficient is
+/// <c>h(x) = Coefficient · g(x) · table(x) · Π wakes</c>, each factor 1 when not given:
+/// <list type="bullet">
+/// <item>g, the boundary layer's development: h ∝ x^<see cref="Exponent"/>, scaled so the
+/// faces' area-mean of Coefficient·g is Coefficient (−½ for a laminar layer, about −⅕ for a
+/// turbulent one). Each triangle takes the law's exact mean over its area (the
+/// singularity at the leading edge is integrable); upstream of the edge x counts as 0.</item>
+/// <item>table, a factor against x (straight lines between the points, flat beyond them).</item>
+/// <item>a wake: behind a part, a band of the flow's direction narrower than
+/// <see cref="ConvectionWake.HalfWidth"/> either side of the part's axis, the factor
+/// rising from <see cref="ConvectionWake.Factor"/> just behind the part to 1 at
+/// <see cref="ConvectionWake.Length"/> downstream.</item>
+/// </list>
+/// Each triangle takes the mean of h over its area. The shapes are the user's: the
+/// profile carries no correlation of its own.
+/// </summary>
+public sealed record ConvectionProfile
+{
+    /// <summary>Where the flow meets the surface first [m].</summary>
+    public required Vector3D LeadingEdge { get; init; }
+
+    /// <summary>The direction the flow runs (normalized when used).</summary>
+    public required Vector3D FlowDirection { get; init; }
+
+    /// <summary>Boundary-layer development, h ∝ x^Exponent with the faces' mean held at
+    /// <see cref="Convection.Coefficient"/>; must lie in (−1, 0]. Null: none.</summary>
+    public double? Exponent { get; init; }
+
+    /// <summary>Downstream distances [m] of a factor table, rising.</summary>
+    public IReadOnlyList<double>? Distances { get; init; }
+
+    /// <summary>The table's factors, one per distance.</summary>
+    public IReadOnlyList<double>? Factors { get; init; }
+
+    /// <summary>Wakes behind parts.</summary>
+    public IReadOnlyList<ConvectionWake> Wakes { get; init; } = Array.Empty<ConvectionWake>();
+}
+
+/// <summary>A part's wake on a convecting surface: from <paramref name="Position"/> (the
+/// part's footprint centre) downstream for <paramref name="Length"/> [m], within
+/// <paramref name="HalfWidth"/> [m] of the axis through the position along the flow, the
+/// coefficient is multiplied by <paramref name="Factor"/> just behind the part, recovering
+/// linearly to 1 at the wake's end.</summary>
+public sealed record ConvectionWake(Vector3D Position, double HalfWidth, double Length, double Factor);

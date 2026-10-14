@@ -97,6 +97,13 @@ public sealed record SolveInput
     public EnvironmentSettings? Environment { get; init; }
 
     /// <summary>
+    /// Radiation exchanged among faces that see each other, with view factors from the
+    /// geometry (<see cref="Model.SurfaceRadiation"/>). Consumed by the steady and
+    /// transient thermal solvers and the thermal impedance; null leaves every path as it was.
+    /// </summary>
+    public IReadOnlyList<SurfaceRadiation>? SurfaceRadiation { get; init; }
+
+    /// <summary>
     /// An externally computed surface film — the CFD stage's wall heat flux expressed as
     /// the SAME record the Stage 1 correlations produce. When set, the thermal solvers
     /// apply it as a FIXED Robin exchange (per-triangle h and reference temperature)

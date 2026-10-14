@@ -550,6 +550,27 @@ internal sealed class ThermalNetworkTerms
         return full;
     }
 
+    /// <summary>Sets the unknowns of the named network nodes in a full-length vector to the
+    /// given states' temperatures — a transient's start. Fixed nodes keep their value and
+    /// nodes tied to faces follow the faces, so neither is written.</summary>
+    public void ApplyStart(double[] full, IReadOnlyList<ThermalNetworkState> states)
+    {
+        foreach (var state in states)
+        {
+            int k = IndexOfNetwork(state.Network);
+            for (int s = 0; s < state.Nodes.Count; s++)
+            {
+                int i = _networks[k].IndexOf(state.Nodes[s]);
+                if (i < 0)
+                    throw new InvalidOperationException(
+                        $"The initial state names node '{state.Nodes[s]}', which thermal network '{state.Network}' does not have.");
+                var group = _groups[_groupOf[k][i]];
+                if (group.Dof < 0 || group.Tied is not null || group.Fixed is not null) continue;
+                full[group.Dof] = state.Kelvin[s];
+            }
+        }
+    }
+
     /// <summary>The weights that read a node's temperature from a full-length vector: its
     /// unknown, or its faces' area mean when tied.</summary>
     public IReadOnlyList<(int Dof, double Weight)> ProbeWeights(string network, string node)
