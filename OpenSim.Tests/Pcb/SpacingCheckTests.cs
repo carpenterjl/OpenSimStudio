@@ -35,11 +35,14 @@ public class SpacingCheckTests
             return this;
         }
 
+        public List<Polygon2> TopMask { get; } = new();
+
         public PcbBoard Build(int layers = 2) => new()
         {
             Outline = Outline, Islands = _islands, Pads = Array.Empty<CopperPad>(), Vias = Array.Empty<Via>(),
             Nets = _order.Select((n, i) => new CopperNet(i + 1, _nets[n]) { Name = n }).ToList(),
             Layers = Array.Empty<BoardLayer>(), Warnings = Array.Empty<string>(),
+            TopMaskOpenings = TopMask,
             Stackup = new OpenSim.Core.Model.PcbStackupSettings
             {
                 DielectricGapThicknesses = Enumerable.Repeat(0.2e-3, layers - 1).ToList(),
@@ -249,5 +252,163 @@ public class SpacingCheckTests
         Assert.Equal(0.3 * Mm, f.MeasuredMeters, 1e-12);
         Assert.Equal(0.6 * Mm, f.RequiredMeters, 1e-12);
         Assert.False(f.Passes);
+    }
+
+    [Fact]
+    public void Creepage_FollowsATruePolygon_WhereAHullWouldSwallowThePad()
+    {
+        // Pad A sits in the mouth of a U-shaped cutout (bar x 3.5..4.5, feet x 1..3.5 at the top and
+        // bottom); B is beyond the bar. The U's convex hull covers A, so a hull could not follow any
+        // path; the true polygon lets the path leave the mouth: from A's top edge at (1,2) up to
+        // (1,4), (1,5), along to (4.5,5), down to B's corner (6,2) = 2 + 1 + 3.5 + √11.25 = 9.854 mm.
+        var u = new[]
+        {
+            new Point2(1 * Mm, -3 * Mm), new Point2(4.5 * Mm, -3 * Mm), new Point2(4.5 * Mm, 5 * Mm), new Point2(1 * Mm, 5 * Mm),
+            new Point2(1 * Mm, 4 * Mm), new Point2(3.5 * Mm, 4 * Mm), new Point2(3.5 * Mm, -2 * Mm), new Point2(1 * Mm, -2 * Mm)
+        };
+        var builder = new Builder()
+            .Copper("A", 1, Rect(0, 0, 2 * Mm, 2 * Mm))
+            .Copper("B", 1, Rect(6 * Mm, 0, 8 * Mm, 2 * Mm));
+        builder.Outline.Add(new Polygon2(Rect(-5 * Mm, -7 * Mm, 13 * Mm, 9 * Mm).Outer, new[] { u.Reverse().ToList() }));
+        var report = SpacingChecker.Check(builder.Build(), new Dictionary<string, double> { ["A"] = 0, ["B"] = 1000 });
+        _out.WriteLine(string.Join("\n", report.Describe()));
+        Assert.Equal(2, report.Findings.Count);
+        var creepage = report.Findings.Single(f => f.Kind == SpacingKind.Creepage);
+        Assert.Equal((2 + 1 + 3.5 + Math.Sqrt(11.25)) * Mm, creepage.MeasuredMeters, 1e-9 * Mm);
+        Assert.True(creepage.Passes);
+        Assert.DoesNotContain(report.Notes, n => n.Contains("was not followed"));
+
+        // The path primitive through the same mouth, from a point inside it.
+        double path = SpacingChecker.SurfacePath(new Point2(2, 1), new Point2(6, 1),
+            new[] { u.Select(p => p * (1 / Mm)).ToList() });
+        Assert.Equal(Math.Sqrt(10) + 1 + 3.5 + Math.Sqrt(2.25 + 16), path, 1e-9);
+        // A segment that merely runs along a cutout edge is not blocked: (1,4)→(1,5) is the edge itself.
+        Assert.Equal(1, SpacingChecker.SurfacePath(new Point2(1, 4), new Point2(1, 5), new[] { u.Select(p => p * (1 / Mm)).ToList() }), 1e-12);
+    }
+
+    [Fact]
+    public void Creepage_OverTheBoardEdge_ToTheOtherSide()
+    {
+        // A on L1 at x 0..2, B on L2 at x 3..5, both y 0..2; the board edge runs along y = −1.
+        // The best crossing is at x = 2.5: 2·√(1 + 0.5²) of runs plus the board's 0.27 mm.
+        var builder = new Builder()
+            .Copper("A", 1, Rect(0, 0, 2 * Mm, 2 * Mm))
+            .Copper("B", 2, Rect(3 * Mm, 0, 5 * Mm, 2 * Mm));
+        builder.Outline.Add(Rect(-5 * Mm, -1 * Mm, 13 * Mm, 9 * Mm));
+        var board = builder.Build();
+        double thickness = 2 * 35e-6 + 0.2e-3;
+
+        var report = SpacingChecker.Check(board, new Dictionary<string, double> { ["A"] = 0, ["B"] = 1000 });
+        _out.WriteLine(string.Join("\n", report.Describe()));
+        var edge = Assert.Single(report.Findings);
+        Assert.Equal(SpacingKind.EdgeCreepage, edge.Kind);
+        Assert.Equal(2 * Math.Sqrt(1.25) * Mm + thickness, edge.MeasuredMeters, 1e-7 * Mm);
+        Assert.Equal(2.5 * Mm, edge.At.X, 1e-6 * Mm);
+        Assert.Equal(-1 * Mm, edge.At.Y, 1e-12);
+        Assert.Equal(1, edge.Layer);
+        Assert.Equal(2, edge.OtherLayer);
+        Assert.Equal(5 * Mm, edge.RequiredMeters, 1e-12);
+        Assert.False(edge.Passes);
+        Assert.Contains("over the board edge from L1 to L2", edge.Message);
+
+        // Switched off, or the edge far away: nothing listed.
+        Assert.Empty(SpacingChecker.Check(board, new Dictionary<string, double> { ["A"] = 0, ["B"] = 1000 },
+            new SpacingCheckOptions { CheckBoardEdge = false }).Findings);
+        var far = new Builder()
+            .Copper("A", 1, Rect(0, 0, 2 * Mm, 2 * Mm))
+            .Copper("B", 2, Rect(3 * Mm, 0, 5 * Mm, 2 * Mm));
+        far.Outline.Add(Rect(-5 * Mm, -10 * Mm, 13 * Mm, 9 * Mm));
+        Assert.Empty(SpacingChecker.Check(far.Build(), new Dictionary<string, double> { ["A"] = 0, ["B"] = 1000 }).Findings);
+    }
+
+    [Fact]
+    public void SolderMask_PicksTheCoatedColumn_WhereItCoversBothEdges()
+    {
+        // The 0.5 mm gap at 300 V: B2 asks 1.25 mm (fails), B4 0.4 mm (passes). The mask decides.
+        Builder Pads() => new Builder()
+            .Copper("A", 1, Rect(0, 0, 10 * Mm, 5 * Mm))
+            .Copper("B", 1, Rect(10.5 * Mm, 0, 20 * Mm, 5 * Mm));
+        var volts = new Dictionary<string, double> { ["A"] = 0, ["B"] = 300 };
+        var options = new SpacingCheckOptions { CoatedOuterColumn = "B4" };
+
+        var covered = Pads();
+        covered.TopMask.Add(Rect(1 * Mm, 1 * Mm, 2 * Mm, 2 * Mm));          // an opening away from the gap
+        var coated = SpacingChecker.Check(covered.Build(), volts, options);
+        _out.WriteLine(string.Join("\n", coated.Describe()));
+        var f = Assert.Single(coated.Findings);
+        Assert.Equal("B4", f.Column);
+        Assert.Equal(0.4 * Mm, f.RequiredMeters, 1e-12);
+        Assert.True(f.Passes);
+        Assert.Contains(coated.Notes, n => n.Contains("1 pair(s)") && n.Contains("B4"));
+
+        var exposed = Pads();
+        exposed.TopMask.Add(Rect(9 * Mm, 0, 10.2 * Mm, 5 * Mm));             // A's edge is bare
+        f = Assert.Single(SpacingChecker.Check(exposed.Build(), volts, options).Findings);
+        Assert.Equal("B2", f.Column);
+        Assert.False(f.Passes);
+
+        // No mask layer in the set: the coated column is not applied, and the notes say so.
+        var unknown = SpacingChecker.Check(Pads().Build(), volts, options);
+        Assert.Equal("B2", Assert.Single(unknown.Findings).Column);
+        Assert.Contains(unknown.Notes, n => n.Contains("no solder-mask layers"));
+    }
+
+    [Fact]
+    public void GerberProfile_KeepsItsCutout_AndTheMaskLayerIsRead()
+    {
+        // A 20 × 10 mm outline stroked with a 0.1 mm pen, a stroked 2 × 6 mm cutout at x 9..11, two pads
+        // either side of it, and a top mask with one opening over pad A.
+        const string header = "%FSLAX46Y46*%\n%MOMM*%\n";
+        static string Ring(double x0, double y0, double x1, double y1)
+        {
+            long X(double v) => (long)Math.Round(v * 1e6);
+            return $"X{X(x0)}Y{X(y0)}D02*\nX{X(x1)}Y{X(y0)}D01*\nX{X(x1)}Y{X(y1)}D01*\nX{X(x0)}Y{X(y1)}D01*\nX{X(x0)}Y{X(y0)}D01*\n";
+        }
+        string profile = "%TF.FileFunction,Profile,NP*%\n" + header + "%ADD10C,0.1*%\nD10*\n" + Ring(0, 0, 20, 10) + Ring(9, 2, 11, 8) + "M02*";
+        string top = "%TF.FileFunction,Copper,L1,Top,Signal*%\n" + header + "%ADD10R,2.0X2.0*%\nD10*\n" +
+                     "%TO.N,A*%\nX7000000Y5000000D03*\n%TO.N,B*%\nX13000000Y5000000D03*\n%TD*%\nM02*";
+        string bottom = "%TF.FileFunction,Copper,L2,Bot,Signal*%\n" + header + "%ADD10R,2.0X2.0*%\nD10*\n" +
+                        "%TO.N,G*%\nX3000000Y8000000D03*\n%TD*%\nM02*";
+        string mask = "%TF.FileFunction,Soldermask,Top*%\n" + header + "%ADD10R,2.2X2.2*%\nD10*\nX7000000Y5000000D03*\nM02*";
+        string dir = Path.Combine(Path.GetTempPath(), "opensim-spacing-gerber-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        PcbBoard board;
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "profile.gbr"), profile);
+            File.WriteAllText(Path.Combine(dir, "top.gbr"), top);
+            File.WriteAllText(Path.Combine(dir, "bottom.gbr"), bottom);
+            File.WriteAllText(Path.Combine(dir, "mask-top.gbr"), mask);
+            board = new PcbBoardReader().Read(dir);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        _out.WriteLine(string.Join("\n", board.Warnings));
+
+        var outline = Assert.Single(board.Outline);
+        var hole = Assert.Single(outline.Holes);
+        // The board reaches the stroke's outer edge, the cutout its inner edge.
+        Assert.Equal(-0.05 * Mm, outline.Outer.Min(p => p.X), 1e-6 * Mm);
+        Assert.Equal(20.05 * Mm, outline.Outer.Max(p => p.X), 1e-6 * Mm);
+        Assert.Equal(9.05 * Mm, hole.Min(p => p.X), 1e-6 * Mm);
+        Assert.Equal(10.95 * Mm, hole.Max(p => p.X), 1e-6 * Mm);
+        Assert.Equal(2.05 * Mm, hole.Min(p => p.Y), 1e-6 * Mm);
+        Assert.Equal(7.95 * Mm, hole.Max(p => p.Y), 1e-6 * Mm);
+        var opening = Assert.Single(board.TopMaskOpenings);
+        Assert.Equal(2.2 * Mm * 2.2 * Mm, opening.Area(), 1e-9 * Mm * Mm);
+        Assert.Empty(board.BottomMaskOpenings);
+
+        // The checker now sees the cutout: pads (y 4..6) 4 mm apart across a cutout reaching y 7.95 →
+        // the path rounds the cutout's top corners: 2·√(1.05² + 1.95²) + 1.9 = 6.329 mm.
+        var report = SpacingChecker.Check(board, new Dictionary<string, double> { ["A"] = 0, ["B"] = 1000, ["G"] = 0 },
+            new SpacingCheckOptions { CoatedOuterColumn = "B4" });
+        _out.WriteLine(string.Join("\n", report.Describe()));
+        var creepage = report.Findings.Single(f => f.Kind == SpacingKind.Creepage);
+        Assert.Equal((2 * Math.Sqrt(1.05 * 1.05 + 1.95 * 1.95) + 1.9) * Mm, creepage.MeasuredMeters, 1e-6 * Mm);
+        var clearance = report.Findings.Single(f => f.Kind == SpacingKind.Clearance && f.NetA == "A" && f.NetB == "B");
+        Assert.Equal(4 * Mm, clearance.MeasuredMeters, 1e-9 * Mm);
+        Assert.Equal("B2", clearance.Column);                                   // A's edge lies in its mask opening
     }
 }

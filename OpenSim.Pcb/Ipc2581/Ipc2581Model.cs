@@ -153,6 +153,10 @@ public sealed class Ipc2581Board
     /// <summary>Routed slots/cavities, aggregated by name across their per-layer occurrences.</summary>
     public IReadOnlyList<Ipc2581SlotCavity> Slots { get; init; } = Array.Empty<Ipc2581SlotCavity>();
 
+    /// <summary>The features of each SOLDERMASK layer (its openings), by layer name, on a
+    /// pseudo-net named after the layer; empty when the file has no mask layers.</summary>
+    public IReadOnlyDictionary<string, Ipc2581Net> MaskLayers { get; init; } = new Dictionary<string, Ipc2581Net>();
+
     /// <summary>Conductor layers in stackup order (CopperOrder 1..N).</summary>
     public IReadOnlyList<Ipc2581Layer> ConductorLayers =>
         Layers.Where(l => l.IsConductor).OrderBy(l => l.CopperOrder).ToList();

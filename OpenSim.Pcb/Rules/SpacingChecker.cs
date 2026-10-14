@@ -1,6 +1,5 @@
 using System.Globalization;
 using OpenSim.Core.Geometry2D;
-using OpenSim.Pcb.Geometry2D;
 using OpenSim.Pcb.Import;
 
 namespace OpenSim.Pcb.Rules;
@@ -17,17 +16,27 @@ public enum SpacingKind
 
     /// <summary>Copper of two nets facing each other across a dielectric gap: the spacing
     /// is the gap thickness.</summary>
-    LayerToLayer
+    LayerToLayer,
+
+    /// <summary>The shortest path along the surface from copper on one outer layer, over the
+    /// board edge (or down a cutout's wall), to copper on the other outer layer: the run to
+    /// the edge on one side, the board's thickness, and the run from the edge on the other.</summary>
+    EdgeCreepage
 }
 
 /// <summary>One measured spacing against its requirement.</summary>
-/// <param name="Layer">The layer; for <see cref="SpacingKind.LayerToLayer"/> the upper of the two.</param>
+/// <param name="Layer">The layer; for <see cref="SpacingKind.LayerToLayer"/> the upper of the two;
+/// for <see cref="SpacingKind.EdgeCreepage"/> the first net's layer.</param>
 /// <param name="Volts">The working voltage between the two nets the requirement was read at.</param>
-/// <param name="At">Where the spacing is smallest (on the first net's copper).</param>
+/// <param name="At">Where the spacing is smallest (on the first net's copper; for
+/// <see cref="SpacingKind.EdgeCreepage"/> the point on the board edge the path crosses).</param>
 /// <param name="Column">The table column the requirement came from.</param>
 public sealed record SpacingFinding(SpacingKind Kind, string NetA, string NetB, int Layer, double Volts,
     double MeasuredMeters, double RequiredMeters, Point2 At, string Column)
 {
+    /// <summary>For <see cref="SpacingKind.EdgeCreepage"/>, the second net's layer; 0 otherwise.</summary>
+    public int OtherLayer { get; init; }
+
     public bool Passes => MeasuredMeters >= RequiredMeters * (1 - 1e-9);
     public double MarginMeters => MeasuredMeters - RequiredMeters;
 
@@ -40,6 +49,7 @@ public sealed record SpacingFinding(SpacingKind Kind, string NetA, string NetB, 
             {
                 SpacingKind.Clearance => $"clearance on L{Layer}",
                 SpacingKind.Creepage => $"creepage on L{Layer} around a cutout",
+                SpacingKind.EdgeCreepage => $"creepage over the board edge from L{Layer} to L{OtherLayer}",
                 _ => $"dielectric between L{Layer} and L{Layer + 1}"
             };
             return $"{(Passes ? "ok  " : "FAIL")} {NetA} ↔ {NetB} at {Volts.ToString("g4", ci)} V: {what} " +
@@ -62,8 +72,17 @@ public sealed record SpacingCheckOptions
     /// <summary>Column for copper on inner layers and across dielectric gaps (IPC-2221: B1).</summary>
     public string InnerColumn { get; init; } = "B1";
 
-    /// <summary>Column a creepage path around a cutout is held to; null uses the outer column.</summary>
+    /// <summary>Column a creepage path around a cutout or over the board edge is held to;
+    /// null uses the outer column.</summary>
     public string? CreepageColumn { get; init; }
+
+    /// <summary>
+    /// Column for an outer-layer pair whose closest copper edges the solder mask covers on both
+    /// sides (IPC-2221: B4, permanent polymer coating), read from the board's mask openings:
+    /// a copper edge inside an opening is exposed and the pair stays on <see cref="OuterColumn"/>.
+    /// Null, or a board without mask layers, applies <see cref="OuterColumn"/> to every outer pair.
+    /// </summary>
+    public string? CoatedOuterColumn { get; init; }
 
     /// <summary>Layer and gap thicknesses. Null is the board file's stackup completed with defaults.</summary>
     public BoardStackup? Stackup { get; init; }
@@ -75,6 +94,10 @@ public sealed record SpacingCheckOptions
 
     /// <summary>Follow the surface path around board cutouts on the outer layers.</summary>
     public bool CheckCutouts { get; init; } = true;
+
+    /// <summary>Follow the surface over the board edge (and down cutout walls) from one outer
+    /// layer to the other.</summary>
+    public bool CheckBoardEdge { get; init; } = true;
 }
 
 public sealed record SpacingReport(IReadOnlyList<SpacingFinding> Findings, IReadOnlyList<string> Notes, SpacingTable Table)
@@ -98,16 +121,21 @@ public sealed record SpacingReport(IReadOnlyList<SpacingFinding> Findings, IRead
 /// the copper of every net with a working voltage is measured against every other.
 /// <list type="bullet">
 /// <item><b>Clearance</b>: on each layer, the shortest distance between the copper edges of
-/// two nets, against the outer or inner column at the voltage between them.</item>
+/// two nets, against the outer or inner column at the voltage between them. On an outer
+/// layer of a board with solder mask, a pair whose closest edges the mask covers takes the
+/// coated column when one is given.</item>
 /// <item><b>Creepage</b>: on the outer layers, where the straight line between the two
-/// closest points crosses a board cutout, the shortest path around the cutout (taken as its
-/// convex hull) — the path a surface current would have to take. Reported only where it is
-/// longer than the clearance; slots are what a designer adds to gain creepage.</item>
+/// closest points crosses a board cutout, the shortest path around the cutout's true outline
+/// — the path a surface current would have to take. Reported only where it is longer than
+/// the clearance; slots are what a designer adds to gain creepage.</item>
 /// <item><b>Layer to layer</b>: copper of two nets overlapping across a dielectric gap,
 /// against the inner column with the gap thickness as the spacing.</item>
+/// <item><b>Over the edge</b>: copper on one outer layer to copper on the other by way of
+/// the board edge or a cutout's wall — the run to the edge, the board's thickness, the run
+/// from the edge — minimised over the crossing point.</item>
 /// </list>
-/// Solder mask and conformal coating are not modelled: choose the coated column when the
-/// board has them. The voltage is whatever the table is defined in (IPC-2221: peak).
+/// Conformal coating is not in the layout: choose the coated column for a coated board. The
+/// voltage is whatever the table is defined in (IPC-2221: peak).
 /// </summary>
 public static class SpacingChecker
 {
@@ -121,6 +149,9 @@ public static class SpacingChecker
         public PolygonSetIndex? Inside;
     }
 
+    /// <summary>Spacing of the points sampled along a board edge before the crossing point is refined.</summary>
+    private const double EdgeSampleSpacing = 0.05e-3;
+
     public static SpacingReport Check(PcbBoard board, IReadOnlyDictionary<string, double> netVolts,
         SpacingCheckOptions? options = null)
     {
@@ -132,6 +163,7 @@ public static class SpacingChecker
         int outer = table.ColumnIndex(options.OuterColumn);
         int inner = table.ColumnIndex(options.InnerColumn);
         int creepage = table.ColumnIndex(options.CreepageColumn ?? options.OuterColumn);
+        int coated = options.CoatedOuterColumn is null ? -1 : table.ColumnIndex(options.CoatedOuterColumn);
         var stackup = options.Stackup ?? BoardStackup.FromBoard(board);
 
         var findings = new List<SpacingFinding>();
@@ -163,12 +195,20 @@ public static class SpacingChecker
 
         var cutouts = options.CheckCutouts ? Cutouts(board) : new List<IReadOnlyList<Point2>>();
 
+        // Solder mask: the openings of each side, when the board carries them.
+        var topMask = board.TopMaskOpenings.Count > 0 ? new PolygonSetIndex(board.TopMaskOpenings) : null;
+        var bottomMask = board.BottomMaskOpenings.Count > 0 ? new PolygonSetIndex(board.BottomMaskOpenings) : null;
+        PolygonSetIndex? MaskOf(int layer) => layer == 1 ? topMask : layer == layerCount ? bottomMask : null;
+        bool maskUsed = coated >= 0 && (topMask is not null || bottomMask is not null);
+        int coatedPairs = 0;
+
         // ---- Clearance (and creepage) on each layer.
         foreach (var group in islands.GroupBy(i => i.Copper.LayerOrder).OrderBy(g => g.Key))
         {
             int layer = group.Key;
             int column = IsOuter(layer) ? outer : inner;
             var list = group.ToList();
+            var mask = coated >= 0 && IsOuter(layer) ? MaskOf(layer) : null;
 
             // The largest cutoff on the layer sets the grid cell, so every query radius fits.
             double cell = 0;
@@ -182,6 +222,7 @@ public static class SpacingChecker
                     double dv = Math.Abs(a.Volts - b.Volts);
                     if (dv <= 0) continue;
                     double r = table.Required(dv, column);
+                    if (mask is not null) r = Math.Max(r, table.Required(dv, coated));
                     required[key] = r;
                     cell = Math.Max(cell, r * options.ReportWithinFactor);
                 }
@@ -209,10 +250,15 @@ public static class SpacingChecker
             foreach (var ((netA, netB), (dist, pa, pb)) in best)
             {
                 double dv = Math.Abs(list.First(x => x.Net == netA).Volts - list.First(x => x.Net == netB).Volts);
+                // The mask covers the pair when neither closest edge point lies in an opening.
+                int pairColumn = column;
+                if (mask is not null && !mask.Contains(pa) && !mask.Contains(pb)) { pairColumn = coated; coatedPairs++; }
+                double pairRequired = table.Required(dv, pairColumn);
+                if (dist >= pairRequired * options.ReportWithinFactor) continue;
                 findings.Add(new SpacingFinding(SpacingKind.Clearance, netA, netB, layer, dv, dist,
-                    required[(netA, netB)], pa, table.Columns[column]));
+                    pairRequired, pa, table.Columns[pairColumn]));
                 if (!IsOuter(layer) || cutouts.Count == 0) continue;
-                if (!cutouts.Any(c => Crosses(pa, pb, c))) continue;
+                if (!cutouts.Any(c => Blocked(pa, pb, c))) continue;
                 double path = Creepage(list.Where(x => x.Net == netA).ToList(), list.Where(x => x.Net == netB).ToList(),
                     cutouts, cell);
                 if (path > dist * (1 + 1e-9) && !double.IsPositiveInfinity(path))
@@ -256,16 +302,61 @@ public static class SpacingChecker
             }
         }
 
+        // ---- Over the board edge: top copper to bottom copper by way of an edge or a cutout wall.
+        int edgePairs = 0;
+        if (options.CheckBoardEdge && layerCount >= 2 && board.Outline.Count > 0)
+        {
+            double thickness = stackup.TotalThickness(layerCount);
+            var edges = board.Outline.SelectMany(Polygon2.OrientedRings).Where(r => r.Count >= 2).ToList();
+            var top = islands.Where(i => i.Copper.LayerOrder == 1).ToList();
+            var bottom = islands.Where(i => i.Copper.LayerOrder == layerCount).ToList();
+            var done = new HashSet<(string, string)>();
+            foreach (var a in top)
+                foreach (var b in bottom)
+                {
+                    if (a.Net == b.Net) continue;
+                    var key = (a.Net, b.Net);
+                    if (!done.Add(key)) continue;
+                    double dv = Math.Abs(a.Volts - b.Volts);
+                    if (dv <= 0) continue;
+                    double req = table.Required(dv, creepage);
+                    double cutoff = req * options.ReportWithinFactor;
+                    if (thickness >= cutoff) continue;
+                    var result = EdgePath(top.Where(x => x.Net == a.Net).ToList(), bottom.Where(x => x.Net == b.Net).ToList(),
+                        edges, cutouts, cutoff - thickness);
+                    if (result is not { } crossing) continue;
+                    double path = crossing.RunA + thickness + crossing.RunB;
+                    if (path >= cutoff) continue;
+                    edgePairs++;
+                    findings.Add(new SpacingFinding(SpacingKind.EdgeCreepage, a.Net, b.Net, 1, dv, path, req, crossing.At,
+                        table.Columns[creepage]) { OtherLayer = layerCount });
+                }
+        }
+
         notes.Add($"Table: {table.Name} ({table.Source}). Columns: {table.Columns[outer]} on the outer layers " +
-                  $"(L1 and L{layerCount}), {table.Columns[inner]} on inner layers and across dielectric gaps" +
-                  (cutouts.Count > 0 ? $", {table.Columns[creepage]} for a surface path around a cutout." : "."));
+                  $"(L1 and L{layerCount}){(maskUsed ? $" where the copper edge is exposed, {table.Columns[coated]} where the solder mask covers it ({coatedPairs} pair(s))" : "")}, " +
+                  $"{table.Columns[inner]} on inner layers and across dielectric gaps" +
+                  (cutouts.Count > 0 || options.CheckBoardEdge ? $", {table.Columns[creepage]} for a surface path around a cutout or over the board edge." : "."));
         notes.Add("Voltages are the working voltages between nets as the table defines them (IPC-2221: peak). " +
                   "Clearance is the straight distance between copper edges; the surface path around a board cutout " +
-                  "(taken as its convex hull) is the creepage. Solder mask and coatings are not modelled — pick the " +
-                  "coated column for a coated board. Component bodies and leads are not in the layout and are not checked.");
+                  "(its true outline) is the creepage." +
+                  (maskUsed
+                      ? " Solder mask is read from the board's mask openings: a pair is coated when neither of its closest " +
+                        "copper edges lies in an opening. Conformal coating is not in the layout."
+                      : coated is >= 0
+                          ? " The board carries no solder-mask layers, so the coated column was not applied."
+                          : " Solder mask and coatings are not modelled — pick the coated column for a coated board.") +
+                  " Component bodies and leads are not in the layout and are not checked.");
         if (options.CheckLayerToLayer)
             notes.Add($"Dielectric gaps from the stackup ({stackup.Source}); copper of two nets counts as facing when " +
                       "a vertex or edge midpoint of one lies inside the other.");
+        if (options.CheckBoardEdge && layerCount >= 2)
+            notes.Add(board.Outline.Count > 0
+                ? $"Over the edge: top copper to bottom copper by way of the board edge or a cutout wall — the straight run " +
+                  $"to the edge, the board thickness ({stackup.TotalThickness(layerCount) * 1e3:0.###} mm from the stackup), " +
+                  $"the run from it — minimised over the crossing point ({edgePairs} pair(s) listed); a run that would cross " +
+                  "a cutout is not followed."
+                : "Over the edge: the board has no outline, so no edge path was measured.");
         return new SpacingReport(findings, notes, table);
     }
 
@@ -326,7 +417,7 @@ public static class SpacingChecker
 
     // ---------------- Cutouts and the surface path around them ----------------
 
-    /// <summary>Board cutouts as convex hulls: the holes of the board outline, and any
+    /// <summary>Board cutouts as their true outlines: the holes of the board outline, and any
     /// further outline polygon lying inside the largest one.</summary>
     private static List<IReadOnlyList<Point2>> Cutouts(PcbBoard board)
     {
@@ -339,11 +430,11 @@ public static class SpacingChecker
             if (ReferenceEquals(polygon, largest))
             {
                 foreach (var hole in polygon.Holes)
-                    if (hole.Count >= 3) result.Add(ConvexHull.Compute(hole.ToList()));
+                    if (hole.Count >= 3) result.Add(hole);
                 continue;
             }
             if (polygon.Outer.Count >= 3 && inside.Contains(Centroid(polygon.Outer)))
-                result.Add(ConvexHull.Compute(polygon.Outer.ToList()));
+                result.Add(polygon.Outer);
         }
         return result;
     }
@@ -357,7 +448,7 @@ public static class SpacingChecker
 
     /// <summary>
     /// The shortest surface path between the copper of two nets on a layer around the
-    /// cutouts: Dijkstra over the hull vertices, where a hull vertex joins a net at the
+    /// cutouts: Dijkstra over the cutouts' vertices, where a vertex joins a net at the
     /// nearest point of its copper, and the nets join directly by the shortest straight
     /// segment from a vertex of one to the copper of the other that crosses no cutout.
     /// Infinity when the path leaves the reach of the proximity grid.
@@ -368,7 +459,7 @@ public static class SpacingChecker
         foreach (var island in netA) island.Edges ??= new EdgeIndex(island.Copper.Shape, reach);
         foreach (var island in netB) island.Edges ??= new EdgeIndex(island.Copper.Shape, reach);
 
-        // Nodes: 0 = net A, 1 = net B, then the hull vertices of the cutouts near either net.
+        // Nodes: 0 = net A, 1 = net B, then the vertices of the cutouts near either net.
         double minX = Math.Min(netA.Min(i => i.MinX), netB.Min(i => i.MinX)) - reach;
         double maxX = Math.Max(netA.Max(i => i.MaxX), netB.Max(i => i.MaxX)) + reach;
         double minY = Math.Min(netA.Min(i => i.MinY), netB.Min(i => i.MinY)) - reach;
@@ -387,7 +478,7 @@ public static class SpacingChecker
             }
             return (best, foot);
         }
-        bool Clear(Point2 p, Point2 q) => !near.Any(c => Crosses(p, q, c));
+        bool Clear(Point2 p, Point2 q) => !near.Any(c => Blocked(p, q, c));
 
         // Edge weights into a dense matrix (the graphs are small).
         var w = new double[n, n];
@@ -434,12 +525,12 @@ public static class SpacingChecker
     /// <summary>
     /// The shortest path from a to b that does not cross any cutout: the straight line when
     /// nothing is in the way, else Dijkstra over the visibility graph of the two points and
-    /// the hull vertices of the cutouts near them.
+    /// the vertices of the cutouts near them. Cutouts are true polygons, convex or not.
     /// </summary>
     public static double SurfacePath(Point2 a, Point2 b, IReadOnlyList<IReadOnlyList<Point2>> cutouts)
     {
         double straight = (b - a).Length;
-        if (cutouts.Count == 0 || !cutouts.Any(c => Crosses(a, b, c))) return straight;
+        if (cutouts.Count == 0 || !cutouts.Any(c => Blocked(a, b, c))) return straight;
 
         // Candidate obstacles: those within the a–b box grown by the straight distance.
         double minX = Math.Min(a.X, b.X) - straight, maxX = Math.Max(a.X, b.X) + straight;
@@ -447,7 +538,7 @@ public static class SpacingChecker
         var near = cutouts.Where(c => c.Any(p => p.X >= minX && p.X <= maxX && p.Y >= minY && p.Y <= maxY)).ToList();
 
         var nodes = new List<Point2> { a, b };
-        foreach (var hull in near) nodes.AddRange(hull);
+        foreach (var ring in near) nodes.AddRange(ring);
         int n = nodes.Count;
         var dist = new double[n];
         Array.Fill(dist, double.PositiveInfinity);
@@ -464,7 +555,7 @@ public static class SpacingChecker
             for (int v = 0; v < n; v++)
             {
                 if (done[v] || v == u) continue;
-                if (near.Any(c => Crosses(nodes[u], nodes[v], c))) continue;
+                if (near.Any(c => Blocked(nodes[u], nodes[v], c))) continue;
                 double d = dist[u] + (nodes[v] - nodes[u]).Length;
                 if (d < dist[v]) dist[v] = d;
             }
@@ -473,16 +564,111 @@ public static class SpacingChecker
         return double.IsPositiveInfinity(dist[1]) ? straight : dist[1];
     }
 
-    /// <summary>Whether the segment p–q passes through the inside of a convex hull: a proper
-    /// crossing of one of its edges, or its midpoint strictly inside.</summary>
-    private static bool Crosses(Point2 p, Point2 q, IReadOnlyList<Point2> hull)
+    // ---------------- Over the board edge ----------------
+
+    /// <summary>
+    /// The shortest run from net A's copper on one outer layer to a point on a board edge
+    /// plus the run from that point to net B's copper on the other outer layer, minimised
+    /// over the crossing point: every edge segment within reach is sampled every
+    /// <see cref="EdgeSampleSpacing"/> and the best sample refined by golden section. A run
+    /// whose straight segment crosses a cutout is not taken. Null when no edge is within reach.
+    /// </summary>
+    private static (double RunA, double RunB, Point2 At)? EdgePath(IReadOnlyList<Island> netA, IReadOnlyList<Island> netB,
+        IReadOnlyList<IReadOnlyList<Point2>> edges, IReadOnlyList<IReadOnlyList<Point2>> cutouts, double reach)
     {
-        for (int i = 0; i < hull.Count; i++)
+        if (netA.Count == 0 || netB.Count == 0 || reach <= 0) return null;
+        var indexA = netA.Select(i => new EdgeIndex(i.Copper.Shape, reach)).ToList();
+        var indexB = netB.Select(i => new EdgeIndex(i.Copper.Shape, reach)).ToList();
+        double minX = Math.Max(netA.Min(i => i.MinX), netB.Min(i => i.MinX)) - reach;
+        double maxX = Math.Min(netA.Max(i => i.MaxX), netB.Max(i => i.MaxX)) + reach;
+        double minY = Math.Max(netA.Min(i => i.MinY), netB.Min(i => i.MinY)) - reach;
+        double maxY = Math.Min(netA.Max(i => i.MaxY), netB.Max(i => i.MaxY)) + reach;
+        if (minX > maxX || minY > maxY) return null;
+
+        double RunTo(List<EdgeIndex> index, Point2 x)
         {
-            var c = hull[i]; var d = hull[(i + 1) % hull.Count];
+            double best = double.PositiveInfinity; Point2 foot = default;
+            foreach (var edge in index)
+            {
+                var (d, f) = edge.Nearest(x, reach);
+                if (d < best) { best = d; foot = f; }
+            }
+            if (double.IsPositiveInfinity(best)) return best;
+            return cutouts.Any(c => Blocked(x, foot, c)) ? double.PositiveInfinity : best;
+        }
+        (double A, double B) Runs(Point2 x) => (RunTo(indexA, x), RunTo(indexB, x));
+
+        double bestTotal = double.PositiveInfinity;
+        (double, double, Point2)? best = null;
+        foreach (var ring in edges)
+            for (int i = 0; i < ring.Count; i++)
+            {
+                var p = ring[i]; var q = ring[(i + 1) % ring.Count];
+                if (Math.Max(p.X, q.X) < minX || Math.Min(p.X, q.X) > maxX ||
+                    Math.Max(p.Y, q.Y) < minY || Math.Min(p.Y, q.Y) > maxY) continue;
+                double length = (q - p).Length;
+                if (length <= 0) continue;
+                int samples = Math.Max(1, (int)Math.Ceiling(length / EdgeSampleSpacing));
+                double tBest = -1, fBest = double.PositiveInfinity;
+                for (int k = 0; k <= samples; k++)
+                {
+                    double t = (double)k / samples;
+                    var (ra, rb) = Runs(p + (q - p) * t);
+                    if (ra + rb < fBest) { fBest = ra + rb; tBest = t; }
+                }
+                if (tBest < 0) continue;
+                // Golden section around the best sample.
+                double lo = Math.Max(0, tBest - 1.0 / samples), hi = Math.Min(1, tBest + 1.0 / samples);
+                const double phi = 0.6180339887498949;
+                double c = hi - phi * (hi - lo), d = lo + phi * (hi - lo);
+                double fc = Sum(Runs(p + (q - p) * c)), fd = Sum(Runs(p + (q - p) * d));
+                for (int it = 0; it < 40; it++)
+                {
+                    if (fc < fd) { hi = d; d = c; fd = fc; c = hi - phi * (hi - lo); fc = Sum(Runs(p + (q - p) * c)); }
+                    else { lo = c; c = d; fc = fd; d = lo + phi * (hi - lo); fd = Sum(Runs(p + (q - p) * d)); }
+                }
+                double tFinal = fc < fd ? c : d;
+                var x = p + (q - p) * tFinal;
+                var runs = Runs(x);
+                double total = Sum(runs);
+                if (total < bestTotal) { bestTotal = total; best = (runs.A, runs.B, x); }
+            }
+        return best;
+
+        static double Sum((double A, double B) runs) => runs.A + runs.B;
+    }
+
+    // ---------------- Segment against a polygon ----------------
+
+    /// <summary>Whether the open segment p–q passes through the inside of a polygon ring,
+    /// convex or not: a proper crossing of one of its edges, or a point of the segment
+    /// strictly inside between the places where it touches the ring's vertices.</summary>
+    private static bool Blocked(Point2 p, Point2 q, IReadOnlyList<Point2> ring)
+    {
+        for (int i = 0; i < ring.Count; i++)
+        {
+            var c = ring[i]; var d = ring[(i + 1) % ring.Count];
             if (ProperCrossing(p, q, c, d)) return true;
         }
-        return StrictlyInside((p + q) * 0.5, hull);
+        var pq = q - p;
+        double len2 = Point2.Dot(pq, pq);
+        if (len2 <= 0) return StrictlyInside(p, ring);
+        double tol = 1e-9 * Math.Max(Math.Sqrt(len2), Scale(ring));
+        var ts = new List<double> { 0, 1 };
+        foreach (var v in ring)
+        {
+            double t = Point2.Dot(v - p, pq) / len2;
+            if (t < -1e-12 || t > 1 + 1e-12) continue;
+            var foot = p + pq * Math.Clamp(t, 0, 1);
+            if ((v - foot).Length <= tol) ts.Add(Math.Clamp(t, 0, 1));
+        }
+        ts.Sort();
+        for (int i = 0; i + 1 < ts.Count; i++)
+        {
+            if (ts[i + 1] - ts[i] <= 1e-12) continue;
+            if (StrictlyInside(p + pq * (0.5 * (ts[i] + ts[i + 1])), ring)) return true;
+        }
+        return false;
     }
 
     private static bool ProperCrossing(Point2 p, Point2 q, Point2 c, Point2 d)
@@ -492,23 +678,31 @@ public static class SpacingChecker
         return d1 * d2 < 0 && d3 * d4 < 0;
     }
 
-    private static bool StrictlyInside(Point2 p, IReadOnlyList<Point2> hull)
+    private static double Scale(IReadOnlyList<Point2> ring)
     {
-        // Convex: p is strictly inside when it lies strictly on one side of every edge.
-        double scale = 0;
-        foreach (var v in hull) scale = Math.Max(scale, Math.Abs(v.X) + Math.Abs(v.Y));
-        double tolerance = 1e-12 * Math.Max(scale, 1e-9);
-        int sign = 0;
-        for (int i = 0; i < hull.Count; i++)
+        double scale = 1e-9;
+        foreach (var v in ring) scale = Math.Max(scale, Math.Abs(v.X) + Math.Abs(v.Y));
+        return scale;
+    }
+
+    /// <summary>Strictly inside a ring (convex or not): not within tolerance of an edge, and
+    /// an odd number of edge crossings on a ray.</summary>
+    private static bool StrictlyInside(Point2 p, IReadOnlyList<Point2> ring)
+    {
+        if (ring.Count < 3) return false;
+        double tol = 1e-9 * Scale(ring);
+        bool inside = false;
+        for (int i = 0; i < ring.Count; i++)
         {
-            var c = hull[i]; var d = hull[(i + 1) % hull.Count];
-            double cross = Point2.Cross(d - c, p - c);
-            if (Math.Abs(cross) <= tolerance) return false;
-            int s = cross > 0 ? 1 : -1;
-            if (sign == 0) sign = s;
-            else if (s != sign) return false;
+            var a = ring[i]; var b = ring[(i + 1) % ring.Count];
+            var ab = b - a;
+            double len2 = Point2.Dot(ab, ab);
+            double t = len2 > 0 ? Math.Clamp(Point2.Dot(p - a, ab) / len2, 0, 1) : 0;
+            if ((p - (a + ab * t)).Length <= tol) return false;
+            if (a.Y > p.Y != b.Y > p.Y && p.X < (b.X - a.X) * (p.Y - a.Y) / (b.Y - a.Y) + a.X)
+                inside = !inside;
         }
-        return hull.Count >= 3;
+        return inside;
     }
 
     // ---------------- Edge proximity index ----------------

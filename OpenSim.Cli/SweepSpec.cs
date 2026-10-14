@@ -221,6 +221,7 @@ public static class ProjectTargets
             _ when ambient => throw new InvalidOperationException($"'{bc.Name}' is not a convection; it has no ambient."),
             VoltagePotential v => v with { Volts = value },
             CurrentFlow i => i with { TotalCurrent = value },
+            ElectricCharge q => q with { TotalCharge = value },
             FixedTemperature t => t with { Kelvin = value },
             HeatFlux q => q with { TotalPower = value },
             PressureLoad p => p with { Magnitude = value },

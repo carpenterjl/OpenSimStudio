@@ -19,6 +19,10 @@ public sealed record StudySettings
     public int PointCount { get; init; } = 15;
     public int ModeCount { get; init; } = 6;
 
+    /// <summary>Electrostatic: the mesh boundary no electrode claims is open space (the
+    /// asymptotic 1/r condition) instead of a zero-flux wall.</summary>
+    public bool OpenBoundary { get; init; }
+
     /// <summary>Environment heat flow: the final equilibrium instead of the time history.</summary>
     public bool EnvironmentSteady { get; init; }
 
@@ -120,6 +124,9 @@ public static class StudyRunner
                 {
                     MinFrequency = settings.MinFrequency, MaxFrequency = settings.MaxFrequency, PointCount = settings.PointCount
                 }
+                : null,
+            Electrostatic = kind == "Electrostatic" && settings.OpenBoundary
+                ? new ElectrostaticSettings { OpenBoundary = true }
                 : null
         };
 
@@ -226,6 +233,9 @@ public static class StudyRunner
                 {
                     MinFrequency = settings.MinFrequency, MaxFrequency = settings.MaxFrequency, PointCount = settings.PointCount
                 }
+                : null,
+            Electrostatic = kind == "Electrostatic" && settings.OpenBoundary
+                ? new ElectrostaticSettings { OpenBoundary = true }
                 : null
         };
         ISolver solver = kind == "AcElectrical" ? new HarmonicElectricSolver() : new ElectricalConductionSolver();

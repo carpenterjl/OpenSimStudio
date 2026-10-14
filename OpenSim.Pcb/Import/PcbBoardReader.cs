@@ -129,6 +129,23 @@ public sealed class PcbBoardReader
 
         var outline = outlineTask.Result;
         warnings.AddRange(outlineWarnings);
+
+        // Solder-mask layers: their drawing is the openings (exposed copper), one list per side.
+        var topMask = new List<Polygon2>();
+        var bottomMask = new List<Polygon2>();
+        foreach (var mask in layers.Where(l => l.Type == GerberLayerType.SolderMask))
+        {
+            try
+            {
+                var openings = MaskOpenings(byName[mask.FileName], outline);
+                (mask.IsTopSide ? topMask : bottomMask).AddRange(openings);
+                warnings.Add($"Solder mask {mask.FileName}: {openings.Count} opening(s) on the {(mask.IsTopSide ? "top" : "bottom")}.");
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"Solder mask {mask.FileName} was not read: {ex.Message}");
+            }
+        }
         if (profile is null)
             warnings.Add("No board outline (Profile) layer found; nets extracted without a board boundary.");
         long outlineMs = outlineTimer.ElapsedMilliseconds;
@@ -200,7 +217,9 @@ public sealed class PcbBoardReader
             Nets = nets,
             Layers = layers,
             Warnings = warnings,
-            TraceCenterlines = centerlines
+            TraceCenterlines = centerlines,
+            TopMaskOpenings = topMask,
+            BottomMaskOpenings = bottomMask
         };
     }
 
@@ -317,6 +336,14 @@ public sealed class PcbBoardReader
         return flips;
     }
 
+    /// <summary>
+    /// The filled board outline from the profile layer: the board's contour (usually a stroked
+    /// ring, sometimes a filled region) minus its cutouts. Each drawn polygon is placed by the
+    /// nesting depth of its outer ring among the others': even depth is board, odd depth a
+    /// cutout. A stroked ring (its net area a sliver of its outer ring's) stands for the board
+    /// out to the stroke's outer edge, and for a cutout in to the stroke's inner edge — the
+    /// stroke itself counts as material either way; a filled region keeps its own holes.
+    /// </summary>
     private List<Polygon2> FillOutline(string profileText, List<string> warnings)
     {
         var doc = new GerberParser().Parse(profileText);
@@ -326,7 +353,39 @@ public sealed class PcbBoardReader
             warnings.Add("Board outline produced no geometry.");
             return new List<Polygon2>();
         }
-        var outerRings = image.Polygons.Select(p => (IReadOnlyList<Point2>)p.Outer).ToList();
-        return _ops.Union(outerRings).ToList();
+        var polygons = image.Polygons;
+        var outers = polygons.Select(p => new PolygonSetIndex(new[] { new Polygon2(p.Outer) })).ToList();
+        var board = new List<IReadOnlyList<Point2>>();
+        var cutouts = new List<IReadOnlyList<Point2>>();
+        for (int i = 0; i < polygons.Count; i++)
+        {
+            var polygon = polygons[i];
+            var probe = polygon.Outer[0];
+            int depth = 0;
+            for (int j = 0; j < polygons.Count; j++)
+                if (j != i && outers[j].Contains(probe)) depth++;
+            bool stroked = polygon.Area() < 0.5 * Math.Abs(Polygon2.RingArea(polygon.Outer));
+            if (depth % 2 == 0)
+            {
+                board.Add(polygon.Outer);
+                if (!stroked) cutouts.AddRange(polygon.Holes);
+            }
+            else
+                cutouts.Add(stroked && polygon.Holes.Count == 1 ? polygon.Holes[0] : polygon.Outer);
+        }
+        var filled = _ops.Union(board.Select(r => Polygon2.RingArea(r) >= 0 ? r : r.Reverse().ToList())).ToList();
+        if (cutouts.Count == 0) return filled;
+        var oriented = cutouts.Select(r => Polygon2.OrientedRings(new Polygon2(r)).First()).ToList();
+        return _ops.Difference(filled, oriented).ToList();
+    }
+
+    /// <summary>The openings of a solder-mask layer: what the file draws (its clear areas on a
+    /// negative file), imaged like copper.</summary>
+    private IReadOnlyList<Polygon2> MaskOpenings(string maskText, IReadOnlyList<Polygon2> outline)
+    {
+        var doc = new GerberParser().Parse(maskText);
+        var image = new LayerImageBuilder(_ops).Build(doc);
+        if (doc.IsNegative) image = InvertWithinOutline(image, outline);
+        return image.Polygons;
     }
 }

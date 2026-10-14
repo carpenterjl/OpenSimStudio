@@ -35,6 +35,8 @@ public static partial class CliRunner
             --duration S --step S --initial K        transient settings
             --fmin HZ --fmax HZ --points N           AC sweep settings
             --modes N                                modal
+            --open                                   electrostatic: open outer boundary (1/r
+                                                     condition) instead of a zero-flux wall
             --steady                                 environment heat flow: equilibrium only
 
         opensim sweep <job.json> [--out DIR]
@@ -61,7 +63,9 @@ public static partial class CliRunner
         opensim spacing <board.zip|folder|ipc2581.xml> --volts nets.csv [options]
             Clearance and creepage of the board's nets against a spacing table.
             nets.csv: "net,volts" lines. --table FILE loads a table (CSV), --coated uses the
-            coated outer-layer column, --within F lists pairs within F × their requirement.
+            coated outer-layer column everywhere, --mask reads the board's solder-mask layers and
+            uses it only where the mask covers both copper edges, --within F lists pairs within
+            F × their requirement.
 
         opensim emi <job.json> [--out DIR]
             Conducted-emission estimate of a switching converter's input on two LISNs against a
@@ -155,6 +159,7 @@ public static partial class CliRunner
         MaxFrequency = Number(o, "fmax", 1e8),
         PointCount = (int)Number(o, "points", 15),
         ModeCount = (int)Number(o, "modes", 6),
+        OpenBoundary = o.ContainsKey("open"),
         EnvironmentSteady = o.ContainsKey("steady"),
         BodyName = o.GetValueOrDefault("body"),
         Remesh = o.ContainsKey("remesh")
@@ -425,6 +430,7 @@ public static partial class CliRunner
         {
             Table = table,
             OuterColumn = ipc ? (o.ContainsKey("coated") ? "B4" : "B2") : table.Columns[0],
+            CoatedOuterColumn = ipc && o.ContainsKey("mask") && !o.ContainsKey("coated") ? "B4" : null,
             InnerColumn = ipc ? "B1" : table.Columns[Math.Min(1, table.Columns.Count - 1)],
             ReportWithinFactor = Math.Max(1, Number(o, "within", 2))
         };

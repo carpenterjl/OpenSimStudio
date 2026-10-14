@@ -197,6 +197,24 @@ public sealed class Ipc2581BoardBuilder
             notes.Add($"IPC-2581: {severedVias} via(s) severed by {backdrills.Count} backdrill " +
                       "hole(s) — stub removal disconnects the drilled-out layers.");
 
+        // Solder-mask layers: their features are the openings, one list per side.
+        var topMask = new List<Polygon2>();
+        var bottomMask = new List<Polygon2>();
+        foreach (var (layerName, openings) in source.MaskLayers)
+        {
+            var layer = source.Layers.FirstOrDefault(l => l.Name == layerName);
+            if (layer is null) continue;
+            if (layer.Polarity.Equals("NEGATIVE", StringComparison.OrdinalIgnoreCase))
+            {
+                warnings.Add($"IPC-2581: solder-mask layer '{layerName}' is NEGATIVE polarity; its openings were not read.");
+                continue;
+            }
+            var polygons = UnionLayerCopper(openings, layerName);
+            bool top = layer.Side.Equals("TOP", StringComparison.OrdinalIgnoreCase);
+            (top ? topMask : bottomMask).AddRange(polygons);
+            notes.Add($"IPC-2581: solder mask '{layerName}': {polygons.Count} opening(s) on the {(top ? "top" : "bottom")}.");
+        }
+
         // Summary and timing are informational, not skipped-content warnings — they must
         // never stop a conforming file from importing with zero warnings.
         notes.Add($"IPC-2581: {nets.Count} nets ({netParts.Count} named) from {islands.Count} islands " +
@@ -219,6 +237,8 @@ public sealed class Ipc2581BoardBuilder
             Stackup = BuildStackup(source, notes),
             TraceCenterlines = centerlines,
             CarriesBackdrills = true,
+            TopMaskOpenings = topMask,
+            BottomMaskOpenings = bottomMask
         };
     }
 

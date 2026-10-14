@@ -163,6 +163,10 @@ public sealed record SolveInput
     /// all other analyses.</summary>
     public HarmonicElectricSettings? HarmonicElectric { get; init; }
 
+    /// <summary>Electrostatic settings (the open outer boundary). Null is the zero-flux
+    /// wall, the solve as it always was.</summary>
+    public ElectrostaticSettings? Electrostatic { get; init; }
+
     /// <summary>The material governing one element, honouring <see cref="RegionMaterials"/>.</summary>
     public Material MaterialOf(int elementIndex) =>
         RegionMaterials is null

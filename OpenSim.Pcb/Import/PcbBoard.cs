@@ -159,4 +159,13 @@ public sealed class PcbBoard
     /// conductor features. Empty when the file holds only flashes, pours, and regions.
     /// </summary>
     public IReadOnlyList<TraceCenterline> TraceCenterlines { get; init; } = Array.Empty<TraceCenterline>();
+
+    /// <summary>The solder-mask openings of the top side — where copper is exposed — as the
+    /// mask layer draws them (Gerber Soldermask,Top; IPC-2581 SOLDERMASK on side TOP). Empty
+    /// when the source carries no mask layer, which the spacing check reads as "unknown", not
+    /// "bare".</summary>
+    public IReadOnlyList<Polygon2> TopMaskOpenings { get; init; } = Array.Empty<Polygon2>();
+
+    /// <summary>The bottom side's solder-mask openings; see <see cref="TopMaskOpenings"/>.</summary>
+    public IReadOnlyList<Polygon2> BottomMaskOpenings { get; init; } = Array.Empty<Polygon2>();
 }

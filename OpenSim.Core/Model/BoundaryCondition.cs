@@ -13,6 +13,7 @@ namespace OpenSim.Core.Model;
 [JsonDerivedType(typeof(PressureLoad), "pressure")]
 [JsonDerivedType(typeof(VoltagePotential), "voltage")]
 [JsonDerivedType(typeof(CurrentFlow), "current")]
+[JsonDerivedType(typeof(ElectricCharge), "charge")]
 [JsonDerivedType(typeof(FixedTemperature), "temperature")]
 [JsonDerivedType(typeof(HeatFlux), "heatFlux")]
 [JsonDerivedType(typeof(Convection), "convection")]
@@ -138,6 +139,18 @@ public sealed record CurrentFlow : BoundaryCondition
     /// rather than a uniform-density injection. False — what every file written before the
     /// option existed loads as — leaves the solve bitwise as it was.</summary>
     public bool Equipotential { get; init; }
+}
+
+/// <summary>
+/// A prescribed total charge [C] for an electrostatic solve. On a conductor the faces
+/// touch, the whole conductor piece is an electrode of unknown potential carrying this net
+/// charge (a charged floating conductor; the solve reports its potential). On a dielectric
+/// surface it is a uniform surface charge density <see cref="TotalCharge"/>/A — the Neumann
+/// condition D·n = σ — distributed area-weighted over the face nodes so the total is exact.
+/// </summary>
+public sealed record ElectricCharge : BoundaryCondition
+{
+    public required double TotalCharge { get; init; }
 }
 
 /// <summary>A prescribed temperature [K] on the selected faces (Dirichlet).</summary>

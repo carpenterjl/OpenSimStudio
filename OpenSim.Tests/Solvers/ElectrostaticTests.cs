@@ -277,4 +277,171 @@ public class ElectrostaticTests
         Assert.Equal("1.5 nF", CapacitanceMatrix.FormatCapacitance(1.5e-9));
         Assert.Contains("C(A, C)", string.Join("\n", m.Describe()));
     }
+
+    private static ElectricCharge Charge(string name, int face, double coulombs) =>
+        new() { Name = name, FaceIds = new[] { face }, TotalCharge = coulombs };
+
+    /// <summary>Adds the element faces between two regions to the skin, tagged as one face
+    /// id, so a condition can name an interior conductor's surface.</summary>
+    private static FeMesh TagInterface(FeMesh mesh, int regionA, int regionB, int faceId)
+    {
+        var owners = new Dictionary<(int, int, int), List<int>>();
+        for (int e = 0; e < mesh.ElementCount; e++)
+        {
+            var el = mesh.Elements[e];
+            foreach (var (a, b, c) in new[] { (el.N1, el.N2, el.N3), (el.N0, el.N2, el.N3), (el.N0, el.N1, el.N3), (el.N0, el.N1, el.N2) })
+            {
+                var k = new[] { a, b, c }.OrderBy(x => x).ToArray();
+                var key = (k[0], k[1], k[2]);
+                if (!owners.TryGetValue(key, out var list)) owners[key] = list = new List<int>();
+                list.Add(e);
+            }
+        }
+        var skin = mesh.BoundaryTriangles.ToList();
+        foreach (var (key, list) in owners)
+        {
+            if (list.Count != 2) continue;
+            var regions = list.Select(mesh.RegionOf).OrderBy(r => r).ToArray();
+            if (regions[0] == Math.Min(regionA, regionB) && regions[1] == Math.Max(regionA, regionB))
+                skin.Add(new BoundaryTriangle(key.Item1, key.Item2, key.Item3, faceId));
+        }
+        return new FeMesh(mesh.Nodes, mesh.Elements, skin, mesh.ElementRegionIds);
+    }
+
+    [Fact]
+    public void ChargeOnAPlate_GivesItsPotential_AndASheetOnADielectricIsTheNeumannCondition()
+    {
+        // Plates a×b a distance d apart in ε_r: a charge Q on the top plate sits at V = Q·d/(ε·A),
+        // the same field a sheet charge Q on the top dielectric surface makes (D = σ).
+        const double a = 20e-3, b = 10e-3, d = 1e-3, t = 0.5e-3, er = 4.4, q = 2e-9;
+        double area = a * b, exactV = q * d / (Eps0 * er * area), exactE = q / (Eps0 * er * area);
+        var fr4 = Dielectric("FR4", er);
+
+        // 1. A copper slab on top, charged through its top face: an electrode of unknown potential.
+        var slabMesh = Regions(StructuredBoxMesh.Build(0, a, 0, b, 0, d + t, 8, 4, 6), c => c.Z > d ? 1 : 0);
+        var charged = new ElectrostaticSolver().Solve(new SolveInput
+        {
+            Mesh = slabMesh, Material = fr4,
+            RegionMaterials = new Dictionary<int, Material> { [0] = fr4, [1] = Copper },
+            BoundaryConditions = new BoundaryCondition[]
+            {
+                Volts("bottom", StructuredBoxMesh.FaceZMin, 0), Charge("top", StructuredBoxMesh.FaceZMax, q)
+            }
+        });
+        _out.WriteLine(string.Join("\n", charged.Log));
+        Assert.Equal(exactV, charged.Summary!["Potential 'top' (V)"], exactV * 1e-9);
+        Assert.Equal(q, charged.Summary["Charge 'top' (C)"], q * 1e-9);
+        Assert.Equal(-q, charged.Summary["Charge 'bottom' (C)"], q * 1e-9);
+        Assert.Equal(0.5 * q * exactV, charged.Summary["Energy (J)"], 0.5 * q * exactV * 1e-9);
+        var field = (ElementScalarField)charged.Fields.Single(f => f.Name == "Field magnitude (element)");
+        for (int e = 0; e < slabMesh.ElementCount; e++)
+            Assert.Equal(slabMesh.RegionOf(e) == 0 ? exactE : 0, field.GetScalar(e), exactE * 1e-8);
+        Assert.Contains(charged.Log, l => l.Contains("potential to be found"));
+
+        // 2. No conductor: the charge is a sheet on the dielectric's top surface (Neumann).
+        var sheetMesh = StructuredBoxMesh.Build(0, a, 0, b, 0, d, 8, 4, 4);
+        var sheet = new ElectrostaticSolver().Solve(new SolveInput
+        {
+            Mesh = sheetMesh, Material = fr4,
+            BoundaryConditions = new BoundaryCondition[]
+            {
+                Volts("bottom", StructuredBoxMesh.FaceZMin, 0), Charge("sheet", StructuredBoxMesh.FaceZMax, q)
+            }
+        });
+        _out.WriteLine(string.Join("\n", sheet.Log));
+        Assert.Equal(-q, sheet.Summary!["Charge 'bottom' (C)"], q * 1e-9);               // Gauss: all of it lands below
+        var phi = (NodalScalarField)sheet.Fields.Single(f => f.Name == ElectrostaticSolver.PotentialFieldName);
+        for (int node = 0; node < sheetMesh.NodeCount; node++)
+            Assert.Equal(exactV * sheetMesh.Nodes[node].Z / d, phi.GetScalar(node), exactV * 1e-9);
+        Assert.Equal(0.5 * q * exactV, sheet.Summary["Energy (J)"], 0.5 * q * exactV * 1e-9);
+        Assert.Contains(sheet.Log, l => l.Contains("Surface charge 'sheet'"));
+
+        // 3. Two sheets on the dielectric, one of them on a side face that shares its bottom edge
+        // with the electrode: the shares that would land on electrode nodes are folded back into the
+        // free nodes, so Gauss still closes exactly: the plate takes −(Q − Q/2).
+        var both = new ElectrostaticSolver().Solve(new SolveInput
+        {
+            Mesh = sheetMesh, Material = fr4,
+            BoundaryConditions = new BoundaryCondition[]
+            {
+                Volts("bottom", StructuredBoxMesh.FaceZMin, 0), Charge("sheet", StructuredBoxMesh.FaceZMax, q),
+                Charge("side", StructuredBoxMesh.FaceXMin, -q / 2)
+            }
+        });
+        _out.WriteLine(string.Join("\n", both.Log));
+        Assert.Equal(-q / 2, both.Summary!["Charge 'bottom' (C)"], q * 1e-9);
+        Assert.Contains(both.Log, l => l.Contains("fall on an electrode"));
+    }
+
+    [Fact]
+    public void AnIsolatedCube_HasCapacitanceOnlyWithAnOpenBoundary()
+    {
+        // A conductor cube of edge a at the centre of an air box. Its capacitance lies between the
+        // inscribed and circumscribed spheres' (capacitance grows with the body): 4πε₀·a/2 … 4πε₀·a√3/2.
+        // Against a zero-flux wall an isolated conductor has none; with the open boundary the
+        // answer barely moves when the box doubles, and a prescribed charge sits at Q/C.
+        const double a = 2e-3, h = 0.5e-3;
+        FeMesh Box(double half)
+        {
+            int cells = (int)Math.Round(2 * half / h);
+            var mesh = Regions(StructuredBoxMesh.Build(-half, half, -half, half, -half, half, cells, cells, cells),
+                c => Math.Abs(c.X) < a / 2 && Math.Abs(c.Y) < a / 2 && Math.Abs(c.Z) < a / 2 ? 1 : 0);
+            return TagInterface(mesh, 0, 1, 10);
+        }
+        var air = Dielectric("air", 1);
+        SolveInput Input(FeMesh mesh, BoundaryCondition drive, bool open) => new()
+        {
+            Mesh = mesh, Material = air,
+            RegionMaterials = new Dictionary<int, Material> { [0] = air, [1] = Copper },
+            BoundaryConditions = new[] { drive },
+            Electrostatic = open ? new ElectrostaticSettings { OpenBoundary = true } : null
+        };
+        double lower = 4 * Math.PI * Eps0 * a / 2, upper = 4 * Math.PI * Eps0 * a * Math.Sqrt(3) / 2;
+
+        var small = Box(3 * a);                                                    // half-width 3a → R/a = 3
+        var wall = ElectrostaticSolver.CapacitanceMatrixOf(Input(small, Volts("cube", 10, 1), open: false));
+        _out.WriteLine($"wall: {wall[0, 0]:g4} F");
+        Assert.True(Math.Abs(wall[0, 0]) < 1e-3 * lower, $"an isolated conductor against a wall: {wall[0, 0]:g3} F");
+
+        var open3 = new ElectrostaticSolver().Solve(Input(small, Volts("cube", 10, 1), open: true));
+        _out.WriteLine(string.Join("\n", open3.Log));
+        double c3 = open3.Summary!["Capacitance to infinity 'cube' (F)"];
+        Assert.InRange(c3, lower, upper);
+        Assert.Equal(1.0 / 3, open3.Summary["Open boundary a/R"] * 2 / Math.Sqrt(3), 1e-9);     // a√3/2 over 3a
+        Assert.Contains(open3.Log, l => l.Contains("Open outer boundary"));
+
+        var open6 = ElectrostaticSolver.CapacitanceMatrixOf(Input(Box(6 * a), Volts("cube", 10, 1), open: true));
+        double c6 = open6[0, 0];
+        _out.WriteLine($"open: R = 3a → {c3:g5} F, R = 6a → {c6:g5} F ({(c3 / c6 - 1) * 100:g2} %); bounds {lower:g4} … {upper:g4} F");
+        Assert.InRange(c6, lower, upper);
+        Assert.True(Math.Abs(c3 / c6 - 1) < 0.005, $"R = 3a and R = 6a differ by {(c3 / c6 - 1) * 100:g2} %");   // measured 0.02 %
+
+        // A charge on the cube: its potential is Q/C from the same matrix.
+        const double q = 1e-12;
+        var charged = new ElectrostaticSolver().Solve(Input(small, Charge("cube", 10, q), open: true));
+        Assert.Equal(q / c3, charged.Summary!["Potential 'cube' (V)"], q / c3 * 1e-9);
+        Assert.Equal(q, charged.Summary["Charge 'cube' (C)"], q * 1e-9);
+
+        // The same charge against a wall has no reference potential and is refused.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new ElectrostaticSolver().Validate(Input(small, Charge("cube", 10, q), open: false)));
+        Assert.Contains("OpenBoundary", ex.Message);
+    }
+
+    [Fact]
+    public void Validation_RefusesAChargeAndAVoltageOnOnePiece()
+    {
+        var half = Regions(StructuredBoxMesh.Build(0, 1e-3, 0, 1e-3, 0, 2e-3, 2, 2, 4), c => c.Z < 1e-3 ? 1 : 0);
+        var ex = Assert.Throws<InvalidOperationException>(() => new ElectrostaticSolver().Validate(new SolveInput
+        {
+            Mesh = half, Material = Dielectric("d", 2),
+            RegionMaterials = new Dictionary<int, Material> { [0] = Dielectric("d", 2), [1] = Copper },
+            BoundaryConditions = new BoundaryCondition[]
+            {
+                Volts("a", StructuredBoxMesh.FaceZMin, 0), Charge("q", StructuredBoxMesh.FaceXMin, 1e-12),
+                Volts("b", StructuredBoxMesh.FaceZMax, 1)
+            }
+        }));
+        Assert.Contains("one or the other", ex.Message);
+    }
 }

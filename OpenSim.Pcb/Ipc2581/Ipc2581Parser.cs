@@ -24,6 +24,7 @@ public sealed class Ipc2581Parser
     private readonly Ipc2581PrimitiveDictionary _dictionary = new();
     private readonly Ipc2581StyleDictionary _styles = new();
     private readonly Dictionary<string, Ipc2581Net> _nets = new();
+    private readonly Dictionary<string, Ipc2581Net> _maskLayers = new();
 
     // Layer declarations and stackup rows are merged into the final layer array once
     // both sections have streamed past.
@@ -96,7 +97,8 @@ public sealed class Ipc2581Parser
             Components = _components,
             Packages = _packages,
             Backdrills = _backdrills,
-            Slots = BuildSlots()
+            Slots = BuildSlots(),
+            MaskLayers = _maskLayers
         };
     }
 
@@ -625,6 +627,22 @@ public sealed class Ipc2581Parser
         if (known && decl.Function.Equals("DRILL", StringComparison.OrdinalIgnoreCase))
         {
             ReadDrillLayerFeature(reader, layerRef);             // KiCad puts Hole elements here
+            return;
+        }
+        if (known && decl.Function.Equals("SOLDERMASK", StringComparison.OrdinalIgnoreCase))
+        {
+            // A mask layer's features are its openings; they belong to no net, so they
+            // collect on a pseudo-net named after the layer.
+            if (!_maskLayers.TryGetValue(layerRef, out var openings))
+                _maskLayers[layerRef] = openings = new Ipc2581Net { Name = layerRef };
+            double maskScale = GeometryScale();
+            using var maskSub = reader.ReadSubtree();
+            maskSub.Read();
+            while (maskSub.Read())
+            {
+                if (maskSub.NodeType != XmlNodeType.Element || maskSub.LocalName != "Set") continue;
+                ReadFeatureContainer(maskSub, maskScale, layerRef, openings);
+            }
             return;
         }
         if (!known || !Ipc2581Layer.IsConductorFunction(decl.Function))

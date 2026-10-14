@@ -54,6 +54,16 @@ public sealed record BoardStackup
         GapPermittivity is not null && GapPermittivity.TryGetValue(upperLayer, out double e) && e > 0
             ? e : DefaultPermittivity;
 
+    /// <summary>The board's thickness from the top copper's surface to the bottom copper's:
+    /// every copper layer and every dielectric gap of a board of <paramref name="layerCount"/> layers.</summary>
+    public double TotalThickness(int layerCount)
+    {
+        double total = 0;
+        for (int layer = 1; layer <= layerCount; layer++) total += CopperThicknessOf(layer);
+        for (int gap = 1; gap < layerCount; gap++) total += GapThicknessOf(gap);
+        return total;
+    }
+
     public double LossTangentOf(int upperLayer) =>
         GapLossTangent is not null && GapLossTangent.TryGetValue(upperLayer, out double t) && t >= 0
             ? t : DefaultLossTangent;
