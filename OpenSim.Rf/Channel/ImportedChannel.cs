@@ -104,6 +104,10 @@ public sealed class ImportedChannel
 
     public bool Covers(double frequencyHz) => frequencyHz <= MaxFrequencyHz * (1 + 1e-9);
 
+    /// <summary>The delay taken out of entry (row, column) before interpolating: its median
+    /// phase slope [s].</summary>
+    public double DelaySeconds(int row, int column) => _delay[row * Ports + column];
+
     /// <summary>Smallest frequency step in the file [Hz].</summary>
     public double FinestStepHz
     {

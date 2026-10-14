@@ -28,6 +28,67 @@ public sealed record TdrProfile(double[] TimeSeconds, double[] Reflection, doubl
 }
 
 /// <summary>
+/// The loss of a line, per second of TDR round-trip time: α(f) = a₀ + a₁√f + a₂f [Np/s] —
+/// resistance, skin effect and dielectric loss. A round trip of Δt covers Δt of one-way
+/// travel, so a line whose one-way loss is A(f) over a one-way delay τ has α = A/τ.
+/// </summary>
+public sealed record TdrLoss(double ConstantNepersPerSecond, double SkinNepersPerSecondRootHz,
+    double DielectricNepersPerSecondHz)
+{
+    public double At(double frequencyHz) =>
+        ConstantNepersPerSecond + SkinNepersPerSecondRootHz * Math.Sqrt(frequencyHz)
+                                + DielectricNepersPerSecondHz * frequencyHz;
+
+    /// <summary>
+    /// The loss of a through path of the channel, as if it were spread evenly along it:
+    /// A(f) = −½·ln(|S21|²/(1 − |S11|²)) — the insertion loss with the mismatch at the port
+    /// taken out — over the path's delay, fitted by non-negative least squares to the three
+    /// terms. Points where the port reflects most of the power, or nothing comes through,
+    /// are left out.
+    /// </summary>
+    public static TdrLoss FromThrough(ImportedChannel channel, int from, int to)
+    {
+        double delay = channel.DelaySeconds(to, from);
+        if (!(delay > 0)) throw new InvalidOperationException("The through path has no delay to spread its loss over.");
+        var rows = new List<(double F, double Alpha)>();
+        foreach (double f in channel.FrequenciesHz)
+        {
+            var s = channel.At(f);
+            double through = s[to, from].Magnitude, reflected = s[from, from].Magnitude;
+            double kept = 1 - reflected * reflected;
+            if (kept < 0.1 || through < 1e-4) continue;
+            double loss = -0.5 * Math.Log(through * through / kept);
+            rows.Add((f, Math.Max(0, loss) / delay));
+        }
+        if (rows.Count < 3) throw new InvalidOperationException("Too few usable points on the through path to fit its loss.");
+        // Non-negative least squares over three terms: the best of the subsets whose
+        // unconstrained solution is non-negative.
+        double[]? best = null;
+        double bestError = double.MaxValue;
+        for (int mask = 1; mask < 8; mask++)
+        {
+            var columns = Enumerable.Range(0, 3).Where(c => (mask & (1 << c)) != 0).ToArray();
+            var a = new double[rows.Count, columns.Length];
+            var b = new double[rows.Count];
+            for (int r = 0; r < rows.Count; r++)
+            {
+                for (int c = 0; c < columns.Length; c++)
+                    a[r, c] = columns[c] switch { 0 => 1, 1 => Math.Sqrt(rows[r].F), _ => rows[r].F };
+                b[r] = rows[r].Alpha;
+            }
+            var x = HouseholderLeastSquares.Solve(a, b);
+            if (x.Any(v => v < 0)) continue;
+            var full = new double[3];
+            for (int c = 0; c < columns.Length; c++) full[columns[c]] = x[c];
+            double error = rows.Sum(r => Math.Pow(full[0] + full[1] * Math.Sqrt(r.F) + full[2] * r.F - r.Alpha, 2));
+            if (error < bestError) { bestError = error; best = full; }
+        }
+        best ??= new double[3];
+        return new TdrLoss(best[0], best[1], best[2]);
+    }
+}
+
+/// <summary>
 /// Time-domain reflectometry from a reflection coefficient known against frequency: the
 /// response to a step of finite rise time, by inverse Fourier transform. The step is a
 /// Gaussian-edged one, because the data ends at some frequency and a sharper edge would ask
@@ -36,8 +97,12 @@ public sealed record TdrProfile(double[] TimeSeconds, double[] Reflection, doubl
 /// <para>
 /// The peeled profile runs the layer-peeling recursion on the same band-limited response:
 /// each time sample is a short piece of line, its reflection is read off the first arrival,
-/// and that piece's effect is removed from everything later. It assumes a lossless line;
-/// on a lossy one the later sections read progressively off.
+/// and that piece's effect is removed from everything later. Without a loss model it
+/// assumes a lossless line, and on a lossy one the later sections read progressively off.
+/// With a <see cref="TdrLoss"/>, each piece also takes back its share of the loss: both
+/// waves are referred to the next interface with the forward wave's accumulated loss taken
+/// out of both, which leaves the forward wave as it was and multiplies the backward one by
+/// z/H², H the one-way loss of a piece — minimum phase, so causal, as a passive line's is.
 /// </para>
 /// </summary>
 public static class Tdr
@@ -54,8 +119,10 @@ public static class Tdr
     /// is seen before it wraps (1 / step).</param>
     /// <param name="riseTimeSeconds">Null = the fastest the data supports.</param>
     /// <param name="maxTimeSeconds">Round-trip span to return; null = half the unambiguous range.</param>
+    /// <param name="loss">The line's loss for the peeled profile; null peels it as lossless.</param>
     public static TdrProfile Profile(Func<double, Complex> reflection, double maxFrequencyHz, double frequencyStepHz,
-        double referenceOhms, double? riseTimeSeconds = null, bool peel = true, double? maxTimeSeconds = null)
+        double referenceOhms, double? riseTimeSeconds = null, bool peel = true, double? maxTimeSeconds = null,
+        TdrLoss? loss = null)
     {
         if (!(maxFrequencyHz > 0) || !(frequencyStepHz > 0) || frequencyStepHz >= maxFrequencyHz)
             throw new ArgumentException("TDR needs a frequency range of many steps.");
@@ -113,24 +180,29 @@ public static class Tdr
             rho[n] = sum;
             impedance[n] = Impedance(referenceOhms, sum);
         }
-        double[]? peeled = peel ? Peel(arrivals, referenceOhms) : null;
-        if (peel)
+        double[]? peeled = !peel ? null
+            : loss is null ? Peel(arrivals, referenceOhms)
+            : PeelLossy(arrivals, referenceOhms, loss, dt, maxFrequencyHz);
+        if (peel && loss is null)
             notes.Add("The peeled profile assumes a lossless line: on a lossy one the sections far from the port read off.");
+        if (peel && loss is not null)
+            notes.Add($"The peeled profile takes out a loss of {loss.At(maxFrequencyHz) * 1e-9 * 20 / Math.Log(10):g3} dB per ns of " +
+                      $"round trip at {maxFrequencyHz / 1e9:g4} GHz, as if spread evenly along the line.");
         return new TdrProfile(time, rho, impedance, peeled, rise, referenceOhms, notes);
     }
 
     /// <summary>TDR looking into one port of a channel, the others in their reference.</summary>
     public static TdrProfile Profile(ImportedChannel channel, int port, double? riseTimeSeconds = null,
-        bool peel = true, double? maxTimeSeconds = null) =>
+        bool peel = true, double? maxTimeSeconds = null, TdrLoss? loss = null) =>
         Profile(f => channel.At(f)[port, port], channel.MaxFrequencyHz, channel.FinestStepHz,
-            channel.ReferenceOhms, riseTimeSeconds, peel, maxTimeSeconds);
+            channel.ReferenceOhms, riseTimeSeconds, peel, maxTimeSeconds, loss);
 
     /// <summary>Differential TDR looking into the near pair of a four-port channel
     /// (S_dd11, referred to twice the single-ended reference).</summary>
     public static TdrProfile DifferentialProfile(ImportedChannel channel, DifferentialPairing pairing,
-        double? riseTimeSeconds = null, bool peel = true, double? maxTimeSeconds = null) =>
+        double? riseTimeSeconds = null, bool peel = true, double? maxTimeSeconds = null, TdrLoss? loss = null) =>
         Profile(f => MixedMode.FromSingleEnded(channel.At(f), pairing)[0, 0], channel.MaxFrequencyHz,
-            channel.FinestStepHz, 2 * channel.ReferenceOhms, riseTimeSeconds, peel, maxTimeSeconds);
+            channel.FinestStepHz, 2 * channel.ReferenceOhms, riseTimeSeconds, peel, maxTimeSeconds, loss);
 
     private static double Impedance(double reference, double rho) =>
         reference * (1 + rho) / Math.Max(1e-9, 1 - Math.Min(rho, 1 - 1e-9));
@@ -165,6 +237,63 @@ public static class Tdr
             // The backward wave is seen one round-trip sample earlier in the next layer.
             for (int i = 0; i + 1 < length; i++) backward[i] = backward[i + 1];
             if (length > 0) backward[length - 1] = 0;
+        }
+        return impedance;
+    }
+
+    /// <summary>
+    /// Layer peeling with each piece's loss taken back (see the class remarks). Both waves
+    /// are kept as spectra on a grid at least twice the profile's length, so the per-piece
+    /// filter z/H² is one multiplication and the first time samples the recursion reads are
+    /// sums. |1/H²| = e^{α(f)·dt} per piece (half the round trip each way), held at its value
+    /// at the top of the data's band above it, with the minimum phase that goes with it
+    /// (folded cepstrum).
+    /// </summary>
+    internal static double[] PeelLossy(double[] arrivals, double referenceOhms, TdrLoss loss, double dt, double bandHz)
+    {
+        int n = arrivals.Length;
+        int size = 1;
+        while (size < 2 * n) size <<= 1;
+
+        var logMagnitude = new Complex[size];
+        for (int k = 0; k <= size / 2; k++)
+        {
+            double f = Math.Min(k / (size * dt), bandHz);
+            logMagnitude[k] = loss.At(f) * dt;
+            if (k > 0 && k < size / 2) logMagnitude[size - k] = logMagnitude[k];
+        }
+        var cepstrum = Fft.Inverse(logMagnitude);
+        var folded = new Complex[size];
+        folded[0] = cepstrum[0].Real;
+        for (int k = 1; k < size / 2; k++) folded[k] = 2 * cepstrum[k].Real;
+        folded[size / 2] = cepstrum[size / 2].Real;
+        var logFilter = Fft.Forward(folded);
+        var step = new Complex[size];
+        for (int k = 0; k < size; k++)
+            step[k] = Complex.Exp(logFilter[k]) * Complex.FromPolarCoordinates(1, 2 * Math.PI * k / size);
+
+        var backwardTime = new Complex[size];
+        for (int k = 0; k < n; k++) backwardTime[k] = arrivals[k];
+        var backward = Fft.Forward(backwardTime);
+        var forward = new Complex[size];
+        for (int k = 0; k < size; k++) forward[k] = 1;   // a unit impulse at t = 0
+
+        var impedance = new double[n];
+        double z = referenceOhms;
+        for (int layer = 0; layer < n; layer++)
+        {
+            Complex f0 = 0, b0 = 0;
+            for (int k = 0; k < size; k++) { f0 += forward[k]; b0 += backward[k]; }
+            double gamma = f0.Real != 0 ? Math.Clamp(b0.Real / f0.Real, -0.999, 0.999) : 0;
+            z *= (1 + gamma) / (1 - gamma);
+            impedance[layer] = z;
+            double scale = 1 / (1 - gamma);
+            for (int k = 0; k < size; k++)
+            {
+                Complex a = forward[k], b = backward[k];
+                forward[k] = (a - gamma * b) * scale;
+                backward[k] = (b - gamma * a) * scale * step[k];
+            }
         }
         return impedance;
     }

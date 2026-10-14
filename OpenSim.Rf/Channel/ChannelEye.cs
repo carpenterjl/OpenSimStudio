@@ -7,7 +7,55 @@ namespace OpenSim.Rf.Channel;
 
 /// <summary>What hangs on one port of a channel: a resistance to ground, and the share of
 /// the source waveform driven through it (0 for a plain load).</summary>
-public readonly record struct PortTermination(double ResistanceOhms, double Drive = 0);
+public readonly record struct PortTermination(double ResistanceOhms, double Drive = 0)
+{
+    /// <summary>A lumped network in place of the plain resistance; null = the resistance.</summary>
+    public PortNetwork? Network { get; init; }
+}
+
+/// <summary>
+/// A driver's or receiver's lumped network, from the channel's port inward: an AC-coupling
+/// capacitor in series (0 = DC coupled), the package's series resistance and inductance,
+/// then at the die a capacitance to ground in parallel with the resistance — to ground at a
+/// receiver, to the source at a driver (∞ = none, a CMOS input). A receiver's eye is read
+/// at its die, behind the package.
+/// </summary>
+public sealed record PortNetwork
+{
+    public double ResistanceOhms { get; init; } = 50;
+    public double DieCapacitanceFarads { get; init; }
+    public double PackageInductanceHenries { get; init; }
+    public double PackageResistanceOhms { get; init; }
+    public double CouplingCapacitanceFarads { get; init; }
+
+    /// <summary>
+    /// At one frequency: the impedance seen into the network from the port (null = open),
+    /// the port's open-circuit voltage per unit source behind the resistance, and the die
+    /// voltage per unit port voltage.
+    /// </summary>
+    public (Complex? Impedance, Complex OpenVoltage, Complex DieFromPort) At(double frequencyHz)
+    {
+        double omega = 2 * Math.PI * frequencyHz;
+        Complex dieAdmittance = new Complex(0, omega * DieCapacitanceFarads)
+                                + (double.IsPositiveInfinity(ResistanceOhms) ? 0 : 1 / ResistanceOhms);
+        // The source behind R divides against the die capacitance: e·Y_R/(Y_R + Y_C).
+        Complex openVoltage = double.IsPositiveInfinity(ResistanceOhms) ? 0
+            : dieAdmittance == Complex.Zero ? 1 : (1 / ResistanceOhms) / dieAdmittance;
+        bool series = CouplingCapacitanceFarads > 0;
+        // An open die (a CMOS input at DC) carries no current, so it sits at the port's
+        // voltage; behind a coupling capacitor at DC it sits at its own resistance's ground.
+        if (dieAdmittance == Complex.Zero) return (null, openVoltage, series && omega == 0 ? 0 : 1);
+        if (series && omega == 0) return (null, openVoltage, 0);
+        Complex dieImpedance = 1 / dieAdmittance;
+        Complex seriesImpedance = new Complex(PackageResistanceOhms, omega * PackageInductanceHenries)
+                                  + (series ? 1 / new Complex(0, omega * CouplingCapacitanceFarads) : 0);
+        Complex total = seriesImpedance + dieImpedance;
+        return (total, openVoltage, total == Complex.Zero ? 1 : dieImpedance / total);
+    }
+
+    public bool IsResistive => DieCapacitanceFarads == 0 && PackageInductanceHenries == 0
+                               && PackageResistanceOhms == 0 && CouplingCapacitanceFarads == 0;
+}
 
 /// <summary>The bit stream and the terminations of an eye run.</summary>
 public sealed record ChannelEyeSetup
@@ -32,6 +80,13 @@ public sealed record ChannelEyeSetup
 
     /// <summary>Per leg, to ground.</summary>
     public double LoadOhms { get; init; } = 50;
+
+    /// <summary>The driver's network per leg in place of <see cref="SourceOhms"/>; null = the resistance.</summary>
+    public PortNetwork? Source { get; init; }
+
+    /// <summary>The receiver's network per leg in place of <see cref="LoadOhms"/>; the eye is
+    /// read at its die.</summary>
+    public PortNetwork? Load { get; init; }
 }
 
 public sealed record ChannelEyeResult
@@ -68,7 +123,8 @@ public sealed record ChannelEyeResult
 }
 
 /// <summary>
-/// The eye of an imported channel between resistive terminations: the periodic steady
+/// The eye of an imported channel between linear terminations — resistances, or
+/// <see cref="PortNetwork"/>s with package, die capacitance and AC coupling: the periodic steady
 /// state of a PRBS pattern, bin by bin through the S-parameters (the same construction as
 /// <see cref="TransientLink"/>, with the channel given by its S matrix instead of a line
 /// model). Linear only — a driver or receiver model with clamps goes through
@@ -83,24 +139,45 @@ public static class ChannelEye
     /// coefficients and b_s the waves the sources launch: b = (I − S·Γ)⁻¹·S·b_s, a = Γ·b + b_s,
     /// V = √Z₀·(a + b).
     /// </summary>
-    public static Complex[] PortVoltages(Complex[,] s, double referenceOhms, IReadOnlyList<PortTermination> ports)
+    public static Complex[] PortVoltages(Complex[,] s, double referenceOhms, IReadOnlyList<PortTermination> ports) =>
+        PortVoltages(s, referenceOhms, ports, 0);
+
+    /// <summary>The same with each port's network taken at <paramref name="frequencyHz"/>: a
+    /// network's port is its Thévenin equivalent (impedance and open-circuit voltage).</summary>
+    public static Complex[] PortVoltages(Complex[,] s, double referenceOhms, IReadOnlyList<PortTermination> ports,
+        double frequencyHz)
     {
         int n = s.GetLength(0);
         if (ports.Count != n) throw new ArgumentException("One termination per port.", nameof(ports));
         double root = Math.Sqrt(referenceOhms);
-        var gamma = new double[n];
+        var gamma = new Complex[n];
         var launched = new Complex[n];
         for (int i = 0; i < n; i++)
         {
-            double r = ports[i].ResistanceOhms;
-            if (double.IsPositiveInfinity(r))
+            Complex? impedance;
+            Complex emf;
+            if (ports[i].Network is { } network)
             {
-                if (ports[i].Drive != 0) throw new ArgumentException("A driven port needs a finite source resistance.");
+                var at = network.At(frequencyHz);
+                impedance = at.Impedance;
+                emf = ports[i].Drive * at.OpenVoltage;
+                if (ports[i].Drive != 0 && double.IsPositiveInfinity(network.ResistanceOhms))
+                    throw new ArgumentException("A driven port needs a finite source resistance.");
+            }
+            else
+            {
+                double r = ports[i].ResistanceOhms;
+                impedance = double.IsPositiveInfinity(r) ? null : r;
+                emf = ports[i].Drive;
+                if (impedance is null && emf != 0) throw new ArgumentException("A driven port needs a finite source resistance.");
+            }
+            if (impedance is not { } z)
+            {
                 gamma[i] = 1;
                 continue;
             }
-            gamma[i] = (r - referenceOhms) / (r + referenceOhms);
-            launched[i] = ports[i].Drive * root / (r + referenceOhms);
+            gamma[i] = (z - referenceOhms) / (z + referenceOhms);
+            launched[i] = emf * root / (z + referenceOhms);
         }
         var system = new Complex[n, n];
         var rhs = new Complex[n, 1];
@@ -124,10 +201,18 @@ public static class ChannelEye
         ChannelEyeSetup setup)
     {
         var ports = new PortTermination[channel.Ports];
-        for (int i = 0; i < ports.Length; i++) ports[i] = new PortTermination(setup.LoadOhms);
-        ports[drivenPort] = new PortTermination(setup.SourceOhms, 1);
-        return Run(channel, setup, ports, 0, setup.Swing, v => (v[receiverPort], null));
+        for (int i = 0; i < ports.Length; i++) ports[i] = Load(setup);
+        ports[drivenPort] = Source(setup, 1);
+        return Run(channel, setup, ports, 0, setup.Swing, (v, f) => (v[receiverPort] * Die(setup, f), null));
     }
+
+    private static PortTermination Source(ChannelEyeSetup setup, double drive) =>
+        new(setup.SourceOhms, drive) { Network = setup.Source };
+
+    private static PortTermination Load(ChannelEyeSetup setup) => new(setup.LoadOhms) { Network = setup.Load };
+
+    private static Complex Die(ChannelEyeSetup setup, double frequencyHz) =>
+        setup.Load is { } load ? load.At(frequencyHz).DieFromPort : 1;
 
     /// <summary>Differential: the near pair driven in opposition, the difference read at
     /// the far pair. A four-port file.</summary>
@@ -137,17 +222,20 @@ public static class ChannelEye
         if (channel.Ports != 4)
             throw new InvalidOperationException($"A differential eye needs a four-port file; this one has {channel.Ports}.");
         var ports = new PortTermination[4];
-        ports[pairing.Plus1] = new PortTermination(setup.SourceOhms, 0.5);
-        ports[pairing.Minus1] = new PortTermination(setup.SourceOhms, -0.5);
-        ports[pairing.Plus2] = new PortTermination(setup.LoadOhms);
-        ports[pairing.Minus2] = new PortTermination(setup.LoadOhms);
-        return Run(channel, setup, ports, -setup.Swing, setup.Swing,
-            v => (v[pairing.Plus2] - v[pairing.Minus2], 0.5 * (v[pairing.Plus2] + v[pairing.Minus2])));
+        ports[pairing.Plus1] = Source(setup, 0.5);
+        ports[pairing.Minus1] = Source(setup, -0.5);
+        ports[pairing.Plus2] = Load(setup);
+        ports[pairing.Minus2] = Load(setup);
+        return Run(channel, setup, ports, -setup.Swing, setup.Swing, (v, f) =>
+        {
+            Complex die = Die(setup, f);
+            return ((v[pairing.Plus2] - v[pairing.Minus2]) * die, 0.5 * (v[pairing.Plus2] + v[pairing.Minus2]) * die);
+        });
     }
 
     private static ChannelEyeResult Run(ImportedChannel channel, ChannelEyeSetup setup,
         IReadOnlyList<PortTermination> ports, double low, double high,
-        Func<Complex[], (Complex Signal, Complex? Common)> read)
+        Func<Complex[], double, (Complex Signal, Complex? Common)> read)
     {
         if (!(setup.BitRate > 0)) throw new ArgumentOutOfRangeException(nameof(setup), "The bit rate must be positive.");
         var notes = new List<string>();
@@ -178,7 +266,7 @@ public static class ChannelEye
         {
             double f = k * baseFrequency;
             if (spectrum[k] == Complex.Zero || !channel.Covers(f)) return;
-            slots[k] = read(PortVoltages(channel.At(f), channel.ReferenceOhms, ports));
+            slots[k] = read(PortVoltages(channel.At(f), channel.ReferenceOhms, ports, f), f);
         });
         for (int k = 0; k <= half; k++)
         {
@@ -200,6 +288,8 @@ public static class ChannelEye
         if (dropped > 1e-6 * (kept + dropped))
             notes.Add($"The channel file ends at {channel.MaxFrequencyHz / 1e9:g4} GHz: {dropped / (kept + dropped) * 100:g2} % of the " +
                       "pattern's alternating energy lies above it and is left out.");
+        if (setup.Load is { IsResistive: false })
+            notes.Add("Read at the receiver's die, behind its package and coupling.");
         notes.AddRange(channel.Notes);
 
         var wave = Real(Fft.Inverse(signal));

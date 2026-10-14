@@ -353,9 +353,9 @@
     </GroupBox>
     <GroupBox Header="Channel from a Touchstone file" DataContext="{Binding SignalIntegrity.Channel}">
         <StackPanel>
-            <TextBlock Text="A measured channel, or one from another tool: mixed-mode S-parameters, a TDR impedance profile, and an eye between resistive terminations. IBIS-AMI, COM and statistical BER are not here; export Touchstone to the tools that do them."
+            <TextBlock Text="A measured channel, or one from another tool (Touchstone 1 or 2): causality and passivity repair, mixed-mode S-parameters, a TDR impedance profile, and an eye between resistive or lumped terminations. IBIS-AMI, COM and statistical BER are not here; export Touchstone to the tools that do them."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
-            <Button x:Name="ChannelLoadButton" Content="Load Touchstone file (.sNp)" Command="{Binding LoadCommand}"/>
+            <Button x:Name="ChannelLoadButton" Content="Load Touchstone file (.sNp, .ts)" Command="{Binding LoadCommand}"/>
             <ItemsControl ItemsSource="{Binding SummaryLines}" Margin="0,2,0,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -376,6 +376,14 @@
                           IsEnabled="{Binding IsFourPort}" Margin="0,2,0,0"/>
 
                 <UniformGrid Columns="2" Margin="0,4,0,0">
+                    <Button Content="Repair (causality, passivity)" Command="{Binding RepairCommand}"
+                            ToolTip="Fit every entry with a causal rational model, make the result passive, and use it for the eye, TDR and mixed-mode."/>
+                    <Button Content="Save repaired" Command="{Binding SaveRepairedCommand}" IsEnabled="{Binding HasRepair}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <TextBlock Text="{Binding RepairResult}" TextWrapping="Wrap" FontSize="11"
+                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+
+                <UniformGrid Columns="2" Margin="0,4,0,0">
                     <Button Content="Mixed-mode S" Command="{Binding ShowMixedModeCommand}" IsEnabled="{Binding IsFourPort}"/>
                     <Button Content="Save mixed-mode (.s4p)" Command="{Binding SaveMixedModeCommand}"
                             IsEnabled="{Binding IsFourPort}" Margin="2,0,0,0"/>
@@ -388,6 +396,8 @@
                     <Label Content="TDR edge [ps] (0 = fastest)"/>
                     <TextBox Text="{Binding TdrRisePs}" ToolTip="10–90 % rise time. 0 takes the fastest edge the file's last frequency supports."/>
                 </UniformGrid>
+                <CheckBox Content="Peel with the through path's loss taken out" IsChecked="{Binding TdrTakeOutLoss}"
+                          ToolTip="The loss of the driven → receiver path (a leg's, for a pair), spread evenly along the line." Margin="0,2,0,2"/>
                 <Button Content="TDR impedance profile" Command="{Binding RunTdrCommand}"/>
                 <TextBlock Text="{Binding TdrResult}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
@@ -405,7 +415,15 @@
                     <Label Content="Source [Ω per leg]"/>
                     <TextBox Text="{Binding SourceOhms}"/>
                     <Label Content="Load [Ω per leg]"/>
-                    <TextBox Text="{Binding LoadOhms}"/>
+                    <TextBox Text="{Binding LoadOhms}" ToolTip="With lumped parts, 0 = no termination (a CMOS input)."/>
+                    <Label Content="Driver die C [pF]"/>
+                    <TextBox Text="{Binding SourceDiePf}"/>
+                    <Label Content="Receiver die C [pF]"/>
+                    <TextBox Text="{Binding LoadDiePf}"/>
+                    <Label Content="Package L [nH, each end]"/>
+                    <TextBox Text="{Binding PackageNh}"/>
+                    <Label Content="AC coupling [nF] (0 = DC)"/>
+                    <TextBox Text="{Binding CouplingNf}" ToolTip="A series capacitor at the receiver's port."/>
                 </UniformGrid>
                 <Button Content="Eye" Command="{Binding RunEyeCommand}"/>
                 <TextBlock Text="{Binding EyeResult}" TextWrapping="Wrap" FontSize="11"
