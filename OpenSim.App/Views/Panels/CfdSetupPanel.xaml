@@ -18,7 +18,14 @@
                 <Label Content="CFD cell size [m]"/>
                 <TextBox x:Name="CfdCellSizeBox" Text="{Binding Solve.CfdCellSize}"
                          ToolTip="0 = automatic: smallest body extent / 24, coarsened to the cell budget (the choice is logged)"/>
+
+                <Label Content="Steady march: most steps"/>
+                <TextBox x:Name="CfdMaxStepsBox" Text="{Binding CfdSetup.MaxSteps}"
+                         ToolTip="A steady flow march that has not converged by this many pseudo-time steps stops with its residual. Raise it for a slow case."/>
             </UniformGrid>
+            <CheckBox x:Name="CfdTransientMomentumCheck" Content="Transient: the flow follows the heating"
+                      IsChecked="{Binding CfdSetup.TransientMomentum}" Margin="0,4,0,0"
+                      ToolTip="March the momentum with the energy in real time, so a flow the heating drives (a plume in a sealed box) develops as the solids warm. Off holds the initial state's flow, right when the flow is driven from outside."/>
 
             <StackPanel Visibility="{Binding CfdSetup.IsInternal, Converter={StaticResource BoolToVis}}">
                 <UniformGrid Columns="2">
@@ -65,6 +72,10 @@
                                         <TextBox Text="{Binding Temperature}"
                                                  AutomationProperties.AutomationId="{Binding Index, StringFormat=OpeningTemp{0}}"
                                                  ToolTip="Temperature of the stream arriving here — NOT the ambient, which is the surroundings"/>
+                                        <Label Content="Fan curve [m³/h : Pa]"/>
+                                        <TextBox Text="{Binding FanCurve}"
+                                                 AutomationProperties.AutomationId="{Binding Index, StringFormat=OpeningFan{0}}"
+                                                 ToolTip="Optional: the fan's static pressure against flow, e.g. 0:40, 30:25, 60:0. The flow is then the operating point and the speed box is ignored."/>
                                     </UniformGrid>
                                 </StackPanel>
                             </Border>

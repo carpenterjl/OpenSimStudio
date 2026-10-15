@@ -27,7 +27,8 @@ public static partial class CliRunner
         opensim solve <project.ossproj> [options]
             Runs the project's analysis (or --analysis NAME) on its first solid body.
             --analysis NAME     Static, Electrical, Thermal, JouleCoupled, TransientThermal,
-                                Modal, AcElectrical, Electrostatic, EnvironmentThermal
+                                Modal, AcElectrical, Electrostatic, EnvironmentThermal,
+                                ConjugateThermal (the project's saved CFD case and environment)
             --body NAME         the body to solve (single-body analyses)
             --out DIR           results folder (default: <project>-results next to the file)
             --remesh            re-mesh every body with its stored settings
@@ -41,7 +42,11 @@ public static partial class CliRunner
             --modes N                                modal
             --open                                   electrostatic: open outer boundary (1/r
                                                      condition) instead of a zero-flux wall
-            --steady                                 environment heat flow: equilibrium only
+            --steady                                 environment and conjugate heat flow:
+                                                     equilibrium only
+            --max-steps N                            conjugate: cap on the steady flow march
+            --momentum                               conjugate transient: march the flow with
+                                                     the heating
 
         opensim sweep <job.json> [--out DIR]
             Runs the project at every point of a parameter plan and tabulates the outputs.
@@ -165,6 +170,8 @@ public static partial class CliRunner
         InitialTemperature = Number(o, "initial", 293.15),
         Duration = Number(o, "duration", 10),
         TimeStep = Number(o, "step", 0.1),
+        MaxFlowSteps = o.ContainsKey("max-steps") ? (int)Number(o, "max-steps", 4000) : null,
+        TransientMomentum = o.ContainsKey("momentum"),
         Integrator = Choice(o, "integrator", TimeIntegrator.BackwardEuler, new()
         {
             ["be"] = TimeIntegrator.BackwardEuler, ["trbdf2"] = TimeIntegrator.TrBdf2, ["adaptive"] = TimeIntegrator.Adaptive

@@ -176,7 +176,10 @@ closed-form load lines and round-trip extractions on hand-written fixtures.
 **Conjugate CFD is laminar on a voxel grid.** Solid walls are stair-stepped; the no-slip
 wall sits on the cell boundary, so a duct's friction converges at second order (a 2-cell
 passage is still a coarse answer). Fluid properties are evaluated once, at the
-inflow-weighted stream temperature, and are not updated as the fluid warms.
+inflow-weighted stream temperature, and are not updated as the fluid warms. A transient
+holds the initial state's flow unless the flow is set to follow the heating (then momentum
+and energy march together, first order in time). A fan is one inlet with its curve; several
+fans in one case are not solved together.
 
 ## Contributing
 

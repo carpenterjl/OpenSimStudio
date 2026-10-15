@@ -49,6 +49,8 @@ public partial class CfdSetupViewModel : ObservableObject
         var cfd = _session.Project.Cfd;
         if (cfd is null) return;
         DomainMode = cfd.Regime == FlowRegime.Internal ? 1 : 0;
+        MaxSteps = cfd.MaxSteps;
+        TransientMomentum = cfd.TransientMomentum;
         if (cfd.FluidName is { } name && FluidNames.Contains(name)) FluidName = name;
         Openings.Clear();
         for (int n = 0; n < cfd.Openings.Count; n++)
@@ -64,7 +66,8 @@ public partial class CfdSetupViewModel : ObservableObject
             var row = new FlowOpeningRow(candidate, n + 1)
             {
                 Role = opening.Kind == FlowFaceKind.InletVelocity ? 1 : 2,
-                Speed = opening.Velocity.Length,
+                Speed = opening.Fan is null ? opening.Velocity.Length : 0.1,
+                FanCurve = FlowOpeningRow.FormatFanCurve(opening.Fan),
                 Temperature = opening.Temperature ?? _session.Project.Environment?.AmbientTemperature ?? 293.15
             };
             Openings.Add(row);
@@ -105,6 +108,14 @@ public partial class CfdSetupViewModel : ObservableObject
     /// metal — a silent hole in the heat path. Clamping is what keeps the bore mouths
     /// exactly on the box faces where the openings live.</summary>
     [ObservableProperty] private double _wallMarginMillimetres = 5;
+
+    /// <summary>Cap on the steady march's pseudo-time steps; a case that stops at it is a
+    /// typed failure naming the residual, so a slow case needs it raised.</summary>
+    [ObservableProperty] private int _maxSteps = 4000;
+
+    /// <summary>Transient: march the flow with the heating (buoyancy-driven cases) instead
+    /// of holding the initial state's flow.</summary>
+    [ObservableProperty] private bool _transientMomentum;
 
     /// <summary>Detected ports the user assigns roles to.</summary>
     public ObservableCollection<FlowOpeningRow> Openings { get; } = new();
@@ -196,7 +207,10 @@ public partial class CfdSetupViewModel : ObservableObject
     /// </summary>
     public CfdSettings? Build(double cellSize, Vector3D environmentVelocity)
     {
-        var baseline = new CfdSettings { CellSize = cellSize };
+        var baseline = new CfdSettings
+        {
+            CellSize = cellSize, MaxSteps = Math.Max(1, MaxSteps), TransientMomentum = TransientMomentum
+        };
         if (DomainMode == 0)
             return CfdSettings.ForExternalFlow(environmentVelocity, baseline);
 
@@ -206,7 +220,21 @@ public partial class CfdSetupViewModel : ObservableObject
                         "and at least one solid body.");
             return null;
         }
-        var openings = Openings.Select(o => o.Build()).OfType<FlowOpening>().ToList();
+        List<FlowOpening> openings;
+        try
+        {
+            openings = Openings.Select(o => o.Build()).OfType<FlowOpening>().ToList();
+        }
+        catch (FormatException ex)
+        {
+            _log.Append($"CFD: fan curve — {ex.Message}");
+            return null;
+        }
+        if (openings.Count(o => o.Fan is not null) > 1)
+        {
+            _log.Append("CFD: one fan per case is solved; give only one inlet a fan curve.");
+            return null;
+        }
         if (openings.Count == 0)
         {
             _log.Append("CFD: no opening is assigned a role — detect the openings and set an " +

@@ -31,6 +31,11 @@ public sealed record StudySettings
     /// <summary>Environment heat flow: the final equilibrium instead of the time history.</summary>
     public bool EnvironmentSteady { get; init; }
 
+    /// <summary>Conjugate heat flow: a cap on the steady flow march in place of the
+    /// project's, and whether a transient marches the flow with the heating.</summary>
+    public int? MaxFlowSteps { get; init; }
+    public bool TransientMomentum { get; init; }
+
     /// <summary>The body to solve when the project has several and the analysis is a
     /// single-body one; null is the first solid body.</summary>
     public string? BodyName { get; init; }
@@ -52,7 +57,7 @@ public static class StudyRunner
     public static readonly IReadOnlyList<string> Analyses = new[]
     {
         "Static", "Electrical", "Thermal", "JouleCoupled", "TransientThermal", "Modal", "AcElectrical",
-        "Electrostatic", "EnvironmentThermal"
+        "Electrostatic", "EnvironmentThermal", "ConjugateThermal"
     };
 
     public static IMeshGenerator DefaultMesher() =>
@@ -92,6 +97,8 @@ public static class StudyRunner
 
         if (kind == "EnvironmentThermal")
             return SolveEnvironment(project, solids, settings, Lookup, log, progress, cancellationToken);
+        if (kind == "ConjugateThermal")
+            return SolveConjugate(project, solids, settings, Lookup, log, progress, cancellationToken);
         if (kind is "Electrical" or "AcElectrical" && solids.Count > 1 && settings.BodyName is null)
         {
             if (project.Assembly?.ElectricalContactConductance is { } joint)
@@ -205,6 +212,65 @@ public static class StudyRunner
         string bodyNames = string.Join(" + ", bodies.Select(b => b.Name));
         var report = StudyReport.FromSolve(project.Name, bodyNames, "EnvironmentThermal", input, output);
         return new StudyRun("EnvironmentThermal", bodyNames, input, output, report);
+    }
+
+    /// <summary>
+    /// Conjugate heat flow — every solid body merged and joined at its contacts, coupled to
+    /// the project's CFD case (<see cref="SimProject.Cfd"/>, as the application last saved
+    /// it) in the project's environment; steady with --steady, else the transient. The
+    /// flow's notes and the outlet ledger join the log.
+    /// </summary>
+    private static StudyRun SolveConjugate(SimProject project, List<Body> bodies, StudySettings settings,
+        Func<string, Material?> lookup, Action<string> log, IProgress<SolverProgress>? progress, CancellationToken ct)
+    {
+        var environment = project.Environment
+                          ?? throw new InvalidOperationException("The project has no environment settings; a conjugate study needs them.");
+        var cfd = project.Cfd
+                  ?? throw new InvalidOperationException(
+                      "The project has no CFD case; set one up and save it from the application's conjugate panel.");
+        cfd = cfd with
+        {
+            MaxSteps = settings.MaxFlowSteps ?? cfd.MaxSteps,
+            TransientMomentum = settings.TransientMomentum || cfd.TransientMomentum
+        };
+        foreach (var body in bodies)
+        {
+            if (body.Mesh is null) throw new InvalidOperationException($"Body '{body.Name}' has no mesh.");
+            if (body.Material is null) throw new InvalidOperationException($"Body '{body.Name}' has no material.");
+            body.Material = lookup(body.Material.Name) ?? body.Material;
+        }
+        var detection = (project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
+        var merged = FeMeshAssembler.Assemble(bodies);
+        log($"Merged {bodies.Count} bodies: {merged.Mesh.NodeCount} nodes, {merged.Mesh.ElementCount} elements.");
+        var contacts = ContactDetector.Find(merged.Mesh, merged.NodeBases, detection, log);
+        var source = FeMeshAssembler.BuildElementHeatSource(merged, bodies, log);
+        log($"Environment (resolved by CFD): {environment.Describe()}; flow march cap {cfd.MaxSteps} steps" +
+            (cfd.TransientMomentum ? "; the transient marches the flow." : "."));
+        var input = new SolveInput
+        {
+            Mesh = merged.Mesh,
+            Material = bodies[0].Material!,
+            RegionMaterials = merged.RegionMaterials,
+            BoundaryConditions = merged.BoundaryConditions,
+            ElementHeatSource = source,
+            ThermalContacts = contacts,
+            TransientThermal = settings.EnvironmentSteady
+                ? null
+                : new TransientThermalSettings
+                {
+                    InitialTemperature = settings.InitialTemperature, Duration = settings.Duration, TimeStep = settings.TimeStep,
+                    Integrator = settings.Integrator, Tolerance = settings.Tolerance, Capacity = settings.Capacity
+                }
+        };
+        var result = OpenSim.Cfd.ConjugateHeatStudy.Run(input, merged.NodeBases, environment, cfd, progress,
+            cancellationToken: ct);
+        foreach (var line in result.Thermal.Log) log(line);
+        foreach (var line in result.Flow.Notes) log("Flow: " + line);
+        if (result.Outlets is { } outlets)
+            log($"Outlets: the stream carries {outlets.HeatRemoved:G4} W away.");
+        string bodyNames = string.Join(" + ", bodies.Select(b => b.Name));
+        var report = StudyReport.FromSolve(project.Name, bodyNames, "ConjugateThermal", input, result.Thermal);
+        return new StudyRun("ConjugateThermal", bodyNames, input, result.Thermal, report);
     }
 
     /// <summary>

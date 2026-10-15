@@ -15,19 +15,25 @@ namespace OpenSim.Cfd;
 public readonly record struct EnergyMarch(int Steps, int Planned, bool Settled);
 
 /// <summary>
-/// First-party incompressible laminar flow solver: Chorin projection on the staggered
-/// MAC grid, marched in pseudo-time to steady state.
+/// First-party incompressible laminar flow solver: incremental pressure-correction
+/// projection on the staggered MAC grid, marched in pseudo-time to steady state (or in
+/// real time, <see cref="AdvanceFlow"/>).
 /// <para>
 /// Per step: (1) predictor — explicit first-order upwind advection (monotone; the
-/// second-order limited scheme is a named refinement) plus IMPLICIT viscosity, one SPD
-/// Helmholtz solve per velocity component through the house Jacobi-CG; (2) pressure
-/// Poisson ∇²φ = ∇·u*/Δt on the 7-point SPD Laplacian (outlet faces pin the level via a
+/// second-order limited scheme is a named refinement) plus IMPLICIT viscosity and the
+/// pressure gradient of the previous step, one SPD Helmholtz solve per velocity
+/// component through the house Jacobi-CG; (2) Poisson for the pressure INCREMENT
+/// ∇²φ = ∇·u*/Δt on the 7-point SPD Laplacian (outlet faces pin the level via a
 /// half-cell Dirichlet ghost; a fully closed enclosure is pure-Neumann — net inflow is
 /// checked and a typed failure if unbalanced, the level pinned by reducing out one cell,
 /// exactly the fixed-support precedent); (3) correction u ← u* − Δt∇φ using the SAME
 /// face-gradient expressions the Poisson operator was assembled from, so the corrected
 /// field's discrete divergence is zero to CG tolerance BY CONSTRUCTION — mass
-/// conservation is an identity here, not an aspiration, and it is gated as one.
+/// conservation is an identity here, not an aspiration, and it is gated as one; then
+/// p ← p + ρφ. Carrying the pressure in the predictor is what makes the steady state
+/// independent of Δt: without it (the non-incremental form this solver used before FU-43)
+/// the converged u* met the walls' no-slip and the projected u slipped by Δt·∇p/ρ, which
+/// read a pressure-driven slot's resistance 8 % low.
 /// </para>
 /// <para>
 /// Boundary conventions worth knowing: a velocity component tangential to a Dirichlet
@@ -49,11 +55,11 @@ public readonly record struct EnergyMarch(int Steps, int Planned, bool Settled);
 /// the previous state with disjoint writes, so the march is bitwise identical at any
 /// degree of parallelism.
 /// </summary>
-public sealed class IncompressibleFlowSolver
+public sealed partial class IncompressibleFlowSolver
 {
     private readonly CartesianGrid _grid;
     private readonly VoxelizedDomain _domain;
-    private readonly CfdSettings _settings;
+    private CfdSettings _settings;   // replaced only when a fan's operating point moves an inlet
     private readonly double _nu;       // kinematic viscosity [m²/s]
     private readonly double _rho;      // density [kg/m³]
     private readonly double _alpha;    // thermal diffusivity [m²/s]
@@ -76,7 +82,8 @@ public sealed class IncompressibleFlowSolver
     private readonly int _poissonN;
     private readonly CsrMatrix _poisson;
     private readonly int[] _poissonCells;     // unknown id → flat cell index
-    private readonly double[] _phi;           // full cell array of the last projection
+    private readonly double[] _phi;           // full cell array of the last pressure INCREMENT
+    private readonly double[] _pressure;      // kinematic pressure p/ρ, the sum of the increments
     private readonly double[] _phiSolution;   // unknown-sized warm-start buffer
     private double _dt;
 
@@ -190,6 +197,7 @@ public sealed class IncompressibleFlowSolver
             if (_cellMap[c] >= 0) _poissonCells[_cellMap[c]] = c;
         _poisson = AssemblePoisson();
         _phi = _grid.AllocateCellField();
+        _pressure = _grid.AllocateCellField();
         _phiSolution = new double[_poissonN];
         if (!_hasOutlet)
         {
@@ -264,6 +272,15 @@ public sealed class IncompressibleFlowSolver
         Action<int, double>? progress = null,
         bool marchEnergy = true)
     {
+        int fan = FanOpening();
+        return fan < 0
+            ? MarchSteady(wallFaceTemperatures, cancellationToken, progress, marchEnergy)
+            : SolveFanOperatingPoint(fan, wallFaceTemperatures, cancellationToken, progress, marchEnergy);
+    }
+
+    private FlowSolution MarchSteady(double[]? wallFaceTemperatures, CancellationToken cancellationToken,
+        Action<int, double>? progress, bool marchEnergy)
+    {
         if (wallFaceTemperatures is not null)
         {
             if (_thermal is null)
@@ -286,7 +303,7 @@ public sealed class IncompressibleFlowSolver
             // VELOCITY settled — with the thermal front still halfway down the channel.
             double span = EnergyScale();
             _tScale = span;
-            if (_thermal.IncludeBuoyancy && _beta * span > 0.1)
+            if (_thermal.IncludeBuoyancy && !double.IsPositiveInfinity(span) && _beta * span > 0.1)
                 _notes.Add($"WARNING: β·ΔT = {_beta * span:G3} > 0.1 — the Boussinesq " +
                            "linearization is stretched; treat buoyancy magnitudes as approximate.");
         }
@@ -357,7 +374,7 @@ public sealed class IncompressibleFlowSolver
                    $"max |∇·u| = {maxDiv:G3} 1/s, in {inflow:G4} / out {outflow:G4} m³/s.");
 
         var pressure = _grid.AllocateCellField();
-        for (int c = 0; c < pressure.Length; c++) pressure[c] = _rho * _phi[c];
+        for (int c = 0; c < pressure.Length; c++) pressure[c] = _rho * _pressure[c];
         return new FlowSolution(_grid,
             (double[])_components[0].Values.Clone(),
             (double[])_components[1].Values.Clone(),
@@ -551,7 +568,7 @@ public sealed class IncompressibleFlowSolver
     public FlowSolution Snapshot(int steps, double residual)
     {
         var pressure = _grid.AllocateCellField();
-        for (int c = 0; c < pressure.Length; c++) pressure[c] = _rho * _phi[c];
+        for (int c = 0; c < pressure.Length; c++) pressure[c] = _rho * _pressure[c];
         var (inflow, outflow) = BoundaryFlux();
         return new FlowSolution(_grid,
             (double[])_components[0].Values.Clone(),
@@ -578,7 +595,8 @@ public sealed class IncompressibleFlowSolver
             for (int n = 0; n < comp.ActiveCount; n++)
             {
                 int f = comp.ActiveFaces[n];
-                comp.Rhs[n] = comp.RhsFixed[n] + comp.Values[f] / _dt - comp.Adv[n];
+                comp.Rhs[n] = comp.RhsFixed[n] + comp.Values[f] / _dt - comp.Adv[n]
+                              - FaceGradient(_pressure, comp, f);
                 if (buoyant)
                     comp.Rhs[n] += Buoyancy(comp, f);
                 comp.Star[n] = comp.Values[f];        // warm start from the current field
@@ -625,8 +643,14 @@ public sealed class IncompressibleFlowSolver
             for (int n = 0; n < _poissonN; n++) _phi[_poissonCells[n]] = _phiSolution[n];
             if (_pinnedCell >= 0) _phi[_pinnedCell] = 0;
 
-            // 4. Correct the active faces with the operator's own face gradients.
+            // 4. Correct the active faces with the operator's own face gradients, and
+            //    take the increment into the pressure.
             foreach (var comp in _components) CorrectComponent(comp);
+            for (int n = 0; n < _poissonN; n++)
+            {
+                int c = _poissonCells[n];
+                _pressure[c] += _phi[c];
+            }
         }
 
         // 5. Advance the fluid temperature with the corrected (divergence-free) field —
@@ -1189,33 +1213,39 @@ public sealed class IncompressibleFlowSolver
     private void CorrectComponent(Component comp)
     {
         if (comp.ActiveCount == 0) return;
-        int a = comp.Axis;
         var options = new ParallelOptions { MaxDegreeOfParallelism = _dop };
         Parallel.For(0, comp.ActiveCount, options, nIdx =>
         {
             int f = comp.ActiveFaces[nIdx];
-            comp.Decode(f, out int i, out int j, out int k);
-            int own = a == 0 ? i : a == 1 ? j : k;
-
-            double phiLow, phiHigh;
-            if (own == 0)
-            {
-                // Outlet boundary face on the low domain plane: ghost = −φ_interior.
-                phiHigh = _phi[_grid.CellIndex(i, j, k)];
-                phiLow = -phiHigh;
-            }
-            else if (own == comp.Dim(a) - 1)
-            {
-                phiLow = _phi[CellBehind(i, j, k, a)];
-                phiHigh = -phiLow;
-            }
-            else
-            {
-                phiLow = _phi[CellBehind(i, j, k, a)];
-                phiHigh = _phi[_grid.CellIndex(i, j, k)];
-            }
-            comp.Values[f] -= _dt * (phiHigh - phiLow) / _h;
+            comp.Values[f] -= _dt * FaceGradient(_phi, comp, f);
         });
+    }
+
+    /// <summary>The gradient of a cell field across one active face along its own axis —
+    /// the Poisson operator's flux for that face, an outlet face seeing the zero level
+    /// through the reflected ghost (−φ of its interior cell).</summary>
+    private double FaceGradient(double[] field, Component comp, int f)
+    {
+        comp.Decode(f, out int i, out int j, out int k);
+        int a = comp.Axis;
+        int own = a == 0 ? i : a == 1 ? j : k;
+        double low, high;
+        if (own == 0)
+        {
+            high = field[_grid.CellIndex(i, j, k)];
+            low = -high;
+        }
+        else if (own == comp.Dim(a) - 1)
+        {
+            low = field[CellBehind(i, j, k, a)];
+            high = -low;
+        }
+        else
+        {
+            low = field[CellBehind(i, j, k, a)];
+            high = field[_grid.CellIndex(i, j, k)];
+        }
+        return (high - low) / _h;
     }
 
     private int CellBehind(int i, int j, int k, int axis) => axis switch

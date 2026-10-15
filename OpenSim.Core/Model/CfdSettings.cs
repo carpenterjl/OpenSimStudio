@@ -27,10 +27,79 @@ public enum FlowFaceKind
     Symmetry
 }
 
+/// <summary>One point of a fan curve: a volume flow and the static pressure rise the fan
+/// gives at it.</summary>
+public sealed record FanPoint(double FlowCubicMetresPerSecond, double PressurePascals);
+
+/// <summary>
+/// A fan's static pressure rise against its volume flow, as a datasheet gives it: points
+/// in rising flow, straight lines between them, the end segments run on past the ends (so
+/// an operating point just beyond the table is still found, and said).
+/// </summary>
+public sealed record FanCurve
+{
+    public required IReadOnlyList<FanPoint> Points { get; init; }
+
+    public double PressureAt(double flow)
+    {
+        if (Points.Count < 2) throw new InvalidOperationException("A fan curve needs at least two points.");
+        int hi = 1;
+        while (hi < Points.Count - 1 && flow > Points[hi].FlowCubicMetresPerSecond) hi++;
+        var a = Points[hi - 1];
+        var b = Points[hi];
+        double w = (flow - a.FlowCubicMetresPerSecond) / (b.FlowCubicMetresPerSecond - a.FlowCubicMetresPerSecond);
+        return a.PressurePascals + w * (b.PressurePascals - a.PressurePascals);
+    }
+
+    /// <summary>The pressure at no flow.</summary>
+    public double ShutoffPressure => PressureAt(0);
+
+    /// <summary>Where the curve reaches zero pressure (the free delivery), on the table or on
+    /// its last segment run on.</summary>
+    public double FreeDelivery
+    {
+        get
+        {
+            var last = Points[^1];
+            var before = Points[^2];
+            if (last.PressurePascals <= 0)
+                for (int k = 1; k < Points.Count; k++)
+                    if (Points[k].PressurePascals <= 0)
+                    {
+                        var a = Points[k - 1];
+                        var b = Points[k];
+                        return a.FlowCubicMetresPerSecond + (b.FlowCubicMetresPerSecond - a.FlowCubicMetresPerSecond)
+                               * a.PressurePascals / (a.PressurePascals - b.PressurePascals);
+                    }
+            double slope = (last.PressurePascals - before.PressurePascals)
+                           / (last.FlowCubicMetresPerSecond - before.FlowCubicMetresPerSecond);
+            return slope < 0 ? last.FlowCubicMetresPerSecond - last.PressurePascals / slope : double.PositiveInfinity;
+        }
+    }
+
+    public void Validate()
+    {
+        if (Points.Count < 2) throw new InvalidOperationException("A fan curve needs at least two points.");
+        for (int k = 1; k < Points.Count; k++)
+        {
+            if (!(Points[k].FlowCubicMetresPerSecond > Points[k - 1].FlowCubicMetresPerSecond))
+                throw new InvalidOperationException("A fan curve's flows must rise from point to point.");
+            if (Points[k].PressurePascals > Points[k - 1].PressurePascals)
+                throw new InvalidOperationException(
+                    "A fan curve whose pressure rises with flow has an unstable stretch; give the falling part only.");
+        }
+        if (Points[0].FlowCubicMetresPerSecond < 0 || !(Points[0].PressurePascals > 0))
+            throw new InvalidOperationException("A fan curve starts at a flow ≥ 0 with a positive pressure.");
+        if (double.IsPositiveInfinity(FreeDelivery))
+            throw new InvalidOperationException("The fan curve never falls to zero pressure.");
+    }
+}
+
 /// <summary>
 /// A rectangular opening on a domain-box face — an enclosure inlet or outlet. The rest
 /// of the face keeps the face's own kind (typically <see cref="FlowFaceKind.Wall"/>).
-/// A fan is modelled as a uniform-velocity inlet patch; fan curves are a named deferral.
+/// A fan is an inlet opening with a <see cref="Fan"/> curve: its velocity's direction is
+/// kept and its speed is the operating point's.
 /// </summary>
 public sealed record FlowOpening
 {
@@ -62,6 +131,10 @@ public sealed record FlowOpening
     /// (backflow through an outlet still arrives at the ambient).
     /// </summary>
     public double? Temperature { get; init; }
+
+    /// <summary>On an inlet: the fan driving it. The flow is then wherever the system's
+    /// pressure drop meets the curve; <see cref="Velocity"/> gives only the direction.</summary>
+    public FanCurve? Fan { get; init; }
 }
 
 /// <summary>
@@ -172,6 +245,15 @@ public sealed record CfdSettings
     /// naming the residual — an oscillating residual suggests unsteady physics).</summary>
     public int MaxSteps { get; init; } = 4000;
 
+    /// <summary>
+    /// Transient conjugate solves: march the MOMENTUM with the energy in real time, so the
+    /// flow follows the buoyancy as the solids warm (a heated enclosure's plume, a
+    /// chimney starting up). False keeps the frozen-momentum mode: the flow of the initial
+    /// state held throughout, which is right when the flow is driven from outside and
+    /// settles far faster than the solids warm.
+    /// </summary>
+    public bool TransientMomentum { get; init; }
+
     /// <summary>The face kind of one box face.</summary>
     public FlowFaceKind FaceKind(BoxFace face) => face switch
     {
@@ -196,13 +278,27 @@ public sealed record CfdSettings
     public (FlowFaceKind Kind, Vector3D Velocity, double? Temperature) BoundaryAt(
         BoxFace face, double u, double v)
     {
-        foreach (var opening in Openings)
+        int index = OpeningAt(face, u, v);
+        if (index >= 0)
         {
-            if (opening.Face != face) continue;
-            if (u >= opening.UMin && u <= opening.UMax && v >= opening.VMin && v <= opening.VMax)
-                return (opening.Kind, opening.Velocity, opening.Temperature);
+            var opening = Openings[index];
+            return (opening.Kind, opening.Velocity, opening.Temperature);
         }
         return (FaceKind(face), InletVelocity, null);
+    }
+
+    /// <summary>The index of the opening that owns (u, v) on a face — the first one
+    /// containing it — or −1.</summary>
+    public int OpeningAt(BoxFace face, double u, double v)
+    {
+        for (int n = 0; n < Openings.Count; n++)
+        {
+            var opening = Openings[n];
+            if (opening.Face != face) continue;
+            if (u >= opening.UMin && u <= opening.UMax && v >= opening.VMin && v <= opening.VMax)
+                return n;
+        }
+        return -1;
     }
 
     /// <summary>True when any face or opening lets fluid cross the domain boundary —

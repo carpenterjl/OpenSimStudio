@@ -26,16 +26,17 @@ namespace OpenSim.Cfd;
 /// through the factored coefficient evaluated per triangle.
 /// </para>
 /// <para>
-/// Transient: FROZEN-MOMENTUM mode, a stated v1 decision — the velocity field is solved
-/// once (isothermal, at the initial state) and held, while the fluid ENERGY equation
-/// marches in lockstep with the solid. The exchange is IMPLICIT within each step: the
-/// fluid interval is repeated with the wall temperatures the solid step produced until
-/// the two agree, so the step is backward Euler for the coupled pair. (Handing the solid
-/// a film built from the start-of-step wall instead made it behave as if its heat
-/// capacity were C + g·A·Δt — a third too slow for an FR4 board on 1 mm cells at 10 s
-/// steps, and worse on a finer grid.) Honest when the flow settles much faster than the
-/// solid warms (t_flow = L/U ≪ τ_thermal, checked and logged); a momentum field that
-/// follows the changing buoyancy is a named deferral.
+/// Transient: by default FROZEN-MOMENTUM — the velocity field is solved once (isothermal,
+/// at the initial state) and held, while the fluid ENERGY equation marches in lockstep
+/// with the solid; honest when the flow settles much faster than the solid warms
+/// (t_flow = L/U ≪ τ_thermal, checked and logged). With
+/// <see cref="CfdSettings.TransientMomentum"/> the momentum marches too, in real time with
+/// the energy, so a flow the heating itself drives (a plume in a sealed box) develops as the
+/// solids warm. Either way the exchange is IMPLICIT within each step: the fluid interval is
+/// repeated from its saved state with the wall temperatures the solid step produced until
+/// the two agree, so the step is backward Euler for the coupled pair. (Handing the solid a
+/// film built from the start-of-step wall instead made it behave as if its heat capacity
+/// were C + g·A·Δt — a third too slow for an FR4 board on 1 mm cells at 10 s steps.)
 /// </para>
 /// </summary>
 public static class ConjugateHeatStudy
@@ -205,7 +206,8 @@ public static class ConjugateHeatStudy
                 (step, residual) => progress?.Report(new SolverProgress(
                     $"Flow march: step {step}, residual {residual:G2}", 0.1)),
                 marchEnergy: false);
-            LogFrozenFlowValidity(log, environment, domain, steadyFlow, solidInput);
+            bool marchMomentum = cfd.TransientMomentum;
+            if (!marchMomentum) LogFrozenFlowValidity(log, environment, domain, steadyFlow, solidInput);
 
             // Restart the fluid at the assembly initial temperature: before the stream
             // arrives, the passage holds fluid at the same state as the metal around it.
@@ -223,6 +225,7 @@ public static class ConjugateHeatStudy
             int worstPasses = 0;
             bool marchSettled = false;
             double[]? fluidAtStepStart = null;
+            FlowSnapshotState? stateAtStepStart = null;
             var wallAtStepStart = new double[wallT.Length];
             var solidWall = new double[wallT.Length];
             var mismatch = new double[wallT.Length];
@@ -255,7 +258,8 @@ public static class ConjugateHeatStudy
                         coupledStep = step;
                         stepPasses = 0;
                         mixer.Reset();
-                        fluidAtStepStart = flowSolver.SaveTemperature();
+                        if (marchMomentum) stateAtStepStart = flowSolver.SaveState();
+                        else fluidAtStepStart = flowSolver.SaveTemperature();
                         WallTemperatures(mesh, domain, nodal, wallT);
                         Array.Copy(wallT, wallAtStepStart, wallT.Length);
                     }
@@ -263,9 +267,12 @@ public static class ConjugateHeatStudy
                     {
                         // A repeat: same interval, from the same fluid state, with the wall
                         // temperatures StepAccepted corrected.
-                        flowSolver.RestoreTemperature(fluidAtStepStart!);
+                        if (marchMomentum) flowSolver.RestoreState(stateAtStepStart!);
+                        else flowSolver.RestoreTemperature(fluidAtStepStart!);
                     }
-                    var march = flowSolver.AdvanceEnergy(stepSeconds, wallT, cancellationToken);
+                    var march = marchMomentum
+                        ? flowSolver.AdvanceFlow(stepSeconds, wallT, cancellationToken: cancellationToken)
+                        : flowSolver.AdvanceEnergy(stepSeconds, wallT, cancellationToken);
                     subSteps += march.Steps;
                     marchSettled = march.Settled;
                     latestFlow = flowSolver.Snapshot(steadyFlow.Steps, steadyFlow.Residual);
@@ -318,8 +325,12 @@ public static class ConjugateHeatStudy
                     PrescribedFilmStepAccepted = StepAccepted
                 }, progress, cancellationToken);
             if (surroundings is not null) log.AddRange(surroundings.DrainNotes());
-            log.Add($"Conjugate transient: the fluid energy equation marched {subSteps:N0} CFL " +
-                    "sub-steps on the frozen velocity field. The exchange is implicit: each " +
+            log.Add((marchMomentum
+                        ? $"Conjugate transient: the fluid momentum and energy marched {subSteps:N0} " +
+                          "real-time sub-steps together (the flow follows the buoyancy as the solids warm). "
+                        : $"Conjugate transient: the fluid energy equation marched {subSteps:N0} CFL " +
+                          "sub-steps on the frozen velocity field. ") +
+                    "The exchange is implicit: each " +
                     "solid step was repeated with the fluid until the wall temperatures agreed " +
                     $"to {StepCouplingTolerance:P1} of the step's change ({totalPasses} coupled " +
                     $"solves in all, at most {worstPasses} in one step); the march is first " +

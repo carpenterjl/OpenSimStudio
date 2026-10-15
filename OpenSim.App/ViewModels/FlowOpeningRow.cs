@@ -1,3 +1,4 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSim.Core.Model;
 using OpenSim.Core.Numerics;
@@ -42,6 +43,11 @@ public sealed partial class FlowOpeningRow : ObservableObject
     /// <summary>Stream temperature [K]; inlets only. Empty/0 means the ambient.</summary>
     [ObservableProperty] private double _temperature = 293.15;
 
+    /// <summary>A fan driving this inlet, as "flow m³/h : pressure Pa" pairs separated by
+    /// commas or semicolons ("0:40, 30:25, 60:0"); empty = the fixed speed. With a curve
+    /// the speed box is ignored and the flow is the operating point.</summary>
+    [ObservableProperty] private string _fanCurve = "";
+
     /// <summary>Whether the speed/temperature boxes apply (an outlet takes neither).</summary>
     public bool IsInlet => Role == 1;
 
@@ -53,9 +59,37 @@ public sealed partial class FlowOpeningRow : ObservableObject
         if (Role == 0) return null;
         if (Role == 2)
             return Candidate.ToOpening(FlowFaceKind.OutletPressure, new Vector3D(0, 0, 0), null);
-        return Candidate.ToOpening(FlowFaceKind.InletVelocity,
-            InwardNormal(Candidate.Face) * Speed, Temperature);
+        var fan = ParseFanCurve(FanCurve);
+        var opening = Candidate.ToOpening(FlowFaceKind.InletVelocity,
+            InwardNormal(Candidate.Face) * (fan is null ? Speed : 1), Temperature);
+        return fan is null ? opening : opening with { Fan = fan };
     }
+
+    /// <summary>"Q m³/h : p Pa" pairs to a curve; empty text is no fan. Throws a
+    /// <see cref="FormatException"/> naming what is wrong.</summary>
+    public static FanCurve? ParseFanCurve(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var points = new List<FanPoint>();
+        foreach (string pair in text.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split(':');
+            if (parts.Length != 2
+                || !double.TryParse(parts[0].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double flow)
+                || !double.TryParse(parts[1].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double pressure))
+                throw new FormatException($"'{pair.Trim()}' is not a 'flow m³/h : pressure Pa' pair.");
+            points.Add(new FanPoint(flow / 3600, pressure));
+        }
+        var curve = new FanCurve { Points = points };
+        try { curve.Validate(); }
+        catch (InvalidOperationException ex) { throw new FormatException(ex.Message); }
+        return curve;
+    }
+
+    /// <summary>A curve back to the panel's text.</summary>
+    public static string FormatFanCurve(FanCurve? curve) => curve is null ? "" : string.Join(", ",
+        curve.Points.Select(p => string.Create(CultureInfo.InvariantCulture,
+            $"{p.FlowCubicMetresPerSecond * 3600:G6}:{p.PressurePascals:G6}")));
 
     /// <summary>The domain-box face's INWARD normal — the direction an inlet flows.</summary>
     public static Vector3D InwardNormal(BoxFace face) => face switch
