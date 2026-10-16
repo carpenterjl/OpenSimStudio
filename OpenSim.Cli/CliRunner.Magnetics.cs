@@ -26,6 +26,14 @@ public static partial class CliRunner
         double radius = Number(o, "radius", 30) * 1e-3;
         double frequency = Number(o, "frequency", 0);
         string drive = o.GetValueOrDefault("drive") ?? nets[0];
+        double strandDiameter = 0;
+        int strandsPerTurn = 1;
+        if (o.TryGetValue("strand", out var strandText))
+        {
+            var parts = strandText.Split(',');
+            strandDiameter = double.Parse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture) * 1e-3;
+            if (parts.Length > 1) strandsPerTurn = int.Parse(parts[1], CultureInfo.InvariantCulture);
+        }
 
         var board = Ipc2581Reader.Matches(boardPath) ? new Ipc2581Reader().Read(boardPath) : new PcbBoardReader().Read(boardPath);
         var stackup = BoardStackup.FromBoard(board);
@@ -38,23 +46,32 @@ public static partial class CliRunner
             core = new AxisymmetricCore(spec.PostRadius, spec.WindowRadius, spec.OuterRadius, spec.PlateThickness, spec.WindowHeight,
                 spec.CentreGap, new MagneticMaterial("core", spec.RelativePermeability));
         }
-        var built = PlanarWindingSection.Build(turns, new Dictionary<string, Complex> { [drive] = 1 }, core, solidTurns: frequency > 0);
+        bool solid = frequency > 0 && strandDiameter == 0;
+        var built = PlanarWindingSection.Build(turns, new Dictionary<string, Complex> { [drive] = 1 }, core,
+            solidTurns: solid, strandDiameter: strandDiameter, strandsPerTurn: strandsPerTurn);
         var solver = new MagneticSolver2D();
         var solution = frequency > 0 ? solver.SolveTimeHarmonic(built.Model, frequency) : solver.SolveStatic(built.Model);
 
         var results = new List<(string, string)>();
         var l = built.Inductance(solution, drive);
         results.Add(($"L({drive})", $"{l.Real * 1e9:g5} nH"));
-        if (frequency > 0)
+        if (frequency > 0 && solid)
             results.Add(($"R_ac({drive}) at {frequency:g4} Hz", $"{built.Resistance(solution, drive) * 1e3:g5} mΩ"));
-        // Mutual inductance to the undriven windings (static only: their stranded turns carry no
-        // current, so their flux linkage per ampere of the driven winding is M).
-        if (frequency == 0)
-            foreach (var other in nets.Where(n => n != drive && built.Windings.ContainsKey(n)))
-            {
-                var m = built.Windings[other].Aggregate(Complex.Zero, (s, t) => s + solution.FluxLinkage(t.Name));
-                results.Add(($"M({drive},{other})", $"{m.Real * 1e9:g5} nH"));
-            }
+        if (frequency > 0 && strandDiameter > 0)
+            // Every winding's strand loss loads the drive (1 A), the passive windings' proximity
+            // loss included.
+            results.Add(($"R_ac({drive}) at {frequency:g4} Hz, strands", $"{2 * built.StrandLossWatts(solution) * 1e3:g5} mΩ"));
+        // Mutual inductance to the undriven windings: static or stranded, their turns carry no
+        // current, so their flux linkage per ampere of the driven winding is M; solid at AC, their
+        // open-circuit voltage over jω is.
+        foreach (var other in nets.Where(n => n != drive && built.Windings.ContainsKey(n)))
+        {
+            var m = solid
+                ? built.Windings[other].Aggregate(Complex.Zero, (s, t) => s + solution.ConductorVoltage(t.Name))
+                    / new Complex(0, 2 * Math.PI * frequency)
+                : built.Windings[other].Aggregate(Complex.Zero, (s, t) => s + solution.FluxLinkage(t.Name));
+            results.Add(($"M({drive},{other})", $"{m.Real * 1e9:g5} nH"));
+        }
         foreach (var (k, v) in results) stdout.WriteLine($"{k}: {v}");
 
         string dir = OutDir(boardPath, o, "-magnetics");

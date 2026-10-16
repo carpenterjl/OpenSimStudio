@@ -47,6 +47,33 @@ public sealed record PlanarMagneticModel(MagneticModel2D Model, IReadOnlyDiction
     /// <summary>AC resistance of a winding [Ω] (solid turns, time-harmonic): Σ Re(V_turn / I).</summary>
     public double Resistance(MagneticSolution2D solution, string net) =>
         Windings[net].Sum(t => solution.ConductorImpedance(t.Name).Real);
+
+    /// <summary>Strand-level copper loss of every winding [W] (stranded turns with a strand
+    /// diameter, time-harmonic): the sum over all turns of transport and proximity loss. The
+    /// driven winding's effective AC resistance is 2·(this)/|I|², since every winding's loss loads
+    /// the drive.</summary>
+    public double StrandLossWatts(MagneticSolution2D solution) =>
+        Windings.Values.SelectMany(ts => ts).Sum(t => solution.StrandLoss(t.Name).TotalWatts);
+}
+
+/// <summary>The winding impedance matrix at one frequency: Z_ij = V_i per ampere driven through
+/// winding j with every other winding open (each turn a solid conductor, so R carries skin and
+/// proximity effect and M carries the core's eddy reaction).</summary>
+public sealed record WindingImpedanceMatrix(IReadOnlyList<string> Nets, System.Numerics.Complex[,] Entries, double FrequencyHz)
+{
+    private int Index(string net)
+    {
+        for (int i = 0; i < Nets.Count; i++) if (Nets[i] == net) return i;
+        throw new ArgumentException($"No winding '{net}'.");
+    }
+
+    public Complex Z(string a, string b) => Entries[Index(a), Index(b)];
+
+    /// <summary>Im Z / ω [H]: self-inductance on the diagonal, mutual off it.</summary>
+    public double InductanceHenries(string a, string b) => Z(a, b).Imaginary / (2 * Math.PI * FrequencyHz);
+
+    public double CouplingCoefficient(string a, string b) =>
+        InductanceHenries(a, b) / Math.Sqrt(InductanceHenries(a, a) * InductanceHenries(b, b));
 }
 
 /// <summary>
@@ -147,7 +174,8 @@ public static class PlanarWindingSection
     /// solid copper conductor (skin and proximity effect in a time-harmonic solve); otherwise turns
     /// are stranded (uniform current density).</summary>
     public static PlanarMagneticModel Build(IReadOnlyList<WindingTurn> turns, IReadOnlyDictionary<string, Complex> currents,
-        AxisymmetricCore? core, bool solidTurns, double copperConductivity = 5.8e7, double? minElement = null)
+        AxisymmetricCore? core, bool solidTurns, double copperConductivity = 5.8e7, double? minElement = null,
+        double strandDiameter = 0, int strandsPerTurn = 1)
     {
         if (turns.Count == 0) throw new ArgumentException("No turns: the cut crossed no copper of the windings.", nameof(turns));
         double zMin = turns.Min(t => t.Z0), zMax = turns.Max(t => t.Z1), rMax = turns.Max(t => t.R1);
@@ -194,10 +222,35 @@ public static class PlanarWindingSection
                 model.Regions.Add(new MagneticRegion(turn.Name, turn.R0, turn.R1, turn.Z0, turn.Z1,
                     solidTurns ? copper : MagneticMaterial.Air));
                 if (solidTurns) model.Conductors.Add(new SolidConductor(turn.Name, new[] { turn.Name }, current));
-                else model.Coils.Add(new StrandedCoil(turn.Name, new[] { (turn.Name, 1) }, 1, current.Real));
+                else model.Coils.Add(new StrandedCoil(turn.Name, new[] { (turn.Name, 1) }, 1, current.Real)
+                {
+                    StrandDiameter = strandDiameter,
+                    StrandsPerTurn = strandsPerTurn,
+                    StrandConductivity = copperConductivity
+                });
             }
             notes.Add($"Winding '{group.Key}': {group.Count()} turn(s) on layer(s) {string.Join(", ", group.Select(t => t.LayerOrder).Distinct())}.");
         }
         return new PlanarMagneticModel(model, windings, solidTurns, notes);
+    }
+
+    /// <summary>The winding impedance matrix at <paramref name="frequencyHz"/>: one solid-turn
+    /// time-harmonic solve per winding, each driven with 1 A while the others are open, the
+    /// voltages summed along every winding's turns.</summary>
+    public static WindingImpedanceMatrix ImpedanceMatrix(IReadOnlyList<WindingTurn> turns, AxisymmetricCore? core,
+        double frequencyHz, double copperConductivity = 5.8e7, double? minElement = null)
+    {
+        var nets = turns.Select(t => t.Net).Distinct().OrderBy(n => n, StringComparer.Ordinal).ToList();
+        var entries = new Complex[nets.Count, nets.Count];
+        var solver = new MagneticSolver2D();
+        for (int j = 0; j < nets.Count; j++)
+        {
+            var built = Build(turns, new Dictionary<string, Complex> { [nets[j]] = 1 }, core, solidTurns: true,
+                copperConductivity, minElement);
+            var solution = solver.SolveTimeHarmonic(built.Model, frequencyHz);
+            for (int i = 0; i < nets.Count; i++)
+                entries[i, j] = built.Windings[nets[i]].Aggregate(Complex.Zero, (s, t) => s + solution.ConductorVoltage(t.Name));
+        }
+        return new WindingImpedanceMatrix(nets, entries, frequencyHz);
     }
 }

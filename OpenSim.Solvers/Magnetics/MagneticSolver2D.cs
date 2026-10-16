@@ -26,8 +26,9 @@ public sealed class MagneticSolver2D
         "2D: planar (per metre of depth, current along z) or axisymmetric (current around the axis).",
         "Linear triangles on a graded rectilinear grid; the axisymmetric 1/r weight is taken at each element's centroid.",
         "The vector potential is zero on the outer boundary except on sides declared as symmetry planes; the domain must be large enough that this does not matter.",
-        "Time-harmonic solves use each material's linear permeability (B–H curves are for magnetostatics); core loss is Steinmetz on the peak |B| of each element.",
-        "Stranded windings carry uniform current density (no eddy currents in the strands); solid conductors carry their own skin and proximity currents."
+        "Time-harmonic solves give a B–H material an energy-equivalent effective permeability at each element's own amplitude (fundamental only; harmonics of B are not resolved); core loss is Steinmetz on the peak |B| of each element, or iGSE over a given flux waveform.",
+        "Stranded windings carry uniform current density (no eddy currents in the field solve); with a strand diameter given, the strands' skin and proximity loss is reported from the local field (round strands, proximity term derived for d ≲ δ).",
+        "Forces are the Maxwell stress tensor over a one-element shell of plain air around the named regions (time-average in a time-harmonic solve)."
     };
 
     public MagneticSolution2D SolveStatic(MagneticModel2D model, int maxIterations = 60, double tolerance = 1e-9)
@@ -89,15 +90,12 @@ public sealed class MagneticSolver2D
         return new MagneticSolution2D(model, mesh, values, 0, gValues, log);
     }
 
-    public MagneticSolution2D SolveTimeHarmonic(MagneticModel2D model, double frequencyHz)
+    public MagneticSolution2D SolveTimeHarmonic(MagneticModel2D model, double frequencyHz, int maxIterations = 60, double tolerance = 1e-6)
     {
         if (!(frequencyHz > 0)) throw new ArgumentOutOfRangeException(nameof(frequencyHz));
         var mesh = new Mesh(model);
         var log = new List<string> { mesh.Describe() };
-        if (mesh.Elements.Any(e => e.Material.IsNonlinear))
-            log.Add("Time-harmonic: B–H curves are not used; each material's linear permeability is.");
         double omega = 2 * Math.PI * frequencyHz;
-        int n = mesh.NodeCount;
 
         // Every conductor, plus (planar only) each passive conductive region as a conductor carrying
         // no net current.
@@ -110,10 +108,66 @@ public sealed class MagneticSolver2D
                     conductors.Add(new SolidConductor("(isolated) " + r.Name, new[] { r.Name }, Complex.Zero));
         }
 
-        var nu = mesh.Elements.Select(e => 1 / (MagneticConstants.Mu0 * e.Material.RelativePermeability)).ToArray();
+        var fs = mesh.StrandedLoad();
+        bool nonlinear = mesh.Elements.Any(e => e.Material.IsNonlinear);
+        var nu = new double[mesh.Elements.Count];
+        for (int k = 0; k < nu.Length; k++)
+        {
+            var material = mesh.Elements[k].Material;
+            nu[k] = material.Curve is { } curve ? curve.Reluctivity(0).Nu
+                : 1 / (MagneticConstants.Mu0 * material.RelativePermeability);
+        }
+
+        // B–H materials get an energy-equivalent effective reluctivity at each element's own
+        // amplitude, by damped fixed-point iteration over the linearised solve. An H-driven core
+        // (its B set by the ampere-turns, not a flux) makes the bare map ν ← ν_eff(B̂(ν)) steeper
+        // than −1 on the knee, so the damping halves whenever the change grows instead of falling.
+        Complex[] u;
+        Complex[] g;
+        var nuEff = nonlinear ? new double[nu.Length] : null;
+        int iterations = 0;
+        double damping = 0.5, previousWorst = double.MaxValue;
+        while (true)
+        {
+            (u, g) = SolveLinearised(mesh, conductors, nu, fs, omega);
+            iterations++;
+            if (!nonlinear) break;
+            double worst = 0;
+            for (int k = 0; k < nu.Length; k++)
+            {
+                var e = mesh.Elements[k];
+                if (e.Material.Curve is not { } curve) continue;
+                nuEff![k] = curve.EffectiveReluctivity(Amplitude(e, u));
+                worst = Math.Max(worst, Math.Abs(nuEff[k] - nu[k]) / nu[k]);
+            }
+            if (worst <= tolerance || iterations >= maxIterations)
+            {
+                log.Add($"Effective permeability (energy-equivalent, fundamental only): {iterations} iteration(s), largest ν change {worst:e2}.");
+                if (worst > tolerance)
+                    log.Add($"WARNING: the effective-permeability iteration did not reach {tolerance:e1} in {maxIterations} iterations.");
+                break;
+            }
+            // Shrink the damping when the change grows, creep back up while it falls, hunting the
+            // stable range of the map's local slope.
+            damping = worst > previousWorst ? Math.Max(damping / 2, 0.02) : Math.Min(damping * 1.2, 0.5);
+            previousWorst = worst;
+            for (int k = 0; k < nu.Length; k++)
+                if (mesh.Elements[k].Material.Curve is not null)
+                    nu[k] += damping * (nuEff![k] - nu[k]);
+        }
+
+        var gModel = new Complex[model.Conductors.Count];
+        Array.Copy(g, gModel, gModel.Length);
+        return new MagneticSolution2D(model, mesh, u, frequencyHz, gModel, log, conductors, g, nonlinear ? nu : null);
+    }
+
+    /// <summary>One linear time-harmonic solve at the given per-element reluctivities.</summary>
+    private static (Complex[] U, Complex[] G) SolveLinearised(Mesh mesh, List<SolidConductor> conductors,
+        double[] nu, double[] fs, double omega)
+    {
+        int n = mesh.NodeCount;
         var solver = mesh.Assemble(nu, null, null, omega);
         solver.Factor();
-        var fs = mesh.StrandedLoad();
         var aF = solver.Solve(fs.Select(x => new Complex(x, 0)).ToArray());
         int m = conductors.Count;
         var g = new Complex[m];
@@ -147,9 +201,7 @@ public sealed class MagneticSolver2D
                 u[i] = v;
             }
         }
-        var gModel = new Complex[model.Conductors.Count];
-        Array.Copy(g, gModel, gModel.Length);
-        return new MagneticSolution2D(model, mesh, u, frequencyHz, gModel, log, conductors, g);
+        return (u, g);
 
         static Complex Dot(double[] b, Complex[] x)
         {
@@ -157,6 +209,15 @@ public sealed class MagneticSolver2D
             for (int i = 0; i < b.Length; i++) if (b[i] != 0) s += b[i] * x[i];
             return s;
         }
+    }
+
+    /// <summary>The peak |B| over a cycle of an element's (possibly elliptical) field.</summary>
+    internal static double Amplitude(Mesh.Element e, Complex[] u)
+    {
+        Complex gx = e.Bx[0] * u[e.N0] + e.Bx[1] * u[e.N1] + e.Bx[2] * u[e.N2];
+        Complex gy = e.By[0] * u[e.N0] + e.By[1] * u[e.N1] + e.By[2] * u[e.N2];
+        double sum = gx.Magnitude * gx.Magnitude + gy.Magnitude * gy.Magnitude;
+        return Math.Sqrt(0.5 * (sum + (gx * gx + gy * gy).Magnitude)) / e.Rho;
     }
 
     /// <summary>The grid, its triangles and the per-element assembly data.</summary>
@@ -393,10 +454,13 @@ public sealed class MagneticSolution2D
     private readonly Complex[] _u;
     private readonly List<SolidConductor> _allConductors;
     private readonly Complex[] _allG;
+    private readonly double[]? _acNu;
 
     internal MagneticSolution2D(MagneticModel2D model, MagneticSolver2D.Mesh mesh, Complex[] u, double frequencyHz,
-        Complex[] conductorG, List<string> log, List<SolidConductor>? allConductors = null, Complex[]? allG = null)
+        Complex[] conductorG, List<string> log, List<SolidConductor>? allConductors = null, Complex[]? allG = null,
+        double[]? acNu = null)
     {
+        _acNu = acNu;
         Model = model;
         _mesh = mesh;
         _u = u;
@@ -480,16 +544,25 @@ public sealed class MagneticSolution2D
         return FluxLinkage(coilName) / coil.Current;
     }
 
+    /// <summary>Voltage of a solid conductor in a time-harmonic solve [V; V/m planar] — defined
+    /// for a passive conductor (zero imposed current) too, where it is the open-circuit voltage,
+    /// so a transformer's open secondary reads its induced voltage here.</summary>
+    public Complex ConductorVoltage(string name)
+    {
+        int k = _allConductors.FindIndex(c => c.Name == name);
+        if (k < 0) throw new ArgumentException($"No conductor '{name}'.");
+        if (FrequencyHz == 0) throw new InvalidOperationException("A static solve has no conductor voltage.");
+        var g = _allG[k];
+        return Model.Geometry == MagneticGeometry.Axisymmetric ? 2 * Math.PI * g : g;
+    }
+
     /// <summary>Impedance V/I of a solid conductor [Ω; Ω/m planar] — its resistance with skin and
     /// proximity effect, and its inductance, in a time-harmonic solve.</summary>
     public Complex ConductorImpedance(string name)
     {
-        int k = _allConductors.FindIndex(c => c.Name == name);
-        if (k < 0) throw new ArgumentException($"No conductor '{name}'.");
-        if (FrequencyHz == 0) throw new InvalidOperationException("A static solve has no conductor impedance.");
-        var g = _allG[k];
-        var v = Model.Geometry == MagneticGeometry.Axisymmetric ? 2 * Math.PI * g : g;
-        return v / _allConductors[k].Current;
+        var current = (_allConductors.FirstOrDefault(c => c.Name == name)
+            ?? throw new ArgumentException($"No conductor '{name}'.")).Current;
+        return ConductorVoltage(name) / current;
     }
 
     /// <summary>Current density at an element's three nodes.</summary>
@@ -543,34 +616,157 @@ public sealed class MagneticSolution2D
         return total;
     }
 
-    /// <summary>Stored magnetic energy [J; J/m planar]: ∫∫H·dB for a static solve (exact for a
-    /// B–H curve), the time-average ¼∫ν|B|² for a time-harmonic one.</summary>
+    /// <summary>iGSE core loss [W; W/m planar] for a non-sinusoidal periodic flux: each element's
+    /// B(t) is <paramref name="waveform"/> (one period of (phase ∈ [0, 1), relative value),
+    /// piecewise linear) scaled to the element's own peak |B| from the solve, priced by
+    /// <see cref="SteinmetzCoefficients.IgseLossDensity"/>. Equals <see cref="CoreLoss"/> for a
+    /// sinusoidal waveform; minor loops are not separated out.</summary>
+    public double CoreLossIgse(IReadOnlyList<(double Phase, double Value)> waveform, double? frequencyHz = null)
+    {
+        double f = frequencyHz ?? FrequencyHz;
+        if (!(f > 0)) throw new ArgumentException("Core loss needs a frequency.");
+        double total = 0;
+        foreach (var e in _mesh.Elements)
+            if (e.Material.Steinmetz is { } law)
+                total += law.IgseLossDensity(f, PeakB(e), waveform) * e.Area * Depth(e);
+        return total;
+    }
+
+    /// <summary>Strand-level copper loss of a stranded winding in a time-harmonic solve,
+    /// homogenised from the local field: proximity loss (σ·ω²·d²/32)·(|B_x|² + |B_y|²) per unit
+    /// copper volume (round strands, derived for d ≲ δ) over the winding's regions, plus the
+    /// transport loss ½|I|²·R_dc with the exact round-wire skin factor on each strand's share.
+    /// Needs <see cref="StrandedCoil.StrandDiameter"/>; watts (planar: per metre). A passive
+    /// winding reports its proximity loss alone.</summary>
+    public StrandedWindingLoss StrandLoss(string coilName)
+    {
+        var coil = Model.Coils.FirstOrDefault(c => c.Name == coilName) ?? throw new ArgumentException($"No coil '{coilName}'.");
+        if (!(coil.StrandDiameter > 0)) throw new InvalidOperationException($"Coil '{coilName}' has no strand diameter.");
+        if (FrequencyHz == 0) throw new InvalidOperationException("Strand loss needs a time-harmonic solve (at DC the loss is I²·R_dc).");
+        double omega = 2 * Math.PI * FrequencyHz;
+        double sigma = coil.StrandConductivity;
+        double d = coil.StrandDiameter;
+        double strandArea = Math.PI * d * d / 4;
+        double plus = coil.Regions.Where(r => r.Direction > 0).Sum(r => _mesh.RegionArea(r.Region));
+        double minus = coil.Regions.Where(r => r.Direction < 0).Sum(r => _mesh.RegionArea(r.Region));
+        var notes = new List<string>();
+        double skin = RoundWire.SkinResistanceFactor(d, sigma, FrequencyHz);
+        double delta = 1 / Math.Sqrt(Math.PI * FrequencyHz * MagneticConstants.Mu0 * sigma);
+        if (d > delta)
+            notes.Add($"Strand diameter {d * 1e3:g3} mm exceeds the skin depth {delta * 1e3:g3} mm: the proximity term (derived for d ≲ δ) underestimates.");
+        double rdc = 0, proximity = 0;
+        foreach (var (name, dir) in coil.Regions)
+        {
+            int index = _mesh.RegionIndex(name);
+            double signArea = dir > 0 ? plus : minus;
+            double fill = coil.Turns * coil.StrandsPerTurn * strandArea / signArea;
+            if (fill >= 1)
+                throw new InvalidOperationException($"Coil '{coilName}': the strands do not fit in region '{name}' (fill {fill:g3}).");
+            foreach (var e in _mesh.Elements)
+            {
+                if (e.Region != index) continue;
+                double vol = e.Area * Depth(e);
+                rdc += coil.Turns * coil.Turns / (signArea * signArea) / (sigma * fill) * vol;
+                var (bx, by) = FluxDensity(e);
+                proximity += sigma * omega * omega * d * d / 32
+                    * (bx.Magnitude * bx.Magnitude + by.Magnitude * by.Magnitude) * fill * vol;
+            }
+        }
+        double transport = 0.5 * coil.Current * coil.Current * rdc * skin;
+        double? rac = coil.Current != 0 ? rdc * skin + 2 * proximity / (coil.Current * coil.Current) : null;
+        return new StrandedWindingLoss(transport, proximity, rdc, skin, rac, notes);
+    }
+
+    /// <summary>Magnetic force on the named region(s) by the Maxwell stress tensor, integrated
+    /// over a shell of air around them (the weighted-stress form, the weight falling from 1 to 0
+    /// over <paramref name="shellRings"/> rings of elements — reading the stress several elements
+    /// out, where the linear elements' field error is smaller than right at the body): every
+    /// element of the shell must be plain air — non-magnetic (µr = 1, no B–H curve),
+    /// non-conducting and carrying no winding — so another body closer than the shell needs a
+    /// smaller <paramref name="shellRings"/>. Planar: (Fx, Fy) in N per metre of depth.
+    /// Axisymmetric: (0, Fz) in N — the radial resultant is zero by symmetry. Static solves give
+    /// the force, time-harmonic ones the time average. A region touching the domain boundary
+    /// relies on that side being a symmetry plane for the stress the missing shell would
+    /// carry.</summary>
+    public (double Fx, double Fy) Force(params string[] regions) => Force(4, regions);
+
+    /// <summary>See <see cref="Force(string[])"/>.</summary>
+    public (double Fx, double Fy) Force(int shellRings, params string[] regions)
+    {
+        if (regions.Length == 0) throw new ArgumentException("Name at least one region.", nameof(regions));
+        if (shellRings < 1) throw new ArgumentOutOfRangeException(nameof(shellRings));
+        var set = regions.Select(_mesh.RegionIndex).ToHashSet();
+        // Hop distance from the regions' nodes, level by level over the elements.
+        var distance = new int[_mesh.NodeCount];
+        Array.Fill(distance, int.MaxValue);
+        foreach (var e in _mesh.Elements)
+            if (set.Contains(e.Region)) { distance[e.N0] = 0; distance[e.N1] = 0; distance[e.N2] = 0; }
+        for (int level = 1; level <= shellRings; level++)
+            foreach (var e in _mesh.Elements)
+            {
+                if (Math.Min(distance[e.N0], Math.Min(distance[e.N1], distance[e.N2])) != level - 1) continue;
+                if (distance[e.N0] > level) distance[e.N0] = level;
+                if (distance[e.N1] > level) distance[e.N1] = level;
+                if (distance[e.N2] > level) distance[e.N2] = level;
+            }
+        var w = new double[_mesh.NodeCount];
+        for (int i = 0; i < w.Length; i++)
+            w[i] = distance[i] >= shellRings ? 0 : 1 - (double)distance[i] / shellRings;
+        var coilRegions = Model.Coils.SelectMany(c => c.Regions).Select(r => _mesh.RegionIndex(r.Region)).ToHashSet();
+        bool ac = FrequencyHz > 0;
+        double fx = 0, fy = 0;
+        foreach (var e in _mesh.Elements)
+        {
+            double wx = e.Bx[0] * w[e.N0] + e.Bx[1] * w[e.N1] + e.Bx[2] * w[e.N2];
+            double wy = e.By[0] * w[e.N0] + e.By[1] * w[e.N1] + e.By[2] * w[e.N2];
+            if (wx == 0 && wy == 0) continue;
+            if (set.Contains(e.Region)) continue;
+            if (e.Material.RelativePermeability != 1 || e.Material.Curve is not null
+                || e.Material.Conductivity > 0 || coilRegions.Contains(e.Region))
+                throw new InvalidOperationException(
+                    $"The force contour crosses '{(e.Region >= 0 ? Model.Regions[e.Region].Name : "the background")}', which is magnetic, conducting or carries current: leave a shell of plain air around the region(s).");
+            var (bxC, byC) = FluxDensity(e);
+            double txx, txy; // times µ0; tyy = −txx
+            if (ac)
+            {
+                txx = 0.25 * (bxC.Magnitude * bxC.Magnitude - byC.Magnitude * byC.Magnitude);
+                txy = 0.5 * (bxC * Complex.Conjugate(byC)).Real;
+            }
+            else
+            {
+                double bx = bxC.Real, by = byC.Real;
+                txx = 0.5 * (bx * bx - by * by);
+                txy = bx * by;
+            }
+            double vol = e.Area * Depth(e) / MagneticConstants.Mu0;
+            fx -= (txx * wx + txy * wy) * vol;
+            fy -= (txy * wx - txx * wy) * vol;
+        }
+        return Model.Geometry == MagneticGeometry.Axisymmetric ? (0, fy) : (fx, fy);
+    }
+
+    /// <summary>Stored magnetic energy [J; J/m planar]: ∫H·dB for a static solve (the curve's
+    /// exact integral), the time-average ¼∫ν|B|² for a time-harmonic one (with a B–H material's
+    /// converged effective ν).</summary>
     public double Energy()
     {
         double total = 0;
-        foreach (var e in _mesh.Elements)
+        for (int k = 0; k < _mesh.Elements.Count; k++)
         {
+            var e = _mesh.Elements[k];
             double density;
             if (FrequencyHz > 0)
             {
                 var (bx, by) = FluxDensity(e);
-                density = 0.25 / (MagneticConstants.Mu0 * e.Material.RelativePermeability)
-                    * (bx.Magnitude * bx.Magnitude + by.Magnitude * by.Magnitude);
+                double nu = _acNu?[k] ?? 1 / (MagneticConstants.Mu0 * e.Material.RelativePermeability);
+                density = 0.25 * nu * (bx.Magnitude * bx.Magnitude + by.Magnitude * by.Magnitude);
             }
             else
             {
                 double b = PeakB(e);
-                if (e.Material.Curve is { } curve)
-                {
-                    const int steps = 32;
-                    density = 0;
-                    for (int s = 0; s < steps; s++)
-                    {
-                        double b0 = b * s / steps, b1 = b * (s + 1) / steps;
-                        density += (b1 - b0) / 6 * (curve.Evaluate(b0).H + 4 * curve.Evaluate(0.5 * (b0 + b1)).H + curve.Evaluate(b1).H);
-                    }
-                }
-                else density = 0.5 * b * b / (MagneticConstants.Mu0 * e.Material.RelativePermeability);
+                density = e.Material.Curve is { } curve
+                    ? curve.EnergyDensity(b)
+                    : 0.5 * b * b / (MagneticConstants.Mu0 * e.Material.RelativePermeability);
             }
             total += density * e.Area * Depth(e);
         }
@@ -611,4 +807,16 @@ public sealed class MagneticSolution2D
         lines.Add($"Stored energy {Energy():g5} J{(Model.Geometry == MagneticGeometry.Planar ? "/m" : "")}; largest |B| {MaxFluxDensity():g4} T.");
         return string.Join(System.Environment.NewLine, lines);
     }
+}
+
+/// <summary>Strand-level copper loss of a stranded winding (watts; planar: per metre), from
+/// <see cref="MagneticSolution2D.StrandLoss"/>: the transport loss ½|I|²·R_dc·<see cref="SkinFactor"/>
+/// and the proximity loss of the local field. <see cref="AcResistanceOhms"/> =
+/// R_dc·F_skin + 2·P_prox/|I|² counts only this winding's own loss against its own current, so it
+/// is null for a passive winding (whose proximity loss loads whichever winding drives the
+/// field).</summary>
+public sealed record StrandedWindingLoss(double TransportWatts, double ProximityWatts, double DcResistanceOhms,
+    double SkinFactor, double? AcResistanceOhms, IReadOnlyList<string> Notes)
+{
+    public double TotalWatts => TransportWatts + ProximityWatts;
 }

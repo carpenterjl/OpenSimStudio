@@ -20,7 +20,19 @@ public sealed record MagneticRegion(string Name, double X0, double X1, double Y0
 /// <summary>A stranded winding: <see cref="Turns"/> turns spread uniformly over its regions, each
 /// region with a direction (+1 out of the plane / counter-clockwise about the axis, −1 the return).
 /// The current density in a region is N·I/(total area of the regions with that sign).</summary>
-public sealed record StrandedCoil(string Name, IReadOnlyList<(string Region, int Direction)> Regions, double Turns, double Current);
+public sealed record StrandedCoil(string Name, IReadOnlyList<(string Region, int Direction)> Regions, double Turns, double Current)
+{
+    /// <summary>Strand diameter [m] for <see cref="MagneticSolution2D.StrandLoss"/>; 0 (the
+    /// default) leaves strand-level copper loss unmodelled, as before.</summary>
+    public double StrandDiameter { get; init; }
+
+    /// <summary>Parallel strands per turn (litz; 1 = a plain round wire per turn).</summary>
+    public int StrandsPerTurn { get; init; } = 1;
+
+    /// <summary>Conductivity of the strands [S/m] (the winding regions themselves stay
+    /// non-conducting in the field solve).</summary>
+    public double StrandConductivity { get; init; } = 5.8e7;
+}
 
 /// <summary>A solid conductor: the named regions form ONE conductor carrying a total current
 /// (complex amplitude in a time-harmonic solve) with the field inside free to crowd — skin and
@@ -77,12 +89,16 @@ public sealed class MagneticModel2D
             throw new ArgumentException("Region names must be distinct.");
         var claimed = new HashSet<string>();
         foreach (var coil in Coils)
+        {
+            if (coil.StrandDiameter < 0 || coil.StrandsPerTurn < 1 || !(coil.StrandConductivity > 0))
+                throw new ArgumentException($"Coil '{coil.Name}': strand diameter ≥ 0, strands ≥ 1, conductivity > 0.");
             foreach (var (name, dir) in coil.Regions)
             {
                 Region(name);
                 if (dir != 1 && dir != -1) throw new ArgumentException($"Coil '{coil.Name}': direction must be ±1.");
                 if (!claimed.Add(name)) throw new ArgumentException($"Region '{name}' belongs to two sources.");
             }
+        }
         foreach (var c in Conductors)
             foreach (var name in c.Regions)
             {
