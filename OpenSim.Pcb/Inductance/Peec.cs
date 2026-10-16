@@ -14,6 +14,19 @@ public sealed record PlaneGrid(IReadOnlyList<(Point2 Position, int Node)> Nodes,
     public double DistanceTo(Point2 p) => Nodes.Min(n => (n.Position - p).Length);
 }
 
+/// <summary>How a <see cref="PeecModel"/> is solved.</summary>
+public enum PeecSolver
+{
+    /// <summary>The dense factorization up to <see cref="PeecModel.DenseLimit"/> unknowns,
+    /// the compressed iterative solve beyond it.</summary>
+    Auto,
+    /// <summary>Always the dense factorization (exact; cubic time, square memory).</summary>
+    Dense,
+    /// <summary>Always the compressed iterative solve (the inductance matrix in low-rank
+    /// blocks, conjugate iterations on the mesh currents).</summary>
+    Iterative
+}
+
 /// <summary>Port impedance of a <see cref="PeecModel"/> at one frequency.</summary>
 /// <param name="Impedance">Z[i, j]: volts across port i per ampere through port j.</param>
 /// <param name="FilamentCurrents">For each port, the current in every filament with one
@@ -46,7 +59,7 @@ public sealed record PeecPoint(double FrequencyHz, Complex[,] Impedance, Complex
 /// </summary>
 public sealed class PeecModel
 {
-    private sealed record Filament(Vector3D Start, Vector3D End, Vector3D Along, Vector3D Across, Vector3D Normal,
+    internal sealed record Filament(Vector3D Start, Vector3D End, Vector3D Along, Vector3D Across, Vector3D Normal,
         double Width, double Thickness, int From, int To, double Resistance)
     {
         public double Length => (End - Start).Length;
@@ -191,14 +204,53 @@ public sealed class PeecModel
     }
 
     /// <summary>
+    /// A plated via barrel between two nodes: a tube of outer diameter
+    /// <paramref name="diameter"/> whose current flows in a wall <paramref name="wall"/>
+    /// thick, cut into <paramref name="around"/> filaments round the shell, each standing at
+    /// the wall's mid-radius with its share of the shell's section. The wall is thin against
+    /// any skin depth that matters, so the current cannot crowd through it — but it can crowd
+    /// round the circumference toward a neighbouring conductor, which is what the ring
+    /// resolves. A ring also has the tube's inductance (GMD the shell radius), where a solid
+    /// wire of the same diameter has more internal flux and a higher resistance path.
+    /// </summary>
+    public void AddTube(int from, int to, double diameter, double wall, double conductivity, int around = 8)
+    {
+        var (along, across, normal, length) = Frame(from, to);
+        if (!(diameter > 0 && wall > 0 && wall <= diameter / 2 && conductivity > 0))
+            throw new ArgumentException("A tube needs a positive diameter and a wall at most half of it.");
+        if (around < 1) throw new ArgumentOutOfRangeException(nameof(around));
+        double area = Math.PI * wall * (diameter - wall);
+        if (around == 1)
+        {
+            double side = Math.Sqrt(area);
+            _filaments.Add(new Filament(_nodes[from], _nodes[to], along, across, normal, side, side, from, to,
+                length / (conductivity * area)));
+            return;
+        }
+        double midRadius = (diameter - wall) / 2;
+        double chord = 2 * Math.PI * midRadius / around;
+        double each = around * length / (conductivity * area);
+        for (int k = 0; k < around; k++)
+        {
+            var (sin, cos) = Math.SinCos(2 * Math.PI * (k + 0.5) / around);
+            var radial = cos * across + sin * normal;
+            var tangent = -sin * across + cos * normal;
+            var shift = midRadius * radial;
+            _filaments.Add(new Filament(_nodes[from] + shift, _nodes[to] + shift, along, tangent, radial,
+                chord, wall, from, to, each));
+        }
+    }
+
+    /// <summary>
     /// A plane or pour at height <paramref name="z"/>: a square grid of nodes at
     /// <paramref name="pitch"/> inside the shape, joined to their neighbours by bars one pitch
-    /// wide carrying the x and the y current. One filament through the thickness: the
-    /// distribution of the current over the plane is solved, its skin effect through the
-    /// thickness is not.
+    /// wide carrying the x and the y current. <paramref name="acrossThickness"/> cuts each bar
+    /// into graded strips through the copper, so the skin effect through the plane's thickness
+    /// is solved too; with one strip (the default) the distribution of the current over the
+    /// plane is solved and the plane's resistance stays the DC sheet's.
     /// </summary>
     public PlaneGrid AddPlane(IReadOnlyList<Polygon2> shape, double z, double thickness, double pitch,
-        double conductivity)
+        double conductivity, int acrossThickness = 1)
     {
         if (!(pitch > 0 && thickness > 0 && conductivity > 0))
             throw new ArgumentException("A plane needs a positive pitch, thickness and conductivity.");
@@ -221,10 +273,60 @@ public sealed class PeecModel
             for (int j = 0; j < ny; j++)
             {
                 if (id[i, j] < 0) continue;
-                if (i + 1 < nx && id[i + 1, j] >= 0) AddBar(id[i, j], id[i + 1, j], py, thickness, conductivity);
-                if (j + 1 < ny && id[i, j + 1] >= 0) AddBar(id[i, j], id[i, j + 1], px, thickness, conductivity);
+                if (i + 1 < nx && id[i + 1, j] >= 0)
+                    AddBar(id[i, j], id[i + 1, j], py, thickness, conductivity, acrossThickness: acrossThickness);
+                if (j + 1 < ny && id[i, j + 1] >= 0)
+                    AddBar(id[i, j], id[i, j + 1], px, thickness, conductivity, acrossThickness: acrossThickness);
             }
         return new PlaneGrid(nodes, Math.Max(px, py), z);
+    }
+
+    /// <summary>
+    /// A plane or pour on a GRADED tensor grid: a node at every (x, y) of
+    /// <paramref name="xs"/> × <paramref name="ys"/> (each ascending) inside the shape, joined
+    /// to its grid neighbours by bars as wide as the node's spacing there — fine lines where
+    /// the coordinates are close, coarse where they spread. The reported pitch is the finest
+    /// spacing. <paramref name="acrossThickness"/> as in the uniform overload.
+    /// </summary>
+    public PlaneGrid AddPlane(IReadOnlyList<Polygon2> shape, double z, double thickness,
+        IReadOnlyList<double> xs, IReadOnlyList<double> ys, double conductivity, int acrossThickness = 1)
+    {
+        if (!(thickness > 0 && conductivity > 0))
+            throw new ArgumentException("A plane needs a positive thickness and conductivity.");
+        if (xs.Count < 2 || ys.Count < 2)
+            throw new ArgumentException("A graded plane needs at least two coordinates each way.");
+        for (int i = 1; i < xs.Count; i++)
+            if (!(xs[i] > xs[i - 1])) throw new ArgumentException("The x coordinates must ascend.");
+        for (int j = 1; j < ys.Count; j++)
+            if (!(ys[j] > ys[j - 1])) throw new ArgumentException("The y coordinates must ascend.");
+        var index = new PolygonSetIndex(shape);
+        int nx = xs.Count, ny = ys.Count;
+        // A node's strip is half the span to each neighbour (half a cell at the rim).
+        double StripX(int i) => 0.5 * ((i + 1 < nx ? xs[i + 1] : xs[i]) - (i > 0 ? xs[i - 1] : xs[i]));
+        double StripY(int j) => 0.5 * ((j + 1 < ny ? ys[j + 1] : ys[j]) - (j > 0 ? ys[j - 1] : ys[j]));
+        var id = new int[nx, ny];
+        var nodes = new List<(Point2, int)>();
+        for (int i = 0; i < nx; i++)
+            for (int j = 0; j < ny; j++)
+            {
+                var p = new Point2(xs[i], ys[j]);
+                id[i, j] = index.Contains(p) ? AddNode(new Vector3D(p.X, p.Y, z)) : -1;
+                if (id[i, j] >= 0) nodes.Add((p, id[i, j]));
+            }
+        if (nodes.Count == 0) throw new InvalidOperationException("The plane shape holds no grid node at these coordinates.");
+        for (int i = 0; i < nx; i++)
+            for (int j = 0; j < ny; j++)
+            {
+                if (id[i, j] < 0) continue;
+                if (i + 1 < nx && id[i + 1, j] >= 0)
+                    AddBar(id[i, j], id[i + 1, j], StripY(j), thickness, conductivity, acrossThickness: acrossThickness);
+                if (j + 1 < ny && id[i, j + 1] >= 0)
+                    AddBar(id[i, j], id[i, j + 1], StripX(i), thickness, conductivity, acrossThickness: acrossThickness);
+            }
+        double finest = double.MaxValue;
+        for (int i = 1; i < nx; i++) finest = Math.Min(finest, xs[i] - xs[i - 1]);
+        for (int j = 1; j < ny; j++) finest = Math.Min(finest, ys[j] - ys[j - 1]);
+        return new PlaneGrid(nodes, finest, z);
     }
 
     private (Vector3D Along, Vector3D Across, Vector3D Normal, double Length) Frame(int from, int to)
@@ -290,15 +392,24 @@ public sealed class PeecModel
     // Solve
     // ------------------------------------------------------------------
 
-    /// <summary>The port impedance matrix at each frequency (all above zero).</summary>
-    public IReadOnlyList<PeecPoint> Solve(IReadOnlyList<double> frequenciesHz, bool keepCurrents = false,
-        CancellationToken cancellationToken = default)
-    {
-        if (_ports.Count == 0) throw new InvalidOperationException("The model has no port.");
-        if (_filaments.Count == 0) throw new InvalidOperationException("The model has no conductor.");
-        int nb = _filaments.Count;
+    /// <summary>Above this many unknowns (filaments plus circuit nodes) <see cref="PeecSolver.Auto"/>
+    /// takes the compressed iterative solve instead of the dense factorization.</summary>
+    public const int DenseLimit = 3200;
 
-        // Circuit nodes after the shorts; one reference node per connected piece of copper.
+    /// <summary>How the circuit is solved; <see cref="PeecSolver.Auto"/> by size.</summary>
+    public PeecSolver Solver { get; set; } = PeecSolver.Auto;
+
+    /// <summary>Whether the last <see cref="Solve"/> took the compressed iterative path.</summary>
+    public bool SolvedIteratively { get; private set; }
+
+    internal sealed record Connectivity((int From, int To)[] Ends,
+        (string Name, int Positive, int Negative)[] Ports, HashSet<int> Reference, int NodeCount);
+
+    /// <summary>Circuit nodes after the shorts, the filaments' and ports' ends on them, and one
+    /// reference node per connected piece of copper; refuses a port whose terminals no current
+    /// can flow between.</summary>
+    private Connectivity Connect()
+    {
         var circuit = new Dictionary<int, int>();
         int Circuit(int node)
         {
@@ -322,6 +433,30 @@ public sealed class PeecModel
                     $"Port '{port.Name}' is between two conductors that are not connected anywhere: no current can flow.");
         }
         var reference = new HashSet<int>(Enumerable.Range(0, nn).Where(x => Piece(x) == x));
+        return new Connectivity(ends, ports, reference, nn);
+    }
+
+    internal IReadOnlyList<Filament> Filaments => _filaments;
+
+    internal static double MutualOf(Filament a, Filament b,
+        ConcurrentDictionary<(long, long, long, long, long, long, long, long, long), double> cache) => Mutual(a, b, cache);
+
+    /// <summary>The port impedance matrix at each frequency (all above zero).</summary>
+    public IReadOnlyList<PeecPoint> Solve(IReadOnlyList<double> frequenciesHz, bool keepCurrents = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (_ports.Count == 0) throw new InvalidOperationException("The model has no port.");
+        if (_filaments.Count == 0) throw new InvalidOperationException("The model has no conductor.");
+        int nb = _filaments.Count;
+        var net = Connect();
+        SolvedIteratively = Solver == PeecSolver.Iterative
+            || (Solver == PeecSolver.Auto && nb + net.NodeCount > DenseLimit);
+        if (SolvedIteratively)
+            return PeecIterativeSolver.Solve(this, net, frequenciesHz, keepCurrents, cancellationToken);
+        var ends = net.Ends;
+        var ports = net.Ports;
+        var reference = net.Reference;
+        int nn = net.NodeCount;
 
         var l = Inductance();
         var result = new List<PeecPoint>();

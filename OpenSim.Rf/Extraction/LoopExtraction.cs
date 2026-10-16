@@ -17,15 +17,26 @@ public sealed record LoopExtractionOptions
     public int MaxStripsAcrossWidth { get; init; } = 7;
     public int MaxStripsAcrossThickness { get; init; } = 5;
 
-    /// <summary>Grid pitch of a meshed plane [m]; 0 takes the trace's height above it,
-    /// coarsened until the plane has at most <see cref="MaxPlaneNodes"/> nodes.</summary>
+    /// <summary>Grid pitch of a meshed plane [m], uniform over the plane; 0 (the default)
+    /// meshes GRADED instead — the trace's height above the plane under and near the chain,
+    /// growing by 1.3 per step toward the margin — refined until the plane has at most
+    /// <see cref="MaxPlaneNodes"/> nodes.</summary>
     public double PlanePitchMeters { get; init; }
 
-    public int MaxPlaneNodes { get; init; } = 1400;
+    public int MaxPlaneNodes { get; init; } = 6000;
 
     /// <summary>How far beyond the trace's extent the return plane is meshed [m]; 0 takes
     /// ten times the height above it, at least 3 mm. Current farther out is left out.</summary>
     public double PlaneMarginMeters { get; init; }
+
+    /// <summary>Strips a plane's bars are cut into through the copper's thickness; 0 (the
+    /// default) takes what the highest frequency needs, at most 3. With one strip the skin
+    /// effect through the plane is not solved and its resistance stays the DC sheet's.</summary>
+    public int PlaneStripsAcrossThickness { get; init; }
+
+    /// <summary>Join the loop's ends to the plane ideally, as before FU-33, instead of through
+    /// a connection with its own resistance and inductance.</summary>
+    public bool IdealEndConnections { get; init; }
 }
 
 /// <summary>R and L of a current path against frequency.</summary>
@@ -69,7 +80,8 @@ public static class LoopExtraction
         + "skin and proximity effect come from how the current divides among them.",
         "Magneto-quasi-static: no displacement current, so valid while the path is short against a wavelength; "
         + "capacitance is a separate extraction.",
-        "Via barrels are one filament each (no skin effect in a barrel); bends couple at the filament level.",
+        "Via barrels are rings of filaments round their shell: the current can crowd round the barrel "
+        + "toward a neighbour, though not through the thin wall; bends couple at the filament level.",
         "Non-magnetic materials."
     };
 
@@ -94,6 +106,8 @@ public static class LoopExtraction
                 model.AddBar(previous, next, s.Width, s.Thickness, options.ConductivitySiemensPerMeter,
                     PeecModel.StripsFor(s.Width, skinDepth, max: options.MaxStripsAcrossWidth),
                     PeecModel.StripsFor(s.Thickness, skinDepth, max: options.MaxStripsAcrossThickness));
+            else if (s.Profile == SegmentProfile.RoundTube && s.Thickness > 0 && s.Thickness <= s.Width / 2)
+                model.AddTube(previous, next, s.Width, s.Thickness, options.ConductivitySiemensPerMeter);
             else
                 model.AddRoundWire(previous, next, s.Profile == SegmentProfile.Bar
                     ? Math.Sqrt(s.Width * s.Thickness / Math.PI) : s.Width / 2, options.ConductivitySiemensPerMeter);
@@ -201,23 +215,79 @@ public static class LoopExtraction
         double area = copper.Sum(p => p.Area());
         if (!(area > 0))
             throw new InvalidOperationException("The plane has no copper near the chain.");
-        double pitch = options.PlanePitchMeters > 0 ? options.PlanePitchMeters : height;
-        pitch = Math.Max(pitch, Math.Sqrt(area / options.MaxPlaneNodes));
-
         var model = new PeecModel();
         double delta = FinestSkinDepth(frequenciesHz, options);
+        int acrossThickness = options.PlaneStripsAcrossThickness > 0 ? options.PlaneStripsAcrossThickness
+            : PeecModel.StripsFor(planeThickness, delta, max: 3);
         var (start, end) = Add(model, outbound, delta, options);
-        var grid = model.AddPlane(copper, planeMid, planeThickness, pitch, options.ConductivitySiemensPerMeter);
+        PlaneGrid grid;
+        bool graded = !(options.PlanePitchMeters > 0);
+        if (!graded)
+        {
+            double pitch = Math.Max(options.PlanePitchMeters, Math.Sqrt(area / options.MaxPlaneNodes));
+            grid = model.AddPlane(copper, planeMid, planeThickness, pitch, options.ConductivitySiemensPerMeter,
+                acrossThickness);
+        }
+        else
+        {
+            // Fine at the trace's height under and near the chain, growing 1.3 per step to the
+            // margin; the fine pitch is coarsened only when even the graded grid would blow the
+            // node budget.
+            double chainMinX = chain.Min(s => Math.Min(s.Start.X, s.End.X)), chainMaxX = chain.Max(s => Math.Max(s.Start.X, s.End.X));
+            double chainMinY = chain.Min(s => Math.Min(s.Start.Y, s.End.Y)), chainMaxY = chain.Max(s => Math.Max(s.Start.Y, s.End.Y));
+            double fine = height;
+            double[] xs, ys;
+            while (true)
+            {
+                xs = GradedAxis(minX, maxX, chainMinX - 2 * height, chainMaxX + 2 * height, fine);
+                ys = GradedAxis(minY, maxY, chainMinY - 2 * height, chainMaxY + 2 * height, fine);
+                if ((long)xs.Length * ys.Length <= options.MaxPlaneNodes
+                    || fine > Math.Max(maxX - minX, maxY - minY)) break;
+                fine *= 1.25;
+            }
+            grid = model.AddPlane(copper, planeMid, planeThickness, xs, ys, options.ConductivitySiemensPerMeter,
+                acrossThickness);
+        }
         Point2 endXy = new(outbound[^1].End.X, outbound[^1].End.Y);
         Point2 returnXy = inbound.Count > 0 ? new(inbound[0].Start.X, inbound[0].Start.Y) : new(outbound[0].Start.X, outbound[0].Start.Y);
-        if (grid.DistanceTo(returnXy) > 2 * grid.PitchMeters || grid.DistanceTo(endXy) > 2 * grid.PitchMeters)
+        if (grid.DistanceTo(returnXy) > 2 * Math.Max(grid.PitchMeters, height)
+            || grid.DistanceTo(endXy) > 2 * Math.Max(grid.PitchMeters, height))
             throw new InvalidOperationException(
                 "The plane has no copper under an end of the chain, so the current has nowhere to return from there.");
-        model.AddShort(end, grid.NodeNear(endXy));
+
+        // The joins at the loop's ends: a connection with its own resistance and inductance —
+        // the adjoining segment's barrel (or a wire of the trace's width) down to the plane,
+        // and a strip of plane copper over to the grid node that stands in for the spot.
+        void Join(int chainNode, Vector3D at, TraceSegment3D adjoining, Point2 target)
+        {
+            var (gridPoint, gridNode) = grid.Nodes.MinBy(n => (n.Position - target).Length);
+            if (options.IdealEndConnections)
+            {
+                model.AddShort(chainNode, gridNode);
+                return;
+            }
+            int node = chainNode;
+            if (Math.Abs(at.Z - planeMid) > planeThickness / 2)
+            {
+                int under = model.AddNode(new Vector3D(at.X, at.Y, planeMid));
+                if (adjoining.Profile == SegmentProfile.RoundTube && adjoining.Thickness > 0
+                    && adjoining.Thickness <= adjoining.Width / 2)
+                    model.AddTube(node, under, adjoining.Width, adjoining.Thickness, options.ConductivitySiemensPerMeter);
+                else
+                    model.AddRoundWire(node, under, adjoining.Width / 2, options.ConductivitySiemensPerMeter);
+                node = under;
+            }
+            if ((gridPoint - new Point2(at.X, at.Y)).Length > 1e-9)
+                model.AddBar(node, gridNode, Math.Max(grid.PitchMeters, adjoining.Width), planeThickness,
+                    options.ConductivitySiemensPerMeter);
+            else
+                model.AddShort(node, gridNode);
+        }
+        Join(end, outbound[^1].End, outbound[^1], endXy);
         if (inbound.Count > 0)
         {
             var (back, negative) = Add(model, inbound, delta, options);
-            model.AddShort(grid.NodeNear(returnXy), back);
+            Join(back, inbound[0].Start, inbound[0], returnXy);
             model.AddPort("loop", start, negative);
         }
         else
@@ -225,20 +295,68 @@ public static class LoopExtraction
 
         var notes = Common.ToList();
         notes.Add($"Return through the plane's copper within {margin * 1e3:g3} mm of the chain, meshed at "
-            + $"{grid.PitchMeters * 1e3:g3} mm ({grid.Nodes.Count} nodes), one filament through its thickness: "
-            + "where the return flows in the plane is solved, the skin effect through the plane's thickness is not "
-            + "(its resistance is the DC sheet's).");
+            + $"{grid.PitchMeters * 1e3:g3} mm" + (graded ? " under and near the chain, grading 1.3 per step to the margin" : "")
+            + $" ({grid.Nodes.Count} nodes), " + (acrossThickness > 1
+                ? $"{acrossThickness} graded strips through its thickness, so the skin effect through the plane is solved too."
+                : "one filament through its thickness: where the return flows in the plane is solved, the skin "
+                  + "effect through the plane's thickness is not (its resistance is the DC sheet's)."));
         if (grid.PitchMeters > 1.5 * height)
             notes.Add($"The plane grid ({grid.PitchMeters * 1e3:g3} mm) is coarser than the trace's height above it "
                 + $"({height * 1e3:g3} mm): the return cannot gather under the trace as tightly as it would, and the "
                 + "high-frequency inductance is over-stated.");
-        notes.Add(inbound.Count > 0
-            ? "The outbound leg's end and the inbound leg's start are joined to the plane ideally under them; the port "
-              + "is between the outbound start and the inbound end."
-            : "The chain is joined to the plane ideally under its far end and seen between its near end and the "
-              + "plane under it: the vias that make those connections are not in the loop.");
-        return new LoopExtractionResult(model.PortNames, model.Solve(frequenciesHz, false, cancellationToken),
-            model.FilamentCount, notes);
+        notes.Add(options.IdealEndConnections
+            ? (inbound.Count > 0
+                ? "The outbound leg's end and the inbound leg's start are joined to the plane ideally under them; the "
+                  + "port is between the outbound start and the inbound end."
+                : "The chain is joined to the plane ideally under its far end and seen between its near end and the "
+                  + "plane under it: the vias that make those connections are not in the loop.")
+            : (inbound.Count > 0
+                ? "The legs join the plane through real connections (each leg's own barrel or a wire of its width down "
+                  + "to the plane, and plane copper over to the mesh); the port is between the outbound start and the "
+                  + "inbound end."
+                : "The chain joins the plane through a real connection under its far end (its own barrel or a wire of "
+                  + "its width, and plane copper over to the mesh); at the near end the loop is seen between the chain "
+                  + "and the plane under it."));
+        var points = model.Solve(frequenciesHz, false, cancellationToken);
+        if (model.SolvedIteratively)
+            notes.Add("Solved by the compressed iterative solve (far couplings in low-rank blocks): it matches the "
+                + "dense factorization to its tolerances, about six digits.");
+        return new LoopExtractionResult(model.PortNames, points, model.FilamentCount, notes);
+    }
+
+    /// <summary>Ascending coordinates over [<paramref name="lo"/>, <paramref name="hi"/>]:
+    /// steps of <paramref name="fine"/> across the fine zone, growing 1.3 per step outside it.</summary>
+    private static double[] GradedAxis(double lo, double hi, double fineLo, double fineHi, double fine)
+    {
+        const double growth = 1.3;
+        fineLo = Math.Max(lo, fineLo);
+        fineHi = Math.Min(hi, fineHi);
+        if (fineHi - fineLo < fine)
+        {
+            double centre = 0.5 * (fineLo + fineHi);
+            fineLo = Math.Max(lo, centre - fine / 2);
+            fineHi = Math.Min(hi, fineLo + fine);
+        }
+        int steps = Math.Max(1, (int)Math.Ceiling((fineHi - fineLo) / fine - 1e-9));
+        double step = (fineHi - fineLo) / steps;
+        var axis = new List<double>();
+        for (int k = 0; k <= steps; k++) axis.Add(fineLo + k * step);
+        double x = fineHi, s = step;
+        while (x < hi - 1e-12)
+        {
+            s *= growth;
+            x = Math.Min(hi, x + s);
+            axis.Add(x);
+        }
+        x = fineLo;
+        s = step;
+        while (x > lo + 1e-12)
+        {
+            s *= growth;
+            x = Math.Max(lo, x - s);
+            axis.Insert(0, x);
+        }
+        return axis.ToArray();
     }
 
     /// <summary>The area of a loop made of the chain and its return in the plane directly beneath:
@@ -285,6 +403,10 @@ public static class LoopExtraction
 public sealed record NetCapacitanceMatrix(IReadOnlyList<string> Nets, double[,] Farads,
     IReadOnlyList<string> Assumptions)
 {
+    /// <summary>The crossing, pad and via terms that went in beyond the side-by-side and
+    /// broadside runs (FU-33), each with its place and kind.</summary>
+    public IReadOnlyList<CouplingTerm> Terms { get; init; } = Array.Empty<CouplingTerm>();
+
     /// <summary>Capacitance between two nets [F] (positive).</summary>
     public double Between(int i, int j) => -Farads[i, j];
 
@@ -315,10 +437,13 @@ public static class NetCapacitance
         {
             "To the planes: per-length capacitance of each (layer, width) of the net's traces over the reference "
             + "planes found for it, times routed length, plus parallel-plate pad terms; the net is solved alone.",
-            $"Between nets: stretches running side by side on one layer within {maxEdgeGapMeters * 1e3:g3} mm, each "
-            + "solved as two traces over their planes, mutual capacitance per length times length. Coupling "
-            + "between layers, at crossings, between pads and through vias is not in the matrix, and a third "
-            + "trace between two is not seen as a shield.",
+            $"Between nets: stretches running side by side on one layer within {maxEdgeGapMeters * 1e3:g3} mm "
+            + "(a third trace between two is solved as a guard there), and broadside stretches on two layers with "
+            + "no plane between, each solved as a 2D cross-section, mutual capacitance per length times length.",
+            "Also between nets (FU-33): crossings on two layers (the overlap's section at the crossing angle), "
+            + "stacked and side-by-side pads, and parallel via barrels over their shared depth (the two-cylinder "
+            + "form; a plane's clearance holes around a via pair are not modelled, so that term is conservative). "
+            + "Copper of a third net between two shields a crossing or pad pair, and the term is dropped.",
             "A net's total is its capacitance to the planes when alone plus what it has to each neighbour; a "
             + "neighbour also takes some of the field that went to the plane, so the total is slightly over-stated."
         };
@@ -346,6 +471,19 @@ public static class NetCapacitance
             c[i, i] += mutual;
             c[j, j] += mutual;
         }
-        return new NetCapacitanceMatrix(wanted, c, notes);
+
+        // The terms the run scan cannot see: crossings, pads, via barrels (FU-33).
+        var terms = NetCouplingTerms.Find(new BoardLayoutIndex(board), stackup ?? BoardStackup.FromBoard(board),
+            nets, maxEdgeGapMeters);
+        foreach (var term in terms)
+        {
+            int i = wanted.IndexOf(term.NetA), j = wanted.IndexOf(term.NetB);
+            if (i < 0 || j < 0 || i == j) continue;
+            c[i, j] -= term.Farads;
+            c[j, i] -= term.Farads;
+            c[i, i] += term.Farads;
+            c[j, j] += term.Farads;
+        }
+        return new NetCapacitanceMatrix(wanted, c, notes) { Terms = terms };
     }
 }

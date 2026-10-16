@@ -87,6 +87,36 @@ public class ExtractionTests
         Assert.Contains("no copper under an end", ex.Message);
     }
 
+    [Fact]
+    public void TheEndConnections_CarryTheirOwnInductance()
+    {
+        // FU-33: the joins at the loop's ends are real conductors now — a wire of the trace's
+        // width down to the plane and plane copper over to the mesh — where they used to be
+        // ideal shorts. The loop must grow by their partial inductance, and the notes must say
+        // which model was used.
+        double z = 0.3e-3 + 35e-6;
+        var chain = new[] { Bar(0, 0, 6e-3, 0, z, 0.4e-3) };
+        var solid = new Polygon2(new[] { new Point2(-3e-3, -3e-3), new Point2(9e-3, -3e-3), new Point2(9e-3, 3e-3), new Point2(-3e-3, 3e-3) });
+        var options = new LoopExtractionOptions
+        {
+            PlanePitchMeters = 0.3e-3, PlaneMarginMeters = 3e-3, PlaneStripsAcrossThickness = 1
+        };
+        var f = new[] { 100e6 };
+        var ideal = LoopExtraction.ChainOverPlane(chain, new[] { solid }, (-35e-6, 0), f,
+            options with { IdealEndConnections = true });
+        var real = LoopExtraction.ChainOverPlane(chain, new[] { solid }, (-35e-6, 0), f, options);
+        double added = real.Points[0].Inductance(0, 0) - ideal.Points[0].Inductance(0, 0);
+        _output.WriteLine($"ideal ends {ideal.Points[0].Inductance(0, 0) * 1e9:f3} nH, real ends "
+            + $"{real.Points[0].Inductance(0, 0) * 1e9:f3} nH (+{added * 1e12:f1} pH)");
+        Assert.Contains(ideal.Assumptions, a => a.Contains("ideally"));
+        Assert.Contains(real.Assumptions, a => a.Contains("real connection"));
+        // A 0.3 mm drop of a 0.4 mm wire is tens of picohenries; it must show, and it must
+        // stay a small part of the 3 nH loop.
+        Assert.True(added > 10e-12, $"added {added * 1e12:f1} pH");
+        Assert.True(added < 0.2 * ideal.Points[0].Inductance(0, 0));
+        Assert.True(real.Points[0].Resistance(0, 0) > ideal.Points[0].Resistance(0, 0));
+    }
+
     // ------------------------------------------------------------------ capacitance
 
     private static Polygon2 Rect(double x0, double y0, double x1, double y1) =>

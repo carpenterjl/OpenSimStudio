@@ -1,20 +1,20 @@
-using System.Numerics;
 using OpenSim.Core.Geometry2D;
 
-namespace OpenSim.Rf.Pdn;
+namespace OpenSim.Core.Numerics;
 
 /// <summary>
-/// LDLᵀ of a sparse complex-symmetric matrix (A = Aᵀ, no conjugation) — the plane solve when
-/// the band is too wide for <see cref="BandedComplexLu"/>: a stack's several unknowns per node
-/// and the rings of nodes around every port widen the band to the point where n·b² is minutes
-/// per frequency, while a nested-dissection order keeps the factor's fill near n·log n.
+/// LDLᵀ of a sparse complex-symmetric matrix (A = Aᵀ, no conjugation) — a direct solve where a
+/// band factorization would be too wide: the plane-stack solve's several unknowns per node and
+/// the rings of nodes around every port widen the band to the point where n·b² is minutes per
+/// frequency, and the PEEC mesh system's preconditioner has no useful band at all, while a
+/// nested-dissection order keeps the factor's fill near n·log n.
 ///
 /// <para>The structure (elimination tree, the factor's pattern) is found once; each frequency
 /// refactors the values (Davis's up-looking LDL). There is no pivoting: a pivot that comes out
-/// zero is reported, and the caller checks every solve's residual, refines it, and falls back to the
-/// pivoting band solve when that does not converge.</para>
+/// zero is reported, and the caller checks every solve's residual, refines it, and falls back to a
+/// pivoting solve when that does not converge.</para>
 /// </summary>
-internal sealed class SparseComplexLdl
+public sealed class SparseComplexLdl
 {
     private readonly int _n;
     private readonly int[] _perm, _inverse;          // new → old, old → new

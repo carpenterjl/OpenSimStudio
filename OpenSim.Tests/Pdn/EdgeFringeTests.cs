@@ -72,7 +72,7 @@ public class EdgeFringeTests
 
     /// <summary>Grid lines through the marks, each step at most <paramref name="growth"/> times
     /// its neighbour, starting at <paramref name="finest"/> at the marks in <paramref name="fine"/>.</summary>
-    private static double[] Lines(double[] marks, double[] fine, double finest, double coarsest, double growth)
+    internal static double[] Lines(double[] marks, double[] fine, double finest, double coarsest, double growth)
     {
         var lines = new List<double> { marks[0] };
         for (int s = 0; s + 1 < marks.Length; s++)
@@ -97,7 +97,7 @@ public class EdgeFringeTests
 
     /// <summary>Adds the element faces between a region and every other one to the skin as one
     /// face id, so a voltage condition can name an interior conductor.</summary>
-    private static FeMesh TagConductor(FeMesh mesh, int region, int faceId)
+    internal static FeMesh TagConductor(FeMesh mesh, int region, int faceId)
     {
         var owners = new Dictionary<(int, int, int), List<int>>();
         for (int e = 0; e < mesh.ElementCount; e++)

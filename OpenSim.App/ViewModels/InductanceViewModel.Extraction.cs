@@ -130,6 +130,23 @@ public partial class InductanceViewModel
             ParasiticExport.SpiceSubcircuit(_acName, solved.PortNames, point.Impedance, point.FrequencyHz));
     }
 
+    /// <summary>The wideband SPICE subcircuit: every entry of the sweep fitted as a rational
+    /// function and realized as R/L/C branches, valid over the whole sweep (FU-33). Needs at
+    /// least six solved frequencies.</summary>
+    [RelayCommand]
+    private void ExportWidebandSpice()
+    {
+        if (_acSolved is not { } solved) return;
+        Save("SPICE subcircuit|*.cir;*.lib;*.sp|All files|*.*", "_wideband.cir", () =>
+        {
+            var result = ParasiticExport.SpiceWideband(_acName, solved.PortNames,
+                solved.Points.Select(p => p.FrequencyHz).ToList(),
+                solved.Points.Select(p => p.Impedance).ToList());
+            foreach (string note in result.Notes) _log.Append($"Extraction (wideband): {note}");
+            return result.Text;
+        });
+    }
+
     [RelayCommand]
     private void ExportTouchstone()
     {

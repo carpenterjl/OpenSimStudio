@@ -265,6 +265,8 @@ public partial class SignalIntegrityViewModel : ObservableObject
                     if (matrix.Between(i, j) > 0)
                         lines.Add($"  to {matrix.Nets[j]}: {matrix.Between(i, j) * 1e12:g4} pF");
             }
+            foreach (var group in matrix.Terms.GroupBy(t => t.Kind))
+                lines.Add($"{group.Count()} {group.Key} term(s), {group.Sum(t => t.Farads) * 1e12:g3} pF in all");
             CapacitanceMatrixResult = string.Join(Environment.NewLine, lines)
                 + Environment.NewLine + string.Join(" ", matrix.Assumptions);
             foreach (string line in lines) _log.Append("SI capacitance matrix: " + line.Trim());

@@ -74,8 +74,10 @@ public static class VectorFit
     /// <param name="values">The response at <paramref name="frequenciesHz"/> with
     /// <paramref name="delaySeconds"/> still in it.</param>
     /// <param name="polePairs">Starting complex pole pairs, spread over the band.</param>
+    /// <param name="weights">Per-point least-squares weights (e.g. 1/|value| for a relative
+    /// fit of data spanning decades); null fits every point alike, as before.</param>
     public static RationalResponse Fit(IReadOnlyList<double> frequenciesHz, IReadOnlyList<Complex> values,
-        int polePairs, double delaySeconds = 0, int iterations = 20)
+        int polePairs, double delaySeconds = 0, int iterations = 20, IReadOnlyList<double>? weights = null)
     {
         if (frequenciesHz.Count != values.Count) throw new ArgumentException("One value per frequency.");
         if (polePairs < 1) throw new ArgumentOutOfRangeException(nameof(polePairs));
@@ -100,16 +102,17 @@ public static class VectorFit
         int stale = 0;
         for (int iteration = 0; iteration <= iterations; iteration++)
         {
-            var (residues, constant) = FitResidues(poles, frequenciesHz, flat, scale);
+            var (residues, constant) = FitResidues(poles, frequenciesHz, flat, scale, weights);
             var model = new RationalResponse(poles.ToArray(), residues, constant, delaySeconds, scale);
             double error = 0;
             for (int k = 0; k < flat.Length; k++)
-                error = Math.Max(error, (model.DelayFree(new Complex(0, frequenciesHz[k] / scale)) - flat[k]).Magnitude);
+                error = Math.Max(error, (weights?[k] ?? 1)
+                    * (model.DelayFree(new Complex(0, frequenciesHz[k] / scale)) - flat[k]).Magnitude);
             stale = error < 0.99 * bestError ? 0 : stale + 1;
             if (error < bestError) { bestError = error; best = model; }
             // Settled: at rounding level, or three relocations without a 1 % gain.
             if (iteration == iterations || bestError <= 1e-13 * size || stale >= 3) break;
-            poles = Relocate(poles, frequenciesHz, flat, scale);
+            poles = Relocate(poles, frequenciesHz, flat, scale, weights);
         }
         return best!;
     }
@@ -182,7 +185,7 @@ public static class VectorFit
     /// squares with Re Σ_k σ(s_k) = K fixing the scale, then the zeros of σ are the
     /// eigenvalues of A − b·c̃ᵀ/d̃.</summary>
     private static List<Complex> Relocate(IReadOnlyList<Complex> poles, IReadOnlyList<double> frequenciesHz,
-        IReadOnlyList<Complex> values, double scale)
+        IReadOnlyList<Complex> values, double scale, IReadOnlyList<double>? weights = null)
     {
         int n = Columns(poles), points = values.Count;
         int unknowns = 2 * n + 2;
@@ -195,20 +198,21 @@ public static class VectorFit
         var sums = new double[n];
         for (int k = 0; k < points; k++)
         {
+            double w = weights?[k] ?? 1;
             Basis(poles, new Complex(0, frequenciesHz[k] / scale), row);
             Complex h = values[k];
             for (int j = 0; j < n; j++)
             {
-                a[2 * k, j] = row[j].Real;
-                a[2 * k + 1, j] = row[j].Imaginary;
+                a[2 * k, j] = w * row[j].Real;
+                a[2 * k + 1, j] = w * row[j].Imaginary;
                 Complex hp = -h * row[j];
-                a[2 * k, n + 1 + j] = hp.Real;
-                a[2 * k + 1, n + 1 + j] = hp.Imaginary;
+                a[2 * k, n + 1 + j] = w * hp.Real;
+                a[2 * k + 1, n + 1 + j] = w * hp.Imaginary;
                 sums[j] += row[j].Real;
             }
-            a[2 * k, n] = 1;
-            a[2 * k, 2 * n + 1] = -h.Real;
-            a[2 * k + 1, 2 * n + 1] = -h.Imaginary;
+            a[2 * k, n] = w;
+            a[2 * k, 2 * n + 1] = -w * h.Real;
+            a[2 * k + 1, 2 * n + 1] = -w * h.Imaginary;
         }
         double weight = Math.Max(norm, 1e-300) / points;
         for (int j = 0; j < n; j++) a[2 * points, n + 1 + j] = weight * sums[j];
