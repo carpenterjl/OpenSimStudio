@@ -174,6 +174,10 @@ public sealed record SolveInput
     /// wall, the solve as it always was.</summary>
     public ElectrostaticSettings? Electrostatic { get; init; }
 
+    /// <summary>Flux recovery, its error estimate and flux probes (DC conduction and steady
+    /// heat conduction). Null is the solve as it always was, with the same fields.</summary>
+    public FluxRecoverySettings? FluxRecovery { get; init; }
+
     /// <summary>The material governing one element, honouring <see cref="RegionMaterials"/>.</summary>
     public Material MaterialOf(int elementIndex) =>
         RegionMaterials is null

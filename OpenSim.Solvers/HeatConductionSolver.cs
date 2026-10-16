@@ -31,10 +31,11 @@ public sealed class HeatConductionSolver : ISolver
     {
         if (input.Mesh.ElementCount == 0)
             throw new InvalidOperationException("The mesh has no elements. Generate a mesh first.");
-        if (input.Mesh.IsQuadratic)
+        if (input.Mesh.IsHex)
             throw new InvalidOperationException(
-                "The thermal solver supports linear tetrahedral (TET4) meshes only; " +
-                "re-generate the mesh with linear tetrahedral elements.");
+                "The thermal solver supports tetrahedral meshes (TET4 or TET10) only; " +
+                "re-generate the mesh with tetrahedral elements.");
+        if (input.Mesh.IsQuadratic) RequireQuadraticSupported(input);
 
         input.Material.ValidateThermal();
         if (input.RegionMaterials is not null)
@@ -76,6 +77,28 @@ public sealed class HeatConductionSolver : ISolver
                 contact.Validate(input.Mesh.NodeCount);
 
         RequireAnchoredComponents(input, networks);
+        FluxRecoveryOutput.Validate(input);
+    }
+
+    /// <summary>
+    /// What a quadratic (TET10) mesh carries: fixed temperatures, heat flows, convection
+    /// (one coefficient per surface triangle — a convection profile's triangle mean),
+    /// volumetric sources and conductivity tensors. The surface models below are stamped on
+    /// the corner nodes of the skin and are refused by name, not applied to three of six nodes.
+    /// </summary>
+    private static void RequireQuadraticSupported(SolveInput input)
+    {
+        var refused = new List<string>();
+        if (input.Environment is not null) refused.Add("an environment");
+        if (input.PrescribedFilm is not null) refused.Add("a prescribed film");
+        if (input.SurfaceRadiation is { Count: > 0 }) refused.Add("surface-to-surface radiation");
+        if (input.ThermalNetworks is { Count: > 0 }) refused.Add("thermal networks");
+        if (input.ThermalContacts is { Count: > 0 }) refused.Add("thermal contacts");
+        if (refused.Count > 0)
+            throw new InvalidOperationException(
+                $"On a quadratic (TET10) mesh the thermal solver takes fixed temperatures, heat flows, " +
+                $"convection and volumetric sources; {string.Join(", ", refused)} " +
+                "work on linear meshes only. Re-generate the mesh with linear elements.");
     }
 
     /// <summary>
@@ -230,9 +253,10 @@ public sealed class HeatConductionSolver : ISolver
         if (networks is not null) loads = networks.AugmentLoads(loads, _ => 1.0);
 
         var prescribed = new Dictionary<int, double>();
+        var edgeMid = mesh.IsQuadratic ? QuadraticMeshBuilder.BuildEdgeMidMap(mesh) : null;
         foreach (var temperature in input.BoundaryConditions.OfType<FixedTemperature>())
         {
-            var nodes = mesh.GetScopeNodes(temperature);
+            var nodes = ScalarSolverHelpers.ScopeNodes(mesh, temperature, edgeMid);
             foreach (int node in nodes)
                 prescribed[node] = temperature.Kelvin;
             log.Add($"Temperature '{temperature.Name}': {temperature.Kelvin:g4} K on {nodes.Count} nodes.");
@@ -299,7 +323,16 @@ public sealed class HeatConductionSolver : ISolver
             fields.Add(new NodalScalarField("Film coefficient", "W/(m²·K)",
                 EnvironmentThermalTerms.NodalFilmField(mesh, film)));
 
-        return new SolveOutput { Fields = fields, Log = log, Networks = states };
+        Dictionary<string, double>? summary = null;
+        if (input.FluxRecovery is not null)
+        {
+            summary = new Dictionary<string, double>();
+            FluxRecoveryOutput.Add(input, assembler, temperatureField, assembler.Tensor, input.ElementHeatSource,
+                FluxRecoveryOutput.ThermalOutflow(input, assembler, temperatureField), ("Heat flux", "W/m²"),
+                ("heat flow", "W"), fields, summary, log, cancellationToken);
+        }
+
+        return new SolveOutput { Fields = fields, Log = log, Networks = states, Summary = summary };
     }
 
     /// <summary>

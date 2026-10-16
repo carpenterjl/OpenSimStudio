@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OpenSim.Core.Interfaces;
 using OpenSim.Core.Model;
+using OpenSim.Core.Numerics;
 using OpenSim.Core.Persistence;
 using OpenSim.Core.PostProcessing;
 using OpenSim.Core.Studies;
@@ -47,6 +48,12 @@ public static partial class CliRunner
             --max-steps N                            conjugate: cap on the steady flow march
             --momentum                               conjugate transient: march the flow with
                                                      the heating
+            --recover                                Electrical, Thermal: the recovered flux, its
+                                                     error field and the estimated error
+            --probe "NAME:X,Y,Z:NX,NY,NZ[;...]"      Electrical, Thermal: the current or heat flow
+                                                     through the plane through X,Y,Z (m) normal to
+                                                     NX,NY,NZ; "NAME:faces:ID[,ID...]" through
+                                                     boundary faces (implies --recover)
 
         opensim sweep <job.json> [--out DIR]
             Runs the project at every point of a parameter plan and tabulates the outputs.
@@ -186,10 +193,41 @@ public static partial class CliRunner
         PointCount = (int)Number(o, "points", 15),
         ModeCount = (int)Number(o, "modes", 6),
         OpenBoundary = o.ContainsKey("open"),
+        FluxRecovery = Recovery(o),
         EnvironmentSteady = o.ContainsKey("steady"),
         BodyName = o.GetValueOrDefault("body"),
         Remesh = o.ContainsKey("remesh")
     };
+
+    /// <summary>--recover and --probe: null when neither is given.</summary>
+    private static FluxRecoverySettings? Recovery(Dictionary<string, string> o)
+    {
+        if (!o.TryGetValue("probe", out var spec)) return o.ContainsKey("recover") ? new FluxRecoverySettings() : null;
+        var probes = new List<FluxProbe>();
+        foreach (string item in spec.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = item.Split(':');
+            if (parts.Length == 3 && parts[1].Equals("faces", StringComparison.OrdinalIgnoreCase))
+            {
+                var ids = parts[2].Split(',').Select(s => int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id)
+                    ? id : throw new UsageException($"--probe '{item}': '{s}' is not a face id.")).ToList();
+                probes.Add(new FluxProbe { Name = parts[0], FaceIds = ids });
+                continue;
+            }
+            if (parts.Length != 3)
+                throw new UsageException($"--probe '{item}' is not NAME:X,Y,Z:NX,NY,NZ or NAME:faces:ID[,ID...].");
+            probes.Add(new FluxProbe { Name = parts[0], Origin = Point(item, parts[1]), Normal = Point(item, parts[2]) });
+        }
+        return new FluxRecoverySettings { Probes = probes };
+
+        static Vector3D Point(string item, string text)
+        {
+            var v = text.Split(',').Select(s => double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double x)
+                ? x : throw new UsageException($"--probe '{item}': '{s}' is not a number.")).ToArray();
+            return v.Length == 3 ? new Vector3D(v[0], v[1], v[2])
+                : throw new UsageException($"--probe '{item}': '{text}' needs three numbers.");
+        }
+    }
 
     private static string OutDir(string inputPath, Dictionary<string, string> o, string suffix)
     {

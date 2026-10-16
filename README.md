@@ -19,8 +19,9 @@ fully testable.
 | Domain | Analyses |
 |---|---|
 | **Structural** | Linear static (TET4 + quadratic TET10), modal analysis (subspace eigensolver, consistent mass) |
-| **Thermal** | Steady-state and transient heat conduction (backward Euler) |
-| **Electrical** | DC conduction (voltage, current density, resistance), AC electro-quasistatic frequency sweeps (complex-symmetric COCG solver) |
+| **Thermal** | Steady-state (TET4 or quadratic TET10) and transient heat conduction (backward Euler) |
+| **Electrical** | DC conduction (TET4 or quadratic TET10: voltage, current density, resistance), AC electro-quasistatic frequency sweeps (complex-symmetric COCG solver) |
+| **Fields** | Recovered current density and heat flux (superconvergent patch recovery) with an energy-norm error estimate; current and heat flow through a plane or a set of faces |
 | **Coupled** | One-way Joule heating (I²R → steady or transient thermal) |
 | **PCB** | Gerber RS-274X + Excellon + IPC-2581 import, per-net copper meshing, pad-to-pad trace resistance, 3D partial-inductance chain composition (DC, finite-section parallel bars: self, mutual, coupling k, plane-return loops), lumped R + jωL trace estimates |
 | **RF** | First-party method-of-moments antenna solvers: thin-wire EFIE (dipoles, loops, monopoles, board trace chains) and RWG surface MoM for PEC sheets (plates, patches, PCB copper islands), both with optional infinite PEC ground by image theory; **microstrip substrates** (single- and multi-layer grounded stackups) via a rigorous layered-media Green's function (direct Sommerfeld integration; surface-wave poles found from a pole-free dispersion function with mode counting, and extracted into the power ledger); **coaxial probe feeds** through the slab with a classical 1/ρ attachment mode; input impedance, far-field patterns, directivity, surface-wave power, and near-field E maps in free space, over ground, and inside/above the substrate |

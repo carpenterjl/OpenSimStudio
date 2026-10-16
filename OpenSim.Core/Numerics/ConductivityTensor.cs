@@ -29,6 +29,19 @@ public readonly record struct ConductivityTensor(double Xx, double Yy, double Zz
         Xy * v.X + Yy * v.Y + Yz * v.Z,
         Xz * v.X + Yz * v.Y + Zz * v.Z);
 
+    /// <summary>K⁻¹·v (the gradient that drives a given flux), by the adjugate; the tensor
+    /// must be positive definite.</summary>
+    public Vector3D Solve(Vector3D v)
+    {
+        double c00 = Yy * Zz - Yz * Yz, c01 = Xz * Yz - Xy * Zz, c02 = Xy * Yz - Xz * Yy;
+        double c11 = Xx * Zz - Xz * Xz, c12 = Xy * Xz - Xx * Yz, c22 = Xx * Yy - Xy * Xy;
+        double det = Xx * c00 + Xy * c01 + Xz * c02;
+        return new Vector3D(
+            (c00 * v.X + c01 * v.Y + c02 * v.Z) / det,
+            (c01 * v.X + c11 * v.Y + c12 * v.Z) / det,
+            (c02 * v.X + c12 * v.Y + c22 * v.Z) / det);
+    }
+
     /// <summary>Sylvester's criterion: every leading minor positive.</summary>
     public bool IsPositiveDefinite =>
         Xx > 0

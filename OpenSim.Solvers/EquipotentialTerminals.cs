@@ -42,7 +42,10 @@ internal sealed class EquipotentialTerminals
     /// sharing a node would be one equipotential carrying two currents; both are refused by
     /// name rather than resolved silently.
     /// </summary>
-    public static EquipotentialTerminals? Of(FeMesh mesh, IReadOnlyList<BoundaryCondition> conditions)
+    /// <param name="edgeMid">The mid-edge nodes of a TET10 mesh, which a terminal ties too;
+    /// null on TET4.</param>
+    public static EquipotentialTerminals? Of(FeMesh mesh, IReadOnlyList<BoundaryCondition> conditions,
+        Dictionary<(int, int), int>? edgeMid = null)
     {
         var terminals = conditions.OfType<CurrentFlow>().Where(c => c.Equipotential).ToList();
         if (terminals.Count == 0) return null;
@@ -51,7 +54,7 @@ internal sealed class EquipotentialTerminals
         var terminalOf = new int[nodes];
         Array.Fill(terminalOf, -1);
         for (int t = 0; t < terminals.Count; t++)
-            foreach (int n in mesh.GetScopeNodes(terminals[t]))
+            foreach (int n in ScalarSolverHelpers.ScopeNodes(mesh, terminals[t], edgeMid))
             {
                 if (terminalOf[n] >= 0 && terminalOf[n] != t)
                     throw new InvalidOperationException(
@@ -61,7 +64,7 @@ internal sealed class EquipotentialTerminals
                 terminalOf[n] = t;
             }
         foreach (var voltage in conditions.OfType<VoltagePotential>())
-            foreach (int n in mesh.GetScopeNodes(voltage))
+            foreach (int n in ScalarSolverHelpers.ScopeNodes(mesh, voltage, edgeMid))
                 if (terminalOf[n] >= 0)
                     throw new InvalidOperationException(
                         $"Equipotential terminal '{terminals[terminalOf[n]].Name}' shares mesh nodes with " +

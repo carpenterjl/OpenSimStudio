@@ -87,6 +87,26 @@ public class CliTests : IDisposable
     }
 
     [Fact]
+    public void Solve_ProbesReportTheHeatFlowThroughAPlaneAndAFace()
+    {
+        // k·ΔT·A/L through the bar, from the hot end at z = 20 mm towards z = 0: negative along
+        // +z, and negative out of the hot face, where it comes in.
+        string project = WriteBarProject("probed");
+        string outDir = Path.Combine(_dir, "probed-results");
+        var (code, _, err) = Run("solve", project, "--out", outDir, "--probe", "cut:0,0,0.0073:0,0,1;hot:faces:5");
+        Assert.Equal(0, code);
+        Assert.Equal("", err);
+        var outputs = JsonSerializer.Deserialize<Dictionary<string, double>>(File.ReadAllText(Path.Combine(outDir, "summary.json")))!;
+        double flow = 400 * 100 * 0.01 * 0.01 / 0.02;
+        Assert.Equal(-flow, outputs["Probe 'cut' heat flow (W)"], flow * 1e-8);
+        Assert.Equal(-flow, outputs["Probe 'hot' heat flow (W)"], flow * 1e-8);
+        Assert.True(outputs.ContainsKey("Heat flux error estimate (%)"));
+        Assert.True(outputs.ContainsKey("Max Heat flux (recovered) (W/m²)"));
+
+        Assert.Equal(1, Run("solve", project, "--out", outDir, "--probe", "cut:0,0:0,0,1").Code);
+    }
+
+    [Fact]
     public void Solve_MeshesTheProjectAndWritesTheReport()
     {
         string project = WriteBarProject();

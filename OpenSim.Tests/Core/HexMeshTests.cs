@@ -402,10 +402,10 @@ public class HexMeshTests
 
         var thermal = Assert.Throws<InvalidOperationException>(
             () => new HeatConductionSolver().Validate(input));
-        Assert.Contains("linear tetrahedral (TET4)", thermal.Message);
+        Assert.Contains("tetrahedral meshes (TET4 or TET10)", thermal.Message);
 
         var electrical = Assert.Throws<InvalidOperationException>(
             () => new ElectricalConductionSolver().Validate(input));
-        Assert.Contains("linear tetrahedral (TET4)", electrical.Message);
+        Assert.Contains("tetrahedral meshes (TET4 or TET10)", electrical.Message);
     }
 }

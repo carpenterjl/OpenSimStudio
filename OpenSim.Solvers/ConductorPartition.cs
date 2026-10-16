@@ -78,8 +78,7 @@ internal sealed class ConductorPartition
                 insulatorMax = Math.Max(insulatorMax, sigma[e]);
                 continue;
             }
-            var el = mesh.Elements[e];
-            conductorNode[el.N0] = conductorNode[el.N1] = conductorNode[el.N2] = conductorNode[el.N3] = true;
+            foreach (int n in mesh.GetElementNodes(e)) conductorNode[n] = true;
         }
 
         // Conductor pieces: connected through conductor elements, and through a contact
@@ -89,10 +88,10 @@ internal sealed class ConductorPartition
         for (int e = 0; e < elements; e++)
         {
             if (!conductor[e]) continue;
-            var el = mesh.Elements[e];
-            Union(parent, el.N0, el.N1);
-            Union(parent, el.N0, el.N2);
-            Union(parent, el.N0, el.N3);
+            // Every node of the element joins its first corner: on a TET10 the mid-edge
+            // nodes belong to the piece as much as the corners do.
+            var all = mesh.GetElementNodes(e);
+            for (int i = 1; i < all.Length; i++) Union(parent, all[0], all[i]);
         }
         if (contacts is not null)
             foreach (var contact in contacts)
@@ -117,10 +116,10 @@ internal sealed class ConductorPartition
         for (int e = 0; e < elements; e++)
         {
             if (!conductor[e]) continue;
-            var el = mesh.Elements[e];
-            anchored[e] = anchoredRoots.Contains(Find(parent, el.N0));
+            var all = mesh.GetElementNodes(e);
+            anchored[e] = anchoredRoots.Contains(Find(parent, all[0]));
             var flags = anchored[e] ? nodeAnchored : nodeFloating;
-            flags[el.N0] = flags[el.N1] = flags[el.N2] = flags[el.N3] = true;
+            foreach (int n in all) flags[n] = true;
             if (!anchored[e]) floatingRegions.Add(mesh.RegionOf(e));
         }
 

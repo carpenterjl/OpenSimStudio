@@ -6,7 +6,7 @@ using OpenSim.Core.Results;
 namespace OpenSim.Solvers;
 
 /// <summary>
-/// Steady DC electrical conduction solver over TET4 elements: ∇·(σ∇φ) = 0 with
+/// Steady DC electrical conduction solver over TET4 or TET10 elements: ∇·(σ∇φ) = 0 with
 /// prescribed potentials (Dirichlet), injected currents (Neumann, uniform over the face)
 /// and equipotential current terminals (one free potential per face carrying the total
 /// current — <see cref="CurrentFlow.Equipotential"/>). Produces electric potential, current
@@ -49,10 +49,14 @@ public sealed class ElectricalConductionSolver : ISolver
     {
         if (input.Mesh.ElementCount == 0)
             throw new InvalidOperationException("The mesh has no elements. Generate a mesh first.");
-        if (input.Mesh.IsQuadratic)
+        if (input.Mesh.IsHex)
             throw new InvalidOperationException(
-                "The electrical solver supports linear tetrahedral (TET4) meshes only; " +
-                "re-generate the mesh with linear tetrahedral elements.");
+                "The electrical solver supports tetrahedral meshes (TET4 or TET10) only; " +
+                "re-generate the mesh with tetrahedral elements.");
+        if (input.Mesh.IsQuadratic && input.ElectricalContacts is { Count: > 0 })
+            throw new InvalidOperationException(
+                "Electrical contacts between bodies are stamped on corner nodes and are not available " +
+                "on a quadratic (TET10) mesh; re-generate the meshes with linear elements.");
 
         input.Material.ValidateElectrical();
         if (input.RegionMaterials is not null)
@@ -77,8 +81,12 @@ public sealed class ElectricalConductionSolver : ISolver
                 contact.Validate(input.Mesh.NodeCount);
 
         Partition(input);
-        EquipotentialTerminals.Of(input.Mesh, input.BoundaryConditions);
+        EquipotentialTerminals.Of(input.Mesh, input.BoundaryConditions, EdgeMid(input.Mesh));
+        FluxRecoveryOutput.Validate(input);
     }
+
+    private static Dictionary<(int, int), int>? EdgeMid(FeMesh mesh) =>
+        mesh.IsQuadratic ? QuadraticMeshBuilder.BuildEdgeMidMap(mesh) : null;
 
     private static ConductorPartition Partition(SolveInput input) =>
         ConductorPartition.Of(input.Mesh, e => input.MaterialOf(e).ElectricalConductivity!.Value,
@@ -91,7 +99,8 @@ public sealed class ElectricalConductionSolver : ISolver
         var log = new List<string>();
         var mesh = input.Mesh;
         var partition = Partition(input);
-        var terminals = EquipotentialTerminals.Of(mesh, input.BoundaryConditions);
+        var edgeMid = EdgeMid(mesh);
+        var terminals = EquipotentialTerminals.Of(mesh, input.BoundaryConditions, edgeMid);
         var contacts = input.ElectricalContacts;
 
         progress?.Report(new SolverProgress("Applying boundary conditions", 0.05));
@@ -109,7 +118,7 @@ public sealed class ElectricalConductionSolver : ISolver
         var prescribed = new Dictionary<int, double>();
         foreach (var voltage in input.BoundaryConditions.OfType<VoltagePotential>())
         {
-            var nodes = mesh.GetScopeNodes(voltage);
+            var nodes = ScalarSolverHelpers.ScopeNodes(mesh, voltage, edgeMid);
             foreach (int node in nodes)
                 prescribed[node] = voltage.Volts;
             log.Add($"Voltage '{voltage.Name}': {voltage.Volts:g4} V on {nodes.Count} nodes.");
@@ -164,9 +173,8 @@ public sealed class ElectricalConductionSolver : ISolver
         for (int e = 0; e < mesh.ElementCount; e++)
         {
             double sigma = solved[e];
-            var gradPhi = assembler.ElementGradient(e, phi);
-            current_[e] = gradPhi * -sigma;                          // J = −σ∇φ
-            power[e] = sigma * Vector3D.Dot(gradPhi, gradPhi);       // q = σ|∇φ|², exact per constant-gradient tet
+            current_[e] = assembler.ElementGradient(e, phi) * -sigma;   // J = −σ∇φ (the element mean on a TET10)
+            power[e] = sigma * assembler.MeanSquareGradient(e, phi);    // q = σ|∇φ|², the element mean, exactly
             totalPower += power[e] * mesh.ElementVolume(e);
         }
         if (contacts is not null)
@@ -184,7 +192,7 @@ public sealed class ElectricalConductionSolver : ISolver
         }
         log.Add($"Total dissipated power: {totalPower:g4} W.");
         var summary = new Dictionary<string, double> { ["Total power (W)"] = totalPower };
-        LogElectrodeCurrents(input, partition, reactions, leakage, totalPower, phi, terminals, log, summary);
+        LogElectrodeCurrents(input, partition, reactions, leakage, totalPower, phi, terminals, edgeMid, log, summary);
 
         var groups = ScalarSolverHelpers.MaterialGroups(input, out var groupNames);
         if (groups is not null)
@@ -192,16 +200,25 @@ public sealed class ElectricalConductionSolver : ISolver
         var (currentNodal, currentSides) = ScalarSolverHelpers.NodalAverageWithSides(mesh, current_, groups, groupNames);
         var (powerNodal, powerSides) = ScalarSolverHelpers.NodalAverageWithSides(mesh, power, groups, groupNames);
 
+        var fields = new List<IResultField>
+        {
+            new NodalScalarField("Electric potential", "V", phi),
+            new NodalVectorField("Current density", "A/m²", currentNodal, currentSides),
+            new NodalScalarField("Power density", "W/m³", powerNodal, powerSides),
+            new ElementScalarField(ElementPowerFieldName, "W/m³", power)
+        };
+        if (input.FluxRecovery is not null)
+        {
+            progress?.Report(new SolverProgress("Recovering the current density", 0.9));
+            FluxRecoveryOutput.Add(input, assembler, phi, e => ConductivityTensor.Isotropic(solved[e]), null,
+                FluxRecoveryOutput.ConductionOutflow(input), ("Current density", "A/m²"), ("current", "A"),
+                fields, summary, log, cancellationToken);
+        }
+
         progress?.Report(new SolverProgress("Done", 1.0));
         return new SolveOutput
         {
-            Fields = new IResultField[]
-            {
-                new NodalScalarField("Electric potential", "V", phi),
-                new NodalVectorField("Current density", "A/m²", currentNodal, currentSides),
-                new NodalScalarField("Power density", "W/m³", powerNodal, powerSides),
-                new ElementScalarField(ElementPowerFieldName, "W/m³", power)
-            },
+            Fields = fields,
             Log = log,
             Summary = summary
         };
@@ -353,12 +370,12 @@ public sealed class ElectricalConductionSolver : ISolver
     /// </summary>
     private static void LogElectrodeCurrents(SolveInput input, ConductorPartition partition, double[] reactions,
         double[]? leakage, double totalPower, double[] phi, EquipotentialTerminals? terminals,
-        List<string> log, Dictionary<string, double> summary)
+        Dictionary<(int, int), int>? edgeMid, List<string> log, Dictionary<string, double> summary)
     {
         var voltages = input.BoundaryConditions.OfType<VoltagePotential>().ToList();
         var electrodes = voltages
             .Select((v, i) => (v.Name, v.Volts,
-                Current: input.Mesh.GetScopeNodes(v).Sum(n => reactions[n]) + (leakage?[i] ?? 0)))
+                Current: ScalarSolverHelpers.ScopeNodes(input.Mesh, v, edgeMid).Sum(n => reactions[n]) + (leakage?[i] ?? 0)))
             .ToList();
         foreach (var e in electrodes)
             log.Add($"Electrode '{e.Name}' ({e.Volts:g4} V): net current {e.Current:g4} A.");

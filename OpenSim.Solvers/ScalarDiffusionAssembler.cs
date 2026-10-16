@@ -5,9 +5,10 @@ using OpenSim.Core.Numerics;
 namespace OpenSim.Solvers;
 
 /// <summary>
-/// Assembly of the global system for a steady scalar diffusion field over TET4
+/// Assembly of the global system for a steady scalar diffusion field over TET4 or TET10
 /// elements: K_ij = ∫ c ∇Nᵢ·∇Nⱼ dV with a per-element coefficient c (electrical
-/// conductivity σ, thermal conductivity k). One DOF per node.
+/// conductivity σ, thermal conductivity k). One DOF per node; a TET10 mesh's mid-edge nodes
+/// are ordinary nodes (<see cref="ScalarElements"/>).
 /// </summary>
 public sealed class ScalarDiffusionAssembler
 {
@@ -15,14 +16,23 @@ public sealed class ScalarDiffusionAssembler
     private readonly Func<int, double> _coefficient;
     private readonly Func<int, ConductivityTensor>? _tensor;
 
-    /// <summary>Shape-function gradients per element, cached for flux recovery.</summary>
+    /// <summary>Shape-function gradients per element (the barycentric gradients on a TET10
+    /// mesh), cached for flux recovery.</summary>
     private readonly Vector3D[][] _gradients;
+
+    /// <summary>The mid-edge node of each corner pair on a TET10 mesh; null on TET4.</summary>
+    private readonly Dictionary<(int, int), int>? _edgeMid;
 
     /// <param name="coefficient">Diffusion coefficient of one element (must be positive).</param>
     public ScalarDiffusionAssembler(FeMesh mesh, Func<int, double> coefficient)
     {
+        if (mesh.IsHex)
+            throw new InvalidOperationException(
+                "The scalar solvers take tetrahedral meshes (TET4 or TET10), not hexahedral ones; " +
+                "re-generate the mesh with tetrahedral elements.");
         _mesh = mesh;
         _coefficient = coefficient;
+        _edgeMid = mesh.IsQuadratic ? QuadraticMeshBuilder.BuildEdgeMidMap(mesh) : null;
         _gradients = new Vector3D[mesh.ElementCount][];
         for (int i = 0; i < mesh.ElementCount; i++)
         {
@@ -64,6 +74,21 @@ public sealed class ScalarDiffusionAssembler
 
     public int DofCount => _mesh.NodeCount;
 
+    public FeMesh Mesh => _mesh;
+
+    /// <summary>Whether the elements are quadratic (TET10).</summary>
+    public bool IsQuadratic => _edgeMid is not null;
+
+    /// <summary>The mid-edge node between two corner nodes of a TET10 mesh.</summary>
+    public int MidNode(int a, int b) => _edgeMid![a < b ? (a, b) : (b, a)];
+
+    /// <summary>The diffusion tensor of one element (k·I for a scalar coefficient).</summary>
+    public ConductivityTensor Tensor(int element) =>
+        _tensor?.Invoke(element) ?? ConductivityTensor.Isotropic(_coefficient(element));
+
+    /// <summary>The constant barycentric gradients ∇L₀..∇L₃ of one element.</summary>
+    internal Vector3D[] BarycentricGradients(int element) => _gradients[element];
+
     /// <summary>A Robin (convective) surface term h·∫NᵢNⱼdA added on one boundary triangle.</summary>
     public readonly record struct RobinTerm(BoundaryTriangle Triangle, double Coefficient);
 
@@ -84,7 +109,19 @@ public sealed class ScalarDiffusionAssembler
     public CsrMatrix AssembleStiffness(IReadOnlyList<RobinTerm>? robinTerms,
         IReadOnlyList<ContactInterface>? contacts, CancellationToken cancellationToken)
     {
+        if (IsQuadratic && contacts is { Count: > 0 })
+            throw new InvalidOperationException(
+                "Contacts between bodies are stamped on corner nodes and are not available on a " +
+                "quadratic (TET10) mesh; re-generate the mesh with linear elements.");
         var builder = new SparseMatrixBuilder(DofCount, DofCount);
+        if (IsQuadratic)
+        {
+            AddQuadraticStiffness(builder, cancellationToken);
+            if (robinTerms is not null)
+                foreach (var term in robinTerms)
+                    AddQuadraticRobin(builder, term.Triangle, term.Coefficient);
+            return builder.Build();
+        }
         Span<int> nodes = stackalloc int[4];
         for (int el = 0; el < _mesh.ElementCount; el++)
         {
@@ -144,6 +181,53 @@ public sealed class ScalarDiffusionAssembler
     }
 
     /// <summary>
+    /// The TET10 stiffness by the 4-point rule: ∇Nᵢ·K·∇Nⱼ is degree 2 on a straight-edged
+    /// tetrahedron, so the rule is exact.
+    /// </summary>
+    private void AddQuadraticStiffness(SparseMatrixBuilder builder, CancellationToken cancellationToken)
+    {
+        var g = new Vector3D[10];
+        var kg = new Vector3D[10];
+        var local = new double[10, 10];
+        for (int el = 0; el < _mesh.ElementCount; el++)
+        {
+            if ((el & 1023) == 0)
+                cancellationToken.ThrowIfCancellationRequested();
+            var nodes = _mesh.GetElementNodes(el);
+            var k = Tensor(el);
+            double volume = _mesh.ElementVolume(el);
+            Array.Clear(local);
+            foreach (var (l, w) in ScalarElements.TetDegree2)
+            {
+                ScalarElements.Tet10Gradients(_gradients[el], l, g);
+                for (int i = 0; i < 10; i++) kg[i] = _tensor is null ? g[i] * k.Xx : k.Apply(g[i]);
+                for (int i = 0; i < 10; i++)
+                    for (int j = 0; j < 10; j++)
+                        local[i, j] += w * volume * Vector3D.Dot(kg[i], g[j]);
+            }
+            for (int i = 0; i < 10; i++)
+                for (int j = 0; j < 10; j++)
+                    builder.Add(nodes[i], nodes[j], local[i, j]);
+        }
+    }
+
+    /// <summary>The nodes of a boundary triangle: A, B, C, and on a TET10 mesh the mid-edge
+    /// nodes AB, BC, CA after them.</summary>
+    public int[] TriangleNodes(BoundaryTriangle t) => IsQuadratic
+        ? new[] { t.A, t.B, t.C, MidNode(t.A, t.B), MidNode(t.B, t.C), MidNode(t.C, t.A) }
+        : new[] { t.A, t.B, t.C };
+
+    /// <summary>h·∫NᵢNⱼ dA over a T6 triangle (the exact surface mass, <see cref="ScalarElements.Tri6Mass"/>).</summary>
+    private void AddQuadraticRobin(SparseMatrixBuilder builder, BoundaryTriangle triangle, double coefficient)
+    {
+        double ha = coefficient * SurfaceArea(_mesh, triangle);
+        var nodes = TriangleNodes(triangle);
+        for (int i = 0; i < 6; i++)
+            for (int j = 0; j < 6; j++)
+                builder.Add(nodes[i], nodes[j], ha * ScalarElements.Tri6Mass[i, j]);
+    }
+
+    /// <summary>
     /// Assembles the consistent mass (capacity) matrix M_ij = ∫ c NᵢNⱼ dV with a
     /// per-element coefficient c (ρ·c_p for thermal capacity). For a linear tet the
     /// integral is analytic: M_ij = c·V/20·(1+δᵢⱼ) — exact, no quadrature.
@@ -151,6 +235,7 @@ public sealed class ScalarDiffusionAssembler
     public CsrMatrix AssembleMass(Func<int, double> massCoefficient,
         CancellationToken cancellationToken = default)
     {
+        RequireLinear("capacity");
         var builder = new SparseMatrixBuilder(DofCount, DofCount);
         Span<int> nodes = stackalloc int[4];
         for (int el = 0; el < _mesh.ElementCount; el++)
@@ -177,6 +262,7 @@ public sealed class ScalarDiffusionAssembler
     public CsrMatrix AssembleLumpedMass(Func<int, double> massCoefficient,
         CancellationToken cancellationToken = default)
     {
+        RequireLinear("capacity");
         var diagonal = new double[DofCount];
         for (int el = 0; el < _mesh.ElementCount; el++)
         {
@@ -219,12 +305,55 @@ public sealed class ScalarDiffusionAssembler
     public static double SurfaceArea(FeMesh mesh, BoundaryTriangle t) =>
         0.5 * Vector3D.Cross(mesh.Nodes[t.B] - mesh.Nodes[t.A], mesh.Nodes[t.C] - mesh.Nodes[t.A]).Length;
 
-    /// <summary>Constant field gradient ∇φ of one element from the global solution vector.</summary>
+    /// <summary>The field gradient ∇φ of one element from the global solution vector: the
+    /// constant gradient of a TET4, the element mean of a TET10 (its value at the centroid,
+    /// where a linear gradient takes its mean).</summary>
     public Vector3D ElementGradient(int element, ReadOnlySpan<double> values)
     {
+        if (IsQuadratic) return ElementGradientAt(element, Centroid, values);
         var e = _mesh.Elements[element];
         var g = _gradients[element];
         return g[0] * values[e.N0] + g[1] * values[e.N1] + g[2] * values[e.N2] + g[3] * values[e.N3];
+    }
+
+    private static readonly double[] Centroid = { 0.25, 0.25, 0.25, 0.25 };
+
+    /// <summary>∇φ of one element at barycentric point L (constant on a TET4).</summary>
+    public Vector3D ElementGradientAt(int element, ReadOnlySpan<double> l, ReadOnlySpan<double> values)
+    {
+        if (!IsQuadratic) return ElementGradient(element, values);
+        Span<Vector3D> g = stackalloc Vector3D[10];
+        ScalarElements.Tet10Gradients(_gradients[element], l, g);
+        var nodes = _mesh.GetElementNodes(element);
+        var sum = Vector3D.Zero;
+        for (int i = 0; i < 10; i++) sum += g[i] * values[nodes[i]];
+        return sum;
+    }
+
+    /// <summary>(1/V)∫|∇φ|² dV of one element, exact: the gradient is constant on a TET4 and
+    /// linear on a TET10, whose square the 4-point rule integrates.</summary>
+    public double MeanSquareGradient(int element, ReadOnlySpan<double> values)
+    {
+        if (!IsQuadratic)
+        {
+            var g = ElementGradient(element, values);
+            return Vector3D.Dot(g, g);
+        }
+        double sum = 0;
+        foreach (var (l, w) in ScalarElements.TetDegree2)
+        {
+            var g = ElementGradientAt(element, l, values);
+            sum += w * Vector3D.Dot(g, g);
+        }
+        return sum;
+    }
+
+    private void RequireLinear(string what)
+    {
+        if (IsQuadratic)
+            throw new InvalidOperationException(
+                $"The {what} matrix is assembled for linear tetrahedra (TET4) only; the solvers that " +
+                "need it take linear meshes.");
     }
 
 }

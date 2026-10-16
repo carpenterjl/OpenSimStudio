@@ -28,6 +28,10 @@ public sealed record StudySettings
     /// asymptotic 1/r condition) instead of a zero-flux wall.</summary>
     public bool OpenBoundary { get; init; }
 
+    /// <summary>Electrical and Thermal: the recovered flux, its error estimate and flux
+    /// probes; null leaves the solve's fields as they are.</summary>
+    public FluxRecoverySettings? FluxRecovery { get; init; }
+
     /// <summary>Environment heat flow: the final equilibrium instead of the time history.</summary>
     public bool EnvironmentSteady { get; init; }
 
@@ -140,7 +144,8 @@ public static class StudyRunner
                 : null,
             Electrostatic = kind == "Electrostatic" && settings.OpenBoundary
                 ? new ElectrostaticSettings { OpenBoundary = true }
-                : null
+                : null,
+            FluxRecovery = Recovery(kind, settings, log)
         };
 
         SolveOutput output;
@@ -309,7 +314,8 @@ public static class StudyRunner
                 : null,
             Electrostatic = kind == "Electrostatic" && settings.OpenBoundary
                 ? new ElectrostaticSettings { OpenBoundary = true }
-                : null
+                : null,
+            FluxRecovery = Recovery(kind, settings, log)
         };
         ISolver solver = kind == "AcElectrical" ? new HarmonicElectricSolver() : new ElectricalConductionSolver();
         solver.Validate(input);
@@ -322,6 +328,15 @@ public static class StudyRunner
 
     /// <summary>The scalar outputs of a run as a sweep sees them: the summary values, and
     /// the min and max of every field.</summary>
+    /// <summary>Flux recovery and probes belong to the DC conduction and the steady heat
+    /// solve; for any other analysis they are dropped, and the log says so.</summary>
+    private static FluxRecoverySettings? Recovery(string kind, StudySettings settings, Action<string> log)
+    {
+        if (settings.FluxRecovery is null || kind is "Electrical" or "Thermal") return settings.FluxRecovery;
+        log($"Flux recovery and probes apply to the Electrical and Thermal analyses; not to {kind}.");
+        return null;
+    }
+
     public static IReadOnlyDictionary<string, double> Outputs(StudyRun run)
     {
         var outputs = new Dictionary<string, double>();

@@ -158,15 +158,17 @@ public class Tet10SolverTests
     }
 
     [Fact]
-    public void ScalarSolvers_RejectQuadraticMeshes_Loudly()
+    public void ScalarSolvers_TakeQuadraticMeshesWhereTheyCan_AndRefuseThemLoudlyElsewhere()
     {
+        // DC conduction and steady heat conduction assemble TET10 (FU-45); the AC, the
+        // electrostatic and the transient solvers still take linear meshes only, and say so.
         var mesh = MeshBox(0.05, 0.02, 0.01, 0.005);
         var copper = new Material
         {
             Name = "Copper", YoungsModulus = 110e9, PoissonRatio = 0.34, Density = 8960,
-            ElectricalConductivity = 5.96e7, ThermalConductivity = 400
+            ElectricalConductivity = 5.96e7, ThermalConductivity = 400, SpecificHeat = 385
         };
-        var input = new SolveInput
+        var electrical = new SolveInput
         {
             Mesh = mesh,
             Material = copper,
@@ -175,11 +177,27 @@ public class Tet10SolverTests
                 new VoltagePotential { Name = "V", FaceIds = new[] { 0 }, Volts = 1 }
             }
         };
+        var thermal = electrical with
+        {
+            BoundaryConditions = new BoundaryCondition[]
+            {
+                new FixedTemperature { Name = "T", FaceIds = new[] { 0 }, Kelvin = 300 }
+            }
+        };
 
-        var e1 = Assert.Throws<InvalidOperationException>(() => new ElectricalConductionSolver().Validate(input));
-        Assert.Contains("linear tetrahedral (TET4)", e1.Message);
-        var e2 = Assert.Throws<InvalidOperationException>(() => new HeatConductionSolver().Validate(input));
-        Assert.Contains("linear tetrahedral (TET4)", e2.Message);
+        new ElectricalConductionSolver().Validate(electrical);
+        new HeatConductionSolver().Validate(thermal);
+
+        var ac = Assert.Throws<InvalidOperationException>(() => new HarmonicElectricSolver().Validate(electrical with
+        {
+            HarmonicElectric = new HarmonicElectricSettings { MinFrequency = 1e3, MaxFrequency = 1e6, PointCount = 3 }
+        }));
+        Assert.Contains("linear tetrahedral (TET4)", ac.Message);
+        var transient = Assert.Throws<InvalidOperationException>(() => new TransientThermalSolver().Validate(thermal with
+        {
+            TransientThermal = new TransientThermalSettings { InitialTemperature = 300, Duration = 1, TimeStep = 0.1 }
+        }));
+        Assert.Contains("linear tetrahedral (TET4)", transient.Message);
     }
 
     private static (int, int) Key(int a, int b) => a < b ? (a, b) : (b, a);

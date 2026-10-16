@@ -31,6 +31,7 @@ internal static class ScalarSolverHelpers
     {
         var mesh = input.Mesh;
         var loads = new double[mesh.NodeCount];
+        var edgeMid = mesh.IsQuadratic ? QuadraticMeshBuilder.BuildEdgeMidMap(mesh) : null;
         foreach (var flux in input.BoundaryConditions.OfType<HeatFlux>())
         {
             DistributeOverFaces(mesh, flux.FaceIds, flux.TotalPower, loads, flux.Name);
@@ -41,8 +42,13 @@ internal static class ScalarSolverHelpers
             // RHS of the Robin term: h·T_amb·∫Nᵢ dA = h·T_amb·A/3 per triangle node.
             foreach (var (t, h) in ConvectionTerms.Triangles(mesh, convection))
             {
-                double share = h * convection.AmbientTemperature
-                               * TriangleArea(mesh, t) / 3.0;
+                double total = h * convection.AmbientTemperature * TriangleArea(mesh, t);
+                if (edgeMid is not null)
+                {
+                    AddTriangle6(loads, t, edgeMid, total);
+                    continue;
+                }
+                double share = total / 3.0;
                 loads[t.A] += share;
                 loads[t.B] += share;
                 loads[t.C] += share;
@@ -58,6 +64,13 @@ internal static class ScalarSolverHelpers
             {
                 double qv = input.ElementHeatSource[e] * mesh.ElementVolume(e);
                 totalSource += qv;
+                if (edgeMid is not null)
+                {
+                    // ∫Nᵢ dV of a TET10: −V/20 on a corner, V/5 on a mid-edge node.
+                    var all = mesh.GetElementNodes(e);
+                    for (int i = 0; i < 10; i++) loads[all[i]] += qv * ScalarElements.Tet10Load[i];
+                    continue;
+                }
                 var el = mesh.Elements[e];
                 loads[el.N0] += qv / 4;
                 loads[el.N1] += qv / 4;
@@ -97,6 +110,7 @@ internal static class ScalarSolverHelpers
         double[] loads, string bcName)
     {
         var triangles = mesh.GetFaceTriangles(faceIds);
+        var edgeMid = mesh.IsQuadratic ? QuadraticMeshBuilder.BuildEdgeMidMap(mesh) : null;
         // Areas once: the total and each triangle's share are the same numbers.
         var areas = new double[triangles.Count];
         double totalArea = 0;
@@ -110,11 +124,45 @@ internal static class ScalarSolverHelpers
         for (int i = 0; i < triangles.Count; i++)
         {
             var t = triangles[i];
+            if (edgeMid is not null)
+            {
+                AddTriangle6(loads, t, edgeMid, total * (areas[i] / totalArea));
+                continue;
+            }
             double share = total * (areas[i] / totalArea / 3.0);
             loads[t.A] += share;
             loads[t.B] += share;
             loads[t.C] += share;
         }
+    }
+
+    /// <summary>A uniform surface quantity over one T6 triangle: ∫Nᵢ dA is zero on its
+    /// corners and a third of the area on each mid-edge node.</summary>
+    private static void AddTriangle6(double[] loads, BoundaryTriangle t, Dictionary<(int, int), int> edgeMid,
+        double total)
+    {
+        Span<int> nodes = stackalloc int[6];
+        nodes[0] = t.A; nodes[1] = t.B; nodes[2] = t.C;
+        nodes[3] = Mid(edgeMid, t.A, t.B); nodes[4] = Mid(edgeMid, t.B, t.C); nodes[5] = Mid(edgeMid, t.C, t.A);
+        for (int i = 0; i < 6; i++) loads[nodes[i]] += total * ScalarElements.Tri6Load[i];
+    }
+
+    private static int Mid(Dictionary<(int, int), int> edgeMid, int a, int b) => edgeMid[a < b ? (a, b) : (b, a)];
+
+    /// <summary>
+    /// Every node a condition's scope holds: its corner nodes and, on a TET10 mesh, the
+    /// mid-edge node of every edge it covers. A Dirichlet value on corners only would leave
+    /// the mid-edge nodes free and the boundary leaking between them.
+    /// </summary>
+    public static IReadOnlySet<int> ScopeNodes(FeMesh mesh, BoundaryCondition condition,
+        Dictionary<(int, int), int>? edgeMid)
+    {
+        var corners = mesh.GetScopeNodes(condition);
+        if (edgeMid is null) return corners;
+        var nodes = new HashSet<int>(corners);
+        foreach (var segment in mesh.GetScopeSegments(condition))
+            nodes.Add(Mid(edgeMid, segment.A, segment.B));
+        return nodes;
     }
 
     /// <summary>

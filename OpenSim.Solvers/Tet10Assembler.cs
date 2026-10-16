@@ -20,7 +20,7 @@ public sealed class Tet10Assembler : IElasticityAssembler
     private const double GaussA = 0.5854101966249685;   // (5 + 3√5)/20
     private const double GaussB = 0.1381966011250105;   // (5 −  √5)/20
 
-    private static readonly double[][] GaussPoints =
+    internal static readonly double[][] GaussPoints =
     {
         new[] { GaussA, GaussB, GaussB, GaussB },
         new[] { GaussB, GaussA, GaussB, GaussB },
@@ -45,7 +45,7 @@ public sealed class Tet10Assembler : IElasticityAssembler
     private const double MassF = 0.4544962958743503;    // ½ − MassE
     private const double MassW3 = 0.0425460207770812;
 
-    private static readonly (double[] L, double W)[] MassQuadrature = BuildMassQuadrature();
+    internal static readonly (double[] L, double W)[] MassQuadrature = BuildMassQuadrature();
 
     private static (double[] L, double W)[] BuildMassQuadrature()
     {
