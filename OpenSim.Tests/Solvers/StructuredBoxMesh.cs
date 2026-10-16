@@ -38,17 +38,21 @@ internal static class StructuredBoxMesh
 
     /// <summary>Builds the mesh of the axis-aligned box [x0,x1]×[y0,y1]×[z0,z1].</summary>
     public static FeMesh Build(double x0, double x1, double y0, double y1, double z0, double z1,
-        int nx, int ny, int nz)
+        int nx, int ny, int nz) =>
+        Build(Enumerable.Range(0, nx + 1).Select(i => x0 + (x1 - x0) * i / nx).ToArray(),
+            Enumerable.Range(0, ny + 1).Select(j => y0 + (y1 - y0) * j / ny).ToArray(),
+            Enumerable.Range(0, nz + 1).Select(k => z0 + (z1 - z0) * k / nz).ToArray());
+
+    /// <summary>The mesh of a box with the given grid lines along each axis (ascending).</summary>
+    public static FeMesh Build(IReadOnlyList<double> xs, IReadOnlyList<double> ys, IReadOnlyList<double> zs)
     {
+        int nx = xs.Count - 1, ny = ys.Count - 1, nz = zs.Count - 1;
         var nodes = new List<Vector3D>((nx + 1) * (ny + 1) * (nz + 1));
         int Index(int i, int j, int k) => (k * (ny + 1) + j) * (nx + 1) + i;
         for (int k = 0; k <= nz; k++)
             for (int j = 0; j <= ny; j++)
                 for (int i = 0; i <= nx; i++)
-                    nodes.Add(new Vector3D(
-                        x0 + (x1 - x0) * i / nx,
-                        y0 + (y1 - y0) * j / ny,
-                        z0 + (z1 - z0) * k / nz));
+                    nodes.Add(new Vector3D(xs[i], ys[j], zs[k]));
 
         var elements = new List<Tet4>(6 * nx * ny * nz);
         var corner = new int[8];

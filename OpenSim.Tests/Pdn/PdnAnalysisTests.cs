@@ -246,6 +246,9 @@ public class PdnAnalysisTests
         return (board, power, ground);
     }
 
+    internal static (PcbBoard Board, CopperNet Power, CopperNet Ground) FourLayerBoard() => Board();
+    internal static BoardStackup FourLayerStackup => Stackup;
+
     private static readonly BoardStackup Stackup = new()
     {
         GapThickness = new Dictionary<int, double> { [1] = 0.2e-3, [2] = 0.1e-3, [3] = 1.0e-3 },
@@ -258,7 +261,8 @@ public class PdnAnalysisTests
     public void TheBoardGivesThePlanePair_TheCapacitorsAndTheirMounting()
     {
         var (board, power, ground) = Board();
-        var options = new PdnBoardOptions { Stackup = Stackup };
+        // Bare edges: the resonance below is the rectangle's; the fringe has tests of its own.
+        var options = new PdnBoardOptions { Stackup = Stackup, EdgeFringe = false };
         var model = PdnBoard.Extract(board, power, ground, options);
         foreach (string note in model.Notes) _output.WriteLine(note);
         foreach (var c in model.Capacitors)
@@ -293,9 +297,10 @@ public class PdnAnalysisTests
         // The load's site, the problem as a whole, and a solve.
         var setup = PdnBoard.Setup(board, power, ground, model, "U1", _ => Cap100n,
             options: options) with { MinFrequencyHz = 1e6, MaxFrequencyHz = 1e9, PointsPerDecade = 20, ModeCount = 2 };
-        Assert.Equal(3, setup.Planes.Ports.Count);                 // U1, C1, C2
-        Assert.Equal(2, setup.Capacitors.Count);
-        Assert.Single(setup.LoadPorts);
+        // A port where each via goes on past the ground plane: U1's, C1's and C2's power vias.
+        Assert.Equal(3, setup.Stack!.Ports.Count);
+        Assert.Equal(2, setup.Mounting!.Capacitors.Count);
+        Assert.Single(setup.Mounting.Load.Ports);
         var result = PdnAnalysis.Solve(setup);
         foreach (string line in result.Describe()) _output.WriteLine(line);
         // With two 100 nF parts the low end is their capacitance plus the planes'.

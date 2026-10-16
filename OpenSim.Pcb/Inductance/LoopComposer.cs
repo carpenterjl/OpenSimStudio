@@ -85,6 +85,13 @@ public sealed class LoopComposer
         return new InductanceReport(self, loop, StandardAssumptions);
     }
 
+    /// <summary>The signed partial mutual inductance of two segments, by the kernels
+    /// <see cref="Compose(IReadOnlyList{TraceSegment3D})"/> uses.</summary>
+    public static double PartialMutual(TraceSegment3D a, TraceSegment3D b) => MutualTerm(a, b);
+
+    /// <summary>The partial self-inductance of a segment, by the kernel of its profile.</summary>
+    public static double PartialSelf(TraceSegment3D segment) => SelfInductance(segment);
+
     /// <summary>The parallel branch's tolerance on 1 − |cosε|, matching
     /// <see cref="FilamentMutual"/>: a sub-threshold tilt is FP noise and is flattened.</summary>
     private const double ParallelTolerance = 1e-9;

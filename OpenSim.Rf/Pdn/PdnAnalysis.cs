@@ -94,12 +94,20 @@ public sealed record PlacedCapacitor(string Name, int Port, CapacitorModel Model
         : double.NaN;
 }
 
-/// <summary>The regulator as a resistance and an inductance behind an ideal source: its
-/// output impedance well below its loop bandwidth, and the inductance it turns into above.</summary>
+/// <summary>The regulator as a resistance and an inductance behind a source. With no
+/// <see cref="Loop"/> the source is ideal and R + L stands for its output impedance (flat well
+/// below the loop's bandwidth, the inductance it turns into above). With a loop the source is
+/// driven by A(s) from the error at its sense port, and R + L is its open-loop output (for a
+/// converter, the inductor's resistance and inductance).</summary>
 public sealed record Regulator(string Name, int Port, double ResistanceOhms, double InductanceHenries)
 {
     public Complex Impedance(double frequencyHz) =>
         new(ResistanceOhms, 2 * Math.PI * frequencyHz * InductanceHenries);
+
+    public RegulatorLoop? Loop { get; init; }
+
+    /// <summary>The plane port its sense lines read; null reads its own port.</summary>
+    public int? SensePort { get; init; }
 }
 
 /// <summary>The impedance the supply has to stay under, by frequency.</summary>
@@ -131,13 +139,23 @@ public sealed record TargetImpedance(IReadOnlyList<(double Hz, double Ohms)> Poi
 
 public sealed record PdnSetup
 {
-    public required PlanePairSpec Planes { get; init; }
+    /// <summary>The plane pair; set this or <see cref="Stack"/>.</summary>
+    public PlanePairSpec? Planes { get; init; }
 
-    /// <summary>The plane ports of the load, taken as tied together at the part.</summary>
-    public required IReadOnlyList<int> LoadPorts { get; init; }
+    /// <summary>The plane stack; when set it is solved instead of <see cref="Planes"/>.</summary>
+    public PlaneStackSpec? Stack { get; init; }
+
+    /// <summary>The plane ports of the load, taken as tied together at the part (without
+    /// <see cref="Mounting"/>).</summary>
+    public IReadOnlyList<int> LoadPorts { get; init; } = Array.Empty<int>();
 
     public IReadOnlyList<PlacedCapacitor> Capacitors { get; init; } = Array.Empty<PlacedCapacitor>();
     public IReadOnlyList<Regulator> Regulators { get; init; } = Array.Empty<Regulator>();
+
+    /// <summary>The parts on their pads and vias above the stack; when set it replaces
+    /// <see cref="LoadPorts"/>, <see cref="Capacitors"/> and <see cref="Regulators"/>.</summary>
+    public PdnMounting? Mounting { get; init; }
+
     public TargetImpedance? Target { get; init; }
 
     public double MinFrequencyHz { get; init; } = 1e4;
@@ -146,6 +164,10 @@ public sealed record PdnSetup
 
     /// <summary>Plane resonances to list.</summary>
     public int ModeCount { get; init; } = 6;
+
+    /// <summary>The stack to solve.</summary>
+    public PlaneStackSpec StackSpec() =>
+        Stack ?? Planes?.ToStack() ?? throw new InvalidOperationException("The PDN setup has neither a plane pair nor a stack.");
 }
 
 /// <param name="IsMaximum">A peak of |Z| (an anti-resonance); false for a dip.</param>
@@ -154,6 +176,10 @@ public sealed record PdnExtremum(double FrequencyHz, double Ohms, bool IsMaximum
 /// <summary>A band over which |Z| is above the target.</summary>
 public sealed record PdnViolation(double FromHz, double ToHz, double WorstHz, double WorstOhms, double TargetOhms);
 
+/// <summary>Where the regulator's loop gain falls through 1, and its phase margin there
+/// (180° + ∠T): negative means the loop with this board is unstable.</summary>
+public sealed record LoopCrossover(double FrequencyHz, double PhaseMarginDegrees);
+
 public sealed record PdnResult
 {
     public required IReadOnlyList<double> FrequenciesHz { get; init; }
@@ -161,7 +187,7 @@ public sealed record PdnResult
     /// <summary>Impedance at the load with the capacitors and regulators in place.</summary>
     public required IReadOnlyList<Complex> Impedance { get; init; }
 
-    /// <summary>The same with the plane pair alone.</summary>
+    /// <summary>The same with the planes (and the load's own mounting) alone.</summary>
     public required IReadOnlyList<Complex> BareImpedance { get; init; }
 
     public required IReadOnlyList<PdnExtremum> Extrema { get; init; }
@@ -170,6 +196,12 @@ public sealed record PdnResult
 
     /// <summary>True with a target and no violation; null with no target.</summary>
     public required bool? Pass { get; init; }
+
+    /// <summary>The first regulator's loop gain T = A·H with the board in the loop, by
+    /// frequency; null without a regulator loop.</summary>
+    public IReadOnlyList<Complex>? LoopGain { get; init; }
+
+    public IReadOnlyList<LoopCrossover> Crossovers { get; init; } = Array.Empty<LoopCrossover>();
 
     public required IReadOnlyList<string> Assumptions { get; init; }
     public required IReadOnlyList<string> Summary { get; init; }
@@ -199,13 +231,14 @@ public sealed record PdnResult
 }
 
 /// <summary>
-/// Power-distribution impedance against frequency at a load: the plane pair solved by
-/// <see cref="PlanePair"/> between every port, then each capacitor and regulator hung on its
-/// port as a shunt branch,
-/// <code>  Z = (I + Z_planes·Y_parts)⁻¹·Z_planes,</code>
-/// and the load's ports tied together. The plane solve is the expensive part and does not
-/// depend on the parts, so <see cref="Evaluate"/> re-prices a changed capacitor set on the
-/// same plane response.
+/// Power-distribution impedance against frequency at a load: the plane stack solved by
+/// <see cref="PlaneStack"/> between its ports, then the circuit around it — each capacitor and
+/// regulator on its port (or, with a <see cref="PdnMounting"/>, on its pads, with every pad, escape
+/// trace and via above the planes in one coupled inductance network), the load's ports tied
+/// together or its pads behind its package — solved by nodal analysis
+/// (<see cref="PdnCircuit"/>). The plane solve is the expensive part and does not depend on the
+/// parts, so <see cref="Evaluate(PlaneStack, IReadOnlyList{double}, IReadOnlyList{Complex[,]}, PdnSetup, IReadOnlyList{PlaneMode}?)"/>
+/// re-prices a changed capacitor set on the same plane response.
 /// </summary>
 public static class PdnAnalysis
 {
@@ -221,16 +254,23 @@ public static class PdnAnalysis
     public static PdnResult Solve(PdnSetup setup, IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var pair = new PlanePair(setup.Planes with { MaxFrequencyHz = setup.MaxFrequencyHz });
+        var stack = new PlaneStack(setup.StackSpec() with { MaxFrequencyHz = setup.MaxFrequencyHz });
+        var circuit = Circuit(setup, stack);
         var frequencies = LogSweep(setup.MinFrequencyHz, setup.MaxFrequencyHz, setup.PointsPerDecade).ToList();
-        var planes = pair.Sweep(frequencies, progress, cancellationToken).ToList();
+        var planes = stack.Sweep(frequencies, progress, cancellationToken).ToList();
 
         // A peak between two grid points is higher than either: twice over, put nine more
-        // points around every local maximum of the loaded impedance.
+        // points around every local maximum of the loaded impedance, and in every interval
+        // where a regulator loop's gain falls through 1.
         for (int round = 0; round < 2; round++)
         {
-            var loaded = frequencies.Select((f, k) => AtLoad(planes[k], f, setup, true).Magnitude).ToList();
+            var solved0 = frequencies.Select((f, k) => circuit.Solve(f, planes[k], true)).ToList();
+            var loaded = solved0.Select(s => s.Impedance.Magnitude).ToList();
             var extra = new SortedSet<double>();
+            for (int k = 1; k < frequencies.Count; k++)
+                if (solved0[k - 1].LoopGain is { } a && solved0[k].LoopGain is { } b && a.Magnitude >= 1 && b.Magnitude < 1)
+                    for (int s = 1; s < 10; s++)
+                        extra.Add(frequencies[k - 1] * Math.Pow(frequencies[k] / frequencies[k - 1], s / 10.0));
             for (int k = 1; k + 1 < frequencies.Count; k++)
             {
                 if (!(loaded[k] >= loaded[k - 1] && loaded[k] > loaded[k + 1])) continue;
@@ -244,7 +284,7 @@ public static class PdnAnalysis
             }
             if (extra.Count == 0) break;
             var added = extra.ToList();
-            var solved = pair.Sweep(added, null, cancellationToken);
+            var solved = stack.Sweep(added, null, cancellationToken);
             var merged = frequencies.Select((f, k) => (f, planes[k]))
                 .Concat(added.Select((f, k) => (f, solved[k])))
                 .OrderBy(p => p.f).ToList();
@@ -252,54 +292,122 @@ public static class PdnAnalysis
             planes = merged.Select(p => p.Item2).ToList();
         }
 
-        var modes = setup.ModeCount > 0 ? pair.Modes(setup.ModeCount, cancellationToken) : Array.Empty<PlaneMode>();
-        return Evaluate(pair, frequencies, planes, setup, modes);
+        var modes = setup.ModeCount > 0 ? stack.Modes(setup.ModeCount, cancellationToken) : Array.Empty<PlaneMode>();
+        return Evaluate(stack, frequencies, planes, setup, modes);
     }
 
-    /// <summary>Impedance at the load for one frequency's plane matrix.</summary>
-    private static Complex AtLoad(Complex[,] planes, double f, PdnSetup setup, bool withParts)
+    /// <summary>The circuit of a setup on the given stack's ports.</summary>
+    private static PdnCircuit Circuit(PdnSetup setup, PlaneStack stack)
     {
-        int n = planes.GetLength(0);
-        Complex[,] z = planes;
-        if (withParts && (setup.Capacitors.Count > 0 || setup.Regulators.Count > 0))
+        int ports = stack.Spec.Ports.Count;
+        var circuit = new PdnCircuit();
+        if (setup.Mounting is { } mounting)
         {
-            var admittance = new Complex[n];
-            foreach (var c in setup.Capacitors) admittance[c.Port] += 1 / c.Impedance(f);
-            foreach (var r in setup.Regulators) admittance[r.Port] += 1 / r.Impedance(f);
-            var system = new Complex[n, n];
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < n; j++)
-                    system[i, j] = (i == j ? 1 : 0) + planes[i, j] * admittance[j];
-            z = NetworkParameters.Multiply(NetworkParameters.Invert(system), planes);
+            var ids = new Dictionary<MountNode, int>();
+            var used = new List<MountNode>();
+            void Use(MountNode? node)
+            {
+                if (node is not { } n || n.Node == MountingNetwork.Plate || ids.ContainsKey(n)) return;
+                var network = (n.Side == BoardSide.Top ? mounting.Top : mounting.Bottom)
+                    ?? throw new InvalidOperationException($"The {n.Side.ToString().ToLowerInvariant()} side has no mounting network.");
+                if (n.Node < 0 || n.Node >= network.Nodes.Count)
+                    throw new InvalidOperationException($"Node {n.Node} is not a node of the {n.Side.ToString().ToLowerInvariant()} side's network.");
+                ids[n] = circuit.AddNode($"{n.Side}:{network.Nodes[n.Node]}");
+                used.Add(n);
+            }
+            foreach (var foot in mounting.Feet)
+            {
+                if (foot.Port < 0 || foot.Port >= ports)
+                    throw new InvalidOperationException($"Port index {foot.Port} is not one of the {ports} stack ports.");
+                Use(foot.Node);
+            }
+            foreach (var c in mounting.Capacitors) { Use(c.A); Use(c.B); }
+            Use(mounting.Load.Plus);
+            Use(mounting.Load.Minus);
+            foreach (var r in mounting.Regulators) { Use(r.Plus); Use(r.Minus); Use(r.SensePlus); Use(r.SenseMinus); }
+            int Id(MountNode n) => n.Node == MountingNetwork.Plate ? -1 : ids[n];
+
+            foreach (var side in new[] { BoardSide.Top, BoardSide.Bottom })
+            {
+                var network = side == BoardSide.Top ? mounting.Top : mounting.Bottom;
+                var nodes = used.Where(n => n.Side == side).ToList();
+                if (network is null || nodes.Count == 0) continue;
+                circuit.AddNetwork(nodes.Select(n => ids[n]).ToArray(), network.Reduce(nodes.Select(n => n.Node).ToList()));
+            }
+            foreach (var foot in mounting.Feet) circuit.AddFoot(Id(foot.Node), foot.Port);
+            foreach (var c in mounting.Capacitors) circuit.AddImpedance(Id(c.A), Id(c.B), c.Model.Impedance, part: true);
+            var load = mounting.Load;
+            int plus = Id(load.Plus);
+            if (load.PackageOhms > 0 || load.PackageHenries > 0)
+            {
+                int die = circuit.AddNode($"{load.Name} die");
+                circuit.AddImpedance(die, plus, f => new Complex(load.PackageOhms, 2 * Math.PI * f * load.PackageHenries), part: false);
+                plus = die;
+            }
+            circuit.LoadPlus = plus;
+            circuit.LoadMinus = Id(load.Minus);
+            foreach (var r in mounting.Regulators)
+            {
+                Complex Open(double f) => new(r.ResistanceOhms, 2 * Math.PI * f * r.InductanceHenries);
+                if (r.Loop is { } loop)
+                {
+                    loop.Validate();
+                    circuit.AddControlled(Id(r.Plus), Id(r.Minus), Open, loop, Id(r.SensePlus ?? r.Plus), Id(r.SenseMinus ?? r.Minus));
+                }
+                else circuit.AddImpedance(Id(r.Plus), Id(r.Minus), Open, part: true);
+            }
+            return circuit;
         }
-        if (setup.LoadPorts.Count == 1) return z[setup.LoadPorts[0], setup.LoadPorts[0]];
-        // The load's ports tied together: 1/(1ᵀ·S⁻¹·1) with S the block of Z among them.
-        int m = setup.LoadPorts.Count;
-        var block = new Complex[m, m];
-        for (int i = 0; i < m; i++)
-            for (int j = 0; j < m; j++)
-                block[i, j] = z[setup.LoadPorts[i], setup.LoadPorts[j]];
-        var inverse = NetworkParameters.Invert(block);
-        Complex total = Complex.Zero;
-        foreach (Complex y in inverse) total += y;
-        return 1 / total;
+
+        if (setup.LoadPorts.Count == 0) throw new InvalidOperationException("The PDN needs a load port.");
+        foreach (int p in setup.LoadPorts.Concat(setup.Capacitors.Select(c => c.Port)).Concat(setup.Regulators.Select(r => r.Port))
+                     .Concat(setup.Regulators.Where(r => r.SensePort is not null).Select(r => r.SensePort!.Value)))
+            if (p < 0 || p >= ports) throw new InvalidOperationException($"Port index {p} is not one of the {ports} plane ports.");
+        // A node on each port used; the load's ports share one (tied at the part).
+        var node = new Dictionary<int, int>();
+        int loadNode = circuit.AddNode("load");
+        foreach (int p in setup.LoadPorts.Distinct()) { node[p] = loadNode; circuit.AddFoot(loadNode, p); }
+        int NodeOf(int port)
+        {
+            if (node.TryGetValue(port, out int id)) return id;
+            id = circuit.AddNode(stack.Spec.Ports[port].Site.Name);
+            node[port] = id;
+            circuit.AddFoot(id, port);
+            return id;
+        }
+        foreach (var c in setup.Capacitors) circuit.AddImpedance(NodeOf(c.Port), -1, c.Impedance, part: true);
+        foreach (var r in setup.Regulators)
+        {
+            if (r.Loop is { } loop)
+            {
+                loop.Validate();
+                circuit.AddControlled(NodeOf(r.Port), -1, r.Impedance, loop, NodeOf(r.SensePort ?? r.Port), -1);
+            }
+            else circuit.AddImpedance(NodeOf(r.Port), -1, r.Impedance, part: true);
+        }
+        circuit.LoadPlus = loadNode;
+        return circuit;
     }
 
-    /// <summary>Hang the setup's parts on an already solved plane response.</summary>
+    /// <summary>Hang the setup's parts on an already solved plane-pair response.</summary>
     public static PdnResult Evaluate(PlanePair pair, IReadOnlyList<double> frequenciesHz,
+        IReadOnlyList<Complex[,]> planeImpedance, PdnSetup setup, IReadOnlyList<PlaneMode>? modes = null) =>
+        Evaluate(pair.Stack, frequenciesHz, planeImpedance, setup, modes);
+
+    /// <summary>Hang the setup's parts on an already solved stack response.</summary>
+    public static PdnResult Evaluate(PlaneStack stack, IReadOnlyList<double> frequenciesHz,
         IReadOnlyList<Complex[,]> planeImpedance, PdnSetup setup, IReadOnlyList<PlaneMode>? modes = null)
     {
-        int ports = pair.Spec.Ports.Count;
-        if (setup.LoadPorts.Count == 0) throw new InvalidOperationException("The PDN needs a load port.");
-        foreach (int p in setup.LoadPorts.Concat(setup.Capacitors.Select(c => c.Port)).Concat(setup.Regulators.Select(r => r.Port)))
-            if (p < 0 || p >= ports) throw new InvalidOperationException($"Port index {p} is not one of the {ports} plane ports.");
-
+        var circuit = Circuit(setup, stack);
         var loaded = new Complex[frequenciesHz.Count];
         var bare = new Complex[frequenciesHz.Count];
+        var loop = circuit.HasLoop ? new Complex[frequenciesHz.Count] : null;
         for (int k = 0; k < frequenciesHz.Count; k++)
         {
-            loaded[k] = AtLoad(planeImpedance[k], frequenciesHz[k], setup, true);
-            bare[k] = AtLoad(planeImpedance[k], frequenciesHz[k], setup, false);
+            var (z, t) = circuit.Solve(frequenciesHz[k], planeImpedance[k], true);
+            loaded[k] = z;
+            if (loop is not null) loop[k] = t!.Value;
+            bare[k] = circuit.Solve(frequenciesHz[k], planeImpedance[k], false).Impedance;
         }
 
         var extrema = new List<PdnExtremum>();
@@ -332,66 +440,143 @@ public static class PdnAnalysis
             }
         }
 
+        var crossovers = new List<LoopCrossover>();
+        if (loop is not null)
+            for (int k = 1; k < loop.Length; k++)
+            {
+                double a = loop[k - 1].Magnitude, b = loop[k].Magnitude;
+                if (!(a >= 1 && b < 1)) continue;
+                // Log-linear between the two points, magnitude and phase alike.
+                double t = Math.Log(a) / (Math.Log(a) - Math.Log(b));
+                double f = frequenciesHz[k - 1] * Math.Pow(frequenciesHz[k] / frequenciesHz[k - 1], t);
+                double p0 = loop[k - 1].Phase, p1 = loop[k].Phase;
+                if (p1 - p0 > Math.PI) p1 -= 2 * Math.PI;
+                if (p0 - p1 > Math.PI) p1 += 2 * Math.PI;
+                double phase = p0 + t * (p1 - p0);
+                double margin = 180 + phase * 180 / Math.PI;
+                while (margin > 180) margin -= 360;
+                while (margin <= -180) margin += 360;
+                crossovers.Add(new LoopCrossover(f, margin));
+            }
+
         modes ??= Array.Empty<PlaneMode>();
         bool? pass = setup.Target is null ? null : violations.Count == 0;
-        var spec = pair.Spec;
+        var spec = stack.Spec;
 
         var summary = new List<string>();
-        string load = string.Join(" + ", setup.LoadPorts.Select(p => spec.Ports[p].Name));
+        string load = setup.Mounting is { } m ? m.Load.Name
+            : string.Join(" + ", setup.LoadPorts.Select(p => spec.Ports[p].Site.Name));
         int top = Enumerable.Range(0, loaded.Length).MaxBy(k => loaded[k].Magnitude);
         summary.Add($"PDN impedance at {load}, {Hz(frequenciesHz[0])} to {Hz(frequenciesHz[^1])}"
             + (pass is null ? "" : pass.Value ? " — within the target" : " — OVER the target")
             + $": highest {Ohm(loaded[top].Magnitude)} at {Hz(frequenciesHz[top])}.");
-        summary.Add($"  Plane pair: {pair.AreaSquareMeters * 1e4:g4} cm², {spec.SeparationMeters * 1e6:g4} µm apart, "
-            + $"εr {spec.RelativePermittivity:g3}, tan δ {spec.LossTangent:g2} — {Farad(pair.StaticCapacitanceFarads)}; "
-            + $"{pair.NodeCount} unknowns at a {pair.MeshEdgeMeters * 1e3:g3} mm element size.");
+        if (setup.Stack is null && setup.Planes is { } planes)
+            summary.Add($"  Plane pair: {stack.AreaSquareMeters * 1e4:g4} cm², {planes.SeparationMeters * 1e6:g4} µm apart, "
+                + $"εr {planes.RelativePermittivity:g3}, tan δ {planes.LossTangent:g2} — {Farad(stack.StaticCapacitanceFarads)}; "
+                + $"{stack.UnknownCount} unknowns at a {stack.MeshEdgeMeters * 1e3:g3} mm element size.");
+        else
+        {
+            summary.Add($"  Plane stack: {spec.Layers.Count} layers, {stack.Cavities.Count} cavit{(stack.Cavities.Count == 1 ? "y" : "ies")} "
+                + $"over {stack.AreaSquareMeters * 1e4:g4} cm² — {Farad(stack.StaticCapacitanceFarads)} between neighbouring plates; "
+                + $"{stack.UnknownCount} unknowns at a {stack.MeshEdgeMeters * 1e3:g3} mm element size"
+                + (spec.Ties.Count > 0 ? $", {spec.Ties.Count} stitching via(s)" : "") + ".");
+            foreach (var c in stack.Cavities.OrderByDescending(c => c.AreaSquareMeters).Take(8))
+                summary.Add($"    {spec.Layers[c.UpperLayer].Name} – {spec.Layers[c.LowerLayer].Name}: {c.SeparationMeters * 1e6:g4} µm, "
+                    + $"εr {c.RelativePermittivity:g3}, {c.AreaSquareMeters * 1e4:g4} cm².");
+        }
+        if (stack.FringedEdgeMeters > 0)
+            summary.Add($"  {stack.FringedEdgeMeters * 1e3:g4} mm of open edge carries its fringe.");
         foreach (var v in violations)
             summary.Add($"  over the target from {Hz(v.FromHz)} to {Hz(v.ToHz)}: worst {Ohm(v.WorstOhms)} at "
                 + $"{Hz(v.WorstHz)} against {Ohm(v.TargetOhms)}.");
         foreach (var e in extrema.Where(e => e.IsMaximum).OrderByDescending(e => e.Ohms).Take(8).OrderBy(e => e.FrequencyHz))
             summary.Add($"  peak (anti-resonance) {Ohm(e.Ohms)} at {Hz(e.FrequencyHz)}.");
-        foreach (var m in modes)
-            summary.Add($"  plane resonance {Hz(m.FrequencyHz)}: seen at the load with "
-                + $"{setup.LoadPorts.Max(p => m.PortCoupling[p]):p0} of the mode's peak voltage.");
-        foreach (var c in setup.Capacitors.GroupBy(c => (c.Model, Math.Round(c.MountingInductanceHenries * 1e11))))
+        var loadPorts = setup.Mounting is { } mm ? mm.Load.Ports.ToList() : setup.LoadPorts.ToList();
+        foreach (var mode in modes)
+            summary.Add($"  plane resonance {Hz(mode.FrequencyHz)}"
+                + (loadPorts.Count > 0 ? $": seen at the load with {loadPorts.Max(p => mode.PortCoupling[p]):p0} of the mode's peak voltage." : "."));
+        if (setup.Mounting is { } mounted)
         {
-            var first = c.First();
-            string what = first.Model.Measured is null
-                ? $"{Farad(first.Model.CapacitanceFarads)}, ESR {Ohm(first.Model.EsrOhms)}, ESL {Henry(first.Model.EslHenries)}"
-                : "measured model";
-            summary.Add($"  {c.Count()} × {(first.Model.PartName.Length > 0 ? first.Model.PartName + " " : "")}({what}) "
-                + $"+ {Henry(first.MountingInductanceHenries)} mounting"
-                + (double.IsNaN(first.MountedResonanceHz) ? "" : $": resonates mounted at {Hz(first.MountedResonanceHz)}")
-                + $" — {string.Join(", ", c.Take(6).Select(x => x.Name))}{(c.Count() > 6 ? ", …" : "")}.");
+            foreach (var c in mounted.Capacitors.GroupBy(c => c.Model))
+            {
+                var first = c.First();
+                string what = first.Model.Measured is null
+                    ? $"{Farad(first.Model.CapacitanceFarads)}, ESR {Ohm(first.Model.EsrOhms)}, ESL {Henry(first.Model.EslHenries)}"
+                    : "measured model";
+                summary.Add($"  {c.Count()} × {(first.Model.PartName.Length > 0 ? first.Model.PartName + " " : "")}({what}) on its pads"
+                    + $" — {string.Join(", ", c.Take(6).Select(x => x.Name))}{(c.Count() > 6 ? ", …" : "")}.");
+            }
+            int vias = (mounted.Top?.BranchCount ?? 0) + (mounted.Bottom?.BranchCount ?? 0);
+            summary.Add($"  Mountings: {vias} conductor(s) above the planes in one coupled inductance network; "
+                + $"{mounted.Feet.Count} via(s) go on into the stack.");
+            if (mounted.Load.PackageHenries > 0 || mounted.Load.PackageOhms > 0)
+                summary.Add($"  {mounted.Load.Name}'s package: {Ohm(mounted.Load.PackageOhms)} + {Henry(mounted.Load.PackageHenries)}.");
+            foreach (var r in mounted.Regulators)
+                summary.Add($"  regulator {r.Name}: {Ohm(r.ResistanceOhms)} + {Henry(r.InductanceHenries)}"
+                    + (r.Loop is null ? "." : r.SensePlus is null ? ", with its loop sensing at its own pads." : ", with its loop sensing remotely."));
         }
-        foreach (var r in setup.Regulators)
-            summary.Add($"  regulator {r.Name}: {Ohm(r.ResistanceOhms)} + {Henry(r.InductanceHenries)}.");
+        else
+        {
+            foreach (var c in setup.Capacitors.GroupBy(c => (c.Model, Math.Round(c.MountingInductanceHenries * 1e11))))
+            {
+                var first = c.First();
+                string what = first.Model.Measured is null
+                    ? $"{Farad(first.Model.CapacitanceFarads)}, ESR {Ohm(first.Model.EsrOhms)}, ESL {Henry(first.Model.EslHenries)}"
+                    : "measured model";
+                summary.Add($"  {c.Count()} × {(first.Model.PartName.Length > 0 ? first.Model.PartName + " " : "")}({what}) "
+                    + $"+ {Henry(first.MountingInductanceHenries)} mounting"
+                    + (double.IsNaN(first.MountedResonanceHz) ? "" : $": resonates mounted at {Hz(first.MountedResonanceHz)}")
+                    + $" — {string.Join(", ", c.Take(6).Select(x => x.Name))}{(c.Count() > 6 ? ", …" : "")}.");
+            }
+            foreach (var r in setup.Regulators)
+                summary.Add($"  regulator {r.Name}: {Ohm(r.ResistanceOhms)} + {Henry(r.InductanceHenries)}"
+                    + (r.Loop is null ? "." : r.SensePort is null ? ", with its loop sensing at its own port." : $", with its loop sensing at {spec.Ports[r.SensePort.Value].Site.Name}."));
+        }
+        if (loop is not null)
+        {
+            if (crossovers.Count == 0)
+                summary.Add("  Regulator loop: the loop gain does not fall through 1 in the band.");
+            foreach (var c in crossovers)
+                summary.Add($"  Regulator loop crosses over at {Hz(c.FrequencyHz)} with {c.PhaseMarginDegrees:f0}° of phase margin"
+                    + (c.PhaseMarginDegrees < 0 ? " — UNSTABLE with this board: the closed-loop impedance is not physical." : "."));
+        }
 
         var assumptions = new List<string>
         {
-            "The plane pair is two copper sheets with the field uniform across the gap (a 2D model, valid while "
-            + "the gap is far below a wavelength); the edges are open and their fringing field is left out, so "
-            + "resonances come out a fraction of the gap-to-size ratio high.",
-            "A port spreads its current uniformly over its patch and reads the mean voltage over it: the "
-            + "inductance of the current converging on a via between the planes is in the plane solve, the part of "
-            + "a via above the planes is not (for a capacitor it is the mounting inductance; for the load it is "
-            + "left out, so the result is the impedance at the planes under the load).",
-            spec.WidebandDielectric && spec.LossTangent > 0
-                ? $"Dielectric: Djordjevic–Sarkar, εr {spec.RelativePermittivity:g3} and tan δ {spec.LossTangent:g2} "
-                  + $"taken as the values at {Hz(spec.DielectricReferenceHz)}."
-                : $"Dielectric: εr {spec.RelativePermittivity:g3} and tan δ {spec.LossTangent:g2} at every frequency.",
-            "Copper loss is the surface impedance of each plane's inner face, smooth copper.",
-            "The regulator is a resistance and an inductance in series; its control loop is not modelled.",
-            "Parts interact only through the planes: no mutual inductance between the mounting loops of "
-            + "neighbouring capacitors."
+            "The planes are copper sheets with the field uniform across each gap (a 2D model, valid while the gaps are "
+            + "far below a wavelength). "
+            + (stack.FringedEdgeMeters > 0
+                ? "Open edges carry the fringe of the board's cross-section through them (2D, so the field round a corner is not in it)."
+                : "The edges are open and their fringing field is left out, so resonances come out a fraction of the gap-to-size ratio high."),
+            "A port spreads its current uniformly over its patch and reads the mean voltage over it: the inductance of "
+            + "the current converging on a via between the planes is in the plane solve. "
+            + (setup.Mounting is null
+                ? "The part of a via above the planes is not (for a capacitor it is the mounting inductance; for the load "
+                  + "it is left out, so the result is the impedance at the planes under the load)."
+                : "Above the planes, pads, escape traces and vias are partial inductances over a perfectly conducting "
+                  + "outer plate (by images), every one coupled to every other; bends and the pads' own area are not modelled."),
+            spec.WidebandDielectric
+                ? $"Dielectrics: Djordjevic–Sarkar, each gap's εr and tan δ taken as the values at {Hz(spec.DielectricReferenceHz)}."
+                : "Dielectrics: each gap's εr and tan δ at every frequency.",
+            "Copper loss is each plate face's surface impedance (smooth copper); a plate shared by two cavities couples "
+            + "them through its thickness.",
+            setup.Mounting is null
+                ? "Parts interact only through the planes: no mutual inductance between the mounting loops of neighbouring capacitors."
+                : "The load's power pads are tied together at the die, and so are its ground pads, behind one lumped package impedance.",
+            setup.Regulators.Any(r => r.Loop is not null) || (setup.Mounting?.Regulators.Any(r => r.Loop is not null) ?? false)
+                ? "The regulator is a source behind its R + L, driven by A(s) from the error at its sense point (small signal, "
+                  + "averaged: no switching ripple, no current-mode inner loop)."
+                : "The regulator is a resistance and an inductance in series; its control loop is not modelled."
         };
-        foreach (var c in setup.Capacitors.Select(c => c.Model).Distinct().Where(m => m.MeasuredBand is not null))
+        foreach (var c in setup.Capacitors.Select(c => c.Model).Concat(setup.Mounting?.Capacitors.Select(c => c.Model) ?? Array.Empty<CapacitorModel>())
+                     .Distinct().Where(m => m.MeasuredBand is not null))
         {
             var (from, to) = c.MeasuredBand!.Value;
             if (frequenciesHz[0] < from || frequenciesHz[^1] > to)
                 assumptions.Add($"The measured model of {c.PartName} covers {Hz(from)} to {Hz(to)}; outside it the "
                     + "part is continued as the capacitor below and the inductor above that its end points imply.");
         }
+        assumptions.AddRange(stack.Notes);
 
         return new PdnResult
         {
@@ -402,6 +587,8 @@ public static class PdnAnalysis
             Violations = violations,
             Modes = modes,
             Pass = pass,
+            LoopGain = loop,
+            Crossovers = crossovers,
             Assumptions = assumptions,
             Summary = summary
         };

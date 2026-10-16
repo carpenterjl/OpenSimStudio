@@ -18,7 +18,7 @@ public partial class PdnCapacitorRow : ObservableObject
     public BoardCapacitor Capacitor { get; }
     public string Label => Capacitor.RefDes + (Capacitor.PartName is { Length: > 0 } p ? $" ({p})" : "");
 
-    /// <summary>Mounting inductance [pH], or why the part is not on the planes.</summary>
+    /// <summary>Mounting inductance [pH] (every via of both pads), or why the part is not on the planes.</summary>
     public string Mounting => Capacitor.Site is null
         ? Capacitor.Problem ?? "not connected"
         : $"{Capacitor.MountingInductanceHenries * 1e12:f0} pH";
@@ -29,12 +29,25 @@ public partial class PdnCapacitorRow : ObservableObject
     [ObservableProperty] private double _nanofarads;
     [ObservableProperty] private double _esrMilliohms;
     [ObservableProperty] private double _eslNanohenries;
+
+    /// <summary>The manufacturer's part number, from a bill of materials.</summary>
+    [ObservableProperty] private string? _partNumber;
+
+    /// <summary>The vendor's measured model found for the part number; replaces C, ESR and ESL.</summary>
+    [ObservableProperty] private CapacitorModel? _measured;
+
+    public string Source => Measured is not null ? "measured" : PartNumber ?? "";
+
+    partial void OnMeasuredChanged(CapacitorModel? value) => OnPropertyChanged(nameof(Source));
+    partial void OnPartNumberChanged(string? value) => OnPropertyChanged(nameof(Source));
 }
 
 /// <summary>
-/// PDN impedance against frequency at a load (<see cref="PdnAnalysis"/>): the plane pair of
-/// a power and a ground net read off the imported board, its capacitors with their mounting
-/// inductance, a regulator, and a target impedance.
+/// PDN impedance against frequency at a load (<see cref="PdnAnalysis"/>): the planes between a
+/// power and a ground net read off the imported board (every plane-sized island on the layers
+/// between, the stitching vias, the fringe of the edges), its capacitors on their pads and vias
+/// (values from a bill of materials, measured models by part number), the load behind its
+/// package, a regulator with or without its control loop, and a target impedance.
 /// </summary>
 public partial class PdnViewModel : ObservableObject
 {
@@ -60,6 +73,23 @@ public partial class PdnViewModel : ObservableObject
     [ObservableProperty] private string _regulatorRefDes = "";
     [ObservableProperty] private double _regulatorMilliohms = 5;
     [ObservableProperty] private double _regulatorNanohenries = 20;
+
+    /// <summary>The regulator's control loop: A(s) = 2π·f_gain/s · (1 + s/ω_zero)/(1 + s/ω_pole).</summary>
+    [ObservableProperty] private bool _regulatorLoop;
+    [ObservableProperty] private double _loopGainKhz = 20;
+    [ObservableProperty] private double _loopZeroKhz = 5;
+    [ObservableProperty] private double _loopPoleKhz = 1000;
+    [ObservableProperty] private bool _senseAtLoad;
+
+    /// <summary>The load's package between its die and its pads.</summary>
+    [ObservableProperty] private double _packageMilliohms;
+    [ObservableProperty] private double _packageNanohenries;
+
+    /// <summary>Give the planes' open edges the fringe of the board's cross-section.</summary>
+    [ObservableProperty] private bool _edgeFringe = true;
+
+    [ObservableProperty] private string _bomStatus = "";
+    private string? _vendorFolder;
 
     /// <summary>What a found capacitor starts with; edit a row to change one part.</summary>
     [ObservableProperty] private double _defaultNanofarads = 100;
@@ -106,7 +136,13 @@ public partial class PdnViewModel : ObservableObject
         Assumptions = "";
     }
 
-    private PdnBoardOptions Options() => new() { Stackup = _meshOptions?.Invoke().Stackup };
+    private PdnBoardOptions Options() => new()
+    {
+        Stackup = _meshOptions?.Invoke().Stackup,
+        EdgeFringe = EdgeFringe,
+        LoadPackageOhms = PackageMilliohms * 1e-3,
+        LoadPackageHenries = PackageNanohenries * 1e-9
+    };
 
     /// <summary>Reads the plane pair and the capacitors off the board.</summary>
     [RelayCommand]
@@ -142,10 +178,11 @@ public partial class PdnViewModel : ObservableObject
                     EslNanohenries = DefaultEslNanohenries
                 });
             int connected = model.Capacitors.Count(c => c.Site is not null);
-            PlanesResult = $"Planes L{model.PowerLayer} ({model.PowerNet}) and L{model.GroundLayer} ({model.GroundNet}): "
+            PlanesResult = $"Closest planes L{model.PowerLayer} ({model.PowerNet}) and L{model.GroundLayer} ({model.GroundNet}): "
                 + $"{model.AreaSquareMeters * 1e4:g4} cm² overlap, {model.SeparationMeters * 1e6:g4} µm apart, "
                 + $"εr {model.RelativePermittivity:g3}. {connected} of {model.Capacitors.Count} capacitor(s) between the "
                 + "two nets reach the planes." + Environment.NewLine + string.Join(Environment.NewLine, model.Notes);
+            ApplyVendorFolder();
             _log.Append("PDN: " + PlanesResult.Replace(Environment.NewLine, " "));
             foreach (var c in model.Capacitors.Where(c => c.Site is null))
                 _log.Append($"PDN: {c.RefDes} left out — {c.Problem}.");
@@ -190,6 +227,92 @@ public partial class PdnViewModel : ObservableObject
         VendorModelStatus = "";
     }
 
+    /// <summary>Capacitor values from a bill of materials (CSV/TSV: designator, value, and ESR,
+    /// ESL and part number when it has them) or a placement file (its value column).</summary>
+    [RelayCommand]
+    private void ReadBom()
+    {
+        if (Capacitors.Count == 0)
+        {
+            BomStatus = "Read the planes and capacitors first.";
+            return;
+        }
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Bill of materials or placement file|*.csv;*.tsv;*.txt;*.pos|All files|*.*",
+            Title = "Bill of materials or placement file"
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            string text = File.ReadAllText(dialog.FileName);
+            IReadOnlyList<BomPart> parts;
+            IReadOnlyList<string> notes;
+            bool placement = Path.GetExtension(dialog.FileName).Equals(".pos", StringComparison.OrdinalIgnoreCase)
+                             || text.Contains("PosX", StringComparison.OrdinalIgnoreCase);
+            if (placement)
+                parts = CapacitorBom.FromPlacement(OpenSim.Pcb.Thermal.ComponentPlacement.ReadPlacementFile(text, out notes));
+            else
+                parts = CapacitorBom.Read(text, out notes);
+            var byRef = parts.GroupBy(p => p.RefDes, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            int values = 0, esr = 0, esl = 0, numbers = 0, missing = 0;
+            foreach (var row in Capacitors)
+            {
+                if (!byRef.TryGetValue(row.Capacitor.RefDes, out var part)) { missing++; continue; }
+                if (part.Farads is { } c) { row.Nanofarads = c * 1e9; values++; }
+                if (part.EsrOhms is { } r) { row.EsrMilliohms = r * 1e3; esr++; }
+                if (part.EslHenries is { } l) { row.EslNanohenries = l * 1e9; esl++; }
+                if (part.PartNumber is { } pn) { row.PartNumber = pn; numbers++; }
+            }
+            ApplyVendorFolder();
+            BomStatus = $"{Path.GetFileName(dialog.FileName)}: C for {values} of {Capacitors.Count} capacitor(s)"
+                + (esr > 0 ? $", ESR for {esr}" : "") + (esl > 0 ? $", ESL for {esl}" : "")
+                + (numbers > 0 ? $", a part number for {numbers}" : "")
+                + (missing > 0 ? $"; {missing} not in the file keep their values" : "")
+                + ". The rest keep the defaults. " + string.Join(" ", notes);
+            _log.Append("PDN: " + BomStatus);
+        }
+        catch (Exception ex)
+        {
+            BomStatus = "Not read: " + ex.Message;
+        }
+    }
+
+    /// <summary>A folder of vendor S-parameter files: a capacitor whose part number names one of
+    /// them (.s1p across the part, .s2p measured in shunt) uses it instead of C, ESR and ESL.</summary>
+    [RelayCommand]
+    private void ChooseVendorFolder()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog { Title = "Folder of vendor S-parameter files" };
+        if (dialog.ShowDialog() != true) return;
+        _vendorFolder = dialog.FolderName;
+        ApplyVendorFolder();
+    }
+
+    private void ApplyVendorFolder()
+    {
+        if (_vendorFolder is null) return;
+        int found = 0, numbered = 0;
+        var problems = new List<string>();
+        foreach (var row in Capacitors)
+        {
+            row.Measured = null;
+            if (string.IsNullOrWhiteSpace(row.PartNumber)) continue;
+            numbered++;
+            try
+            {
+                row.Measured = CapacitorBom.VendorModel(_vendorFolder, row.PartNumber, out _);
+                if (row.Measured is not null) found++;
+            }
+            catch (Exception ex)
+            {
+                problems.Add($"{row.Capacitor.RefDes}: {ex.Message}");
+            }
+        }
+        BomStatus = $"Vendor files in {_vendorFolder}: a measured model for {found} of the {numbered} capacitor(s) with a part number."
+            + (problems.Count > 0 ? " Not read: " + string.Join("; ", problems) : "");
+    }
+
     [RelayCommand]
     private async Task Solve()
     {
@@ -217,6 +340,7 @@ public partial class PdnViewModel : ObservableObject
             {
                 if (!rows.TryGetValue(c.RefDes, out var row)) return null;
                 if (vendor is not null) return vendor;
+                if (row.Measured is not null) return row.Measured;
                 return new CapacitorModel
                 {
                     PartName = c.PartName ?? "",
@@ -228,6 +352,15 @@ public partial class PdnViewModel : ObservableObject
             (string, double, double)? regulator = string.IsNullOrWhiteSpace(RegulatorRefDes)
                 ? null
                 : (RegulatorRefDes.Trim(), RegulatorMilliohms * 1e-3, RegulatorNanohenries * 1e-9);
+            RegulatorLoop? loop = RegulatorLoop && regulator is not null
+                ? new RegulatorLoop
+                {
+                    GainHz = LoopGainKhz * 1e3,
+                    ZerosHz = LoopZeroKhz > 0 ? new[] { LoopZeroKhz * 1e3 } : Array.Empty<double>(),
+                    PolesHz = LoopPoleKhz > 0 ? new[] { LoopPoleKhz * 1e3 } : Array.Empty<double>()
+                }
+                : null;
+            bool senseAtLoad = SenseAtLoad;
             _target = RailVolts > 0
                 ? TargetImpedance.Flat(RailVolts, RipplePercent, StepAmps, TargetUpToMhz * 1e6)
                 : null;
@@ -237,7 +370,7 @@ public partial class PdnViewModel : ObservableObject
 
             var result = await Task.Run(() =>
             {
-                var setup = PdnBoard.Setup(board, power, ground, model, load, ModelFor, regulator, options) with
+                var setup = PdnBoard.Setup(board, power, ground, model, load, ModelFor, regulator, options, loop, senseAtLoad) with
                 {
                     Target = target,
                     MinFrequencyHz = from,
@@ -251,7 +384,7 @@ public partial class PdnViewModel : ObservableObject
             {
                 new("at the load", result.FrequenciesHz, result.Impedance.Select(z => z.Magnitude).ToList(),
                     System.Windows.Media.Color.FromRgb(0x3D, 0x8B, 0xFD)),
-                new("planes alone", result.FrequenciesHz, result.BareImpedance.Select(z => z.Magnitude).ToList(),
+                new("planes and the load's mounting", result.FrequenciesHz, result.BareImpedance.Select(z => z.Magnitude).ToList(),
                     System.Windows.Media.Color.FromRgb(0x9A, 0xA0, 0xA6), Dashed: true)
             };
             if (target is not null)
@@ -260,8 +393,8 @@ public partial class PdnViewModel : ObservableObject
             Plot = Controls.CurvePlot.Render(curves, logX: true, logY: true, "frequency [Hz]", "|Z| [Ω]");
             Result = string.Join(Environment.NewLine, result.Describe());
             Assumptions = "Assumptions: " + string.Join(" ", result.Assumptions.Concat(model.Notes))
-                + " The mounting inductance takes the nearest via of each pad and an escape trace as wide as the pad "
-                + "or twice the via, whichever is less; more vias per pad would lower it.";
+                + " An escape trace runs straight from each pad's centre to each of its vias, as wide as the pad "
+                + "or twice the via, whichever is less (the trace itself is not read from the layout).";
             foreach (string line in result.Describe()) _log.Append("PDN: " + line.Trim());
         }
         catch (Exception ex)
