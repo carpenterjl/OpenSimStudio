@@ -17,7 +17,21 @@ public sealed record SweepParameter
 
     public string? Unit { get; init; }
 
+    /// <summary>How a Monte Carlo plan draws this parameter: uniform over its range (the
+    /// smallest to the largest of <see cref="Values"/>), or normal about the nominal.</summary>
+    public SweepDistribution Distribution { get; init; } = SweepDistribution.Uniform;
+
+    /// <summary>The normal distribution's σ; null takes a sixth of the range, so a
+    /// ±tolerance band is ±3σ (99.7 % of parts inside it).</summary>
+    public double? StandardDeviation { get; init; }
+
     public double Nominal => NominalValue ?? Values[Values.Count / 2];
+
+    public double Minimum => Values.Min();
+    public double Maximum => Values.Max();
+
+    /// <summary>The σ a Monte Carlo draw uses: <see cref="StandardDeviation"/>, or a sixth of the range.</summary>
+    public double Sigma => StandardDeviation ?? (Maximum - Minimum) / 6;
 
     /// <summary>Evenly spaced values from min to max.</summary>
     public static SweepParameter Linear(string name, double min, double max, int points, string? unit = null)
@@ -51,7 +65,21 @@ public sealed record SweepParameter
         if (string.IsNullOrWhiteSpace(Name)) throw new InvalidOperationException("A sweep parameter needs a name.");
         if (Values.Count == 0) throw new InvalidOperationException($"Sweep parameter '{Name}' has no values.");
         if (Values.Any(v => !double.IsFinite(v))) throw new InvalidOperationException($"Sweep parameter '{Name}' has a non-finite value.");
+        if (StandardDeviation is { } s && !(s >= 0 && double.IsFinite(s)))
+            throw new InvalidOperationException($"Sweep parameter '{Name}' has a negative or non-finite standard deviation.");
     }
+}
+
+/// <summary>The distribution a Monte Carlo plan draws a parameter from.</summary>
+public enum SweepDistribution
+{
+    /// <summary>Every value between the smallest and the largest equally likely — the
+    /// honest choice when only the tolerance band is known.</summary>
+    Uniform,
+
+    /// <summary>Normal about the nominal with σ = <see cref="SweepParameter.Sigma"/>
+    /// (a sixth of the range unless given): a process centred on its nominal.</summary>
+    Normal
 }
 
 /// <summary>How the parameter values are combined into runs.</summary>
@@ -66,7 +94,13 @@ public enum SweepMode
 
     /// <summary>The nominal point and every corner (each parameter at its smallest or
     /// largest value): the tolerance stack-up's worst cases.</summary>
-    Corners
+    Corners,
+
+    /// <summary>The nominal point, then <see cref="SweepPlan.Samples"/> points with every
+    /// parameter drawn at random from its distribution (<see cref="SweepParameter.Distribution"/>),
+    /// independently of the others: the tolerance plan whose spread and yield are the answer.
+    /// The draws are a deterministic function of <see cref="SweepPlan.Seed"/>.</summary>
+    MonteCarlo
 }
 
 /// <summary>One run of a sweep: the parameter values it was made at.</summary>
@@ -77,6 +111,9 @@ public sealed record SweepPoint(int Index, IReadOnlyDictionary<string, double> V
     /// <summary>The parameter this point varies alone (one-at-a-time plans); null at the
     /// nominal point and in other plans.</summary>
     public string? Varied { get; init; }
+
+    /// <summary>True for a Monte Carlo draw (not the nominal point that heads the plan).</summary>
+    public bool Sampled { get; init; }
 }
 
 /// <summary>The parameters and the plan.</summary>
@@ -85,18 +122,27 @@ public sealed record SweepPlan
     public required IReadOnlyList<SweepParameter> Parameters { get; init; }
     public SweepMode Mode { get; init; } = SweepMode.FullFactorial;
 
+    /// <summary>Monte Carlo: how many random points follow the nominal.</summary>
+    public int Samples { get; init; } = 100;
+
+    /// <summary>Monte Carlo: the generator's seed; the same seed gives the same points.</summary>
+    public int Seed { get; init; } = 1;
+
     public void Validate()
     {
         if (Parameters.Count == 0) throw new InvalidOperationException("A sweep needs at least one parameter.");
         foreach (var p in Parameters) p.Validate();
         if (Parameters.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != Parameters.Count)
             throw new InvalidOperationException("Sweep parameter names must be distinct.");
+        if (Mode == SweepMode.MonteCarlo && Samples < 1)
+            throw new InvalidOperationException("A Monte Carlo plan needs at least one sample.");
     }
 
     public int Count => Mode switch
     {
         SweepMode.FullFactorial => Parameters.Aggregate(1, (n, p) => n * p.Values.Count),
         SweepMode.OneAtATime => 1 + Parameters.Sum(p => p.Values.Count),
+        SweepMode.MonteCarlo => 1 + Samples,
         _ => 1 + (1 << Parameters.Count)
     };
 
@@ -131,6 +177,21 @@ public sealed record SweepPlan
                         yield return new SweepPoint(index++, values) { Varied = p.Name };
                     }
                 yield break;
+            case SweepMode.MonteCarlo:
+            {
+                yield return new SweepPoint(index++, Nominal());
+                var random = new SplitMix64(Seed);
+                for (int s = 0; s < Samples; s++)
+                {
+                    var values = new Dictionary<string, double>();
+                    foreach (var p in Parameters)
+                        values[p.Name] = p.Distribution == SweepDistribution.Normal
+                            ? p.Nominal + p.Sigma * random.NextNormal()
+                            : p.Minimum + (p.Maximum - p.Minimum) * random.NextDouble();
+                    yield return new SweepPoint(index++, values) { Sampled = true };
+                }
+                yield break;
+            }
             default:
                 yield return new SweepPoint(index++, Nominal());
                 for (int corner = 0; corner < 1 << Parameters.Count; corner++)
@@ -157,8 +218,49 @@ public sealed record SweepRow(SweepPoint Point, IReadOnlyDictionary<string, doub
 /// <param name="Range">Largest minus smallest output over the parameter's values.</param>
 public sealed record Sensitivity(string Parameter, string Output, double Slope, double Normalized, double Range);
 
+/// <summary>The spread of one output over a Monte Carlo plan's samples.</summary>
+/// <param name="StandardDeviation">The sample standard deviation (n − 1).</param>
+/// <param name="Percentile5">The value 5 % of the samples lie below (linear interpolation
+/// between order statistics); <paramref name="Percentile50"/> the median, <paramref name="Percentile95"/> the 95 % point.</param>
+public sealed record OutputStatistics(string Output, int Count, double Mean, double StandardDeviation,
+    double Min, double Max, double Percentile5, double Percentile50, double Percentile95);
+
 public sealed record SweepResult(SweepPlan Plan, IReadOnlyList<SweepRow> Rows)
 {
+    /// <summary>The rows statistics are taken over: a Monte Carlo plan's successful samples
+    /// (the nominal row is not a draw); for any other plan every successful row.</summary>
+    private IEnumerable<SweepRow> Population() =>
+        Rows.Where(r => r.Succeeded && (Plan.Mode != SweepMode.MonteCarlo || r.Point.Sampled));
+
+    /// <summary>Mean, spread and percentiles of an output over the sampled runs.</summary>
+    public OutputStatistics Statistics(string output)
+    {
+        var values = Population().Where(r => r.Outputs.ContainsKey(output)).Select(r => r.Outputs[output]).OrderBy(v => v).ToList();
+        if (values.Count == 0) throw new InvalidOperationException($"No sampled run produced '{output}'.");
+        int n = values.Count;
+        double mean = values.Average();
+        double variance = n > 1 ? values.Sum(v => (v - mean) * (v - mean)) / (n - 1) : 0;
+        double Percentile(double p)
+        {
+            double rank = p * (n - 1);
+            int lo = (int)Math.Floor(rank);
+            int hi = Math.Min(lo + 1, n - 1);
+            return values[lo] + (rank - lo) * (values[hi] - values[lo]);
+        }
+        return new OutputStatistics(output, n, mean, Math.Sqrt(variance), values[0], values[^1],
+            Percentile(0.05), Percentile(0.5), Percentile(0.95));
+    }
+
+    /// <summary>The fraction of the sampled runs whose output lies inside [low, high]
+    /// (inclusive); a run that failed or did not produce the output counts as outside.</summary>
+    public double Yield(string output, double low, double high)
+    {
+        var population = Rows.Where(r => Plan.Mode != SweepMode.MonteCarlo || r.Point.Sampled).ToList();
+        if (population.Count == 0) throw new InvalidOperationException("The sweep has no sampled runs.");
+        int inside = population.Count(r => r.Succeeded && r.Outputs.TryGetValue(output, out double v) && v >= low && v <= high);
+        return (double)inside / population.Count;
+    }
+
     public IReadOnlyList<string> OutputNames =>
         Rows.Where(r => r.Succeeded).SelectMany(r => r.Outputs.Keys).Distinct().ToList();
 
@@ -244,6 +346,14 @@ public sealed record SweepResult(SweepPlan Plan, IReadOnlyList<SweepRow> Rows)
             var (min, atMin, max, atMax) = Range(output);
             lines.Add($"  {output}: {min.ToString("g5", ci)} at [{Point(atMin)}] to {max.ToString("g5", ci)} at [{Point(atMax)}]");
         }
+        if (Plan.Mode == SweepMode.MonteCarlo)
+            foreach (string output in OutputNames)
+            {
+                var s = Statistics(output);
+                lines.Add($"  {output}: mean {s.Mean.ToString("g5", ci)}, σ {s.StandardDeviation.ToString("g4", ci)}, " +
+                          $"P5 {s.Percentile5.ToString("g5", ci)}, P50 {s.Percentile50.ToString("g5", ci)}, " +
+                          $"P95 {s.Percentile95.ToString("g5", ci)} over {s.Count} samples (seed {Plan.Seed})");
+            }
         foreach (var s in Sensitivities())
             lines.Add($"  d({s.Output})/d({s.Parameter}) = {s.Slope.ToString("g4", ci)}" +
                       (double.IsNaN(s.Normalized) ? "" : $" ({(s.Normalized * 100).ToString("g3", ci)} % per % of nominal)") +
@@ -255,6 +365,39 @@ public sealed record SweepResult(SweepPlan Plan, IReadOnlyList<SweepRow> Rows)
 
     private static string Escape(string s) =>
         s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0 ? s : "\"" + s.Replace("\"", "\"\"") + "\"";
+}
+
+/// <summary>
+/// SplitMix64 (Steele, Lea and Flood 2014): a 64-bit generator whose every output is a fixed
+/// function of the seed and the draw count, so a Monte Carlo plan reproduces its points on
+/// any runtime — <see cref="Random"/> makes no such promise across .NET versions.
+/// </summary>
+internal sealed class SplitMix64
+{
+    private ulong _state;
+
+    public SplitMix64(long seed) => _state = (ulong)seed;
+
+    public ulong Next()
+    {
+        _state += 0x9E3779B97F4A7C15UL;
+        ulong z = _state;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+        return z ^ (z >> 31);
+    }
+
+    /// <summary>Uniform on [0, 1): the top 53 bits as a double.</summary>
+    public double NextDouble() => (Next() >> 11) * (1.0 / (1UL << 53));
+
+    /// <summary>Standard normal by Box–Muller (one deviate per two uniforms, the other discarded,
+    /// so each draw depends on a fixed pair of outputs).</summary>
+    public double NextNormal()
+    {
+        double u1 = 1.0 - NextDouble();                       // (0, 1]: the log is finite
+        double u2 = NextDouble();
+        return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+    }
 }
 
 /// <summary>

@@ -355,6 +355,7 @@ public partial class MainViewModel : ObservableObject
             Session.Body.Material = Session.SelectedMaterial;
             Session.Project.Name = Path.GetFileNameWithoutExtension(dialog.FileName);
             Session.Project.AnalysisType = Session.SelectedAnalysis.Kind.ToString();
+            Session.Project.Solver = Solve.ToSolverSettings();
             _serializer.Save(Session.Project, dialog.FileName);
             _recentProjects.Add(dialog.FileName);
             Log.Append($"Project saved to {dialog.FileName}");
@@ -392,6 +393,7 @@ public partial class MainViewModel : ObservableObject
                 Pcb.PcbCopperThickness = project.Stackup.CopperThickness;
                 Pcb.PcbBoardThickness = project.Stackup.BoardThickness;
             }
+            Solve.LoadSolverSettings(project.Solver);
 
             Materials.AdoptProjectMaterial(Session.Body.Material);
             Meshing.TargetEdgeLength = Session.Body.MeshSettings.TargetEdgeLength;

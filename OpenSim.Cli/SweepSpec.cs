@@ -7,6 +7,7 @@ using OpenSim.Core.Numerics;
 using OpenSim.Core.Persistence;
 using OpenSim.Core.Studies;
 using OpenSim.Geometry;
+using OpenSim.Pcb.Import;
 using OpenSim.Rf.Si;
 
 namespace OpenSim.Cli;
@@ -28,21 +29,62 @@ public sealed class SweepParameterSpec
     public int Points { get; set; } = 3;
     public string? Unit { get; set; }
 
+    /// <summary>Monte Carlo: "Uniform" (default) over the range, or "Normal" about the nominal.</summary>
+    public string? Distribution { get; set; }
+
+    /// <summary>Monte Carlo, normal: σ; null takes a sixth of the range (±tolerance = ±3σ).</summary>
+    public double? Sigma { get; set; }
+
     public SweepParameter ToParameter()
     {
         if (string.IsNullOrWhiteSpace(Name)) throw new InvalidOperationException("Every sweep parameter needs a name.");
         if (string.IsNullOrWhiteSpace(Target)) throw new InvalidOperationException($"Parameter '{Name}' names no target.");
+        var distribution = Distribution is null ? SweepDistribution.Uniform
+            : Enum.TryParse<SweepDistribution>(Distribution, true, out var d) ? d
+            : throw new InvalidOperationException($"Parameter '{Name}': distribution '{Distribution}' is not Uniform or Normal.");
+        SweepParameter p;
         if (Values is { Length: > 0 })
-            return new SweepParameter { Name = Name, Values = Values, NominalValue = Nominal, Unit = Unit };
-        if (Nominal is not { } nominal)
+            p = new SweepParameter { Name = Name, Values = Values, NominalValue = Nominal, Unit = Unit };
+        else if (Nominal is not { } nominal)
             throw new InvalidOperationException($"Parameter '{Name}' needs either values or a nominal with a tolerance.");
-        if (TolerancePercent is { } pct) return SweepParameter.Tolerance(Name, nominal, pct / 100, Points, Unit);
-        if (PlusMinus is { } pm) return SweepParameter.PlusMinus(Name, nominal, pm, Points, Unit);
-        throw new InvalidOperationException($"Parameter '{Name}' has a nominal but no tolerancePercent or plusMinus.");
+        else if (TolerancePercent is { } pct) p = SweepParameter.Tolerance(Name, nominal, pct / 100, Points, Unit);
+        else if (PlusMinus is { } pm) p = SweepParameter.PlusMinus(Name, nominal, pm, Points, Unit);
+        else throw new InvalidOperationException($"Parameter '{Name}' has a nominal but no tolerancePercent or plusMinus.");
+        return p with { Distribution = distribution, StandardDeviation = Sigma };
     }
 }
 
-/// <summary>A sweep job: a project, an analysis, the parameters and how they combine.</summary>
+/// <summary>A board re-import sweep: the net of a Gerber set or IPC-2581 file that each run
+/// re-meshes with the swept stackup, the two pads its DC resistance is measured between,
+/// and the frequency its trace line is reported at.</summary>
+public sealed class BoardSweepSpec
+{
+    /// <summary>The board: a Gerber ZIP or folder, or an IPC-2581 file.</summary>
+    public string Path { get; set; } = "";
+
+    /// <summary>The net's design name (X2 %TO.N / IPC-2581), or "Net N" by id.</summary>
+    public string Net { get; set; } = "";
+
+    /// <summary>The source and sink pads: "U1.3" (component.pin), or "x,y" in mm (the nearest pad centre).</summary>
+    public string Source { get; set; } = "";
+    public string Sink { get; set; } = "";
+
+    /// <summary>Also report the net's trace as a transmission line (Z0, RLGC) over the
+    /// board's reference planes at <see cref="FrequencyHz"/>.</summary>
+    public bool Rlgc { get; set; } = true;
+    public double FrequencyHz { get; set; } = 1e9;
+
+    /// <summary>The net mesh's edge length [m]; 0 = automatic.</summary>
+    public double TargetEdgeLength { get; set; }
+
+    /// <summary>The stackup every run starts from; null takes the board file's (IPC-2581) or
+    /// the defaults (35 µm copper, 1.6 mm board split evenly across the gaps, FR4).</summary>
+    public PcbStackupSettings? Stackup { get; set; }
+
+    public string CopperMaterial { get; set; } = "Copper (annealed)";
+}
+
+/// <summary>A sweep job: a project (or a board), an analysis, the parameters and how they combine.</summary>
 public sealed class SweepSpec
 {
     public string Project { get; set; } = "";
@@ -50,8 +92,18 @@ public sealed class SweepSpec
     public string Mode { get; set; } = "OneAtATime";
     public List<SweepParameterSpec> Parameters { get; set; } = new();
 
+    /// <summary>Monte Carlo: the number of random points and the generator's seed.</summary>
+    public int Samples { get; set; } = 100;
+    public int Seed { get; set; } = 1;
+
     /// <summary>Outputs to keep (summary names, or "Max &lt;field&gt; (&lt;unit&gt;)"); null keeps every one.</summary>
     public List<string>? Outputs { get; set; }
+
+    /// <summary>Monte Carlo: [low, high] per output; the report gives the fraction of samples inside.</summary>
+    public Dictionary<string, double[]>? Limits { get; set; }
+
+    /// <summary>A board re-import sweep in place of a project.</summary>
+    public BoardSweepSpec? Board { get; set; }
 
     public StudySettings? Settings { get; set; }
 
@@ -68,18 +120,126 @@ public sealed class SweepSpec
     {
         var spec = JsonSerializer.Deserialize<SweepSpec>(File.ReadAllText(path), JsonOptions)
                    ?? throw new InvalidDataException($"'{path}' is not a sweep job.");
-        if (string.IsNullOrWhiteSpace(spec.Project)) throw new InvalidDataException("The sweep job names no project.");
-        if (!Path.IsPathRooted(spec.Project))
-            spec.Project = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".", spec.Project));
+        string dir = Path.GetDirectoryName(Path.GetFullPath(path)) ?? ".";
+        if (spec.Board is { } board)
+        {
+            if (string.IsNullOrWhiteSpace(board.Path)) throw new InvalidDataException("The board sweep names no board path.");
+            if (string.IsNullOrWhiteSpace(board.Net)) throw new InvalidDataException("The board sweep names no net.");
+            if (string.IsNullOrWhiteSpace(board.Source) || string.IsNullOrWhiteSpace(board.Sink))
+                throw new InvalidDataException("The board sweep needs a source and a sink pad (\"U1.3\" or \"x,y\" in mm).");
+            if (!Path.IsPathRooted(board.Path)) board.Path = Path.GetFullPath(Path.Combine(dir, board.Path));
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(spec.Project)) throw new InvalidDataException("The sweep job names no project (or board).");
+            if (!Path.IsPathRooted(spec.Project)) spec.Project = Path.GetFullPath(Path.Combine(dir, spec.Project));
+        }
         if (spec.Parameters.Count == 0) throw new InvalidDataException("The sweep job has no parameters.");
+        if (spec.Limits is { } limits)
+            foreach (var (output, band) in limits)
+                if (band is not { Length: 2 } || !(band[0] <= band[1]))
+                    throw new InvalidDataException($"The limit for '{output}' must be [low, high].");
         return spec;
     }
 
-    public SweepPlan Plan() => new()
+    public SweepPlan Plan() => ParsePlan(Parameters, Mode, Samples, Seed);
+
+    internal static SweepPlan ParsePlan(IEnumerable<SweepParameterSpec> parameters, string mode, int samples, int seed) => new()
     {
-        Parameters = Parameters.Select(p => p.ToParameter()).ToList(),
-        Mode = Enum.TryParse<SweepMode>(Mode, true, out var mode) ? mode
-            : throw new InvalidOperationException($"Unknown sweep mode '{Mode}'; use FullFactorial, OneAtATime or Corners.")
+        Parameters = parameters.Select(p => p.ToParameter()).ToList(),
+        Mode = Enum.TryParse<SweepMode>(mode, true, out var m) ? m
+            : throw new InvalidOperationException($"Unknown sweep mode '{mode}'; use FullFactorial, OneAtATime, Corners or MonteCarlo."),
+        Samples = samples,
+        Seed = seed
+    };
+}
+
+/// <summary>
+/// The things a board sweep can set, named as <c>stackup.&lt;property&gt;</c>:
+/// <c>copperThickness</c> (every layer not listed by itself), <c>layer&lt;n&gt;.thickness</c>,
+/// <c>boardThickness</c> (split evenly across unlisted gaps), <c>gap&lt;n&gt;.thickness|permittivity|lossTangent</c>
+/// (gap n lies under copper layer n), <c>viaPlating</c>; and <c>mesh.targetEdgeLength</c>,
+/// <c>settings.frequency</c>. Anything else goes to <see cref="ProjectTargets"/> on the
+/// run's one-body project (a material property, a condition value).
+/// </summary>
+public static class BoardTargets
+{
+    public static bool Handles(string target)
+    {
+        string kind = target.Split('.', ':')[0].Trim().ToLowerInvariant();
+        return kind == "stackup" || (kind == "mesh" && !target.Contains(':')) ||
+               target.Equals("settings.frequency", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Applies one value; returns the changed mesh options and frequency.</summary>
+    public static (NetMeshOptions Options, double FrequencyHz) Apply(NetMeshOptions options, double frequencyHz,
+        string target, double value)
+    {
+        var parts = target.Split('.');
+        string kind = parts[0].Trim().ToLowerInvariant();
+        if (kind == "settings" && parts.Length == 2 && parts[1].Equals("frequency", StringComparison.OrdinalIgnoreCase))
+            return (options, value > 0 ? value : throw new InvalidOperationException("settings.frequency must be positive."));
+        if (kind == "mesh" && parts.Length == 2 && parts[1].Equals("targetEdgeLength", StringComparison.OrdinalIgnoreCase))
+            return (options with { TargetEdgeLength = value }, frequencyHz);
+        if (kind != "stackup")
+            throw new InvalidOperationException($"Target '{target}' is not a board target.");
+        if (parts.Length == 2)
+        {
+            options = parts[1].ToLowerInvariant() switch
+            {
+                "copperthickness" => options with { CopperThickness = Positive(target, value) },
+                "boardthickness" => options with { DefaultDielectricThickness = Positive(target, value) },
+                "viaplating" => options with { ViaPlatingThickness = Positive(target, value) },
+                _ => throw new InvalidOperationException(
+                    $"Stackup target '{parts[1]}' is not known; use copperThickness, boardThickness, viaPlating, layer<n>.thickness or gap<n>.thickness|permittivity|lossTangent.")
+            };
+            return (options, frequencyHz);
+        }
+        if (parts.Length != 3) throw new InvalidOperationException($"Target '{target}' is not stackup.<property> or stackup.<layer|gap><n>.<property>.");
+        string which = parts[1].ToLowerInvariant();
+        string property = parts[2].ToLowerInvariant();
+        bool layer = which.StartsWith("layer"), gap = which.StartsWith("gap");
+        if (!layer && !gap || !int.TryParse(which[(layer ? 5 : 3)..], out int n) || n < 1)
+            throw new InvalidOperationException($"Target '{target}': expected layer<n> or gap<n> with n ≥ 1.");
+        if (layer)
+        {
+            if (property != "thickness") throw new InvalidOperationException($"Layer target '{parts[2]}' is not known; use thickness.");
+            return (options with { LayerThickness = With(options.LayerThickness, n, Positive(target, value)) }, frequencyHz);
+        }
+        options = property switch
+        {
+            "thickness" => options with { DielectricGapThickness = With(options.DielectricGapThickness, n, Positive(target, value)) },
+            "permittivity" => options with { DielectricGapPermittivity = With(options.DielectricGapPermittivity, n, Positive(target, value)) },
+            "losstangent" => options with { DielectricGapLossTangent = With(options.DielectricGapLossTangent, n, value >= 0 ? value : throw new InvalidOperationException($"{target} must not be negative.")) },
+            _ => throw new InvalidOperationException($"Gap target '{parts[2]}' is not known; use thickness, permittivity or lossTangent.")
+        };
+        return (options, frequencyHz);
+    }
+
+    private static double Positive(string target, double value) =>
+        value > 0 ? value : throw new InvalidOperationException($"{target} must be positive.");
+
+    private static Dictionary<int, double> With(IReadOnlyDictionary<int, double>? map, int key, double value)
+    {
+        var copy = map is null ? new Dictionary<int, double>() : new Dictionary<int, double>(map);
+        copy[key] = value;
+        return copy;
+    }
+
+    /// <summary>The mesh options a stackup record stands for: per-layer copper, per-gap
+    /// thickness and materials indexed by (upper layer order − 1) as the project stores them.</summary>
+    public static NetMeshOptions ToMeshOptions(PcbStackupSettings stackup, int copperLayers, double targetEdgeLength,
+        string copperMaterial) => new()
+    {
+        TargetEdgeLength = targetEdgeLength,
+        CopperThickness = stackup.CopperThickness,
+        CopperMaterialName = copperMaterial,
+        LayerThickness = stackup.CopperLayerThicknesses.Select((t, i) => (i + 1, t)).ToDictionary(x => x.Item1, x => x.Item2),
+        DefaultDielectricThickness = stackup.BoardThickness /
+                                     Math.Max(1, stackup.DielectricGapThicknesses.Count > 0 ? stackup.DielectricGapThicknesses.Count : copperLayers - 1),
+        DielectricGapThickness = stackup.DielectricGapThicknesses.Select((t, i) => (i + 1, t)).ToDictionary(x => x.Item1, x => x.Item2),
+        DielectricGapPermittivity = stackup.DielectricGapPermittivities.Select((e, i) => (i + 1, e)).ToDictionary(x => x.Item1, x => x.Item2),
+        DielectricGapLossTangent = stackup.DielectricGapLossTangents.Select((d, i) => (i + 1, d)).ToDictionary(x => x.Item1, x => x.Item2)
     };
 }
 
@@ -93,9 +253,12 @@ public sealed class SweepSpec
 /// electricalConductivity, relativePermittivity, relativePermeability, density, youngsModulus,
 /// poissonRatio, emissivity, dielectricStrength, resistivityTemperatureCoefficient.</item>
 /// <item><c>mesh:&lt;body&gt;.targetEdgeLength</c> — re-meshes the body.</item>
-/// <item><c>geometry:&lt;body&gt;.sizeX|sizeY|sizeZ</c> — a box body's dimension; re-meshes.</item>
+/// <item><c>geometry:&lt;body&gt;.sizeX|sizeY|sizeZ</c> — a box body's dimension;
+/// <c>.radius|height</c> — a cylinder body's; <c>.scale|scaleX|scaleY|scaleZ</c> — any
+/// geometry scaled about the corner of its bounding box nearest the origin (a primitive
+/// stays where it was built). Each re-meshes.</item>
 /// <item><c>environment.ambientTemperature</c></item>
-/// <item><c>settings.duration|timeStep|initialTemperature|minFrequency|maxFrequency</c></item>
+/// <item><c>settings.duration|timeStep|initialTemperature|tolerance|minFrequency|maxFrequency|pointCount|modeCount</c></item>
 /// </list>
 /// </summary>
 public static class ProjectTargets
@@ -161,20 +324,7 @@ public static class ProjectTargets
             {
                 var body = Body(project, name);
                 var geometry = body.Geometry ?? throw new InvalidOperationException($"Body '{name}' has no geometry.");
-                if (geometry.Vertices.Count != 8 || geometry.Triangles.Count != 12)
-                    throw new InvalidOperationException(
-                        $"Body '{name}' is not a box primitive ({geometry.Vertices.Count} vertices); only a box's size can be swept.");
-                var bounds = Aabb.FromPoints(geometry.Vertices);
-                var size = bounds.Max - bounds.Min;
-                double sx = size.X, sy = size.Y, sz = size.Z;
-                switch (property.ToLowerInvariant())
-                {
-                    case "sizex": sx = value; break;
-                    case "sizey": sy = value; break;
-                    case "sizez": sz = value; break;
-                    default: throw new InvalidOperationException($"Geometry target '{property}' is not known; use sizeX, sizeY or sizeZ.");
-                }
-                body.Geometry = PrimitiveFactory.CreateBox(sx, sy, sz);
+                body.Geometry = SetGeometry(name, geometry, property, value);
                 body.Mesh = null;
                 return settings;
             }
@@ -194,8 +344,10 @@ public static class ProjectTargets
                     "duration" => settings with { Duration = value },
                     "timestep" => settings with { TimeStep = value },
                     "initialtemperature" => settings with { InitialTemperature = value },
+                    "tolerance" => settings with { Tolerance = value },
                     "minfrequency" => settings with { MinFrequency = value },
                     "maxfrequency" => settings with { MaxFrequency = value },
+                    "pointcount" => settings with { PointCount = (int)Math.Round(value) },
                     "modecount" => settings with { ModeCount = (int)Math.Round(value) },
                     _ => throw new InvalidOperationException($"Setting '{property}' is not known.")
                 };
@@ -208,6 +360,70 @@ public static class ProjectTargets
     private static Body Body(SimProject project, string name) =>
         project.Bodies.FirstOrDefault(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase))
         ?? throw new InvalidOperationException($"No body named '{name}'. Bodies: {string.Join(", ", project.Bodies.Select(b => b.Name))}.");
+
+    /// <summary>A box's size, a cylinder's radius or height, or a scale of any geometry.</summary>
+    internal static TriangleMesh SetGeometry(string bodyName, TriangleMesh geometry, string property, double value)
+    {
+        string key = property.ToLowerInvariant();
+        var bounds = Aabb.FromPoints(geometry.Vertices);
+        var size = bounds.Max - bounds.Min;
+        switch (key)
+        {
+            case "sizex" or "sizey" or "sizez":
+            {
+                if (geometry.Vertices.Count != 8 || geometry.Triangles.Count != 12)
+                    throw new InvalidOperationException(
+                        $"Body '{bodyName}' is not a box primitive ({geometry.Vertices.Count} vertices); use radius|height for a cylinder or scale for any geometry.");
+                double sx = key == "sizex" ? value : size.X, sy = key == "sizey" ? value : size.Y, sz = key == "sizez" ? value : size.Z;
+                return PrimitiveFactory.CreateBox(sx, sy, sz);
+            }
+            case "radius" or "height":
+            {
+                var cylinder = AsCylinder(geometry)
+                               ?? throw new InvalidOperationException(
+                                   $"Body '{bodyName}' is not a cylinder primitive ({geometry.Vertices.Count} vertices); use sizeX|Y|Z for a box or scale for any geometry.");
+                double r = key == "radius" ? value : cylinder.Radius, h = key == "height" ? value : cylinder.Height;
+                return PrimitiveFactory.CreateCylinder(r, h, cylinder.Segments);
+            }
+            case "scale" or "scalex" or "scaley" or "scalez":
+            {
+                if (!(value > 0)) throw new InvalidOperationException($"A scale must be positive, not {value}.");
+                var s = new Vector3D(key is "scale" or "scalex" ? value : 1, key is "scale" or "scaley" ? value : 1, key is "scale" or "scalez" ? value : 1);
+                var origin = bounds.Min;
+                var vertices = geometry.Vertices.Select(v => new Vector3D(
+                    origin.X + (v.X - origin.X) * s.X, origin.Y + (v.Y - origin.Y) * s.Y, origin.Z + (v.Z - origin.Z) * s.Z)).ToList();
+                return new TriangleMesh(vertices, geometry.Triangles, geometry.TriangleFaceIds);
+            }
+            default:
+                throw new InvalidOperationException(
+                    $"Geometry target '{property}' is not known; use sizeX|sizeY|sizeZ (box), radius|height (cylinder) or scale|scaleX|scaleY|scaleZ.");
+        }
+    }
+
+    /// <summary>Recognises <see cref="PrimitiveFactory.CreateCylinder"/>'s layout — two rings of n
+    /// vertices and two centres, 4n triangles on faces 0, 1, 2, the rings at one radius about the
+    /// axis — and reads its radius, height and segment count.</summary>
+    private static (double Radius, double Height, int Segments)? AsCylinder(TriangleMesh geometry)
+    {
+        int n = (geometry.Vertices.Count - 2) / 2;
+        if (n < 3 || geometry.Vertices.Count != 2 * n + 2 || geometry.Triangles.Count != 4 * n) return null;
+        if (geometry.TriangleFaceIds.Any(f => f is < 0 or > 2)) return null;
+        var bottom = geometry.Vertices[2 * n];
+        var top = geometry.Vertices[2 * n + 1];
+        double height = top.Z - bottom.Z;
+        if (!(height > 0) || bottom.X != top.X || bottom.Y != top.Y) return null;
+        double radius = Math.Sqrt(Math.Pow(geometry.Vertices[0].X - bottom.X, 2) + Math.Pow(geometry.Vertices[0].Y - bottom.Y, 2));
+        if (!(radius > 0)) return null;
+        double tol = 1e-9 * Math.Max(radius, height);
+        for (int i = 0; i < 2 * n; i++)
+        {
+            var v = geometry.Vertices[i];
+            double r = Math.Sqrt(Math.Pow(v.X - bottom.X, 2) + Math.Pow(v.Y - bottom.Y, 2));
+            double z = i < n ? bottom.Z : top.Z;
+            if (Math.Abs(r - radius) > tol || Math.Abs(v.Z - z) > tol) return null;
+        }
+        return (radius, height, n);
+    }
 
     private static BoundaryCondition SetCondition(BoundaryCondition bc, string property, double value)
     {
@@ -257,6 +473,11 @@ public sealed class ImpedanceSpec
     public string Mode { get; set; } = "OneAtATime";
     public List<SweepParameterSpec>? Parameters { get; set; }
     public int PanelsPerTrace { get; set; } = 48;
+
+    /// <summary>Monte Carlo: the number of random points, the seed, and [low, high] per output for the yield.</summary>
+    public int Samples { get; set; } = 100;
+    public int Seed { get; set; } = 1;
+    public Dictionary<string, double[]>? Limits { get; set; }
 
     public static ImpedanceSpec Load(string path)
     {

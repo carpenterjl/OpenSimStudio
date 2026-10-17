@@ -166,6 +166,11 @@ public sealed class Body
 /// <summary>The root document a user edits: bodies, settings and the latest results.</summary>
 public sealed class SimProject
 {
+    /// <summary>The file format this project was last saved in (<see cref="Persistence.ProjectSerializer.CurrentFormatVersion"/>);
+    /// 0 for a file written before the version existed. Every addition so far has been
+    /// nullable, so any version loads — the number says which fields a file can carry.</summary>
+    public int FormatVersion { get; set; }
+
     public string Name { get; set; } = "Untitled Project";
 
     /// <summary>
@@ -192,6 +197,10 @@ public sealed class SimProject
     /// <summary>How the bodies are joined when several are solved together (contact
     /// conductance, gap tolerance). Null — every older project — means the defaults.</summary>
     public AssemblySettings? Assembly { get; set; }
+
+    /// <summary>The analysis settings (transient clock, AC band, modal count, …) the
+    /// application last solved with. Null — every older project — means the defaults.</summary>
+    public SolverSettings? Solver { get; set; }
 
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
     public List<Body> Bodies { get; } = new();

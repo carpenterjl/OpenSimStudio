@@ -7,10 +7,22 @@ using OpenSim.Solvers;
 
 namespace OpenSim.Cli;
 
-/// <summary>Solver settings the project file does not carry (the app keeps them in its
-/// panels), given on the command line instead.</summary>
+/// <summary>The solver settings of one run: the project's saved <see cref="SolverSettings"/>
+/// as the defaults (<see cref="FromProject"/>), overridden by the command line or a job file.</summary>
 public sealed record StudySettings
 {
+    /// <summary>The settings a project was saved with; a project without them (every older
+    /// file) gives the defaults below.</summary>
+    public static StudySettings FromProject(SolverSettings? saved) => saved is null
+        ? new StudySettings()
+        : new StudySettings
+        {
+            InitialTemperature = saved.InitialTemperature, Duration = saved.Duration, TimeStep = saved.TimeStep,
+            Integrator = saved.Integrator, Tolerance = saved.Tolerance, Capacity = saved.Capacity,
+            MinFrequency = saved.MinFrequency, MaxFrequency = saved.MaxFrequency, PointCount = saved.PointCount,
+            ModeCount = saved.ModeCount, OpenBoundary = saved.OpenBoundary, EnvironmentSteady = saved.EnvironmentSteady
+        };
+
     public double InitialTemperature { get; init; } = 293.15;
     public double Duration { get; init; } = 10;
     public double TimeStep { get; init; } = 0.1;

@@ -59,6 +59,45 @@ public partial class SolveViewModel : ObservableObject
     /// body extent / 24, coarsened to the cell budget — the choice is logged).</summary>
     [ObservableProperty] private double _cfdCellSize;
 
+    /// <summary>The panel's analysis settings as the project saves them (FU-46), so the
+    /// command line solves the project the way the panel last did. The open-boundary flag
+    /// has no panel control and keeps whatever the project already carries.</summary>
+    public SolverSettings ToSolverSettings() => new()
+    {
+        InitialTemperature = InitialTemperature,
+        Duration = TransientDuration,
+        TimeStep = TransientTimeStep,
+        Integrator = (TimeIntegrator)Math.Clamp(TransientIntegratorIndex, 0, 2),
+        Tolerance = TransientTolerance,
+        Capacity = (ThermalCapacity)Math.Clamp(TransientCapacityIndex, 0, 2),
+        MinFrequency = AcMinFrequency,
+        MaxFrequency = AcMaxFrequency,
+        PointCount = AcPointCount,
+        ModeCount = ModeCount,
+        OpenBoundary = _session.Project.Solver?.OpenBoundary ?? false,
+        EnvironmentSteady = EnvironmentSteadyState,
+        JouleTransient = JouleTransient
+    };
+
+    /// <summary>Sets the panel from a loaded project's settings; null (an older project)
+    /// leaves the panel as it is.</summary>
+    public void LoadSolverSettings(SolverSettings? saved)
+    {
+        if (saved is null) return;
+        InitialTemperature = saved.InitialTemperature;
+        TransientDuration = saved.Duration;
+        TransientTimeStep = saved.TimeStep;
+        TransientIntegratorIndex = (int)saved.Integrator;
+        TransientTolerance = saved.Tolerance;
+        TransientCapacityIndex = (int)saved.Capacity;
+        AcMinFrequency = saved.MinFrequency;
+        AcMaxFrequency = saved.MaxFrequency;
+        AcPointCount = saved.PointCount;
+        ModeCount = saved.ModeCount;
+        EnvironmentSteadyState = saved.EnvironmentSteady;
+        JouleTransient = saved.JouleTransient;
+    }
+
     [RelayCommand]
     private async Task SolveAsync()
     {

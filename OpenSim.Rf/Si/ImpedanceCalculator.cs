@@ -319,18 +319,7 @@ public static class ImpedanceCalculator
         double R(int i, int j) => r is not null ? r[i, j] : i == j ? rlgc.ResistancePerMeter(i, f) : 0;
         double L(int i, int j) => rlgc.InductanceHenriesPerMeter[i, j] + (lInternal is not null ? lInternal[i, j] : 0);
 
-        LineMode Mode(string name, double rm, double lm, double cm, double gm)
-        {
-            var series = new Complex(rm, w * lm);
-            var shunt = new Complex(gm, w * cm);
-            var z = Complex.Sqrt(series / shunt);
-            var gamma = Complex.Sqrt(series * shunt);
-            double beta = gamma.Imaginary;
-            double conductor = Complex.Sqrt(series * new Complex(0, w * cm)).Real;
-            double dielectric = Complex.Sqrt(new Complex(0, w * lm) * shunt).Real;
-            return new LineMode(name, z.Real, Math.Pow(beta * C0 / w, 2), beta / w,
-                conductor * NeperToDb, dielectric * NeperToDb, rm, lm, cm, gm);
-        }
+        LineMode Mode(string name, double rm, double lm, double cm, double gm) => LineModeOf(name, rm, lm, cm, gm, w);
 
         var modes = new List<LineMode>();
         double? nearEnd = null, farEnd = null;
@@ -398,6 +387,36 @@ public static class ImpedanceCalculator
             FarEndCouplingSecondsPerMeter = farEnd,
             Assumptions = assumptions
         };
+    }
+
+    /// <summary>One mode from its per-unit-length r, l, c, g at ω: Z = √(Z′/Y′), γ = √(Z′Y′),
+    /// ε_eff = (βc₀/ω)², the conductor and dielectric losses as the attenuation each would
+    /// give alone.</summary>
+    internal static LineMode LineModeOf(string name, double rm, double lm, double cm, double gm, double w)
+    {
+        var series = new Complex(rm, w * lm);
+        var shunt = new Complex(gm, w * cm);
+        var z = Complex.Sqrt(series / shunt);
+        var gamma = Complex.Sqrt(series * shunt);
+        double beta = gamma.Imaginary;
+        double conductor = Complex.Sqrt(series * new Complex(0, w * cm)).Real;
+        double dielectric = Complex.Sqrt(new Complex(0, w * lm) * shunt).Real;
+        return new LineMode(name, z.Real, Math.Pow(beta * C0 / w, 2), beta / w,
+            conductor * NeperToDb, dielectric * NeperToDb, rm, lm, cm, gm);
+    }
+
+    /// <summary>The single-trace mode of a 1-conductor extraction at <paramref name="frequencyHz"/>:
+    /// the same R(f), L + ΔL(f), C(f), G(f) the calculator reads for a lone trace.</summary>
+    internal static LineMode SingleMode(RlgcResult rlgc, double frequencyHz)
+    {
+        double f = frequencyHz, w = 2 * Math.PI * f;
+        var r = rlgc.ResistanceMatrixOhmsPerMeter?.Invoke(f);
+        var lInternal = rlgc.InternalInductanceHenriesPerMeter?.Invoke(f);
+        var c = rlgc.CapacitancePerMeter(f);
+        var g = rlgc.ConductancePerMeter(f);
+        double rm = r is not null ? r[0, 0] : rlgc.ResistancePerMeter(0, f);
+        double lm = rlgc.InductanceHenriesPerMeter[0, 0] + (lInternal is not null ? lInternal[0, 0] : 0);
+        return LineModeOf("single", rm, lm, c[0, 0], g[0, 0], w);
     }
 
     /// <summary>

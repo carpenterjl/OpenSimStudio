@@ -107,6 +107,76 @@ public class ParameterSweepTests
         Assert.Contains("1 failed", string.Join("\n", result.Describe()));
     }
 
+    /// <summary>
+    /// FU-46: the Monte Carlo plan. The draws are a fixed function of the seed; a uniform
+    /// parameter's sample mean and variance sit where the closed forms put them (mean
+    /// (lo + hi)/2, variance (hi − lo)²/12, each within five standard errors); a normal one's
+    /// sample σ is the range/6 it was asked for; independent draws add variances: for
+    /// y = 2a + 3b, Var y = 4·Var a + 9·Var b; and the yield is the fraction of samples inside.
+    /// </summary>
+    [Fact]
+    public void MonteCarlo_IsDeterministicBySeed_AndItsMomentsAreTheClosedForms()
+    {
+        const int n = 4000;
+        var plan = new SweepPlan { Parameters = new[] { A, B }, Mode = SweepMode.MonteCarlo, Samples = n, Seed = 7 };
+        Assert.Equal(n + 1, plan.Count);
+        var points = plan.Points().ToList();
+        Assert.Equal(n + 1, points.Count);
+        Assert.Equal((2.0, 10.0), (points[0]["a"], points[0]["b"]));             // the nominal heads the plan
+        Assert.False(points[0].Sampled);
+        Assert.All(points.Skip(1), p => { Assert.True(p.Sampled); Assert.InRange(p["a"], 1, 3); Assert.InRange(p["b"], 9, 11); });
+        var again = plan.Points().ToList();
+        Assert.Equal(points.Select(p => p["a"]), again.Select(p => p["a"]));      // the same seed, the same points
+        Assert.NotEqual(points[1]["a"], (plan with { Seed = 8 }).Points().ElementAt(1)["a"]);
+
+        var result = ParameterSweep.Run(plan, Linear);
+        _out.WriteLine(string.Join("\n", result.Describe()));
+        Assert.Equal(0, result.Failures);
+        Assert.Equal(34.0, result.Nominal()!.Outputs["y"], 12);
+        Assert.Empty(result.Sensitivities());
+
+        // a ~ U(1, 3): mean 2, variance 4/12; the sample mean has standard error σ/√n and the
+        // sample variance ≈ σ²·√(2/(n − 1)); five of each is the band.
+        var ya = result.Statistics("z");                                           // z = a·b, just to exercise the names
+        Assert.Equal(n, ya.Count);
+        double sigmaA = Math.Sqrt(4.0 / 12), sigmaB = Math.Sqrt(4.0 / 12);
+        var a = result.Rows.Where(r => r.Point.Sampled).Select(r => r.Point["a"]).ToList();
+        double meanA = a.Average();
+        double varA = a.Sum(v => (v - meanA) * (v - meanA)) / (n - 1);
+        Assert.Equal(2.0, meanA, 5 * sigmaA / Math.Sqrt(n));
+        Assert.Equal(sigmaA * sigmaA, varA, 5 * sigmaA * sigmaA * Math.Sqrt(2.0 / (n - 1)));
+
+        // y = 2a + 3b with a and b independent: Var y = 4·Var a + 9·Var b.
+        var y = result.Statistics("y");
+        double varY = 4 * sigmaA * sigmaA + 9 * sigmaB * sigmaB;
+        Assert.Equal(2 * 2 + 3 * 10, y.Mean, 5 * Math.Sqrt(varY / n));
+        Assert.Equal(varY, y.StandardDeviation * y.StandardDeviation, 5 * varY * Math.Sqrt(2.0 / (n - 1)));
+        Assert.True(y.Min <= y.Percentile5 && y.Percentile5 <= y.Percentile50 && y.Percentile50 <= y.Percentile95 && y.Percentile95 <= y.Max);
+        Assert.Contains("samples (seed 7)", string.Join("\n", result.Describe()));
+
+        // Yield: the fraction of samples with y inside the band, counted by hand.
+        double low = 30, high = 36;
+        double counted = result.Rows.Count(r => r.Point.Sampled && r.Outputs["y"] >= low && r.Outputs["y"] <= high) / (double)n;
+        Assert.Equal(counted, result.Yield("y", low, high), 15);
+        Assert.InRange(result.Yield("y", low, high), 0.3, 0.9);
+
+        // A normal parameter: σ = range/6 by default (±tolerance = ±3σ), or as given.
+        var normal = new SweepPlan
+        {
+            Parameters = new[] { B with { Distribution = SweepDistribution.Normal } },
+            Mode = SweepMode.MonteCarlo, Samples = n, Seed = 3
+        };
+        var b = normal.Points().Where(p => p.Sampled).Select(p => p["b"]).ToList();
+        double sigma = 2.0 / 6, meanB = b.Average();
+        double varB = b.Sum(v => (v - meanB) * (v - meanB)) / (n - 1);
+        Assert.Equal(10.0, meanB, 5 * sigma / Math.Sqrt(n));
+        Assert.Equal(sigma * sigma, varB, 5 * sigma * sigma * Math.Sqrt(2.0 / (n - 1)));
+        Assert.Equal(0.05, (B with { StandardDeviation = 0.05 }).Sigma);
+
+        Assert.Throws<InvalidOperationException>(() => (plan with { Samples = 0 }).Validate());
+        Assert.Throws<InvalidOperationException>(() => (B with { StandardDeviation = -1 }).Validate());
+    }
+
     [Fact]
     public void StudyReport_FromASolve_CarriesInputsResultsAndAssumptions()
     {

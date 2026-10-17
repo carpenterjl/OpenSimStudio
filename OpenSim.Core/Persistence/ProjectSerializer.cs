@@ -11,6 +11,10 @@ public sealed class ProjectSerializer
     public const string FileExtension = ".ossproj";
     public const string FileFilter = "OpenSim Studio project (*.ossproj)|*.ossproj";
 
+    /// <summary>The format this build writes: 1 = the original schema (unversioned files
+    /// read as 0), 2 = the solver settings and this number (FU-46).</summary>
+    public const int CurrentFormatVersion = 2;
+
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
@@ -20,6 +24,7 @@ public sealed class ProjectSerializer
 
     public void Save(SimProject project, string filePath)
     {
+        project.FormatVersion = CurrentFormatVersion;
         File.WriteAllText(filePath, JsonSerializer.Serialize(project, Options));
     }
 

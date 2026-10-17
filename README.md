@@ -59,6 +59,16 @@ dotnet run   --project OpenSim.App      # launch the app
 Example inputs for trying the PCB and STEP pipelines ship in the repository root
 (`Example_Gerbers.zip`, `Example_IPC-2581.cvg`, `Example_Model.step`, `Breakout_Board.xml`).
 
+The same solvers run without the UI from `OpenSim.Cli` (`opensim help`): `solve` a saved
+project with the settings it was saved with, `sweep` it over conditions, materials, mesh
+size and geometry (box sizes, cylinder radius and height, or a scale of any shape) in
+one-at-a-time, full-factorial, corner or Monte Carlo plans (mean, σ, percentiles, yield
+inside limits; the draws are a fixed function of the seed), `sweep` a board's net over its
+stackup — each run re-meshes the net and reports the pad-to-pad resistance and the trace's
+Z0/RLGC over the board's own reference planes — plus the `impedance` calculator, `spacing`
+checks, `emi` estimates and planar `magnetics`. Every command writes a report (Markdown and
+HTML) with its assumptions, CSV tables and the log, so a study is reproducible from a script.
+
 ## Design principles
 
 The priority order is explicit and non-negotiable:

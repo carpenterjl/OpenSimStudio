@@ -123,6 +123,45 @@ public class ProjectSerializerTests
         }
     }
 
+    /// <summary>FU-46: the solver settings and the format version round-trip; an older file
+    /// (no version, no settings) loads with version 0 and null settings — the defaults.</summary>
+    [Fact]
+    public void SolverSettings_RoundTrip_AndOldProjectsLoadWithoutThem()
+    {
+        var project = new SimProject
+        {
+            Name = "Clocked",
+            AnalysisType = "TransientThermal",
+            Solver = new SolverSettings
+            {
+                InitialTemperature = 320, Duration = 2, TimeStep = 0.5, Integrator = OpenSim.Core.Interfaces.TimeIntegrator.TrBdf2,
+                Tolerance = 0.02, Capacity = OpenSim.Core.Interfaces.ThermalCapacity.Lumped,
+                MinFrequency = 1e4, MaxFrequency = 1e7, PointCount = 9, ModeCount = 4,
+                OpenBoundary = true, EnvironmentSteady = true, JouleTransient = true
+            }
+        };
+        string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".ossproj");
+        try
+        {
+            var serializer = new ProjectSerializer();
+            serializer.Save(project, path);
+            Assert.Equal(ProjectSerializer.CurrentFormatVersion, project.FormatVersion);
+            var loaded = serializer.Load(path);
+            Assert.Equal(ProjectSerializer.CurrentFormatVersion, loaded.FormatVersion);
+            Assert.Equal(project.Solver, loaded.Solver);                       // record equality: every field
+
+            File.WriteAllText(path, """{ "name": "Old", "bodies": [] }""");
+            var old = serializer.Load(path);
+            Assert.Equal(0, old.FormatVersion);
+            Assert.Null(old.Solver);
+            Assert.Equal(10, new SolverSettings().Duration);                   // the defaults the panels started with
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void AssemblySettings_EnvironmentAndPerBodyHeatSource_RoundTrip()
     {

@@ -26,7 +26,8 @@ public static partial class CliRunner
         opensim — OpenSim Studio from the command line
 
         opensim solve <project.ossproj> [options]
-            Runs the project's analysis (or --analysis NAME) on its first solid body.
+            Runs the project's analysis (or --analysis NAME) on its first solid body. The
+            settings the project was saved with are the defaults; the options below override.
             --analysis NAME     Static, Electrical, Thermal, JouleCoupled, TransientThermal,
                                 Modal, AcElectrical, Electrostatic, EnvironmentThermal,
                                 ConjugateThermal (the project's saved CFD case and environment)
@@ -57,19 +58,37 @@ public static partial class CliRunner
 
         opensim sweep <job.json> [--out DIR]
             Runs the project at every point of a parameter plan and tabulates the outputs.
-            Job: { "project": "...", "analysis": "...", "mode": "OneAtATime|FullFactorial|Corners",
+            Job: { "project": "...", "analysis": "...",
+                   "mode": "OneAtATime|FullFactorial|Corners|MonteCarlo", "samples": 200, "seed": 1,
                    "parameters": [ { "name": "...", "target": "condition:hot.value", "values": [...] },
                                    { "name": "...", "target": "material:FR4.relativePermittivity",
-                                     "nominal": 4.4, "tolerancePercent": 10, "points": 3 } ],
-                   "outputs": [ "Max Temperature (K)" ] }
+                                     "nominal": 4.4, "tolerancePercent": 10, "points": 3,
+                                     "distribution": "Normal", "sigma": 0.1 } ],
+                   "outputs": [ "Max Temperature (K)" ],
+                   "limits": { "Max Temperature (K)": [0, 350] } }
             Targets: condition:<name>.value|.ambient, body:<name>.heatSourcePower,
                      material:<name>.<property>, mesh:<body>.targetEdgeLength,
-                     geometry:<body>.sizeX|sizeY|sizeZ, environment.ambientTemperature,
-                     settings.duration|timeStep|initialTemperature|minFrequency|maxFrequency
+                     geometry:<body>.sizeX|sizeY|sizeZ (box) | radius|height (cylinder) |
+                       scale|scaleX|scaleY|scaleZ (any geometry), environment.ambientTemperature,
+                     settings.duration|timeStep|initialTemperature|tolerance|minFrequency|
+                       maxFrequency|pointCount|modeCount
+            Monte Carlo draws each parameter uniformly over its range (or normally about its
+            nominal, sigma = range/6 unless given), reports mean, sigma, percentiles and the
+            yield inside each limit. The project's saved solver settings are the defaults.
+            A board instead of a project re-reads a net with the swept stackup at every
+            point: its pad-to-pad DC resistance, and its trace as a line (Z0, RLGC) over the
+            board's reference planes.
+            Job: { "board": { "path": "board.zip", "net": "CLK", "source": "U1.3", "sink": "R2.1",
+                              "rlgc": true, "frequencyHz": 1e9, "targetEdgeLength": 0 },
+                   "parameters": [ { "name": "t", "target": "stackup.copperThickness",
+                                     "nominal": 35e-6, "tolerancePercent": 20 } ] }
+            Board targets: stackup.copperThickness|boardThickness|viaPlating,
+                     stackup.layer<n>.thickness, stackup.gap<n>.thickness|permittivity|lossTangent,
+                     mesh.targetEdgeLength, settings.frequency, plus material:<name>.<property>
 
         opensim impedance <line.json> [--out DIR]
             The stackup and impedance calculator, optionally swept over the line's own
-            properties (stackup tolerances).
+            properties (stackup tolerances); "mode", "samples", "seed" and "limits" as in sweep.
             Job: { "line": { "structure": "Microstrip", "widthMeters": 3e-4, "heightMeters": 2e-4,
                              "relativePermittivity": 4.4, "thicknessMeters": 35e-6 },
                    "mode": "OneAtATime",
@@ -174,32 +193,38 @@ public static partial class CliRunner
                 : throw new UsageException($"--{key} takes {string.Join(", ", choices.Keys)}, not '{s}'.")
             : fallback;
 
-    private static StudySettings Settings(Dictionary<string, string> o) => new()
+    /// <summary>The run's settings: the project's saved ones where the command line says
+    /// nothing, the command line where it does.</summary>
+    private static StudySettings Settings(Dictionary<string, string> o, SolverSettings? saved)
     {
-        InitialTemperature = Number(o, "initial", 293.15),
-        Duration = Number(o, "duration", 10),
-        TimeStep = Number(o, "step", 0.1),
-        MaxFlowSteps = o.ContainsKey("max-steps") ? (int)Number(o, "max-steps", 4000) : null,
-        TransientMomentum = o.ContainsKey("momentum"),
-        Integrator = Choice(o, "integrator", TimeIntegrator.BackwardEuler, new()
+        var d = StudySettings.FromProject(saved);
+        return d with
         {
-            ["be"] = TimeIntegrator.BackwardEuler, ["trbdf2"] = TimeIntegrator.TrBdf2, ["adaptive"] = TimeIntegrator.Adaptive
-        }),
-        Tolerance = Number(o, "tolerance", 0.01),
-        Capacity = Choice(o, "capacity", ThermalCapacity.Automatic, new()
-        {
-            ["auto"] = ThermalCapacity.Automatic, ["consistent"] = ThermalCapacity.Consistent, ["lumped"] = ThermalCapacity.Lumped
-        }),
-        MinFrequency = Number(o, "fmin", 1e3),
-        MaxFrequency = Number(o, "fmax", 1e8),
-        PointCount = (int)Number(o, "points", 15),
-        ModeCount = (int)Number(o, "modes", 6),
-        OpenBoundary = o.ContainsKey("open"),
-        FluxRecovery = Recovery(o),
-        EnvironmentSteady = o.ContainsKey("steady"),
-        BodyName = o.GetValueOrDefault("body"),
-        Remesh = o.ContainsKey("remesh")
-    };
+            InitialTemperature = Number(o, "initial", d.InitialTemperature),
+            Duration = Number(o, "duration", d.Duration),
+            TimeStep = Number(o, "step", d.TimeStep),
+            MaxFlowSteps = o.ContainsKey("max-steps") ? (int)Number(o, "max-steps", 4000) : null,
+            TransientMomentum = o.ContainsKey("momentum"),
+            Integrator = Choice(o, "integrator", d.Integrator, new()
+            {
+                ["be"] = TimeIntegrator.BackwardEuler, ["trbdf2"] = TimeIntegrator.TrBdf2, ["adaptive"] = TimeIntegrator.Adaptive
+            }),
+            Tolerance = Number(o, "tolerance", d.Tolerance),
+            Capacity = Choice(o, "capacity", d.Capacity, new()
+            {
+                ["auto"] = ThermalCapacity.Automatic, ["consistent"] = ThermalCapacity.Consistent, ["lumped"] = ThermalCapacity.Lumped
+            }),
+            MinFrequency = Number(o, "fmin", d.MinFrequency),
+            MaxFrequency = Number(o, "fmax", d.MaxFrequency),
+            PointCount = (int)Number(o, "points", d.PointCount),
+            ModeCount = (int)Number(o, "modes", d.ModeCount),
+            OpenBoundary = o.ContainsKey("open") || d.OpenBoundary,
+            FluxRecovery = Recovery(o),
+            EnvironmentSteady = o.ContainsKey("steady") || d.EnvironmentSteady,
+            BodyName = o.GetValueOrDefault("body"),
+            Remesh = o.ContainsKey("remesh")
+        };
+    }
 
     /// <summary>--recover and --probe: null when neither is given.</summary>
     private static FluxRecoverySettings? Recovery(Dictionary<string, string> o)
@@ -246,7 +271,7 @@ public static partial class CliRunner
     private static int Solve(string projectPath, Dictionary<string, string> o, TextWriter stdout)
     {
         var project = new ProjectSerializer().Load(projectPath);
-        var settings = Settings(o);
+        var settings = Settings(o, project.Solver);
         var log = new List<string>();
         void Log(string line) { log.Add(line); stdout.WriteLine(line); }
         StudyRunner.MeshBodies(project, StudyRunner.DefaultMesher(), settings.Remesh, Log);
@@ -288,14 +313,47 @@ public static partial class CliRunner
     {
         var spec = SweepSpec.Load(jobPath);
         var plan = spec.Plan();
-        var baseSettings = spec.Settings ?? new StudySettings();
+        stdout.WriteLine($"Sweep '{Path.GetFileName(jobPath)}': {plan.Count} run(s), {plan.Mode}.");
+        var progress = new Progress<(int Done, int Total)>(p => stdout.WriteLine($"  run {p.Done} of {p.Total}"));
+        StudyReport? nominal;
+        string title;
+        SweepResult result;
+        if (spec.Board is { } board)
+        {
+            result = SweepBoard(spec, board, plan, stdout, progress, out nominal);
+            title = $"{Path.GetFileNameWithoutExtension(board.Path)} — board stackup sweep";
+        }
+        else
+        {
+            result = SweepProject(spec, plan, progress, out nominal);
+            title = $"{Path.GetFileNameWithoutExtension(spec.Project)} — parameter sweep";
+        }
+
+        string dir = OutDir(jobPath, o, "-sweep");
+        File.WriteAllText(Path.Combine(dir, "sweep.csv"), result.ToCsv());
+        var report = SweepReport(title, result, spec.Parameters, nominal, spec.Limits);
+        File.WriteAllText(Path.Combine(dir, "sweep-report.md"), report.ToMarkdown());
+        File.WriteAllText(Path.Combine(dir, "sweep-report.html"), report.ToHtml());
+        if (plan.Mode == SweepMode.MonteCarlo)
+            File.WriteAllText(Path.Combine(dir, "sweep-statistics.json"), StatisticsJson(result, spec.Limits));
+        foreach (var line in result.Describe()) stdout.WriteLine(line);
+        foreach (var line in YieldLines(result, spec.Limits)) stdout.WriteLine(line);
+        foreach (var row in result.Rows.Where(r => !r.Succeeded))
+            stdout.WriteLine($"  run {row.Point.Index} failed: {row.Error}");
+        stdout.WriteLine($"Results written to {dir}");
+        return result.Failures == 0 ? 0 : 2;
+    }
+
+    /// <summary>The project sweep: a fresh load per run with the point's values applied, the
+    /// project's saved solver settings as the defaults the job may override.</summary>
+    private static SweepResult SweepProject(SweepSpec spec, SweepPlan plan, IProgress<(int, int)> progress, out StudyReport? nominal)
+    {
         var serializer = new ProjectSerializer();
+        var baseSettings = spec.Settings ?? StudySettings.FromProject(serializer.Load(spec.Project).Solver);
         var materials = new MaterialLibrary();
         var mesher = StudyRunner.DefaultMesher();
         var targets = spec.Parameters.ToDictionary(p => p.Name, p => p.Target, StringComparer.OrdinalIgnoreCase);
-        StudyRun? nominal = null;
-
-        stdout.WriteLine($"Sweep '{Path.GetFileName(jobPath)}': {plan.Count} run(s), {plan.Mode}.");
+        StudyReport? first = null;
         var result = ParameterSweep.Run(plan, values =>
         {
             // A fresh project per run: nothing carries over from the last point.
@@ -307,35 +365,170 @@ public static partial class CliRunner
             var lines = new List<string>();
             StudyRunner.MeshBodies(project, mesher, settings.Remesh, lines.Add);
             var run = StudyRunner.Solve(project, spec.Analysis, materials, settings, lines.Add, materialOverrides: overrides);
-            nominal ??= run;
-            var outputs = StudyRunner.Outputs(run);
-            if (spec.Outputs is { Count: > 0 } wanted)
-            {
-                var missing = wanted.Where(w => !outputs.ContainsKey(w)).ToList();
-                if (missing.Count > 0)
-                    throw new InvalidOperationException($"Output(s) not produced: {string.Join(", ", missing)}. Available: {string.Join(", ", outputs.Keys)}.");
-                outputs = wanted.ToDictionary(w => w, w => outputs[w]);
-            }
-            return outputs;
-        }, new Progress<(int Done, int Total)>(p => stdout.WriteLine($"  run {p.Done} of {p.Total}")));
-
-        string dir = OutDir(jobPath, o, "-sweep");
-        File.WriteAllText(Path.Combine(dir, "sweep.csv"), result.ToCsv());
-        var report = SweepReport($"{Path.GetFileNameWithoutExtension(spec.Project)} — parameter sweep", result,
-            spec.Parameters, nominal?.Report);
-        File.WriteAllText(Path.Combine(dir, "sweep-report.md"), report.ToMarkdown());
-        File.WriteAllText(Path.Combine(dir, "sweep-report.html"), report.ToHtml());
-        foreach (var line in result.Describe()) stdout.WriteLine(line);
-        foreach (var row in result.Rows.Where(r => !r.Succeeded))
-            stdout.WriteLine($"  run {row.Point.Index} failed: {row.Error}");
-        stdout.WriteLine($"Results written to {dir}");
-        return result.Failures == 0 ? 0 : 2;
+            first ??= run.Report;
+            return Select(StudyRunner.Outputs(run), spec.Outputs);
+        }, progress);
+        nominal = first;
+        return result;
     }
 
-    /// <summary>A report of a sweep: the plan, the ranges, the sensitivities, every run, and
-    /// the nominal run's assumptions.</summary>
+    /// <summary>
+    /// The board sweep: the board read once, and at every point the net meshed again with
+    /// that point's stackup (copper, gaps, plating) and solved for the DC resistance between
+    /// the two pads; with <see cref="BoardSweepSpec.Rlgc"/>, the net's trace as a line over
+    /// the board's own reference planes at the same stackup. Material and condition targets
+    /// apply to the run's one-body project as in a project sweep.
+    /// </summary>
+    private static SweepResult SweepBoard(SweepSpec spec, BoardSweepSpec board, SweepPlan plan, TextWriter stdout,
+        IProgress<(int, int)> progress, out StudyReport? nominal)
+    {
+        var pcb = Ipc2581Reader.Matches(board.Path) ? new Ipc2581Reader().Read(board.Path) : new PcbBoardReader().Read(board.Path);
+        stdout.WriteLine($"Board: {pcb.Nets.Count} nets, {pcb.Islands.Count} copper islands, {pcb.Pads.Count} pads" +
+                         (pcb.Warnings.Count > 0 ? $", {pcb.Warnings.Count} import note(s)." : "."));
+        var net = pcb.Nets.FirstOrDefault(n => string.Equals(n.Name, board.Net, StringComparison.OrdinalIgnoreCase))
+                  ?? pcb.Nets.FirstOrDefault(n => string.Equals($"Net {n.Id}", board.Net, StringComparison.OrdinalIgnoreCase))
+                  ?? throw new InvalidOperationException(
+                      $"No net named '{board.Net}'. Nets: {string.Join(", ", pcb.Nets.Select(n => n.Name ?? $"Net {n.Id}"))}.");
+        int copperLayers = pcb.Islands.Count == 0 ? 1 : pcb.Islands.Max(i => i.LayerOrder);
+        NetMeshOptions baseOptions;
+        if (board.Stackup is { } given)
+            baseOptions = BoardTargets.ToMeshOptions(given, copperLayers, board.TargetEdgeLength, board.CopperMaterial);
+        else
+        {
+            var file = BoardStackup.FromBoard(pcb);
+            baseOptions = new NetMeshOptions
+            {
+                TargetEdgeLength = board.TargetEdgeLength, CopperThickness = file.DefaultCopperThickness,
+                CopperMaterialName = board.CopperMaterial, LayerThickness = file.LayerThickness,
+                DefaultDielectricThickness = file.DefaultGapThickness, DielectricGapThickness = file.GapThickness,
+                DielectricGapPermittivity = file.GapPermittivity, DielectricGapLossTangent = file.GapLossTangent
+            };
+            stdout.WriteLine($"Stackup: {file.Source}.");
+        }
+        var materials = new MaterialLibrary();
+        var baseSettings = spec.Settings ?? new StudySettings();
+        var targets = spec.Parameters.ToDictionary(p => p.Name, p => p.Target, StringComparer.OrdinalIgnoreCase);
+        StudyReport? first = null;
+        var result = ParameterSweep.Run(plan, values =>
+        {
+            var options = baseOptions;
+            double frequency = board.FrequencyHz;
+            var deferred = new List<(string Target, double Value)>();
+            foreach (var (name, value) in values)
+            {
+                string target = targets[name];
+                if (BoardTargets.Handles(target)) (options, frequency) = BoardTargets.Apply(options, frequency, target, value);
+                else deferred.Add((target, value));
+            }
+
+            var meshed = new NetMesher().MeshNet(net, pcb.Pads, options);
+            var body = meshed.Body;
+            body.Material = materials.Materials.FirstOrDefault(m => m.Name == options.CopperMaterialName)
+                            ?? throw new InvalidOperationException($"The material library has no '{options.CopperMaterialName}'.");
+            var source = FindPad(meshed.Pads, board.Source, "source");
+            var sink = FindPad(meshed.Pads, board.Sink, "sink");
+            if (source.FaceId == sink.FaceId) throw new InvalidOperationException("The source and sink name the same pad.");
+            body.BoundaryConditions.Add(new VoltagePotential { Name = "Source", FaceIds = new[] { source.FaceId }, Volts = 1 });
+            body.BoundaryConditions.Add(new VoltagePotential { Name = "Sink", FaceIds = new[] { sink.FaceId }, Volts = 0 });
+            var project = new SimProject { Name = Path.GetFileNameWithoutExtension(board.Path), AnalysisType = "Electrical" };
+            project.Bodies.Add(body);
+            var settings = baseSettings;
+            var overrides = new Dictionary<string, Material>();
+            foreach (var (target, value) in deferred) settings = ProjectTargets.Apply(project, target, value, settings, overrides);
+
+            var lines = new List<string>();
+            var run = StudyRunner.Solve(project, "Electrical", materials, settings, lines.Add, materialOverrides: overrides);
+            var outputs = new Dictionary<string, double>(StudyRunner.Outputs(run));
+            var assumptions = new List<string>(meshed.Warnings)
+            {
+                $"Electrodes: source {source.Label}, sink {sink.Label}; 1 V between them, the pad faces as equipotentials."
+            };
+            if (board.Rlgc)
+            {
+                var material = overrides.GetValueOrDefault(body.Material.Name) ?? body.Material;
+                var line = BoardTraceLine.Extract(pcb, net, new BoardCoupledOptions
+                {
+                    Stackup = options.Stackup, CopperThicknessMeters = options.CopperThickness, Model = RlgcModel.Board,
+                    ConductivitySiemensPerMeter = material.ElectricalConductivity ?? 5.8e7
+                }, frequency);
+                if (line.FailureReason is not null) throw new InvalidOperationException("Trace line: " + line.FailureReason);
+                var mode = line.Mode!;
+                outputs["Z0 (Ω)"] = mode.ImpedanceOhms;
+                outputs["eps_eff"] = mode.EffectivePermittivity;
+                outputs["Delay (ps/in)"] = mode.DelaySecondsPerMeter * 1e12 * 0.0254;
+                outputs["Loss (dB/in)"] = mode.LossDbPerMeter * 0.0254;
+                outputs["R (Ω/m)"] = mode.ResistanceOhmsPerMeter;
+                outputs["L (nH/m)"] = mode.InductanceHenriesPerMeter * 1e9;
+                outputs["C (pF/m)"] = mode.CapacitanceFaradsPerMeter * 1e12;
+                outputs["Line length (mm)"] = line.LengthMeters * 1e3;
+                assumptions.Add($"Trace line at {frequency / 1e9:g4} GHz, board model (thickness, return-path loss, causal dielectric).");
+                assumptions.AddRange(line.Assumptions);
+            }
+            first ??= run.Report with { Assumptions = run.Report.Assumptions.Concat(assumptions).ToList() };
+            return Select(outputs, spec.Outputs);
+        }, progress);
+        nominal = first;
+        return result;
+    }
+
+    /// <summary>A pad by "component.pin" (case-insensitive), or the nearest pad centre to "x,y" in mm.</summary>
+    private static NetMesher.PadElectrode FindPad(IReadOnlyList<NetMesher.PadElectrode> pads, string spec, string role)
+    {
+        if (pads.Count == 0) throw new InvalidOperationException("The net has no pad electrodes to connect to.");
+        var byPin = pads.Where(p => p.ComponentRef is not null &&
+                                    string.Equals($"{p.ComponentRef}.{p.Pin}", spec, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (byPin.Count == 1) return byPin[0];
+        if (byPin.Count > 1) throw new InvalidOperationException($"The {role} '{spec}' names {byPin.Count} pads; give x,y in mm instead.");
+        var xy = spec.Split(',');
+        if (xy.Length == 2 && double.TryParse(xy[0], NumberStyles.Float, CultureInfo.InvariantCulture, out double x)
+                           && double.TryParse(xy[1], NumberStyles.Float, CultureInfo.InvariantCulture, out double y))
+            return pads.MinBy(p => Math.Pow(p.Center.X - x * 1e-3, 2) + Math.Pow(p.Center.Y - y * 1e-3, 2))!;
+        throw new InvalidOperationException(
+            $"The {role} '{spec}' is not a pad of the net. Pads: {string.Join("; ", pads.Select(p => p.Label))}.");
+    }
+
+    private static IReadOnlyDictionary<string, double> Select(IReadOnlyDictionary<string, double> outputs, List<string>? wanted)
+    {
+        if (wanted is not { Count: > 0 }) return outputs;
+        var missing = wanted.Where(w => !outputs.ContainsKey(w)).ToList();
+        if (missing.Count > 0)
+            throw new InvalidOperationException($"Output(s) not produced: {string.Join(", ", missing)}. Available: {string.Join(", ", outputs.Keys)}.");
+        return wanted.ToDictionary(w => w, w => outputs[w]);
+    }
+
+    private static IEnumerable<string> YieldLines(SweepResult result, Dictionary<string, double[]>? limits)
+    {
+        if (limits is null || result.Rows.Count == 0) yield break;
+        var ci = CultureInfo.InvariantCulture;
+        foreach (var (output, band) in limits)
+            yield return $"  Yield of {output} within [{band[0].ToString("g5", ci)}, {band[1].ToString("g5", ci)}]: " +
+                         $"{(result.Yield(output, band[0], band[1]) * 100).ToString("g4", ci)} %";
+    }
+
+    private static string StatisticsJson(SweepResult result, Dictionary<string, double[]>? limits)
+    {
+        var stats = new Dictionary<string, object>();
+        foreach (string output in result.OutputNames)
+        {
+            var s = result.Statistics(output);
+            var entry = new Dictionary<string, double>
+            {
+                ["samples"] = s.Count, ["mean"] = s.Mean, ["sigma"] = s.StandardDeviation, ["min"] = s.Min,
+                ["p5"] = s.Percentile5, ["p50"] = s.Percentile50, ["p95"] = s.Percentile95, ["max"] = s.Max
+            };
+            if (limits is not null && limits.TryGetValue(output, out var band))
+            {
+                entry["low"] = band[0]; entry["high"] = band[1]; entry["yield"] = result.Yield(output, band[0], band[1]);
+            }
+            stats[output] = entry;
+        }
+        return JsonSerializer.Serialize(stats, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>A report of a sweep: the plan, the ranges, the sensitivities (one at a time),
+    /// the statistics and yield (Monte Carlo), every run, and the nominal run's assumptions.</summary>
     public static StudyReport SweepReport(string title, SweepResult result, IReadOnlyList<SweepParameterSpec> specs,
-        StudyReport? nominal)
+        StudyReport? nominal, Dictionary<string, double[]>? limits = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var inputs = new List<(string, string)> { ("Plan", $"{result.Plan.Mode}, {result.Rows.Count} runs") };
@@ -371,16 +564,50 @@ public static partial class CliRunner
                 TableHeaders = new[] { "Output", "Parameter", "Slope", "% per % of nominal", "Range over the values" },
                 TableRows = sensitivities
             });
+        var assumptions = new List<string>
+        {
+            "Each run is an independent solve of the project with the listed values set; nothing carries over between runs."
+        };
+        if (result.Plan.Mode == SweepMode.MonteCarlo)
+        {
+            inputs.Add(("Samples", $"{result.Plan.Samples} random draws after the nominal, seed {result.Plan.Seed}; " +
+                                   string.Join(", ", result.Plan.Parameters.Select(p => p.Distribution == SweepDistribution.Normal
+                                       ? $"{p.Name} normal σ {p.Sigma.ToString("g4", ci)}"
+                                       : $"{p.Name} uniform [{p.Minimum.ToString("g5", ci)}, {p.Maximum.ToString("g5", ci)}]"))));
+            var statistics = result.OutputNames.Where(n => result.Rows.Any(r => r.Succeeded && r.Point.Sampled && r.Outputs.ContainsKey(n)))
+                .Select(result.Statistics).Select(s => (IReadOnlyList<string>)new[]
+                {
+                    s.Output, s.Count.ToString(ci), s.Mean.ToString("g6", ci), s.StandardDeviation.ToString("g5", ci),
+                    s.Min.ToString("g6", ci), s.Percentile5.ToString("g6", ci), s.Percentile50.ToString("g6", ci),
+                    s.Percentile95.ToString("g6", ci), s.Max.ToString("g6", ci)
+                }).ToList();
+            sections.Add(new("Statistics (Monte Carlo)")
+            {
+                TableHeaders = new[] { "Output", "Samples", "Mean", "σ", "Min", "P5", "P50", "P95", "Max" },
+                TableRows = statistics
+            });
+            if (limits is { Count: > 0 })
+                sections.Add(new("Yield")
+                {
+                    TableHeaders = new[] { "Output", "Low", "High", "Inside (%)" },
+                    TableRows = limits.Select(kv => (IReadOnlyList<string>)new[]
+                    {
+                        kv.Key, kv.Value[0].ToString("g6", ci), kv.Value[1].ToString("g6", ci),
+                        (result.Yield(kv.Key, kv.Value[0], kv.Value[1]) * 100).ToString("g4", ci)
+                    }).ToList()
+                });
+            assumptions.Add("Monte Carlo: every parameter is drawn independently of the others at each sample — uniform over its range, " +
+                            "or normal about its nominal with the stated σ (a sixth of the range unless given, so the tolerance band is ±3σ). " +
+                            "Statistics and yield are over the successful samples; the nominal row is not a draw, and a failed run counts as outside every limit. " +
+                            "The draws are a fixed function of the seed, so the same job gives the same points on any machine.");
+        }
+        else
+            assumptions.Add("Sensitivities are secant slopes between a parameter's smallest and largest value with the others at nominal.");
         sections.Add(new("Runs")
         {
             TableHeaders = new[] { "Run" }.Concat(result.Plan.Parameters.Select(p => p.Name)).Concat(result.OutputNames).Concat(new[] { "Error" }).ToList(),
             TableRows = runs
         });
-        var assumptions = new List<string>
-        {
-            "Each run is an independent solve of the project with the listed values set; nothing carries over between runs.",
-            "Sensitivities are secant slopes between a parameter's smallest and largest value with the others at nominal."
-        };
         if (nominal is not null) assumptions.AddRange(nominal.Assumptions);
         return new StudyReport
         {
@@ -414,12 +641,7 @@ public static partial class CliRunner
 
         if (spec.Parameters is { Count: > 0 })
         {
-            var plan = new SweepPlan
-            {
-                Parameters = spec.Parameters.Select(p => p.ToParameter()).ToList(),
-                Mode = Enum.TryParse<SweepMode>(spec.Mode, true, out var mode) ? mode
-                    : throw new InvalidOperationException($"Unknown sweep mode '{spec.Mode}'.")
-            };
+            var plan = SweepSpec.ParsePlan(spec.Parameters, spec.Mode, spec.Samples, spec.Seed);
             var targets = spec.Parameters.ToDictionary(p => p.Name, p => p.Target, StringComparer.OrdinalIgnoreCase);
             var result = ParameterSweep.Run(plan, values =>
             {
@@ -429,10 +651,13 @@ public static partial class CliRunner
             });
             File.WriteAllText(Path.Combine(dir, "impedance-sweep.csv"), result.ToCsv());
             var sweepReport = SweepReport($"{Path.GetFileNameWithoutExtension(jobPath)} — stackup tolerance sweep", result,
-                spec.Parameters, report);
+                spec.Parameters, report, spec.Limits);
             File.WriteAllText(Path.Combine(dir, "impedance-sweep-report.md"), sweepReport.ToMarkdown());
             File.WriteAllText(Path.Combine(dir, "impedance-sweep-report.html"), sweepReport.ToHtml());
+            if (plan.Mode == SweepMode.MonteCarlo)
+                File.WriteAllText(Path.Combine(dir, "impedance-statistics.json"), StatisticsJson(result, spec.Limits));
             foreach (var l in result.Describe()) stdout.WriteLine(l);
+            foreach (var l in YieldLines(result, spec.Limits)) stdout.WriteLine(l);
             if (result.Failures > 0)
             {
                 foreach (var row in result.Rows.Where(r => !r.Succeeded)) stdout.WriteLine($"  run {row.Point.Index} failed: {row.Error}");
