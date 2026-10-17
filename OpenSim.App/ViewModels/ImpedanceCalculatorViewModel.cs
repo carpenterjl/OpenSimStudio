@@ -53,6 +53,13 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
     /// <summary>Huray's sphere area per flat area.</summary>
     [ObservableProperty] private double _huraySurfaceRatio;
 
+    /// <summary>The catalog's foils (shared with the SI panel, files loaded there included).</summary>
+    public ObservableCollection<string> Foils => RoughnessChoice.FoilNames;
+
+    /// <summary>The data-sheet foil for the "Named foil" roughness model; its gauge follows
+    /// <see cref="CopperThicknessUm"/>.</summary>
+    [ObservableProperty] private string? _foil;
+
     /// <summary>Solve the trace as the trapezoid it is, side walls included
     /// (<see cref="RlgcModel.SideWalls"/>).</summary>
     [ObservableProperty] private bool _sideWallSolve;
@@ -81,7 +88,7 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
         UpperRelativePermittivity = UpperEpsR,
         UpperLossTangent = UpperTanD,
         FrequencyHz = FrequencyGhz * 1e9,
-        Model = RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio) with { SideWalls = SideWallSolve }
+        Model = RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio, Foil, CopperThicknessUm) with { SideWalls = SideWallSolve }
     };
 
     [RelayCommand]

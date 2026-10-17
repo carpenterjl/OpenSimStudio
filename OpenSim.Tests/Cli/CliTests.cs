@@ -522,6 +522,53 @@ public class CliTests : IDisposable
     }
 
     [Fact]
+    public void Impedance_TakesANamedFoil_AndTheCatalogLists()
+    {
+        // The catalog itself.
+        var (code, stdout, err) = Run("foils");
+        Assert.Equal(0, code);
+        Assert.Equal("", err);
+        Assert.Contains("Circuit Foil BF-TZA", stdout);
+        Assert.Contains("Source:", stdout);
+        (code, stdout, _) = Run("foils", "--name", "Rogers Rolled foil");
+        Assert.Equal(0, code);
+        Assert.Contains("RMS 0.4 µm typical", stdout);
+        Assert.DoesNotContain("BF-TZA", stdout);
+
+        // A job naming a foil: its roughness is on the line and in the report.
+        string job = Path.Combine(_dir, "foil.json");
+        File.WriteAllText(job, """
+            { "line": { "structure": "Microstrip", "widthMeters": 3e-4, "heightMeters": 2e-4, "thicknessMeters": 35e-6 },
+              "foil": "Circuit Foil BF-TZA", "panelsPerTrace": 24 }
+            """);
+        string outDir = Path.Combine(_dir, "foil-out");
+        (code, _, err) = Run("impedance", job, "--out", outDir);
+        Assert.Equal(0, code);
+        Assert.Equal("", err);
+        string report = File.ReadAllText(Path.Combine(outDir, "impedance-report.md"));
+        Assert.Contains("Cannonball from Circuit Foil BF-TZA 35 µm", report);
+
+        // A foils file beside the job adds a foil; an unknown name is a usage error.
+        File.WriteAllText(Path.Combine(_dir, "mine.json"), """
+            [ { "vendor": "Acme", "name": "X1", "gauges": [ { "thicknessMicrons": 35, "roughnessMicrons": 1.0 } ], "source": "Acme sheet" } ]
+            """);
+        File.WriteAllText(job, """
+            { "line": { "widthMeters": 3e-4, "heightMeters": 2e-4, "thicknessMeters": 35e-6 },
+              "foil": "Acme X1", "foils": "mine.json", "panelsPerTrace": 24 }
+            """);
+        (code, _, err) = Run("impedance", job, "--out", outDir);
+        Assert.Equal(0, code);
+        Assert.Contains("Cannonball from Acme X1", File.ReadAllText(Path.Combine(outDir, "impedance-report.md")));
+
+        File.WriteAllText(job, """
+            { "line": { "widthMeters": 3e-4, "heightMeters": 2e-4 }, "foil": "Acme X9", "panelsPerTrace": 24 }
+            """);
+        (code, _, err) = Run("impedance", job, "--out", outDir);
+        Assert.Equal(1, code);
+        Assert.Contains("No foil is named 'Acme X9'", err);
+    }
+
+    [Fact]
     public void Spacing_ChecksATwoNetGerberBoard()
     {
         string board = Path.Combine(_dir, "board");

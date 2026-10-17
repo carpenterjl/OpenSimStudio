@@ -470,6 +470,16 @@ public static class ProjectTargets
 public sealed class ImpedanceSpec
 {
     public LineSpec? Line { get; set; }
+
+    /// <summary>A copper foil by name from the <see cref="FoilCatalog"/> ("Circuit Foil BF-TZA"):
+    /// its data-sheet Rz for the line's copper thickness becomes the line's roughness by the
+    /// Cannonball stack. Null is the line's own model (smooth unless "model" says otherwise).</summary>
+    public string? Foil { get; set; }
+
+    /// <summary>A foils file (JSON array of foils) merged into the catalog before the lookup;
+    /// relative to the job file.</summary>
+    public string? Foils { get; set; }
+
     public string Mode { get; set; } = "OneAtATime";
     public List<SweepParameterSpec>? Parameters { get; set; }
     public int PanelsPerTrace { get; set; } = 48;

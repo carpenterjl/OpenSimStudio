@@ -29,6 +29,11 @@
                     <TextBox Text="{Binding HuraySurfaceRatio}" Margin="2,0,0,0"
                              ToolTip="Huray only: sphere surface area per flat area, from the foil's data sheet"/>
                 </UniformGrid>
+                <Label Content="Foil (data sheet)"/>
+                <ComboBox ItemsSource="{Binding Foils}" SelectedItem="{Binding Foil}"
+                          ToolTip="Named foil only: the vendor's published Rz for the copper thickness above, turned into Huray parameters by the Cannonball stack. Load your own foils file in the SI section."/>
+                <Label/>
+                <Label/>
                 <Label Content="Below: h [mm] / εr / tanδ"/>
                 <UniformGrid Columns="3">
                     <TextBox x:Name="ZcHeightBox" Text="{Binding HeightMm}" Margin="0,0,2,0"/>
@@ -102,6 +107,13 @@
                     <TextBox Text="{Binding SignalIntegrity.HuraySurfaceRatio}" Margin="2,0,0,0"
                              ToolTip="Huray only: sphere surface area per flat area, from the foil's data sheet"/>
                 </UniformGrid>
+                <Label Content="Foil (data sheet)"/>
+                <ComboBox ItemsSource="{Binding SignalIntegrity.Foils}" SelectedItem="{Binding SignalIntegrity.Foil}"
+                          ToolTip="Named foil only: the vendor's published Rz for the copper thickness above, turned into Huray parameters by the Cannonball stack"/>
+                <Button Content="Load foils file…" Command="{Binding SignalIntegrity.LoadFoilsCommand}" Margin="0,1"
+                        ToolTip="A JSON array of foils (vendor, name, gauges with Rz, the data sheet) added to the list; one with a built-in foil's vendor and name replaces it"/>
+                <TextBlock Text="{Binding SignalIntegrity.FoilStatus}" TextWrapping="Wrap" FontSize="11"
+                           VerticalAlignment="Center" Foreground="{DynamicResource TextFaintBrush}"/>
                 <Label Content="Length [mm]"/>
                 <TextBox x:Name="SiLengthBox" Text="{Binding SignalIntegrity.LineLengthMm}"/>
                 <Label Content="Signal"/>

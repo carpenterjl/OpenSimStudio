@@ -137,6 +137,15 @@ public partial class SignalIntegrityViewModel : ObservableObject
     /// <summary>Huray's sphere area per flat area.</summary>
     [ObservableProperty] private double _huraySurfaceRatio;
 
+    /// <summary>The catalog's foils (shared with the calculator).</summary>
+    public ObservableCollection<string> Foils => RoughnessChoice.FoilNames;
+
+    /// <summary>The data-sheet foil for the "Named foil" roughness model; its gauge follows
+    /// <see cref="CopperThicknessUm"/> (the wizard's copper, also for board nets).</summary>
+    [ObservableProperty] private string? _foil;
+
+    [ObservableProperty] private string _foilStatus = "";
+
     /// <summary>Solve the traces as the trapezoids they are, side walls included, instead of
     /// strips of effective width (<see cref="RlgcModel.SideWalls"/>).</summary>
     [ObservableProperty] private bool _sideWallSolve;
@@ -146,7 +155,28 @@ public partial class SignalIntegrityViewModel : ObservableObject
     [ObservableProperty] private bool _cornerDiscontinuities;
 
     private RlgcModel BoardModel() =>
-        RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio) with { SideWalls = SideWallSolve };
+        RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio, Foil, CopperThicknessUm) with { SideWalls = SideWallSolve };
+
+    /// <summary>Merge a foils file (a JSON array of foils, each with its vendor, name, gauges and
+    /// the data sheet it was read from) into the shared catalog, for this panel and the calculator.</summary>
+    [RelayCommand]
+    private void LoadFoils()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "Foils (JSON)|*.json|All files|*.*",
+            Title = "Copper foils file (a JSON array of foils)"
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            FoilStatus = RoughnessChoice.LoadFoilFile(dialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            FoilStatus = "Not loaded: " + ex.Message;
+        }
+    }
 
     // ------------------------------------------------------------------
     // IBIS driver (Stage S11): a nonlinear behavioral buffer replaces the Thevenin driver.

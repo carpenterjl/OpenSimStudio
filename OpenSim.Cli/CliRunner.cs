@@ -91,9 +91,16 @@ public static partial class CliRunner
             properties (stackup tolerances); "mode", "samples", "seed" and "limits" as in sweep.
             Job: { "line": { "structure": "Microstrip", "widthMeters": 3e-4, "heightMeters": 2e-4,
                              "relativePermittivity": 4.4, "thicknessMeters": 35e-6 },
+                   "foil": "Circuit Foil BF-TZA",        (optional: a catalog foil's data-sheet Rz
+                   "foils": "my-foils.json",             as Huray roughness; "foils" adds your own)
                    "mode": "OneAtATime",
                    "parameters": [ { "name": "w", "target": "WidthMeters", "nominal": 3e-4,
                                      "tolerancePercent": 10, "points": 3 } ] }
+
+        opensim foils [--foils FILE] [--name NAME]
+            The copper-foil catalog: each foil's published treated-side roughness per weight, the
+            Huray parameters the Cannonball stack makes of it, and the data sheet it was read from.
+            --foils FILE merges a JSON array of your own foils; --name shows one foil.
 
         opensim spacing <board.zip|folder|ipc2581.xml> --volts nets.csv [options]
             Clearance and creepage of the board's nets against a spacing table.
@@ -137,8 +144,9 @@ public static partial class CliRunner
         }
         try
         {
-            var options = ParseOptions(args.Skip(2));
-            return args[0].ToLowerInvariant() switch
+            string command = args[0].ToLowerInvariant();
+            var options = ParseOptions(args.Skip(command == "foils" ? 1 : 2));     // foils takes no positional argument
+            return command switch
             {
                 "solve" => Solve(Require(args, "a project file"), options, stdout),
                 "sweep" => Sweep(Require(args, "a sweep job file"), options, stdout),
@@ -146,6 +154,7 @@ public static partial class CliRunner
                 "spacing" => Spacing(Require(args, "a board"), options, stdout),
                 "emi" => Emi(Require(args, "an EMI job file"), options, stdout),
                 "magnetics" => Magnetics(Require(args, "a board"), options, stdout),
+                "foils" => Foils(options, stdout),
                 _ => Fail(stderr, $"Unknown command '{args[0]}'.{Environment.NewLine}{Usage}", 1)
             };
         }
@@ -624,6 +633,18 @@ public static partial class CliRunner
     {
         var spec = ImpedanceSpec.Load(jobPath);
         var line = spec.Line!;
+        if (spec.Foil is { Length: > 0 } foilName)
+        {
+            var catalog = new FoilCatalog();
+            if (spec.Foils is { Length: > 0 } foilsPath)
+                catalog = catalog.WithFile(Path.IsPathRooted(foilsPath)
+                    ? foilsPath
+                    : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(jobPath)) ?? ".", foilsPath));
+            CopperFoil foil;
+            try { foil = catalog.Require(foilName); }
+            catch (KeyNotFoundException ex) { throw new UsageException(ex.Message); }
+            line = line with { Model = line.Model with { Roughness = foil.Roughness(line.ThicknessMeters) } };
+        }
         string dir = OutDir(jobPath, o, "-impedance");
 
         var nominalReport = ImpedanceCalculator.Solve(line, spec.PanelsPerTrace);
@@ -669,6 +690,25 @@ public static partial class CliRunner
         return 0;
     }
 
+    // ---------------- foils ----------------
+
+    private static int Foils(Dictionary<string, string> o, TextWriter stdout)
+    {
+        var catalog = new FoilCatalog();
+        if (o.TryGetValue("foils", out var path)) catalog = catalog.WithFile(path);
+        IEnumerable<CopperFoil> foils = catalog.Foils;
+        if (o.TryGetValue("name", out var name))
+        {
+            try { foils = new[] { catalog.Require(name) }; }
+            catch (KeyNotFoundException ex) { throw new UsageException(ex.Message); }
+        }
+        stdout.WriteLine("Huray parameters by the Cannonball stack (14 spheres, A_flat = 36r², r = Rz/(4√3(1+√2)) or " +
+                         "RMS/(2(1+√2))) from each data sheet's treated-side roughness; a '≤' value is the sheet's limit.");
+        foreach (var foil in foils)
+            foreach (var line in foil.Describe()) stdout.WriteLine(line);
+        return 0;
+    }
+
     private static List<(string, string)> LineInputs(LineSpec line)
     {
         var ci = CultureInfo.InvariantCulture;
@@ -681,6 +721,7 @@ public static partial class CliRunner
             ("Frequency", $"{line.FrequencyHz / 1e9:g4} GHz"),
             ("Model", line.Model.ToString())
         };
+        if (line.Model.Roughness is { } rough) inputs.Add(("Roughness", rough.Describe()));
         if (line.PairGapMeters is { } gap) inputs.Add(("Pair gap", $"{gap * 1e6:g5} µm"));
         if (line.CoplanarGapMeters is { } cg) inputs.Add(("Coplanar gap", $"{cg * 1e6:g5} µm, ground width {line.CoplanarGroundWidthMeters * 1e6:g5} µm"));
         if (line.Structure != LineStructure.Microstrip)
