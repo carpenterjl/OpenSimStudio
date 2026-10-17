@@ -42,6 +42,11 @@ public sealed record RailThermalSetup
     /// <summary>The loop stops when no node moves by more than this [K] in one pass.</summary>
     public double Tolerance { get; init; } = 0.01;
 
+    /// <summary>The temperature [K] the cold rail is solved at and the rise is counted
+    /// from. Null: the environment's ambient, or 293.15 K with hand-placed conditions only
+    /// — give it the conditions' ambient when the cold rail should sit there.</summary>
+    public double? StartTemperature { get; init; }
+
     /// <summary>
     /// The heat solve of every pass when it is not the environment's correlation film — a
     /// conjugate CFD solve of the air around the board. Handed the thermal input with the
@@ -251,7 +256,8 @@ public static class RailThermalAnalysis
             Environment = setup.Environment,
             ThermalNetworks = parts?.Network is { } network ? new[] { network } : null,
             Cooling = setup.Cooling,
-            Tolerance = setup.Tolerance
+            Tolerance = setup.Tolerance,
+            StartTemperature = setup.StartTemperature
         };
         return (input, parts, copper, hasLaminate);
     }
