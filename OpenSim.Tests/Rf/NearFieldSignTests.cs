@@ -156,6 +156,86 @@ public class NearFieldSignTests
         static double Sq(Complex c) => c.Real * c.Real + c.Imaginary * c.Imaginary;
     }
 
+    /// <summary>
+    /// Fix 9's original gate (FU-50): on a perfect conductor the scattered field cancels the
+    /// impressed one, so the tangential E the probe returns ON the metal, away from the feed,
+    /// must be small against the gap field, and inside the gap it must be the gap field's
+    /// negative. A finite gap of width g driven at V impresses exactly V/g along the strip
+    /// between its rows, so "the incident gap field" is a definite number here. With the
+    /// charge sign reversed the scalar-potential leg of E flips and nothing cancels.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StripDipole_TangentialE_OnTheMetal_IsBelowFivePercentOfTheGapField(bool finiteGap)
+    {
+        // A λ/2 strip, λ/10 wide, four columns across so the middle columns have triangles
+        // that touch no rim. The finite gap is one element wide (three mesh rows across it);
+        // the delta gap's "gap field" is the voltage over the port row's height, the narrowest
+        // gap the mesh resolves.
+        double width = Lambda / 10, length = Lambda / 2, element = Lambda / 40;
+        const double volts = 1.0;
+        double gap = element;
+        var grid = SurfaceMeshBuilder.BuildRectangularPlate(width, length, element,
+            portOffset: length / 2, portGapWidth: finiteGap ? gap : null);
+        Assert.Null(grid.FailureReason);
+        var strip = grid.Structure!;
+        var solution = new SurfaceMomSolver().Solve(strip, Frequency, grid.Port!, volts);
+        double gapField = volts / gap;
+
+        // Interior points: centroids of triangles in the two middle columns, at least two
+        // rows from the gap and from the ends. Gap points: middle-column centroids in the
+        // gap's MIDDLE row (its three rows resolve the gap; the outer two see the smeared
+        // step of the impressed field at the gap's edges, −0.58 and −0.81 of E_gap).
+        var metal = new List<Vector3D>();
+        var inGap = new List<Vector3D>();
+        for (int t = 0; t < strip.Triangles.Count; t++)
+        {
+            var c = strip.TriangleCentroids[t];
+            if (Math.Abs(c.X) > width / 4) continue;
+            if (finiteGap && Math.Abs(c.Y) < gap / 2)
+            {
+                if (Math.Abs(c.Y) < gap / 6) inGap.Add(c);
+                continue;
+            }
+            if (Math.Abs(c.Y) < gap / 2 + 2 * element) continue;
+            if (length / 2 - Math.Abs(c.Y) < 2 * element) continue;
+            metal.Add(c);
+        }
+        Assert.True(metal.Count >= 20, $"{metal.Count} interior points");
+        if (finiteGap) Assert.True(inGap.Count >= 4, $"{inGap.Count} gap points");
+
+        // Measured 2.3 % for both gaps at λ/40 (0.8 % at λ/80); 5.3 % before the probe's near
+        // triangles took the analytic static kernel, at 2.1 % a tenth of an element above.
+        var onMetal = SurfaceFieldProbe.Evaluate(strip, solution, metal);
+        double worst = 0;
+        for (int i = 0; i < metal.Count; i++)
+        {
+            var (ex, ey, _) = onMetal.E[i];
+            double tangential = Math.Sqrt(ex.Magnitude * ex.Magnitude + ey.Magnitude * ey.Magnitude);
+            worst = Math.Max(worst, tangential / gapField);
+        }
+        Assert.True(worst < 0.05,
+            $"tangential E on the metal reaches {worst:p2} of the gap field {gapField:g4} V/m ({(finiteGap ? "finite" : "delta")} gap)");
+
+        if (!finiteGap) return;
+        // Inside the gap the scattered tangential field is −E_gap: E_y = −V/g (measured
+        // −0.963 − 0.002j of it in the middle row, the same at λ/80), E_x ≈ 0 (1.9 %). With
+        // the charge sign reversed the real part would not come out near −1.
+        var gapMap = SurfaceFieldProbe.Evaluate(strip, solution, inGap);
+        double worstAxial = 0, worstTransverse = 0;
+        for (int i = 0; i < inGap.Count; i++)
+        {
+            var (ex, ey, _) = gapMap.E[i];
+            worstAxial = Math.Max(worstAxial, (ey + gapField).Magnitude / gapField);
+            worstTransverse = Math.Max(worstTransverse, ex.Magnitude / gapField);
+        }
+        Assert.True(worstAxial < 0.05,
+            $"E_y in the gap's middle row differs from −E_gap by {worstAxial:p2} of E_gap");
+        Assert.True(worstTransverse < 0.05,
+            $"E_x in the gap's middle row reaches {worstTransverse:p2} of E_gap");
+    }
+
     [Fact]
     public void LayeredEvaluator_SatisfiesAmpere_AboveThePatch()
     {

@@ -197,6 +197,124 @@ public class TrianglePotentialTests
         Assert.True((analyticRho - iVec).Length <= 1e-8 * iVec.Length,
             $"Iρ {analyticRho} vs oracle {iVec} (rel {(analyticRho - iVec).Length / iVec.Length:g2})");
     }
+
+    /// <summary>The in-plane ray-sweep oracle for ∇I0 = −∫(r − r′)/R³ dS′ (FU-50): in polar
+    /// coordinates about the observation the integrand is û/ρ², so the sweep gives
+    /// Σ_edges ∫ û(θ)·ln ρ_edge(θ) dθ over each edge's SIGNED angle — for a point inside the
+    /// triangle the ln ε of the excluded disc cancels because ∫û dθ over the full circle is
+    /// zero (the principal value); for a point outside the near edge's negative sweep
+    /// leaves ln(ρ_far/ρ_near). No algebra in common with the closed form's edge logarithms.</summary>
+    private static (double Gx, double Gy) OracleGradientInPlane(
+        (double X, double Y)[] triangle2D, (double X, double Y) o)
+    {
+        double gx = 0, gy = 0;
+        for (int e = 0; e < 3; e++)
+        {
+            var w1 = triangle2D[e];
+            var w2 = triangle2D[(e + 1) % 3];
+            double d1X = w1.X - o.X, d1Y = w1.Y - o.Y;
+            double d2X = w2.X - o.X, d2Y = w2.Y - o.Y;
+            double theta1 = Math.Atan2(d1Y, d1X);
+            double theta2 = Math.Atan2(d2Y, d2X);
+            double delta = theta2 - theta1;
+            while (delta > Math.PI) delta -= 2 * Math.PI;
+            while (delta < -Math.PI) delta += 2 * Math.PI;
+            if (Math.Abs(delta) < 1e-15) continue;
+
+            double edgeX = w2.X - w1.X, edgeY = w2.Y - w1.Y;
+            var (nodes, weights) = GaussLegendre.Rule(64, theta1, theta1 + delta);
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                double ux = Math.Cos(nodes[i]), uy = Math.Sin(nodes[i]);
+                double crossUe = ux * edgeY - uy * edgeX;
+                double rho = (d1X * edgeY - d1Y * edgeX) / crossUe;
+                gx += weights[i] * ux * Math.Log(rho);
+                gy += weights[i] * uy * Math.Log(rho);
+            }
+        }
+        return (gx, gy);
+    }
+
+    /// <param name="along">Position on the line from the centroid (0) through the foot of its
+    /// perpendicular on edge AB (1) and beyond.</param>
+    [Theory]
+    [InlineData(0.0, 0.0)]      // the centroid
+    [InlineData(1.8, 0.0)]      // in plane, reflected across AB (outside)
+    [InlineData(5.0, 0.0)]      // in plane, several sizes outside
+    [InlineData(1.0, 0.0)]      // ON edge AB: the logarithm's divergence, clamped
+    [InlineData(0.0, 0.37)]     // above the centroid
+    [InlineData(1.8, -0.2)]     // outside and below the plane
+    [InlineData(0.0, -0.05)]    // just below the centroid: the normal part is nearly −2π·sign(h)
+    public void Gradient_MatchesTheOracles(double along, double heightOverSize)
+    {
+        var (e1, e2, n) = PlaneBasis();
+        var centroid = (A + B + C) / 3;
+        double size = (B - A).Length;
+        var s = (B - A).Normalized();
+        var foot = A + s * Vector3D.Dot(centroid - A, s);
+        var observation = centroid + (foot - centroid) * along + n * (heightOverSize * size);
+
+        var gradient = TrianglePotentials.Gradient(A, B, C, observation);
+        if (along == 1.0)
+        {
+            // On the edge the tangential part diverges like ln(1/R⁰); the clamp at 1e-12 of the
+            // edge length makes it finite, large and pointing into the triangle.
+            Assert.True(double.IsFinite(gradient.X) && double.IsFinite(gradient.Y) && double.IsFinite(gradient.Z),
+                $"∇I0 on the edge is {gradient}");
+            Assert.True(Vector3D.Dot(gradient, centroid - foot) > 20 * (centroid - foot).Length,
+                $"∇I0 on the edge {gradient} should point into the triangle, large");
+            return;
+        }
+        if (heightOverSize == 0)
+        {
+            var tri2D = new[] { To2D(A, e1, e2), To2D(B, e1, e2), To2D(C, e1, e2) };
+            var (gx, gy) = OracleGradientInPlane(tri2D, To2D(observation, e1, e2));
+            double scale = Math.Sqrt(gx * gx + gy * gy);
+            Assert.True(Math.Abs(Vector3D.Dot(gradient, e1) - gx) <= 1e-8 * scale,
+                $"∇I0·e1 {Vector3D.Dot(gradient, e1)} vs oracle {gx}");
+            Assert.True(Math.Abs(Vector3D.Dot(gradient, e2) - gy) <= 1e-8 * scale,
+                $"∇I0·e2 {Vector3D.Dot(gradient, e2)} vs oracle {gy}");
+            // The principal value on the plane: no normal part (the in-plane edge vectors leave rounding).
+            Assert.True(Math.Abs(Vector3D.Dot(gradient, n)) <= 1e-12 * gradient.Length,
+                $"∇I0·n̂ = {Vector3D.Dot(gradient, n)} on the plane");
+            return;
+        }
+
+        // Off the plane the kernel is smooth: 4^5 uniform sub-triangles × degree-6 rule of
+        // −(r − r′)/R³, the normal part included (→ −2π·sign(h)·n̂ as h → 0 over an interior point).
+        var (l1, l2, l3, w) = TriangleQuadrature.Rule(6);
+        var oracle = new Vector3D(0, 0, 0);
+        int levels = 64;
+        void Integrate(Vector3D p, Vector3D q, Vector3D r)
+        {
+            double area = Vector3D.Cross(q - p, r - p).Length / 2;
+            for (int i = 0; i < w.Length; i++)
+            {
+                var point = p * l1[i] + q * l2[i] + r * l3[i];
+                var separation = observation - point;
+                double distance = separation.Length;
+                oracle -= separation * (w[i] * area / (distance * distance * distance));
+            }
+        }
+        for (int i = 0; i < levels; i++)
+            for (int j = 0; j < levels - i; j++)
+            {
+                Integrate(Corner(i, j), Corner(i + 1, j), Corner(i, j + 1));
+                if (j < levels - i - 1)
+                    Integrate(Corner(i + 1, j), Corner(i + 1, j + 1), Corner(i, j + 1));
+            }
+        Vector3D Corner(int i, int j) =>
+            A + (B - A) * ((double)i / levels) + (C - A) * ((double)j / levels);
+
+        double tolerance = 1e-8;
+        Assert.True((gradient - oracle).Length <= tolerance * oracle.Length,
+            $"∇I0 {gradient} vs oracle {oracle} (rel {(gradient - oracle).Length / oracle.Length:g2})");
+        // The normal part is −sign(h) times the solid angle the triangle subtends: against the
+        // observation's side, and never more than a half space.
+        double normalPart = Vector3D.Dot(gradient, n);
+        Assert.True(normalPart * Math.Sign(heightOverSize) < 0 && Math.Abs(normalPart) < 2 * Math.PI,
+            $"normal part {normalPart} at h = {heightOverSize} sizes");
+    }
 }
 
 /// <summary>

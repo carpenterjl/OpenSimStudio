@@ -89,4 +89,74 @@ public static class TrianglePotentials
 
         return (i0, iRho, rho);
     }
+
+    /// <summary>∇I0 = ∇_r ∫_T dS′/R = −∫_T (r − r′)/R³ dS′ (Wilton–Rao et al. 1984, eq. 6):
+    /// an in-plane edge sum −Σ m̂·ln((R⁺+l⁺)/(R⁻+l⁻)) and the normal solid-angle part
+    /// −n̂·sign(h)·Σ(β⁺ − β⁻), which is −2π·n̂·sign(h) as the observation approaches an
+    /// interior point from either side. ON the plane (h = 0) the normal part is the mean
+    /// of the two limits, zero — the principal value, which is the tangential field a
+    /// sheet's own charge makes at a point of the sheet; the caller adds the jump ±σ/2ε₀
+    /// if it wants one side. The in-plane logarithm diverges on an edge's own segment
+    /// (the charge jump's log singularity); within <see cref="OnLineRelative"/> of the
+    /// edge line the distance is clamped there, so the value is finite and large
+    /// instead of infinite. Oracle-tested like <see cref="Integrals"/>.</summary>
+    public static Vector3D Gradient(Vector3D a, Vector3D b, Vector3D c, Vector3D observation)
+    {
+        var normal = Vector3D.Cross(b - a, c - a);
+        double doubleArea = normal.Length;
+        if (doubleArea <= 0)
+            throw new ArgumentException("The triangle is degenerate (zero area).");
+        var n = normal / doubleArea;
+
+        double h = Vector3D.Dot(observation - a, n);
+        var rho = observation - n * h;
+        double absH = Math.Abs(h);
+        // In the plane to rounding: the principal value, not the ±2π a last-bit height would
+        // pick (a sheet's own vertices put a point of the sheet exactly there only by luck).
+        double diameter = Math.Max((b - a).Length, Math.Max((c - b).Length, (a - c).Length));
+        if (absH <= OnLineRelative * diameter) { absH = 0; h = 0; rho = observation; }
+
+        var tangential = new Vector3D(0, 0, 0);
+        double solidAngle = 0;
+        Span<(Vector3D V1, Vector3D V2)> edges = stackalloc (Vector3D, Vector3D)[]
+        {
+            (a, b), (b, c), (c, a)
+        };
+
+        foreach (var (v1, v2) in edges)
+        {
+            var edge = v2 - v1;
+            double edgeLength = edge.Length;
+            var s = edge / edgeLength;
+            var m = Vector3D.Cross(s, n);
+
+            double lMinus = Vector3D.Dot(v1 - rho, s);
+            double lPlus = Vector3D.Dot(v2 - rho, s);
+            var perpendicular = (v1 - rho) - s * lMinus;
+            double t0 = Vector3D.Dot(perpendicular, m);
+            double r0Squared = perpendicular.LengthSquared + h * h;
+            double onLine = OnLineRelative * edgeLength;
+            if (r0Squared < onLine * onLine) r0Squared = onLine * onLine;
+            double rMinus = Math.Sqrt(r0Squared + lMinus * lMinus);
+            double rPlus = Math.Sqrt(r0Squared + lPlus * lPlus);
+
+            // ln((R⁺+l⁺)/(R⁻+l⁻)) in the form whose sums never cancel: R + l for l ≥ 0,
+            // R − l for l ≤ 0, using (R + l)(R − l) = R⁰². With the projection between the
+            // endpoints this is ln((R⁺+l⁺)(R⁻−l⁻)/R⁰²), the divergence at the edge explicit.
+            double logTerm;
+            if (lMinus >= 0) logTerm = Math.Log((rPlus + lPlus) / (rMinus + lMinus));
+            else if (lPlus <= 0) logTerm = Math.Log((rMinus - lMinus) / (rPlus - lPlus));
+            else logTerm = Math.Log((rPlus + lPlus) * (rMinus - lMinus) / r0Squared);
+            tangential -= m * logTerm;
+
+            if (absH > 0)
+            {
+                double betaPlus = Math.Atan(t0 * lPlus / (r0Squared + absH * rPlus));
+                double betaMinus = Math.Atan(t0 * lMinus / (r0Squared + absH * rMinus));
+                solidAngle += betaPlus - betaMinus;
+            }
+        }
+
+        return absH > 0 ? tangential - n * (Math.Sign(h) * solidAngle) : tangential;
+    }
 }
