@@ -8,7 +8,7 @@ namespace OpenSim.Solvers.Magnetics;
 /// replaced by identity). Real and imaginary parts are kept in separate arrays, which matters in
 /// a debug build where complex arithmetic in the inner loop is several times slower.
 /// </summary>
-internal sealed class BandedSolver
+internal sealed class BandedSolver : ILinearSolver
 {
     private readonly int _n, _q, _w;
     private readonly double[] _re, _im;

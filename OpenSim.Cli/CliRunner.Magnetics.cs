@@ -35,9 +35,19 @@ public static partial class CliRunner
             if (parts.Length > 1) strandsPerTurn = int.Parse(parts[1], CultureInfo.InvariantCulture);
         }
 
+        int cutAngles = (int)Number(o, "cut-angles", 1);
+
         var board = Ipc2581Reader.Matches(boardPath) ? new Ipc2581Reader().Read(boardPath) : new PcbBoardReader().Read(boardPath);
         var stackup = BoardStackup.FromBoard(board);
-        var turns = PlanarWindingSection.Cut(board, nets, new Point2(xy[0], xy[1]), angle, radius, stackup);
+        IReadOnlyList<WindingTurn> turns;
+        IReadOnlyList<string> cutNotes = Array.Empty<string>();
+        if (cutAngles > 1)
+        {
+            var averaged = PlanarWindingSection.CutAveraged(board, nets, new Point2(xy[0], xy[1]), radius, stackup, cutAngles);
+            turns = averaged.Turns;
+            cutNotes = averaged.Notes;
+        }
+        else turns = PlanarWindingSection.Cut(board, nets, new Point2(xy[0], xy[1]), angle, radius, stackup);
         AxisymmetricCore? core = null;
         if (o.TryGetValue("core", out var corePath))
         {
@@ -81,7 +91,8 @@ public static partial class CliRunner
             Inputs = new List<(string, string)>
             {
                 ("Windings", string.Join(", ", nets)), ("Driven", drive),
-                ("Axis", $"({xy[0] * 1e3:g5}, {xy[1] * 1e3:g5}) mm, cut at {angle * 180 / Math.PI:g4}°"),
+                ("Axis", $"({xy[0] * 1e3:g5}, {xy[1] * 1e3:g5}) mm, "
+                    + (cutAngles > 1 ? $"cut averaged over {cutAngles} angles" : $"cut at {angle * 180 / Math.PI:g4}°")),
                 ("Frequency", frequency > 0 ? $"{frequency:g5} Hz" : "static"),
                 ("Core", core is null ? "none" : $"post {core.PostRadius * 1e3:g4} mm, gap {core.CentreGap * 1e3:g4} mm, µr {core.Material.RelativePermeability:g4}")
             },
@@ -98,7 +109,7 @@ public static partial class CliRunner
                         (t.Z1 * 1e6).ToString("0.#", CultureInfo.InvariantCulture)
                     }).ToList()
                 },
-                new ReportSection("Solve") { Lines = solution.Log.Concat(built.Notes).ToList() }
+                new ReportSection("Solve") { Lines = cutNotes.Concat(solution.Log).Concat(built.Notes).ToList() }
             },
             Assumptions = PlanarWindingSection.Assumptions.Concat(MagneticSolver2D.Assumptions).ToList()
         };

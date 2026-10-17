@@ -97,6 +97,8 @@ public static partial class CliRunner
             Planar magnetics from the layout: the windings' copper cut along a ray from the
             winding axis (mm), solved as an axisymmetric section.
             --angle DEG         direction of the cut (default 0)
+            --cut-angles N      average the cut over N angles around the axis (folds the
+                                spiral's pitch in; default 1 = the single --angle cut)
             --radius MM         how far out to cut (default 30)
             --frequency HZ      AC resistance and inductance with skin and proximity effect
             --drive NET         the winding that carries current (default the first)

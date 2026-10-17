@@ -1,4 +1,5 @@
 using System.Numerics;
+using OpenSim.Core.Geometry2D;
 using OpenSim.Core.Numerics;
 
 namespace OpenSim.Solvers.Magnetics;
@@ -24,7 +25,7 @@ public sealed class MagneticSolver2D
     public static IReadOnlyList<string> Assumptions { get; } = new[]
     {
         "2D: planar (per metre of depth, current along z) or axisymmetric (current around the axis).",
-        "Linear triangles on a graded rectilinear grid; the axisymmetric 1/r weight is taken at each element's centroid.",
+        "Linear triangles on a graded rectilinear grid — or, when any region is a polygon, on a constrained Delaunay mesh conforming to every outline, seeded from the same grading; the axisymmetric 1/r weight is taken at each element's centroid.",
         "The vector potential is zero on the outer boundary except on sides declared as symmetry planes; the domain must be large enough that this does not matter.",
         "Time-harmonic solves give a B–H material an energy-equivalent effective permeability at each element's own amplitude (fundamental only; harmonics of B are not resolved); core loss is Steinmetz on the peak |B| of each element, or iGSE over a given flux waveform.",
         "Stranded windings carry uniform current density (no eddy currents in the field solve); with a strand diameter given, the strands' skin and proximity loss is reported from the local field (round strands, proximity term derived for d ≲ δ).",
@@ -220,15 +221,18 @@ public sealed class MagneticSolver2D
         return Math.Sqrt(0.5 * (sum + (gx * gx + gy * gy).Magnitude)) / e.Rho;
     }
 
-    /// <summary>The grid, its triangles and the per-element assembly data.</summary>
+    /// <summary>The mesh (graded rectilinear grid, or constrained Delaunay when any region is a
+    /// polygon), its triangles and the per-element assembly data.</summary>
     internal sealed class Mesh
     {
         public readonly MagneticModel2D Model;
         public readonly double[] Xs, Ys;
         public readonly bool XFast;
+        public readonly bool Unstructured;
         public readonly int NodeCount, HalfBandwidth;
         public readonly List<Element> Elements = new();
         public readonly bool[] Pinned;
+        private readonly double[] _nodeX, _nodeY;
         private readonly Dictionary<string, int> _regionIndex;
         private readonly double[] _regionArea; // geometric area per region (meshed)
 
@@ -249,50 +253,69 @@ public sealed class MagneticSolver2D
             Model = model;
             Xs = model.GridLines(true);
             Ys = model.GridLines(false);
-            int nx = Xs.Length, ny = Ys.Length;
-            XFast = nx <= ny;
-            NodeCount = nx * ny;
-            HalfBandwidth = (XFast ? nx : ny) + 1;
             _regionIndex = model.Regions.Select((r, i) => (r.Name, i)).ToDictionary(p => p.Name, p => p.i);
             _regionArea = new double[model.Regions.Count];
             bool axi = model.Geometry == MagneticGeometry.Axisymmetric;
             var coilRegions = model.Coils.SelectMany(c => c.Regions.Select(r => _regionIndex[r.Region])).ToHashSet();
+            Unstructured = model.Regions.Any(r => r.Shape is not null);
+            int nx = Xs.Length, ny = Ys.Length;
+
+            if (Unstructured)
+            {
+                var (nodes, triangles) = TriangulateUnstructured(model, Xs, Ys);
+                XFast = true;
+                NodeCount = nodes.Count;
+                HalfBandwidth = 0;
+                _nodeX = new double[NodeCount];
+                _nodeY = new double[NodeCount];
+                for (int i = 0; i < NodeCount; i++) { _nodeX[i] = nodes[i].X; _nodeY[i] = nodes[i].Y; }
+                foreach (var (a, b, c) in triangles)
+                {
+                    double cx = (_nodeX[a] + _nodeX[b] + _nodeX[c]) / 3;
+                    double cy = (_nodeY[a] + _nodeY[b] + _nodeY[c]) / 3;
+                    AddElement(a, b, c, model.RegionAt(cx, cy), axi, coilRegions);
+                }
+                Pinned = new bool[NodeCount];
+                double hMin = Math.Min(model.MinElement ?? model.MaxElement, model.MaxElement);
+                double diag = Math.Sqrt(Math.Pow(model.DomainX1 - model.DomainX0, 2) + Math.Pow(model.DomainY1 - model.DomainY0, 2));
+                double tol = Math.Min(2e-6 * diag, 0.3 * hMin);
+                for (int n = 0; n < NodeCount; n++)
+                {
+                    bool left = Math.Abs(_nodeX[n] - model.DomainX0) <= tol;
+                    bool right = Math.Abs(_nodeX[n] - model.DomainX1) <= tol;
+                    bool bottom = Math.Abs(_nodeY[n] - model.DomainY0) <= tol;
+                    bool top = Math.Abs(_nodeY[n] - model.DomainY1) <= tol;
+                    Pinned[n] = (left && (!model.NaturalSides.HasFlag(DomainSides.Left) || (axi && model.DomainX0 == 0)))
+                        || (right && !model.NaturalSides.HasFlag(DomainSides.Right))
+                        || (bottom && !model.NaturalSides.HasFlag(DomainSides.Bottom))
+                        || (top && !model.NaturalSides.HasFlag(DomainSides.Top));
+                }
+                return;
+            }
+
+            XFast = nx <= ny;
+            NodeCount = nx * ny;
+            HalfBandwidth = (XFast ? nx : ny) + 1;
+            _nodeX = new double[NodeCount];
+            _nodeY = new double[NodeCount];
+            for (int i = 0; i < nx; i++)
+                for (int j = 0; j < ny; j++)
+                {
+                    int node = Node(i, j);
+                    _nodeX[node] = Xs[i];
+                    _nodeY[node] = Ys[j];
+                }
             for (int i = 0; i + 1 < nx; i++)
                 for (int j = 0; j + 1 < ny; j++)
                 {
                     double cx = 0.5 * (Xs[i] + Xs[i + 1]), cy = 0.5 * (Ys[j] + Ys[j + 1]);
-                    int region = -1;
-                    for (int r = model.Regions.Count - 1; r >= 0; r--)
-                    {
-                        var reg = model.Regions[r];
-                        if (cx > reg.X0 && cx < reg.X1 && cy > reg.Y0 && cy < reg.Y1) { region = r; break; }
-                    }
-                    var material = region >= 0 ? model.Regions[region].Material : model.Background;
+                    int region = model.RegionAt(cx, cy);
                     int p00 = Node(i, j), p10 = Node(i + 1, j), p11 = Node(i + 1, j + 1), p01 = Node(i, j + 1);
                     var tris = (i + j) % 2 == 0
                         ? new[] { (p00, p10, p11), (p00, p11, p01) }
                         : new[] { (p00, p10, p01), (p10, p11, p01) };
                     foreach (var (a, b, c) in tris)
-                    {
-                        var e = new Element
-                        {
-                            N0 = a, N1 = b, N2 = c, Region = region, Material = material,
-                            Sigma = coilRegions.Contains(region) ? 0 : material.Conductivity
-                        };
-                        var (xa, ya) = Coord(a);
-                        var (xb, yb) = Coord(b);
-                        var (xc, yc) = Coord(c);
-                        double twoA = (xb - xa) * (yc - ya) - (xc - xa) * (yb - ya);
-                        e.Area = Math.Abs(twoA) / 2;
-                        e.Bx[0] = (yb - yc) / twoA; e.Bx[1] = (yc - ya) / twoA; e.Bx[2] = (ya - yb) / twoA;
-                        e.By[0] = (xc - xb) / twoA; e.By[1] = (xa - xc) / twoA; e.By[2] = (xb - xa) / twoA;
-                        e.Cx = (xa + xb + xc) / 3;
-                        e.Cy = (ya + yb + yc) / 3;
-                        e.Rho = axi ? e.Cx : 1;
-                        e.Weight = axi ? e.Area / e.Cx : e.Area;
-                        Elements.Add(e);
-                        if (region >= 0) _regionArea[region] += e.Area;
-                    }
+                        AddElement(a, b, c, region, axi, coilRegions);
                 }
 
             Pinned = new bool[NodeCount];
@@ -308,14 +331,214 @@ public sealed class MagneticSolver2D
                 }
         }
 
+        private void AddElement(int a, int b, int c, int region, bool axi, HashSet<int> coilRegions)
+        {
+            var material = region >= 0 ? Model.Regions[region].Material : Model.Background;
+            var e = new Element
+            {
+                N0 = a, N1 = b, N2 = c, Region = region, Material = material,
+                Sigma = coilRegions.Contains(region) ? 0 : material.Conductivity
+            };
+            double xa = _nodeX[a], ya = _nodeY[a];
+            double xb = _nodeX[b], yb = _nodeY[b];
+            double xc = _nodeX[c], yc = _nodeY[c];
+            double twoA = (xb - xa) * (yc - ya) - (xc - xa) * (yb - ya);
+            if (twoA == 0) throw new InvalidOperationException("The mesh produced a degenerate triangle.");
+            e.Area = Math.Abs(twoA) / 2;
+            e.Bx[0] = (yb - yc) / twoA; e.Bx[1] = (yc - ya) / twoA; e.Bx[2] = (ya - yb) / twoA;
+            e.By[0] = (xc - xb) / twoA; e.By[1] = (xa - xc) / twoA; e.By[2] = (xb - xa) / twoA;
+            e.Cx = (xa + xb + xc) / 3;
+            e.Cy = (ya + yb + yc) / 3;
+            e.Rho = axi ? e.Cx : 1;
+            e.Weight = axi ? e.Area / e.Cx : e.Area;
+            Elements.Add(e);
+            if (region >= 0) _regionArea[region] += e.Area;
+        }
+
+        /// <summary>
+        /// The constrained Delaunay mesh of a model with polygonal regions: every region outline
+        /// (rectangles at their grid-line crossings, polygon rings subdivided at the local graded
+        /// spacing) and the domain boundary are constraint polylines; the seed points are the
+        /// graded grid's interior crossings, except within half a step of a polygon edge. Input
+        /// points are snapped back to their exact coordinates after triangulation (the CDT jitters
+        /// them by far less than an element).
+        /// </summary>
+        private static (List<Point2> Nodes, List<(int A, int B, int C)> Triangles)
+            TriangulateUnstructured(MagneticModel2D model, double[] xs, double[] ys)
+        {
+            double spanX = model.DomainX1 - model.DomainX0, spanY = model.DomainY1 - model.DomainY0;
+            double diag = Math.Sqrt(spanX * spanX + spanY * spanY);
+            double tol = 1e-9 * diag;
+            double hMin = Math.Min(model.MinElement ?? model.MaxElement, model.MaxElement);
+
+            var basePoints = new List<Point2>();
+            var pointIndex = new Dictionary<(long, long), int>();
+            int AddPoint(double x, double y)
+            {
+                var key = ((long)Math.Round(x / tol), (long)Math.Round(y / tol));
+                if (pointIndex.TryGetValue(key, out int k)) return k;
+                pointIndex[key] = basePoints.Count;
+                basePoints.Add(new Point2(x, y));
+                return basePoints.Count - 1;
+            }
+
+            var constraints = new List<(int, int)>();
+            void Chain(IReadOnlyList<int> idx)
+            {
+                for (int k = 0; k < idx.Count; k++)
+                {
+                    int u = idx[k], v = idx[(k + 1) % idx.Count];
+                    if (u != v) constraints.Add((u, v));
+                }
+            }
+
+            double LocalSpacing(double x, double y)
+            {
+                int i = Array.BinarySearch(xs, x);
+                if (i < 0) i = ~i - 1;
+                i = Math.Clamp(i, 0, xs.Length - 2);
+                int j = Array.BinarySearch(ys, y);
+                if (j < 0) j = ~j - 1;
+                j = Math.Clamp(j, 0, ys.Length - 2);
+                return Math.Clamp(Math.Min(xs[i + 1] - xs[i], ys[j + 1] - ys[j]), hMin, model.MaxElement);
+            }
+
+            // Domain boundary, at the graded grid's own crossings.
+            var boundary = new List<int>();
+            foreach (double x in xs) boundary.Add(AddPoint(x, model.DomainY0));
+            for (int j = 1; j < ys.Length; j++) boundary.Add(AddPoint(model.DomainX1, ys[j]));
+            for (int i = xs.Length - 2; i >= 0; i--) boundary.Add(AddPoint(xs[i], model.DomainY1));
+            for (int j = ys.Length - 2; j >= 1; j--) boundary.Add(AddPoint(model.DomainX0, ys[j]));
+            Chain(boundary);
+
+            // Region outlines. Rectangles subdivide at the grid lines crossing their edges;
+            // polygon rings at the local graded spacing (their vertices are grid lines, so the
+            // spacing is MinElement near every vertex).
+            var polygonEdges = new List<(Point2 A, Point2 B)>();
+            foreach (var region in model.Regions)
+            {
+                if (region.Shape is { } shape)
+                {
+                    foreach (var ring in Polygon2.OrientedRings(shape))
+                    {
+                        var idx = new List<int>();
+                        for (int k = 0; k < ring.Count; k++)
+                        {
+                            var p0 = ring[k];
+                            var p1 = ring[(k + 1) % ring.Count];
+                            polygonEdges.Add((p0, p1));
+                            idx.Add(AddPoint(p0.X, p0.Y));
+                            var d = p1 - p0;
+                            double length = d.Length;
+                            if (length <= 0) continue;
+                            if (Math.Abs(d.Y) <= tol || Math.Abs(d.X) <= tol)
+                            {
+                                // Axis-aligned: subdivide at the grid lines crossing it, exactly as
+                                // a rectangle's edge, so a shared edge gets the same points.
+                                bool alongX = Math.Abs(d.Y) <= tol;
+                                var lines = alongX ? xs : ys;
+                                double a0 = alongX ? p0.X : p0.Y, a1 = alongX ? p1.X : p1.Y;
+                                var inside = lines.Where(v => v > Math.Min(a0, a1) + tol && v < Math.Max(a0, a1) - tol);
+                                foreach (double v in a0 < a1 ? inside : inside.Reverse())
+                                    idx.Add(alongX ? AddPoint(v, p0.Y) : AddPoint(p0.X, v));
+                                continue;
+                            }
+                            double at = 0;
+                            while (true)
+                            {
+                                double h = LocalSpacing(p0.X + d.X * at / length, p0.Y + d.Y * at / length);
+                                if (at + 1.5 * h >= length) break;
+                                at += h;
+                                idx.Add(AddPoint(p0.X + d.X * at / length, p0.Y + d.Y * at / length));
+                            }
+                        }
+                        Chain(idx);
+                    }
+                }
+                else
+                {
+                    var onX = xs.Where(x => x >= region.X0 - tol && x <= region.X1 + tol).ToList();
+                    var onY = ys.Where(y => y >= region.Y0 - tol && y <= region.Y1 + tol).ToList();
+                    var idx = new List<int>();
+                    foreach (double x in onX) idx.Add(AddPoint(x, region.Y0));
+                    foreach (double y in onY.Skip(1)) idx.Add(AddPoint(region.X1, y));
+                    for (int i = onX.Count - 2; i >= 0; i--) idx.Add(AddPoint(onX[i], region.Y1));
+                    for (int j = onY.Count - 2; j >= 1; j--) idx.Add(AddPoint(region.X0, onY[j]));
+                    Chain(idx);
+                }
+            }
+
+            // Interior seeds from the graded grid, kept clear of polygon edges.
+            double DistanceToEdge(Point2 p, Point2 a, Point2 b)
+            {
+                var d = b - a;
+                double dd = Point2.Dot(d, d);
+                double t = dd > 0 ? Math.Clamp(Point2.Dot(p - a, d) / dd, 0, 1) : 0;
+                return (p - (a + d * t)).Length;
+            }
+            for (int i = 1; i + 1 < xs.Length; i++)
+                for (int j = 1; j + 1 < ys.Length; j++)
+                {
+                    var p = new Point2(xs[i], ys[j]);
+                    double clearance = 0.45 * LocalSpacing(p.X, p.Y);
+                    bool near = false;
+                    foreach (var (a, b) in polygonEdges)
+                    {
+                        if (p.X < Math.Min(a.X, b.X) - clearance || p.X > Math.Max(a.X, b.X) + clearance
+                            || p.Y < Math.Min(a.Y, b.Y) - clearance || p.Y > Math.Max(a.Y, b.Y) + clearance) continue;
+                        if (DistanceToEdge(p, a, b) < clearance) { near = true; break; }
+                    }
+                    if (!near) AddPoint(p.X, p.Y);
+                }
+
+            var cdt = new Cdt2D();
+            cdt.Triangulate(basePoints, constraints);
+
+            // Compact to the nodes the triangles actually use; snap input points back to their
+            // exact coordinates (recovery-split extras keep theirs). A triangle of three collinear
+            // constraint points (the CDT's jitter bends a straight chain, so a sliver forms along
+            // the hull) snaps flat — it covers no area and is dropped.
+            var newIndex = new int[cdt.Points.Count];
+            Array.Fill(newIndex, -1);
+            var nodes = new List<Point2>();
+            var triangles = new List<(int, int, int)>();
+            Point2 Snapped(int old) => old < basePoints.Count ? basePoints[old] : cdt.Points[old];
+            int Map(int old)
+            {
+                if (newIndex[old] >= 0) return newIndex[old];
+                newIndex[old] = nodes.Count;
+                nodes.Add(Snapped(old));
+                return newIndex[old];
+            }
+            foreach (var (a, b, c) in cdt.Triangles())
+            {
+                var pa = Snapped(a);
+                var pb = Snapped(b);
+                var pc = Snapped(c);
+                double twoA = Point2.Cross(pb - pa, pc - pa);
+                double scale = Math.Max(Point2.Dot(pb - pa, pb - pa),
+                    Math.Max(Point2.Dot(pc - pa, pc - pa), Point2.Dot(pc - pb, pc - pb)));
+                if (Math.Abs(twoA) <= 1e-12 * scale) continue;
+                triangles.Add((Map(a), Map(b), Map(c)));
+            }
+            return (nodes, triangles);
+        }
+
         public int Node(int i, int j) => XFast ? i + Xs.Length * j : j + Ys.Length * i;
 
-        public (double X, double Y) Coord(int node) => XFast
-            ? (Xs[node % Xs.Length], Ys[node / Xs.Length])
-            : (Xs[node / Ys.Length], Ys[node % Ys.Length]);
+        public (double X, double Y) Coord(int node) => (_nodeX[node], _nodeY[node]);
 
-        public string Describe() =>
-            $"Grid {Xs.Length} × {Ys.Length} lines, {NodeCount} nodes, {Elements.Count} triangles.";
+        /// <summary>Node positions, for the sparse solver's elimination order.</summary>
+        public IReadOnlyList<Point2> NodePositions()
+        {
+            var p = new Point2[NodeCount];
+            for (int i = 0; i < NodeCount; i++) p[i] = new Point2(_nodeX[i], _nodeY[i]);
+            return p;
+        }
+
+        public string Describe() => Unstructured
+            ? $"Unstructured mesh (constrained Delaunay): {NodeCount} nodes, {Elements.Count} triangles."
+            : $"Grid {Xs.Length} × {Ys.Length} lines, {NodeCount} nodes, {Elements.Count} triangles.";
 
         public int[] Nodes(Element e) => new[] { e.N0, e.N1, e.N2 };
 
@@ -363,9 +586,11 @@ public sealed class MagneticSolver2D
         }
 
         /// <summary>K(ν) + jωM, plus the Newton term when <paramref name="dnu"/> is given.</summary>
-        public BandedSolver Assemble(double[] nu, double[]? dnu, IReadOnlyList<double>? u, double omega)
+        public ILinearSolver Assemble(double[] nu, double[]? dnu, IReadOnlyList<double>? u, double omega)
         {
-            var s = new BandedSolver(NodeCount, HalfBandwidth);
+            var s = Unstructured
+                ? (ILinearSolver)new SparseLdlSolver(NodePositions())
+                : new BandedSolver(NodeCount, HalfBandwidth);
             var h = new double[3, 3];
             var hu = new double[3];
             for (int k = 0; k < Elements.Count; k++)

@@ -1,3 +1,5 @@
+using OpenSim.Core.Geometry2D;
+
 namespace OpenSim.Solvers.Magnetics;
 
 /// <summary>Planar (x, y; current along z, per metre of depth) or axisymmetric (r, z; current
@@ -8,13 +10,31 @@ public enum MagneticGeometry { Planar, Axisymmetric }
 [Flags]
 public enum DomainSides { None = 0, Left = 1, Right = 2, Bottom = 4, Top = 8 }
 
-/// <summary>An axis-aligned rectangle of one material, optionally carrying current. Later regions
-/// take precedence where they overlap earlier ones.</summary>
+/// <summary>An axis-aligned rectangle of one material, optionally carrying current — or, with
+/// <see cref="Shape"/> set (see <see cref="FromPolygon"/>), a general polygon whose bounding box
+/// X0..Y1 is. Later regions take precedence where they overlap earlier ones.</summary>
 /// <param name="X0">Lower first coordinate (x, or r).</param>
 /// <param name="Y0">Lower second coordinate (y, or z).</param>
 public sealed record MagneticRegion(string Name, double X0, double X1, double Y0, double Y1, MagneticMaterial Material)
 {
-    public double Area => (X1 - X0) * (Y1 - Y0);
+    public double Area => Shape?.Area() ?? (X1 - X0) * (Y1 - Y0);
+
+    /// <summary>Optional polygonal outline (outer ring counter-clockwise, holes clockwise). When
+    /// any region of a model has one, the whole model is meshed by constrained Delaunay
+    /// triangulation conforming to every region's outline instead of the rectilinear grid.</summary>
+    public Polygon2? Shape { get; init; }
+
+    /// <summary>A region covering <paramref name="shape"/> (X0..Y1 become its bounding box).</summary>
+    public static MagneticRegion FromPolygon(string name, Polygon2 shape, MagneticMaterial material)
+    {
+        var points = Polygon2.OrientedRings(shape).SelectMany(r => r).ToList();
+        if (points.Count < 3) throw new ArgumentException($"Region '{name}': the polygon has no ring.");
+        return new MagneticRegion(name, points.Min(p => p.X), points.Max(p => p.X),
+            points.Min(p => p.Y), points.Max(p => p.Y), material) { Shape = shape };
+    }
+
+    internal bool Contains(double x, double y) =>
+        Shape is { } s ? s.Contains(new Point2(x, y)) : x > X0 && x < X1 && y > Y0 && y < Y1;
 }
 
 /// <summary>A stranded winding: <see cref="Turns"/> turns spread uniformly over its regions, each
@@ -84,6 +104,8 @@ public sealed class MagneticModel2D
             if (!(r.X1 > r.X0 && r.Y1 > r.Y0)) throw new ArgumentException($"Region '{r.Name}' is empty.");
             if (r.X0 < DomainX0 || r.X1 > DomainX1 || r.Y0 < DomainY0 || r.Y1 > DomainY1)
                 throw new ArgumentException($"Region '{r.Name}' extends outside the domain.");
+            if (r.Shape is { } s && !(s.Area() > 0))
+                throw new ArgumentException($"Region '{r.Name}': the polygon has no area.");
         }
         if (Regions.Select(r => r.Name).Distinct().Count() != Regions.Count)
             throw new ArgumentException("Region names must be distinct.");
@@ -108,10 +130,26 @@ public sealed class MagneticModel2D
             }
     }
 
+    /// <summary>The region covering a point (later regions take precedence), or −1.</summary>
+    internal int RegionAt(double x, double y)
+    {
+        for (int r = Regions.Count - 1; r >= 0; r--)
+            if (Regions[r].Contains(x, y)) return r;
+        return -1;
+    }
+
     internal double[] GridLines(bool first)
     {
         var raw = new List<double> { first ? DomainX0 : DomainY0, first ? DomainX1 : DomainY1 };
-        foreach (var r in Regions) { raw.Add(first ? r.X0 : r.Y0); raw.Add(first ? r.X1 : r.Y1); }
+        foreach (var r in Regions)
+        {
+            raw.Add(first ? r.X0 : r.Y0);
+            raw.Add(first ? r.X1 : r.Y1);
+            if (r.Shape is { } s)
+                foreach (var ring in Polygon2.OrientedRings(s))
+                    foreach (var p in ring)
+                        raw.Add(first ? p.X : p.Y);
+        }
         raw.AddRange(first ? ExtraLinesX : ExtraLinesY);
         double span = first ? DomainX1 - DomainX0 : DomainY1 - DomainY0;
         double tol = 1e-12 * span;

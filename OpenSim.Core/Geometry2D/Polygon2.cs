@@ -27,6 +27,19 @@ public sealed record Polygon2(
     public double Area() =>
         Math.Abs(RingArea(Outer)) - Holes.Sum(h => Math.Abs(RingArea(h)));
 
+    /// <summary>Even–odd point-in-polygon test (holes excluded; points on an edge are
+    /// either side, within rounding).</summary>
+    public bool Contains(Point2 p)
+    {
+        bool inside = false;
+        foreach (var ring in OrientedRings(this))
+            for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+                if ((ring[i].Y > p.Y) != (ring[j].Y > p.Y)
+                    && p.X < (ring[j].X - ring[i].X) * (p.Y - ring[i].Y) / (ring[j].Y - ring[i].Y) + ring[i].X)
+                    inside = !inside;
+        return inside;
+    }
+
     /// <summary>
     /// The polygon's rings enforced to the boolean-engine winding convention: outer
     /// counter-clockwise, holes clockwise. NonZero fill treats a hole wound the same way

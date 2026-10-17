@@ -1,6 +1,7 @@
 using System.Numerics;
 using OpenSim.Core.Geometry2D;
 using OpenSim.Pcb.Import;
+using OpenSim.Pcb.Inductance;
 using OpenSim.Solvers.Magnetics;
 
 namespace OpenSim.Pcb.Magnetics;
@@ -56,11 +57,29 @@ public sealed record PlanarMagneticModel(MagneticModel2D Model, IReadOnlyDiction
         Windings.Values.SelectMany(ts => ts).Sum(t => solution.StrandLoss(t.Name).TotalWatts);
 }
 
+/// <summary>The turns of a cut averaged around the revolution, and what the averaging saw: the
+/// spiral's radius spread (its pitch) and any angles dropped over a lead-out.</summary>
+public sealed record SpiralCut(IReadOnlyList<WindingTurn> Turns, IReadOnlyList<string> Notes);
+
+/// <summary>A straight lead-out trace from a winding's end to its terminal, priced as a PEEC
+/// rectangular bar in series with that winding: DC resistance plus partial self-inductance. It is
+/// not in the field solve, so it adds to Z_ii only — no mutual to the rings or to other
+/// lead-outs, and no skin effect in the trace itself.</summary>
+public sealed record LeadOut(string Net, double Length, double Width, double Thickness, double Conductivity = 5.8e7)
+{
+    public Complex SeriesImpedance(double frequencyHz) => new(
+        Length / (Conductivity * Width * Thickness),
+        2 * Math.PI * frequencyHz * PartialInductance.SelfInductance(Length, Width, Thickness));
+}
+
 /// <summary>The winding impedance matrix at one frequency: Z_ij = V_i per ampere driven through
 /// winding j with every other winding open (each turn a solid conductor, so R carries skin and
 /// proximity effect and M carries the core's eddy reaction).</summary>
 public sealed record WindingImpedanceMatrix(IReadOnlyList<string> Nets, System.Numerics.Complex[,] Entries, double FrequencyHz)
 {
+    /// <summary>What was added outside the field solve (lead-out series terms).</summary>
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+
     private int Index(string net)
     {
         for (int i = 0; i < Nets.Count; i++) if (Nets[i] == net) return i;
@@ -87,10 +106,10 @@ public static class PlanarWindingSection
 {
     public static IReadOnlyList<string> Assumptions { get; } = new[]
     {
-        "Axisymmetric: each crossing of the cut is a full ring at that radius; the spiral's pitch and its lead-outs are not modelled.",
+        "Axisymmetric: each crossing of the cut is a full ring at that radius. CutAveraged folds the spiral's pitch in by averaging each turn's radii around the revolution; lead-outs enter only as PEEC series terms on their own winding's Z_ii (no field coupling).",
         "Every turn of a winding carries the winding current in the same sense (series aiding).",
         "Copper thickness and layer heights from the board stackup; dielectric is non-magnetic.",
-        "A core is its axisymmetric equivalent (pot core exact, ER/E cores approximate)."
+        "A core is its axisymmetric equivalent (pot core exact; an ER/E core's legs map to the area-preserving wall — ErCore.PlanarLegSection checks the real legs on a planar cut)."
     };
 
     /// <summary>The turns of <paramref name="nets"/> crossing the ray from <paramref name="center"/>
@@ -127,6 +146,54 @@ public static class PlanarWindingSection
         return turns.OrderBy(t => t.Net, StringComparer.Ordinal).ThenBy(t => t.LayerOrder).ThenBy(t => t.R0).ToList();
     }
 
+    /// <summary>
+    /// The cut averaged over <paramref name="angleCount"/> angles around the axis: each turn
+    /// becomes a ring at its mean radius over the revolution — the rotational average of the
+    /// spiral, so its pitch no longer depends on where the cut was taken. Turns are matched by
+    /// radial order per winding and layer; an angle whose crossing count differs from the majority
+    /// (the ray crossed a lead-out, a terminal pad or a partial turn) is dropped for that winding
+    /// with a note, and the spread of each winding's radii over the used angles (the pitch the
+    /// averaging absorbed) is reported.
+    /// </summary>
+    public static SpiralCut CutAveraged(PcbBoard board, IReadOnlyList<string> nets, Point2 center,
+        double maxRadius, BoardStackup stackup, int angleCount = 16)
+    {
+        if (angleCount < 2) throw new ArgumentOutOfRangeException(nameof(angleCount), "Average over at least 2 angles.");
+        var cuts = new List<IReadOnlyList<WindingTurn>>();
+        for (int k = 0; k < angleCount; k++)
+            cuts.Add(Cut(board, nets, center, 2 * Math.PI * k / angleCount, maxRadius, stackup));
+
+        var turns = new List<WindingTurn>();
+        var notes = new List<string>();
+        var keys = cuts.SelectMany(c => c).Select(t => (t.Net, t.LayerOrder)).Distinct()
+            .OrderBy(k => k.Net, StringComparer.Ordinal).ThenBy(k => k.LayerOrder).ToList();
+        foreach (var (net, layer) in keys)
+        {
+            var perAngle = cuts.Select(c => c.Where(t => t.Net == net && t.LayerOrder == layer).ToList()).ToList();
+            // The majority crossing count; more-frequent wins, ties to the larger count.
+            int majority = perAngle.GroupBy(a => a.Count).OrderByDescending(g => g.Count())
+                .ThenByDescending(g => g.Key).First().Key;
+            var used = perAngle.Where(a => a.Count == majority).ToList();
+            if (used.Count < angleCount)
+                notes.Add($"Winding '{net}' layer {layer}: {angleCount - used.Count} of {angleCount} angles dropped "
+                    + $"({majority} crossings in the majority — a lead-out, terminal or partial turn crossed the others).");
+            if (majority == 0) continue;
+            double spread = 0;
+            for (int t = 0; t < majority; t++)
+            {
+                double r0 = used.Average(a => a[t].R0);
+                double r1 = used.Average(a => a[t].R1);
+                spread = Math.Max(spread, used.Max(a => a[t].R0) - used.Min(a => a[t].R0));
+                turns.Add(new WindingTurn(net, layer, r0, r1, used[0][t].Z0, used[0][t].Z1));
+            }
+            notes.Add($"Winding '{net}' layer {layer}: {majority} turn(s) at their mean radii over "
+                + $"{used.Count} angle(s); largest radius spread over the revolution {spread * 1e3:g3} mm (the pitch).");
+        }
+        return new SpiralCut(
+            turns.OrderBy(t => t.Net, StringComparer.Ordinal).ThenBy(t => t.LayerOrder).ThenBy(t => t.R0).ToList(),
+            notes);
+    }
+
     /// <summary>The parameter intervals [a, b] ⊂ [0, 1] of segment p→q inside the polygon.</summary>
     public static IReadOnlyList<(double A, double B)> Intervals(Polygon2 polygon, Point2 p, Point2 q)
     {
@@ -146,7 +213,7 @@ public static class PlanarWindingSection
             }
         hits.Sort();
         var result = new List<(double, double)>();
-        bool inside = Contains(polygon, p);
+        bool inside = polygon.Contains(p);
         double start = inside ? 0 : double.NaN;
         foreach (double t in hits)
         {
@@ -155,17 +222,6 @@ public static class PlanarWindingSection
         }
         if (inside) result.Add((start, 1));
         return result;
-    }
-
-    private static bool Contains(Polygon2 polygon, Point2 p)
-    {
-        bool inside = false;
-        foreach (var ring in Polygon2.OrientedRings(polygon))
-            for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
-                if ((ring[i].Y > p.Y) != (ring[j].Y > p.Y)
-                    && p.X < (ring[j].X - ring[i].X) * (p.Y - ring[i].Y) / (ring[j].Y - ring[i].Y) + ring[i].X)
-                    inside = !inside;
-        return inside;
     }
 
     /// <summary>The axisymmetric model of the cut turns, with an optional core. Each winding in
@@ -236,9 +292,12 @@ public static class PlanarWindingSection
 
     /// <summary>The winding impedance matrix at <paramref name="frequencyHz"/>: one solid-turn
     /// time-harmonic solve per winding, each driven with 1 A while the others are open, the
-    /// voltages summed along every winding's turns.</summary>
+    /// voltages summed along every winding's turns. Each of <paramref name="leadOuts"/> adds its
+    /// PEEC series impedance (DC resistance + partial self-inductance of the straight trace) to
+    /// its own winding's diagonal entry — lead-outs couple to nothing.</summary>
     public static WindingImpedanceMatrix ImpedanceMatrix(IReadOnlyList<WindingTurn> turns, AxisymmetricCore? core,
-        double frequencyHz, double copperConductivity = 5.8e7, double? minElement = null)
+        double frequencyHz, double copperConductivity = 5.8e7, double? minElement = null,
+        IReadOnlyList<LeadOut>? leadOuts = null)
     {
         var nets = turns.Select(t => t.Net).Distinct().OrderBy(n => n, StringComparer.Ordinal).ToList();
         var entries = new Complex[nets.Count, nets.Count];
@@ -251,6 +310,17 @@ public static class PlanarWindingSection
             for (int i = 0; i < nets.Count; i++)
                 entries[i, j] = built.Windings[nets[i]].Aggregate(Complex.Zero, (s, t) => s + solution.ConductorVoltage(t.Name));
         }
-        return new WindingImpedanceMatrix(nets, entries, frequencyHz);
+        var notes = new List<string>();
+        foreach (var lead in leadOuts ?? Array.Empty<LeadOut>())
+        {
+            int i = nets.IndexOf(lead.Net);
+            if (i < 0) throw new ArgumentException($"Lead-out for '{lead.Net}': no such winding.", nameof(leadOuts));
+            var z = lead.SeriesImpedance(frequencyHz);
+            entries[i, i] += z;
+            notes.Add($"Lead-out on '{lead.Net}': {lead.Length * 1e3:g4} × {lead.Width * 1e3:g4} × {lead.Thickness * 1e3:g4} mm "
+                + $"adds {z.Real * 1e3:g4} mΩ + {z.Imaginary / (2 * Math.PI * frequencyHz) * 1e9:g4} nH in series "
+                + "(PEEC partial self; no mutual to the rings or other lead-outs, no skin effect in the trace).");
+        }
+        return new WindingImpedanceMatrix(nets, entries, frequencyHz) { Notes = notes };
     }
 }
