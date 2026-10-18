@@ -42,6 +42,11 @@
                 </UniformGrid>
                 <TextBlock Text="Backward Euler is stable at any step size; smaller steps sharpen the early transient. TR-BDF2 is second order at the same cost per stage; the adaptive step keeps each step's error under the tolerance. Results appear as scrubbable time frames."
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+                <!-- FU-44 / FU-47: the state a transient starts from -->
+                <CheckBox x:Name="StartFromSteadyCheck" Content="Start from the last steady thermal result"
+                          IsChecked="{Binding Solve.StartFromLastSteady}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,4,2,0"
+                          ToolTip="Solve the steady state first (the steady heat-conduction analysis, with the conditions of the starting point), then switch to the transient: it starts from that field, node by node, instead of the uniform initial temperature. Nodes under a fixed temperature start at their value. Needs the same mesh."/>
+                <TextBlock Text="{Binding Solve.LastSteadyStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="20,0,0,0"/>
             </StackPanel>
         </GroupBox>
         <!-- Pulsed power and thermal impedance -->
@@ -66,6 +71,9 @@
                 <CheckBox Content="Follow the nonlinear surface exchange"
                           IsChecked="{Binding Solve.ZthNonlinear}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
                           ToolTip="Z_th from the full transient at the model's power from its unpowered state, the convection correlations and radiation re-evaluated as it heats. Unchecked: the linear model about the steady state."/>
+                <CheckBox x:Name="ZthMutualCheck" Content="Mutual matrix over the heat-flow conditions"
+                          IsChecked="{Binding Solve.ZthMutual}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
+                          ToolTip="Each heat-flow condition is a source: one linear run per source with the others off, each read at every source's faces — the self and mutual Z_th, fitted as a Foster matrix with shared time constants (saved as SPICE). Linear model only."/>
                 <Button Content="Thermal impedance curve (Z_th)" Command="{Binding Solve.SolveThermalImpedanceCommand}"
                         ToolTip="Temperature rise per watt at the heated faces against time after switch-on, on a logarithmic time grid, with a fitted Foster network and its Cauer ladder. Uses the thermal conditions placed on the model."/>
                 <TextBlock Text="{Binding Solve.ZthResult}" TextWrapping="Wrap" FontSize="11"
@@ -108,6 +116,70 @@
                     <TextBox x:Name="AcPointCountBox" Text="{Binding Solve.AcPointCount}"/>
                 </UniformGrid>
                 <TextBlock Text="Electro-quasistatic (σ + jωε) — for dielectric/capacitive studies. Conductor+dielectric composites are rejected (same conditioning ban as DC); use the trace R + jωL estimate for copper. Scrub frequencies in the Results panel."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- FU-42 / FU-47: the electrostatic solve's outer boundary -->
+        <GroupBox Header="Electrostatic settings"
+                  Visibility="{Binding Session.IsElectrostaticAnalysis, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <CheckBox x:Name="OpenBoundaryCheck" Content="Open outer boundary (space beyond the mesh)"
+                          IsChecked="{Binding Solve.ElectrostaticOpenBoundary}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
+                          ToolTip="Every boundary face no electrode claims carries the asymptotic condition of the net charge's 1/r field, so an isolated conductor has a capacitance to infinity. Unchecked: a zero-flux wall. Saved with the project's solver settings."/>
+                <TextBlock Text="The 1/r term is exact; the dipole and higher terms are not absorbed, their share falling as (a/R)³ for a structure of size a in a boundary R away — the solve states a/R."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- FU-45 / FU-47: flux recovery and probes (DC conduction, steady heat) -->
+        <GroupBox Header="Flux recovery and probes"
+                  Visibility="{Binding Session.IsFluxRecoveryAnalysis, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <CheckBox x:Name="RecoverFluxCheck" Content="Recover the flux and estimate its error"
+                          IsChecked="{Binding Solve.RecoverFlux}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
+                          ToolTip="Superconvergent patch recovery of the current density or heat flux, one polynomial per material round every node, with the element error field and the energy-norm error of the whole mesh; and the flux through every probe below, in the log. Off: the solve's own fields only."/>
+                <ItemsControl ItemsSource="{Binding Solve.FluxProbes}" IsEnabled="{Binding Solve.RecoverFlux}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,2">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="70"/>
+                                        <ColumnDefinition Width="20"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding Name}"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding Kind}" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                                    <Button Grid.Column="2" Content="×" Padding="0" ToolTip="Remove this probe"
+                                            Command="{Binding DataContext.Solve.RemoveProbeCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                                <UniformGrid Columns="2" Visibility="{Binding IsPlane, Converter={StaticResource BoolToVis}}">
+                                    <Label Content="Point x/y/z [mm]"/>
+                                    <UniformGrid Columns="3">
+                                        <TextBox Text="{Binding OriginXMm}" Margin="0,0,2,0"/>
+                                        <TextBox Text="{Binding OriginYMm}" Margin="2,0,2,0"/>
+                                        <TextBox Text="{Binding OriginZMm}" Margin="2,0,0,0"/>
+                                    </UniformGrid>
+                                    <Label Content="Normal x/y/z"/>
+                                    <UniformGrid Columns="3">
+                                        <TextBox Text="{Binding NormalX}" Margin="0,0,2,0"/>
+                                        <TextBox Text="{Binding NormalY}" Margin="2,0,2,0"/>
+                                        <TextBox Text="{Binding NormalZ}" Margin="2,0,0,0"/>
+                                    </UniformGrid>
+                                </UniformGrid>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <UniformGrid Columns="2" Margin="0,2,0,0" IsEnabled="{Binding Solve.RecoverFlux}">
+                    <Button Content="Add a plane probe" Command="{Binding Solve.AddPlaneProbeCommand}"
+                            ToolTip="The flux crossing a plane through the point, in the normal's direction: the conservative value (the solve's own balance of the part on the plane's positive side) and the section value through the cut."/>
+                    <Button Content="Probe on the selected faces" Command="{Binding Solve.AddFaceProbeCommand}" Margin="2,0,0,0"
+                            ToolTip="The flux leaving the body through the selected boundary faces."/>
+                </UniformGrid>
+                <TextBlock Text="Probes are kept for this session (not saved with the project); a plane limited to a box is library and command line only."
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </GroupBox>

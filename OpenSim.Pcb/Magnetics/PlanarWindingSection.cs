@@ -115,7 +115,24 @@ public static class PlanarWindingSection
     /// <summary>The turns of <paramref name="nets"/> crossing the ray from <paramref name="center"/>
     /// at <paramref name="angle"/> [rad], out to <paramref name="maxRadius"/>.</summary>
     public static IReadOnlyList<WindingTurn> Cut(PcbBoard board, IReadOnlyList<string> nets, Point2 center, double angle,
-        double maxRadius, BoardStackup stackup)
+        double maxRadius, BoardStackup stackup) =>
+        Cut(board, Resolve(board, nets), center, angle, maxRadius, stackup);
+
+    /// <summary>The same for the nets themselves — a board whose nets carry no names (a Gerber set
+    /// without X2 attributes) can be cut too; such a winding is named "Net {Id}".</summary>
+    public static IReadOnlyList<WindingTurn> Cut(PcbBoard board, IReadOnlyList<CopperNet> nets, Point2 center, double angle,
+        double maxRadius, BoardStackup stackup) =>
+        Cut(board, nets.Select(n => (WindingName(n), n)).ToList(), center, angle, maxRadius, stackup);
+
+    /// <summary>The name a net's winding goes by: its design name, or "Net {Id}" without one.</summary>
+    public static string WindingName(CopperNet net) => net.Name ?? $"Net {net.Id}";
+
+    private static List<(string Name, CopperNet Net)> Resolve(PcbBoard board, IReadOnlyList<string> nets) =>
+        nets.Select(name => (name, board.Nets.FirstOrDefault(n => n.Name == name) ?? throw new ArgumentException($"No net named '{name}'.")))
+            .ToList();
+
+    private static IReadOnlyList<WindingTurn> Cut(PcbBoard board, IReadOnlyList<(string Name, CopperNet Net)> nets, Point2 center,
+        double angle, double maxRadius, BoardStackup stackup)
     {
         var dir = new Point2(Math.Cos(angle), Math.Sin(angle));
         var end = center + dir * maxRadius;
@@ -129,9 +146,8 @@ public static class PlanarWindingSection
             z -= stackup.CopperThicknessOf(k) + (k < layerCount ? stackup.GapThicknessOf(k) : 0);
         }
         var turns = new List<WindingTurn>();
-        foreach (var name in nets)
+        foreach (var (name, net) in nets)
         {
-            var net = board.Nets.FirstOrDefault(n => n.Name == name) ?? throw new ArgumentException($"No net named '{name}'.");
             foreach (var island in net.Islands)
             {
                 double t = stackup.CopperThicknessOf(island.LayerOrder);
@@ -156,7 +172,16 @@ public static class PlanarWindingSection
     /// averaging absorbed) is reported.
     /// </summary>
     public static SpiralCut CutAveraged(PcbBoard board, IReadOnlyList<string> nets, Point2 center,
-        double maxRadius, BoardStackup stackup, int angleCount = 16)
+        double maxRadius, BoardStackup stackup, int angleCount = 16) =>
+        CutAveraged(board, Resolve(board, nets), center, maxRadius, stackup, angleCount);
+
+    /// <summary>The same for the nets themselves (unnamed nets are named "Net {Id}").</summary>
+    public static SpiralCut CutAveraged(PcbBoard board, IReadOnlyList<CopperNet> nets, Point2 center,
+        double maxRadius, BoardStackup stackup, int angleCount = 16) =>
+        CutAveraged(board, nets.Select(n => (WindingName(n), n)).ToList(), center, maxRadius, stackup, angleCount);
+
+    private static SpiralCut CutAveraged(PcbBoard board, IReadOnlyList<(string Name, CopperNet Net)> nets, Point2 center,
+        double maxRadius, BoardStackup stackup, int angleCount)
     {
         if (angleCount < 2) throw new ArgumentOutOfRangeException(nameof(angleCount), "Average over at least 2 angles.");
         var cuts = new List<IReadOnlyList<WindingTurn>>();

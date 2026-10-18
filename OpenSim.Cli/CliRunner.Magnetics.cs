@@ -1,8 +1,6 @@
 using System.Globalization;
-using System.Numerics;
 using System.Text.Json;
 using OpenSim.Core.Geometry2D;
-using OpenSim.Core.PostProcessing;
 using OpenSim.Pcb.Import;
 using OpenSim.Pcb.Ipc2581;
 using OpenSim.Pcb.Magnetics;
@@ -56,63 +54,18 @@ public static partial class CliRunner
             core = new AxisymmetricCore(spec.PostRadius, spec.WindowRadius, spec.OuterRadius, spec.PlateThickness, spec.WindowHeight,
                 spec.CentreGap, new MagneticMaterial("core", spec.RelativePermeability));
         }
-        bool solid = frequency > 0 && strandDiameter == 0;
-        var built = PlanarWindingSection.Build(turns, new Dictionary<string, Complex> { [drive] = 1 }, core,
-            solidTurns: solid, strandDiameter: strandDiameter, strandsPerTurn: strandsPerTurn);
-        var solver = new MagneticSolver2D();
-        var solution = frequency > 0 ? solver.SolveTimeHarmonic(built.Model, frequency) : solver.SolveStatic(built.Model);
-
-        var results = new List<(string, string)>();
-        var l = built.Inductance(solution, drive);
-        results.Add(($"L({drive})", $"{l.Real * 1e9:g5} nH"));
-        if (frequency > 0 && solid)
-            results.Add(($"R_ac({drive}) at {frequency:g4} Hz", $"{built.Resistance(solution, drive) * 1e3:g5} mΩ"));
-        if (frequency > 0 && strandDiameter > 0)
-            // Every winding's strand loss loads the drive (1 A), the passive windings' proximity
-            // loss included.
-            results.Add(($"R_ac({drive}) at {frequency:g4} Hz, strands", $"{2 * built.StrandLossWatts(solution) * 1e3:g5} mΩ"));
-        // Mutual inductance to the undriven windings: static or stranded, their turns carry no
-        // current, so their flux linkage per ampere of the driven winding is M; solid at AC, their
-        // open-circuit voltage over jω is.
-        foreach (var other in nets.Where(n => n != drive && built.Windings.ContainsKey(n)))
+        var result = PlanarMagneticsStudy.Run(new PlanarMagneticsInput
         {
-            var m = solid
-                ? built.Windings[other].Aggregate(Complex.Zero, (s, t) => s + solution.ConductorVoltage(t.Name))
-                    / new Complex(0, 2 * Math.PI * frequency)
-                : built.Windings[other].Aggregate(Complex.Zero, (s, t) => s + solution.FluxLinkage(t.Name));
-            results.Add(($"M({drive},{other})", $"{m.Real * 1e9:g5} nH"));
-        }
-        foreach (var (k, v) in results) stdout.WriteLine($"{k}: {v}");
+            Turns = turns, Drive = drive, Windings = nets, FrequencyHz = frequency, Core = core,
+            StrandDiameter = strandDiameter, StrandsPerTurn = strandsPerTurn
+        });
+        foreach (var (k, v) in result.Lines()) stdout.WriteLine($"{k}: {v}");
 
         string dir = OutDir(boardPath, o, "-magnetics");
-        var report = new StudyReport
-        {
-            Title = $"{Path.GetFileNameWithoutExtension(boardPath)} — planar magnetics",
-            Inputs = new List<(string, string)>
-            {
-                ("Windings", string.Join(", ", nets)), ("Driven", drive),
-                ("Axis", $"({xy[0] * 1e3:g5}, {xy[1] * 1e3:g5}) mm, "
-                    + (cutAngles > 1 ? $"cut averaged over {cutAngles} angles" : $"cut at {angle * 180 / Math.PI:g4}°")),
-                ("Frequency", frequency > 0 ? $"{frequency:g5} Hz" : "static"),
-                ("Core", core is null ? "none" : $"post {core.PostRadius * 1e3:g4} mm, gap {core.CentreGap * 1e3:g4} mm, µr {core.Material.RelativePermeability:g4}")
-            },
-            Results = results,
-            Sections = new[]
-            {
-                new ReportSection("Turns")
-                {
-                    TableHeaders = new[] { "Winding", "Layer", "r0 (mm)", "r1 (mm)", "z0 (µm)", "z1 (µm)" },
-                    TableRows = turns.Select(t => (IReadOnlyList<string>)new[]
-                    {
-                        t.Net, t.LayerOrder.ToString(CultureInfo.InvariantCulture), (t.R0 * 1e3).ToString("0.###", CultureInfo.InvariantCulture),
-                        (t.R1 * 1e3).ToString("0.###", CultureInfo.InvariantCulture), (t.Z0 * 1e6).ToString("0.#", CultureInfo.InvariantCulture),
-                        (t.Z1 * 1e6).ToString("0.#", CultureInfo.InvariantCulture)
-                    }).ToList()
-                },
-                new ReportSection("Solve") { Lines = cutNotes.Concat(solution.Log).Concat(built.Notes).ToList() }
-            },
-            Assumptions = PlanarWindingSection.Assumptions.Concat(MagneticSolver2D.Assumptions).ToList()
-        };
+        var report = result.Report($"{Path.GetFileNameWithoutExtension(boardPath)} — planar magnetics",
+            $"({xy[0] * 1e3:g5}, {xy[1] * 1e3:g5}) mm, "
+            + (cutAngles > 1 ? $"cut averaged over {cutAngles} angles" : $"cut at {angle * 180 / Math.PI:g4}°"),
+            cutNotes);
         File.WriteAllText(Path.Combine(dir, "magnetics-report.md"), report.ToMarkdown());
         File.WriteAllText(Path.Combine(dir, "magnetics-report.html"), report.ToHtml());
         stdout.WriteLine($"Results written to {dir}");

@@ -20,7 +20,70 @@
                 <Label Content="Ambient [K]"/>
                 <TextBox Text="{Binding Conditions.AmbientTemperature}"/>
             </UniformGrid>
+            <!-- FU-44 / FU-47: h varying along a flow (ConvectionProfile) -->
+            <CheckBox x:Name="ConvectionVariesCheck" Content="h varies along a flow (boundary layer, table, wakes)"
+                      IsChecked="{Binding Conditions.ConvectionVaries}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,2,0"
+                      ToolTip="h(x) = h · g(x) · table(x) · wakes, x downstream of the leading edge along the flow; g holds the faces' mean at h. Each triangle takes the mean of h over its area."/>
+            <UniformGrid Columns="2" Visibility="{Binding Conditions.ConvectionVaries, Converter={StaticResource BoolToVis}}">
+                <Label Content="Leading edge x/y/z [mm]"/>
+                <UniformGrid Columns="3">
+                    <TextBox Text="{Binding Conditions.LeadingEdgeXMm}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding Conditions.LeadingEdgeYMm}" Margin="2,0,2,0"/>
+                    <TextBox Text="{Binding Conditions.LeadingEdgeZMm}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Flow direction x/y/z"/>
+                <UniformGrid Columns="3">
+                    <TextBox Text="{Binding Conditions.FlowDirectionX}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding Conditions.FlowDirectionY}" Margin="2,0,2,0"/>
+                    <TextBox Text="{Binding Conditions.FlowDirectionZ}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Boundary layer exponent (0 = none)"/>
+                <TextBox Text="{Binding Conditions.BoundaryLayerExponent}"
+                         ToolTip="h ∝ x^n with the faces' area-mean held at h: −0.5 for a laminar layer, about −0.2 for a turbulent one; 0 leaves it out. Must lie in (−1, 0]."/>
+                <Label Content="Factor table (mm:factor, …)"/>
+                <TextBox Text="{Binding Conditions.ConvectionTable}"
+                         ToolTip="A factor against the downstream distance, straight lines between the points and flat beyond them, e.g. 0:1, 20:0.8, 60:0.6. Blank: none."/>
+                <Label Content="Wakes (x,y,z,half-width,length,factor; …)"/>
+                <TextBox Text="{Binding Conditions.ConvectionWakes}"
+                         ToolTip="Behind a part at (x, y, z) mm: within the half-width of its axis along the flow, h is multiplied by the factor just behind it, recovering to 1 at the length downstream. Distances in mm; separate wakes with ';'."/>
+            </UniformGrid>
             <Button Content="Add convection" Command="{Binding Conditions.AddConvectionCommand}"/>
+
+            <!-- FU-44 / FU-47: radiation exchanged among faces that see each other -->
+            <StackPanel Visibility="{Binding Session.IsRadiationExchangeAnalysis, Converter={StaticResource BoolToVis}}" Margin="0,8,0,0">
+                <TextBlock Text="Radiation exchange" FontWeight="Bold" Margin="0,0,0,2"/>
+                <TextBlock Text="Faces that see each other — fins, two boards, an enclosure's walls — exchange grey diffuse radiation with view factors from the geometry; whatever part of a face's view the set does not take sees a black surrounding at the ambient. Kept for this session (not saved with the project)."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <Button x:Name="AddRadiationSetButton" Content="Add the selected faces as a radiation set" Command="{Binding Solve.AddRadiationSetCommand}"/>
+                <ItemsControl ItemsSource="{Binding Solve.RadiationSets}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,2">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="20"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding Name}"/>
+                                    <Button Grid.Column="1" Content="×" Padding="0" ToolTip="Remove this set"
+                                            Command="{Binding DataContext.Solve.RemoveRadiationSetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding FaceSummary}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
+                                <UniformGrid Columns="2">
+                                    <Label Content="Ambient beyond [K]"/>
+                                    <TextBox Text="{Binding AmbientKelvin}"/>
+                                    <Label Content="Emissivity (0 = material)"/>
+                                    <TextBox Text="{Binding Emissivity}"/>
+                                </UniformGrid>
+                                <CheckBox Content="Other surfaces may block the view" IsChecked="{Binding Obstruction}"
+                                          Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                                          ToolTip="Off: every pair of triangles facing each other sees each other whole — right for convex arrangements, and cheaper."/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </StackPanel>
     </GroupBox>
 </UserControl>

@@ -29,11 +29,16 @@ public partial class PcbViewModel : ObservableObject
     private readonly InductanceViewModel _inductance;
     private readonly AntennaViewModel _antenna;
     private readonly SignalIntegrityViewModel _signalIntegrity;
+    private readonly MagneticsViewModel _magnetics;
+    private readonly EmiViewModel _emi;
 
     public PcbViewModel(ProjectSession session, ILogService log, MeshingViewModel meshing,
         ElectrodesViewModel electrodes, MaterialsViewModel materials, InductanceViewModel inductance,
-        AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, PowerRailViewModel rail)
+        AntennaViewModel antenna, SignalIntegrityViewModel signalIntegrity, PowerRailViewModel rail,
+        MagneticsViewModel magnetics, EmiViewModel emi)
     {
+        _magnetics = magnetics;
+        _emi = emi;
         _rail = rail;
         rail.BoardThermal = RailBoardThermal;
         _session = session;
@@ -330,6 +335,8 @@ public partial class PcbViewModel : ObservableObject
             // GetFileName also yields the folder name for a Gerber directory import —
             // the DC-nets CSV report names its source board with it.
             _signalIntegrity.LoadBoard(board, BuildNetMeshOptions, Path.GetFileName(archive));
+            _magnetics.LoadBoard(board, BuildNetMeshOptions, Path.GetFileName(archive));
+            _emi.LoadBoard(board, BuildNetMeshOptions, Path.GetFileName(archive));
 
             _log.Append($"PCB archive: {board.Layers.Count} layers classified " +
                         $"(import {importTimer.ElapsedMilliseconds} ms).");
@@ -740,6 +747,8 @@ public partial class PcbViewModel : ObservableObject
         ClearSpacing();
         _inductance.Clear();
         _antenna.Clear();
+        _magnetics.Clear();
+        _emi.Clear();
         _session.IsPcbMode = false;
         foreach (var row in NetRows) row.PropertyChanged -= OnNetRowChanged;
         foreach (var f in LayerFilters) f.PropertyChanged -= OnLayerFilterChanged;

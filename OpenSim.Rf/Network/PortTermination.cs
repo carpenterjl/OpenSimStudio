@@ -81,6 +81,53 @@ public static class PortTermination
         return result;
     }
 
+    /// <summary>
+    /// Every port's voltage and current when port <paramref name="driven"/> is driven by an ideal
+    /// source of <paramref name="sourceVolts"/>, each port in <paramref name="loads"/> is closed by
+    /// its impedance (0 is a short), and every other port is left open — nothing connected, so no
+    /// current. Currents flow into the ports (V = Z·I). The currents of the driven and loaded ports
+    /// solve (Z_nn + Z_L)·I_n = V_s·e_driven; the open ports' voltages follow from V = Z·I. This is
+    /// the excitation a far field or a current display needs; <see cref="Terminate"/> is the same
+    /// closure seen from the driven port (V/I there equals its reduced Z).
+    /// </summary>
+    public static (Complex[] Volts, Complex[] Currents) Drive(Complex[,] z, int driven,
+        IReadOnlyDictionary<int, Complex> loads, Complex? sourceVolts = null)
+    {
+        int n = z.GetLength(0);
+        if (z.GetLength(1) != n) throw new ArgumentException("Z must be square.", nameof(z));
+        if (driven < 0 || driven >= n)
+            throw new ArgumentOutOfRangeException(nameof(driven), $"Port {driven} is outside 0..{n - 1}.");
+        foreach (int port in loads.Keys)
+        {
+            if (port < 0 || port >= n)
+                throw new ArgumentOutOfRangeException(nameof(loads), $"Port {port} is outside 0..{n - 1}.");
+            if (port == driven)
+                throw new ArgumentException($"Port {port} is driven; it cannot also be loaded.", nameof(loads));
+        }
+        var carrying = new[] { driven }.Concat(loads.Keys).OrderBy(i => i).ToArray();
+        var system = new ComplexDenseMatrix(carrying.Length, carrying.Length);
+        var rhs = new Complex[carrying.Length];
+        for (int a = 0; a < carrying.Length; a++)
+        {
+            for (int b = 0; b < carrying.Length; b++) system[a, b] = z[carrying[a], carrying[b]];
+            if (loads.TryGetValue(carrying[a], out var load)) system[a, a] += load;
+            if (carrying[a] == driven) rhs[a] = sourceVolts ?? Complex.One;
+        }
+        var solved = ComplexLu.Factor(system).Solve(rhs);
+        var currents = new Complex[n];
+        for (int a = 0; a < carrying.Length; a++) currents[carrying[a]] = solved[a];
+        var volts = new Complex[n];
+        for (int i = 0; i < n; i++)
+        {
+            Complex sum = Complex.Zero;
+            for (int a = 0; a < carrying.Length; a++) sum += z[i, carrying[a]] * solved[a];
+            volts[i] = sum;
+        }
+        // The driven port carries the source's voltage exactly, not the round-off of Z·I.
+        volts[driven] = sourceVolts ?? Complex.One;
+        return (volts, currents);
+    }
+
     /// <summary>Γ = (Z − Z₀)/(Z + Z₀).</summary>
     public static Complex Reflection(Complex z, double referenceOhms) => (z - referenceOhms) / (z + referenceOhms);
 

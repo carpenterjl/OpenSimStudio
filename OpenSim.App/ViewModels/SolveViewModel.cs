@@ -60,8 +60,8 @@ public partial class SolveViewModel : ObservableObject
     [ObservableProperty] private double _cfdCellSize;
 
     /// <summary>The panel's analysis settings as the project saves them (FU-46), so the
-    /// command line solves the project the way the panel last did. The open-boundary flag
-    /// has no panel control and keeps whatever the project already carries.</summary>
+    /// command line solves the project the way the panel last did; the electrostatic open
+    /// boundary is the panel's check box (FU-47).</summary>
     public SolverSettings ToSolverSettings() => new()
     {
         InitialTemperature = InitialTemperature,
@@ -74,7 +74,7 @@ public partial class SolveViewModel : ObservableObject
         MaxFrequency = AcMaxFrequency,
         PointCount = AcPointCount,
         ModeCount = ModeCount,
-        OpenBoundary = _session.Project.Solver?.OpenBoundary ?? false,
+        OpenBoundary = ElectrostaticOpenBoundary,
         EnvironmentSteady = EnvironmentSteadyState,
         JouleTransient = JouleTransient
     };
@@ -96,6 +96,7 @@ public partial class SolveViewModel : ObservableObject
         ModeCount = saved.ModeCount;
         EnvironmentSteadyState = saved.EnvironmentSteady;
         JouleTransient = saved.JouleTransient;
+        ElectrostaticOpenBoundary = saved.OpenBoundary;
     }
 
     [RelayCommand]
@@ -169,7 +170,7 @@ public partial class SolveViewModel : ObservableObject
             BoundaryConditions = conditions,
             RegionMaterials = regionMaterials,
             TransientThermal = transientRequested
-                ? BuildTransientSettings()
+                ? WithInitialState(BuildTransientSettings(), body)
                 : null,
             Modal = kind == AnalysisType.Modal ? new ModalSettings { ModeCount = ModeCount } : null,
             HarmonicElectric = kind == AnalysisType.AcElectrical
@@ -179,7 +180,10 @@ public partial class SolveViewModel : ObservableObject
                     MaxFrequency = AcMaxFrequency,
                     PointCount = AcPointCount
                 }
-                : null
+                : null,
+            Electrostatic = BuildElectrostaticSettings(kind),
+            FluxRecovery = BuildFluxRecovery(kind),
+            SurfaceRadiation = BuildRadiationSets(kind)
         };
 
         var (validate, solve) = ResolveAnalysis(kind);
@@ -210,6 +214,7 @@ public partial class SolveViewModel : ObservableObject
                 _log.Append(line);
 
             RememberRun(kind.ToString(), body.Name, input, output);
+            RememberSteady(kind, body, output);
             _session.RaiseResultsProduced(output.Fields, analysis: kind,
                 frames: output.Frames, frameAxis: output.FrameAxis);
             _session.StatusText = "Solve complete";
@@ -402,6 +407,12 @@ public partial class SolveViewModel : ObservableObject
         var solver = transient
             ? (ISolver)_solvers.First(s => s is OpenSim.Solvers.TransientThermalSolver)
             : _solvers.First(s => s is OpenSim.Solvers.HeatConductionSolver);
+        if (transient && StartFromLastSteady)
+            _log.Append("The environment solve of the assembly starts at the uniform initial temperature: starting from a steady "
+                + "result is for a single body's transient.");
+        if (RadiationSets.Count > 0)
+            _log.Append("The radiation-exchange sets are for a single body's heat conduction; the environment solve of the "
+                + "assembly leaves them out (its faces have assembly-wide numbers).");
 
         _session.IsBusy = true;
         _session.StatusText = "Assembling…";
@@ -547,6 +558,9 @@ public partial class SolveViewModel : ObservableObject
         // Persisted with the project: a CFD case that cannot be saved cannot be re-run,
         // and a number nobody can re-run is not reproducible.
         _session.Project.Cfd = cfd;
+        if (transient && StartFromLastSteady)
+            _log.Append("The conjugate solve starts at the uniform initial temperature: starting from a steady result is for a "
+                + "single body's transient.");
 
         _session.IsBusy = true;
         _session.StatusText = "Assembling…";

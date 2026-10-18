@@ -45,6 +45,10 @@ public sealed record BoardAntennaStackup(
     /// so top-layer board nets stay bitwise what they have always been.</summary>
     public bool IsSingleSlabTop => IsCoplanarTop && Stackup.Layers.Count == 1;
 
+    /// <summary>The copper layer order (1 = top) modelled as the ground plane — where a pin from
+    /// the ground up to the net's copper starts. 0 when the record was built by hand.</summary>
+    public int GroundLayer { get; init; }
+
     /// <summary>Resolve the stackup for a net on copper layer <paramref name="layerOrder"/>
     /// (1 = top). Throws a typed failure naming the reason when the board cannot support an
     /// antenna model — a guessed ground plane would be a wrong answer, not a rough one.</summary>
@@ -149,7 +153,7 @@ public sealed record BoardAntennaStackup(
               + "the metal, so this solves as a covered patch (the cover loads the resonance "
               + "downward relative to the same trace on the top layer).");
 
-        return new BoardAntennaStackup(resolved, sourceInterface, coplanarTop, notes);
+        return new BoardAntennaStackup(resolved, sourceInterface, coplanarTop, notes) { GroundLayer = groundLayer };
     }
 
     /// <summary>Fraction of <paramref name="footprint"/>'s area that has copper of

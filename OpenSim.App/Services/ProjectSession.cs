@@ -217,6 +217,9 @@ public partial class ProjectSession : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsEnvironmentThermalAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsConjugateHeatFlowAnalysis))]
     [NotifyPropertyChangedFor(nameof(ShowsTransientSettings))]
+    [NotifyPropertyChangedFor(nameof(IsElectrostaticAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsFluxRecoveryAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsRadiationExchangeAnalysis))]
     private AnalysisOption _selectedAnalysis = AnalysisOption.All[0];
 
     partial void OnSelectedAnalysisChanged(AnalysisOption value)
@@ -247,6 +250,17 @@ public partial class ProjectSession : ObservableObject
         is { Kind: AnalysisType.EnvironmentThermal };
     public bool IsConjugateHeatFlowAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.ConjugateHeatFlow };
+    public bool IsElectrostaticAnalysis => SelectedAnalysis is { Kind: AnalysisType.Electrostatic };
+
+    /// <summary>The scalar steady solves flux recovery and flux probes run on: DC conduction
+    /// and steady heat conduction (FU-45).</summary>
+    public bool IsFluxRecoveryAnalysis => SelectedAnalysis
+        is { Kind: AnalysisType.Electrical or AnalysisType.Thermal };
+
+    /// <summary>The single-body thermal solves that take radiation-exchange sets (FU-44): steady
+    /// and transient heat conduction (and the thermal impedance run from them).</summary>
+    public bool IsRadiationExchangeAnalysis => SelectedAnalysis
+        is { Kind: AnalysisType.Thermal or AnalysisType.TransientThermal };
 
     /// <summary>The transient settings apply to the transient-thermal analysis, to the
     /// Joule study's optional transient thermal leg, and to both environment heat-flow

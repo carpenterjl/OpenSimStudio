@@ -611,6 +611,8 @@
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
                                                 <panels:ElectricalSetupPanel/>
+                                                <panels:MagneticsPanel/>
+                                                <panels:EmiPanel/>
                                                 <panels:MaterialPanel/>
                                                 <panels:ScopeSelectionPanel/>
                                                 <panels:ElectricalConditionsPanel/>

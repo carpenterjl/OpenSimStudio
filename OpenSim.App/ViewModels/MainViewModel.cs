@@ -21,8 +21,9 @@ namespace OpenSim.App.ViewModels;
 /// (edge length, pad hand-off, material lookup), Solve/Electrodes → Materials
 /// (region-material resolution), Solve → Electrodes (pad-electrode boundary conditions
 /// for the AC-sweep/Joule analyses), Solve → Environment (the surroundings the assembly
-/// heat-flow study runs in), Pcb → {Inductance, Antenna} (board hand-off for
-/// the PEEC self/mutual/loop analysis and the antenna simulator), Antenna → Electrodes
+/// heat-flow study runs in), Pcb → {Inductance, Antenna, SignalIntegrity, Magnetics, Emi} (board
+/// hand-off for the PEEC self/mutual/loop analysis, the antenna simulator, the SI/PDN panels, the
+/// planar-magnetics cut and the EMI hot-loop read), Antenna → Electrodes
 /// (the selected source pad places the feed on net-sourced antennas), Scene → Bodies
 /// (per-body visibility for the assembly scene), Scene → Colormap (the colors and value
 /// range the result view paints through).
@@ -43,8 +44,10 @@ public partial class MainViewModel : ObservableObject
         FlowVisualizationViewModel flow, CfdSetupViewModel cfdSetup,
         StudyRailViewModel studyRail,
         ProjectSerializer serializer, RecentProjectsService recentProjects,
-        ThemeService theme)
+        ThemeService theme, MagneticsViewModel magnetics, EmiViewModel emi)
     {
+        Magnetics = magnetics;
+        Emi = emi;
         Session = session;
         Log = log;
         Geometry = geometry;
@@ -111,6 +114,12 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The CFD case: domain, fluid, grid and the detected openings.</summary>
     public CfdSetupViewModel CfdSetup { get; }
+
+    /// <summary>Planar magnetics: a winding section cut from the board (or entered), solved in 2-D.</summary>
+    public MagneticsViewModel Magnetics { get; }
+
+    /// <summary>EMI pre-compliance of a converter, with its hot loop read off the board.</summary>
+    public EmiViewModel Emi { get; }
 
     /// <summary>The gated study-steps rail; its selected step drives the properties pane.</summary>
     public StudyRailViewModel StudyRail { get; }

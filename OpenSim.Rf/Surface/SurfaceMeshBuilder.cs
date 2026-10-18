@@ -30,11 +30,16 @@ public static class SurfaceMeshBuilder
     /// <summary>Rows across a finite port gap at the least.</summary>
     internal const int GapRows = 3;
 
+    /// <summary>A structured plate centred on the origin at height <paramref name="z"/>.
+    /// <paramref name="snapVertex"/> and <paramref name="snapVertices"/> name points that must BE
+    /// mesh vertices (a probe or a pin is vertex-anchored): each moves its nearest interior grid
+    /// vertex onto itself exactly. Two points that would move the same vertex, or whose moves fold a
+    /// triangle, are refused — they are within an element of each other.</summary>
     public static SurfaceGridResult BuildRectangularPlate(double width, double length,
         double maxEdgeLength, double z = 0, double portFraction = 0.5,
         GroundPlane? ground = null, int maxUnknowns = 2000,
         (double X, double Y)? snapVertex = null, double? portOffset = null,
-        double? portGapWidth = null)
+        double? portGapWidth = null, IReadOnlyList<(double X, double Y)>? snapVertices = null)
     {
         // portOffset: the port row's PHYSICAL distance from the −length/2 edge [m]. A vertex
         // row is placed exactly there, so the gap does not move when the mesh changes
@@ -107,7 +112,14 @@ public static class SurfaceMeshBuilder
         // rim vertex: moving one notches the plate's outline, and the fan needs a full ring
         // of triangles around the probe.
         var warnings = new List<string>();
-        if (snapVertex is { } snap)
+        var snaps = new List<(double X, double Y)>();
+        if (snapVertex is { } single) snaps.Add(single);
+        if (snapVertices is not null) snaps.AddRange(snapVertices);
+        // The grid as built, before any vertex moved: every snap searches the same lattice, so
+        // the vertex a point takes does not depend on the order the points are listed in.
+        var grid = vertices.ToArray();
+        var snappedVertices = new Dictionary<int, (double X, double Y)>();
+        foreach (var snap in snaps)
         {
             if (!(Math.Abs(snap.X) < width / 2 && Math.Abs(snap.Y) < length / 2))
                 return SurfaceGridResult.Failure(
@@ -123,10 +135,16 @@ public static class SurfaceMeshBuilder
                 for (int i = 1; i < m; i++)
                 {
                     int v = Index(i, j);
-                    double dx = vertices[v].X - snap.X, dy = vertices[v].Y - snap.Y;
+                    double dx = grid[v].X - snap.X, dy = grid[v].Y - snap.Y;
                     double dist = dx * dx + dy * dy;
                     if (dist < best) { best = dist; nearest = v; }
                 }
+            if (snappedVertices.TryGetValue(nearest, out var other))
+                return SurfaceGridResult.Failure(
+                    $"the points at ({other.X * 1e3:g4}, {other.Y * 1e3:g4}) mm and ({snap.X * 1e3:g4}, " +
+                    $"{snap.Y * 1e3:g4}) mm fall on the same mesh vertex — they are within an element of each " +
+                    "other; move them apart or lower the element size");
+            snappedVertices[nearest] = snap;
             vertices[nearest] = new Vector3D(snap.X, snap.Y, z);
         }
 
@@ -149,6 +167,21 @@ public static class SurfaceMeshBuilder
                 }
             }
 
+        // Two moved vertices of one triangle can fold it (each moves up to half a cell diagonal):
+        // the triangles are CCW by construction, so a non-positive area is a fold.
+        if (snappedVertices.Count > 1)
+            foreach (var (a, b, c) in triangles)
+            {
+                double cross = (vertices[b].X - vertices[a].X) * (vertices[c].Y - vertices[a].Y)
+                             - (vertices[b].Y - vertices[a].Y) * (vertices[c].X - vertices[a].X);
+                if (cross > 0) continue;
+                var moved = new[] { a, b, c }.Where(snappedVertices.ContainsKey).Select(v => snappedVertices[v]).ToList();
+                return SurfaceGridResult.Failure(
+                    "moving mesh vertices onto the points at " +
+                    string.Join(" and ", moved.Select(p => $"({p.X * 1e3:g4}, {p.Y * 1e3:g4}) mm")) +
+                    " folds a triangle — they are on neighbouring vertices; move them apart or lower the element size");
+            }
+
         SurfaceStructure structure;
         try { structure = new SurfaceStructure(vertices, triangles, ground); }
         catch (InvalidOperationException ex) { return SurfaceGridResult.Failure(ex.Message); }
@@ -169,7 +202,7 @@ public static class SurfaceMeshBuilder
         if (portBases.Count == 0)
             return SurfaceGridResult.Failure("no interior port edges exist — the plate is too coarse");
 
-        if (snapVertex is not null)
+        if (snaps.Count > 0)
         {
             // The snap distorts the triangles around the moved vertex; a probe close to the
             // rim squeezes them against it.
@@ -180,10 +213,15 @@ public static class SurfaceMeshBuilder
                         new Point2(vertices[c].X, vertices[c].Y)) < MinAngleWarningDegrees)
                     slivers++;
             if (slivers > 0)
-                warnings.Add($"Moving a mesh vertex onto the probe left {slivers} triangle(s) with a " +
-                             $"minimum angle below {MinAngleWarningDegrees}° — the probe is within a " +
-                             "fraction of an element of the plate's edge or of a mesh line; expect " +
-                             "reduced accuracy there, or use a finer mesh.");
+                warnings.Add(snaps.Count == 1
+                    ? $"Moving a mesh vertex onto the probe left {slivers} triangle(s) with a " +
+                      $"minimum angle below {MinAngleWarningDegrees}° — the probe is within a " +
+                      "fraction of an element of the plate's edge or of a mesh line; expect " +
+                      "reduced accuracy there, or use a finer mesh."
+                    : $"Moving mesh vertices onto the {snaps.Count} pins left {slivers} triangle(s) with a " +
+                      $"minimum angle below {MinAngleWarningDegrees}° — a pin is within a fraction of an " +
+                      "element of the plate's edge or of a mesh line; expect reduced accuracy there, or use " +
+                      "a finer mesh.");
         }
 
         var port = new SurfacePort(portBases, new Vector3D(0, 1, 0));
@@ -234,10 +272,14 @@ public static class SurfaceMeshBuilder
     /// <paramref name="feedHint"/> (the island centroid when null): the conductor's
     /// narrowest cross-section through that point, every interior edge on it driven
     /// together. <paramref name="singleEdgePort"/> restores the old single-edge port
-    /// (kept for comparison; it is not a physical terminal pair on a wide conductor).</summary>
+    /// (kept for comparison; it is not a physical terminal pair on a wide conductor).
+    /// <paramref name="fixedPoints"/> are points that must BE mesh vertices at exactly their
+    /// coordinates — the pins of a pin-array solve, which are vertex-anchored. They join the
+    /// triangulation as input points, the interior lattice keeps clear of them, and their
+    /// coordinates are restored after the triangulation's deterministic jitter.</summary>
     public static SurfaceGridResult BuildFromPolygon(Polygon2 shape, double maxEdgeLength,
         double z, Point2? feedHint = null, GroundPlane? ground = null, int maxUnknowns = 2000,
-        bool singleEdgePort = false)
+        bool singleEdgePort = false, IReadOnlyList<Point2>? fixedPoints = null)
     {
         if (maxEdgeLength <= 0)
             return SurfaceGridResult.Failure("the element size must be positive");
@@ -281,6 +323,28 @@ public static class SurfaceMeshBuilder
         double minX = points.Min(p => p.X), maxX = points.Max(p => p.X);
         double minY = points.Min(p => p.Y), maxY = points.Max(p => p.Y);
         int boundaryCount = points.Count;
+
+        // Fixed points come right after the boundary, so their indices are known after the
+        // triangulation (it appends any Steiner points after every input point).
+        var pinned = fixedPoints ?? Array.Empty<Point2>();
+        for (int k = 0; k < pinned.Count; k++)
+        {
+            var f = pinned[k];
+            if (!latticeInside.Contains(f))
+                return SurfaceGridResult.Failure(
+                    $"the pin at ({f.X * 1e3:g4}, {f.Y * 1e3:g4}) mm is not on the copper being meshed");
+            if (grid.AnyWithin(f, 0.25 * spacing))
+                return SurfaceGridResult.Failure(
+                    $"the pin at ({f.X * 1e3:g4}, {f.Y * 1e3:g4}) mm is within a quarter of an element of the " +
+                    "copper's edge — a pin needs a full ring of triangles round it; move it inward or lower the element size");
+            for (int other = 0; other < k; other++)
+                if ((pinned[other] - f).Length < 0.25 * spacing)
+                    return SurfaceGridResult.Failure(
+                        $"the pins at ({pinned[other].X * 1e3:g4}, {pinned[other].Y * 1e3:g4}) mm and " +
+                        $"({f.X * 1e3:g4}, {f.Y * 1e3:g4}) mm are within a quarter of an element of each other");
+            points.Add(f);
+        }
+
         int row = 0;
         for (double y = minY + spacing / 2; y < maxY; y += spacing, row++)
             for (double x = minX + spacing / 2 + (row % 2) * spacing / 2; x < maxX; x += spacing)
@@ -288,6 +352,10 @@ public static class SurfaceMeshBuilder
                 var p = new Point2(x, y);
                 if (!latticeInside.Contains(p)) continue;
                 if (grid.AnyWithin(p, 0.45 * spacing)) continue;
+                bool nearPin = false;
+                foreach (var f in pinned)
+                    if ((f - p).Length < 0.45 * spacing) { nearPin = true; break; }
+                if (nearPin) continue;
                 points.Add(p);
             }
 
@@ -312,7 +380,12 @@ public static class SurfaceMeshBuilder
         });
 
         var vertices = cdt.Points.Select(p => new Vector3D(p.X, p.Y, z)).ToList();
+        // The jitter (≈1e-6 of the diagonal) is far below an element, so putting a pin back on its
+        // exact point leaves every triangle as it was; a pin solve looks its vertex up to 1e-9.
+        for (int k = 0; k < pinned.Count; k++)
+            vertices[boundaryCount + k] = new Vector3D(pinned[k].X, pinned[k].Y, z);
         var triangles = new List<(int, int, int)>();
+        var pinUsed = new bool[pinned.Count];
         int slivers = 0;
         foreach (var (a, b, c) in cdt.Triangles())
         {
@@ -322,10 +395,16 @@ public static class SurfaceMeshBuilder
             var centroid = new Point2((pa.X + pb.X + pc.X) / 3, (pa.Y + pb.Y + pc.Y) / 3);
             if (!inside.Contains(centroid)) continue;
             triangles.Add((a, b, c));   // Cdt2D emits CCW → consistent +z normals
+            foreach (int v in new[] { a, b, c })
+                if (v >= boundaryCount && v < boundaryCount + pinned.Count) pinUsed[v - boundaryCount] = true;
             if (MinAngleDegrees(pa, pb, pc) < MinAngleWarningDegrees) slivers++;
         }
         if (triangles.Count == 0)
             return SurfaceGridResult.Failure("no triangles survived containment — the outline may be degenerate");
+        for (int k = 0; k < pinned.Count; k++)
+            if (!pinUsed[k])
+                return SurfaceGridResult.Failure(
+                    $"the pin at ({pinned[k].X * 1e3:g4}, {pinned[k].Y * 1e3:g4}) mm did not end up in the mesh");
         if (slivers > 0)
             warnings.Add($"{slivers} triangles have a minimum angle below {MinAngleWarningDegrees}° " +
                          "(boundary slivers); expect reduced local accuracy.");

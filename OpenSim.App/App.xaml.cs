@@ -62,6 +62,8 @@ public partial class App : Application
         services.AddSingleton<InductanceViewModel>();
         services.AddSingleton<AntennaViewModel>();
         services.AddSingleton<SignalIntegrityViewModel>();
+        services.AddSingleton<MagneticsViewModel>();
+        services.AddSingleton<EmiViewModel>();
         services.AddSingleton<BodiesViewModel>();
         services.AddSingleton<EnvironmentViewModel>();
         services.AddSingleton<FlowVisualizationViewModel>();

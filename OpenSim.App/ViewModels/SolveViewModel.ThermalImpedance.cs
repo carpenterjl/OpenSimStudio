@@ -46,9 +46,15 @@ public partial class SolveViewModel
     [ObservableProperty] private ImageSource? _zthPlot;
     [ObservableProperty] private bool _hasZth;
 
+    /// <summary>The mutual-impedance matrix over every heat-flow condition (FU-44): one linear
+    /// run per source with the others off, each read at every source.</summary>
+    [ObservableProperty] private bool _zthMutual;
+
     private ThermalImpedanceCurve? _zthCurve;
     private FosterFit? _zthFit;
     private CauerNetwork? _zthLadder;
+    private ThermalImpedanceMatrix? _zthMatrix;
+    private FosterMatrixFit? _zthMatrixFit;
 
     /// <summary>The transient settings the panel asks for.</summary>
     private TransientThermalSettings BuildTransientSettings() => new()
@@ -84,12 +90,20 @@ public partial class SolveViewModel
                 Material = _session.SelectedMaterial,
                 BoundaryConditions = conditions,
                 RegionMaterials = _materials.ResolveRegionMaterials(body),
-                Environment = _session.SelectedAnalysis.Kind == AnalysisType.EnvironmentThermal ? _environment.Build() : null
+                Environment = _session.SelectedAnalysis.Kind == AnalysisType.EnvironmentThermal ? _environment.Build() : null,
+                SurfaceRadiation = BuildRadiationSets(_session.SelectedAnalysis.Kind)
             };
         }
         catch (Exception ex) { ZthResult = ex.Message; return; }
 
         var settings = new ThermalImpedanceSettings { StartTime = ZthStartTime, EndTime = ZthEndTime, Nonlinear = ZthNonlinear };
+        if (ZthMutual)
+        {
+            await SolveThermalImpedanceMatrixAsync(input, settings);
+            return;
+        }
+        _zthMatrix = null;
+        _zthMatrixFit = null;
         int stages = Math.Max(0, ZthStages);
         _session.IsBusy = true;
         _session.StatusText = "Thermal impedance…";
@@ -148,9 +162,91 @@ public partial class SolveViewModel
         }
     }
 
+    /// <summary>The mutual matrix: every heat-flow condition a source, the curves [at ← from], the
+    /// steady matrix, and the Foster matrix fitted to them with shared time constants.</summary>
+    private async Task SolveThermalImpedanceMatrixAsync(SolveInput input, ThermalImpedanceSettings settings)
+    {
+        var sources = input.BoundaryConditions.OfType<HeatFlux>()
+            .Select(h => new ThermalSource { Name = h.Name, HeatFlow = h.Name }).ToList();
+        if (sources.Count < 2)
+        {
+            ZthResult = "The mutual matrix needs two or more heat-flow conditions on the model (each is one source).";
+            return;
+        }
+        if (settings.Nonlinear)
+        {
+            ZthResult = "The mutual matrix belongs to the linear model (superposition); untick the nonlinear surface exchange.";
+            return;
+        }
+        _session.IsBusy = true;
+        _session.StatusText = "Thermal impedance matrix…";
+        var progress = new Progress<SolverProgress>(p =>
+        {
+            _session.StatusText = p.Stage;
+            _session.ProgressFraction = p.Fraction;
+        });
+        try
+        {
+            var (matrix, fit) = await Task.Run(() =>
+            {
+                var m = ThermalImpedanceSolver.SolveMatrix(input, sources, settings, progress);
+                return (m, ThermalNetworkFit.FitFosterMatrix(m));
+            });
+            _zthMatrix = matrix;
+            _zthMatrixFit = fit;
+            _zthCurve = null;
+            _zthFit = null;
+            _zthLadder = null;
+            HasZth = true;
+            foreach (string line in matrix.Log) _log.Append(line);
+            _log.Append(fit.Describe());
+            var colors = new[]
+            {
+                Color.FromRgb(0x3D, 0x8B, 0xFD), Color.FromRgb(0xE0, 0x6C, 0x2B), Color.FromRgb(0x2E, 0xA0, 0x5A),
+                Color.FromRgb(0xA0, 0x4C, 0xC8), Color.FromRgb(0xE5, 0x53, 0x4B), Color.FromRgb(0x9A, 0xA0, 0xA6)
+            };
+            int n = matrix.Sources.Count;
+            var series = new List<Controls.PlotSeries>();
+            for (int at = 0; at < n && series.Count < 12; at++)
+                for (int from = 0; from < n && series.Count < 12; from++)
+                {
+                    var curve = matrix[at, from];
+                    series.Add(new(curve.Name, curve.TimesSeconds, curve.KelvinPerWatt, colors[series.Count % colors.Length], Dashed: at != from));
+                }
+            ZthPlot = Controls.CurvePlot.Render(series, logX: true, logY: true, "time [s]", "Z_th [K/W]");
+            var text = new StringBuilder();
+            text.AppendLine($"Mutual Z_th over {n} sources (rise at the row's faces per watt of the column's source alone):");
+            text.AppendLine("steady [K/W]: " + string.Join("  |  ", Enumerable.Range(0, n).Select(at =>
+                $"{matrix.Sources[at]}: " + string.Join(", ", Enumerable.Range(0, n).Select(from =>
+                    double.IsNaN(matrix[at, from].SteadyKelvinPerWatt) ? "—" : $"{matrix[at, from].SteadyKelvinPerWatt:g4}")))));
+            text.Append(fit.Describe());
+            ZthResult = text.ToString();
+            _session.StatusText = "Thermal impedance matrix done";
+        }
+        catch (Exception ex) { ZthResult = ex.Message; _session.ReportError(ex); }
+        finally
+        {
+            _session.IsBusy = false;
+            _session.ProgressFraction = 0;
+        }
+    }
+
     [RelayCommand]
     private void SaveZthCurve()
     {
+        if (_zthMatrix is { } matrix)
+        {
+            var columns = Enumerable.Range(0, matrix.Sources.Count)
+                .SelectMany(at => Enumerable.Range(0, matrix.Sources.Count).Select(from => matrix[at, from])).ToList();
+            var csv = new StringBuilder("time [s]," + string.Join(",", columns.Select(c => $"\"{c.Name} [K/W]\"")) + "\n");
+            var times = columns[0].TimesSeconds;
+            for (int i = 0; i < times.Count; i++)
+                csv.Append(System.Globalization.CultureInfo.InvariantCulture, $"{times[i]:G9}")
+                   .Append(string.Concat(columns.Select(c => "," + c.KelvinPerWatt[i].ToString("G9", System.Globalization.CultureInfo.InvariantCulture))))
+                   .Append('\n');
+            Save("zth-matrix.csv", "CSV|*.csv", csv.ToString());
+            return;
+        }
         if (_zthCurve is null) return;
         var text = new StringBuilder("time [s],Z_th [K/W]\n");
         for (int i = 0; i < _zthCurve.TimesSeconds.Count; i++)
@@ -162,6 +258,12 @@ public partial class SolveViewModel
     [RelayCommand]
     private void SaveZthNetworks()
     {
+        if (_zthMatrixFit is { } matrixFit)
+        {
+            Save("zth-matrix.cir", "SPICE netlist|*.cir;*.lib|All files|*.*",
+                "* " + matrixFit.Describe() + Environment.NewLine + matrixFit.Network.ToSpice());
+            return;
+        }
         if (_zthFit is null) return;
         var text = new StringBuilder();
         text.AppendLine("* " + _zthFit.Describe());

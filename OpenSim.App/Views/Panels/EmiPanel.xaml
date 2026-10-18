@@ -1,0 +1,156 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.EmiPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- FU-47: EMI pre-compliance (Feature 14, FU-41) — the study the command line's 'emi' job runs. -->
+    <GroupBox Header="EMI pre-compliance (conducted and radiated estimate)" DataContext="{Binding Emi}">
+        <StackPanel>
+            <TextBlock Text="A hard-switched converter's conducted emission through two LISNs against a limit line, and a comparative radiated estimate of its hot loop and input cable. The switch current is the differential-mode source, the switch node's voltage through its capacitance to earth the common-mode one. With a board, the hot loop's inductance, resistance and area and the switch node's capacitance are read off the copper and add to the values below. The limit lines are typed as commonly reproduced — check them against your copy of the standard."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+
+            <TextBlock Text="Converter" FontWeight="Bold" Margin="0,4,0,2"/>
+            <UniformGrid Columns="2">
+                <Label Content="Input [V] / output current [A]"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="EmiVinBox" Text="{Binding InputVolts}" Margin="0,0,2,0"/>
+                    <TextBox x:Name="EmiIoutBox" Text="{Binding OutputAmps}" Margin="2,0,0,0"
+                             ToolTip="The switch current's flat top: a buck's output current."/>
+                </UniformGrid>
+                <Label Content="Switching [kHz] / duty [%]"/>
+                <UniformGrid Columns="2">
+                    <TextBox x:Name="EmiFrequencyBox" Text="{Binding SwitchingKhz}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding DutyPercent}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Rise / fall [ns]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding RiseNs}" Margin="0,0,2,0" ToolTip="Edges of the trapezoidal switch current and node voltage."/>
+                    <TextBox Text="{Binding FallNs}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Switch node to earth [pF]"/>
+                <TextBox x:Name="EmiSwitchNodeEarthBox" Text="{Binding SwitchNodeToEarthPf}"
+                         ToolTip="The common-mode path: the switch node's capacitance to the earthed chassis (heatsink tab, case). Must be above 0."/>
+                <Label Content="Input capacitor [µF] / ESR [mΩ] / ESL [nH]"/>
+                <UniformGrid Columns="3">
+                    <TextBox Text="{Binding InputMicrofarads}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding InputEsrMilliohms}" Margin="2,0,2,0"/>
+                    <TextBox Text="{Binding InputEslNanohenries}" Margin="2,0,0,0"
+                             ToolTip="Add the capacitor's mounting-loop inductance here (the Electrical workspace's inductance step, or the board read below)."/>
+                </UniformGrid>
+            </UniformGrid>
+
+            <TextBlock Text="Input filter (0 µH = none)" FontWeight="Bold" Margin="0,6,0,2"/>
+            <UniformGrid Columns="2">
+                <Label Content="L [µH] / DCR [mΩ]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding FilterMicrohenries}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding FilterMilliohms}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="C [µF] / ESR [mΩ] / ESL [nH]"/>
+                <UniformGrid Columns="3">
+                    <TextBox Text="{Binding FilterMicrofarads}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding FilterEsrMilliohms}" Margin="2,0,2,0"/>
+                    <TextBox Text="{Binding FilterEslNanohenries}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <Label Content="Y capacitors, each line to earth [nF]"/>
+                <TextBox Text="{Binding YNanofarads}"/>
+            </UniformGrid>
+
+            <TextBlock Text="Hot loop, ringing and recovery" FontWeight="Bold" Margin="0,6,0,2"/>
+            <UniformGrid Columns="2">
+                <Label Content="Loop L [nH] / R [mΩ]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding HotLoopNanohenries}" Margin="0,0,2,0"
+                             ToolTip="The switches' package inductance; the board's copper adds to it when read below."/>
+                    <TextBox Text="{Binding HotLoopMilliohms}" Margin="2,0,0,0"
+                             ToolTip="The switches' on-resistance; with a loop L and a node C it damps the ring and must be above 0."/>
+                </UniformGrid>
+                <Label Content="Switch node to return [pF]"/>
+                <TextBox Text="{Binding SwitchNodeToReturnPf}"
+                         ToolTip="The switches' output capacitance on the switch node; the ring is the loop L against it."/>
+                <Label Content="Recovery charge [nC] / softness"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding RecoveryNanocoulombs}" Margin="0,0,2,0"
+                             ToolTip="The low-side diode's reverse-recovery charge Qrr; 0 = none (a synchronous switch)."/>
+                    <TextBox Text="{Binding RecoverySoftness}" Margin="2,0,0,0" ToolTip="t_b / t_a of the recovery pulse."/>
+                </UniformGrid>
+                <Label Content="Interwinding [pF] (isolated)"/>
+                <TextBox Text="{Binding InterwindingPf}"
+                         ToolTip="An isolated converter's transformer capacitance from primary to secondary; needs a secondary path to earth."/>
+                <Label Content="Secondary to earth / Y [pF]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding SecondaryToEarthPf}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding SecondaryYPf}" Margin="2,0,0,0"/>
+                </UniformGrid>
+            </UniformGrid>
+
+            <TextBlock Text="Read the hot loop from the board" FontWeight="Bold" Margin="0,6,0,2"/>
+            <TextBlock Text="Needs component names on the pads (IPC-2581, or Gerber with X2 attributes): the input capacitor's pads on the input and return nets, the switches' on the switch node. The loop is solved by PEEC over the return plane, or along the return traces when there is no plane."
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <UniformGrid Columns="2" IsEnabled="{Binding HasBoard}">
+                <Label Content="Input net"/>
+                <ComboBox x:Name="EmiInputNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding InputNet}" DisplayMemberPath="Label"/>
+                <Label Content="Return net"/>
+                <ComboBox x:Name="EmiReturnNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding ReturnNet}" DisplayMemberPath="Label"/>
+                <Label Content="Switch-node net"/>
+                <ComboBox x:Name="EmiSwitchNodeNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding SwitchNodeNet}" DisplayMemberPath="Label"/>
+                <Label Content="Input capacitor (refdes)"/>
+                <TextBox x:Name="EmiInputCapBox" Text="{Binding InputCapacitorRef}"/>
+                <Label Content="High-side / low-side switch"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding HighSideRef}" Margin="0,0,2,0"/>
+                    <TextBox Text="{Binding LowSideRef}" Margin="2,0,0,0"
+                             ToolTip="The low-side switch or diode; blank when one part holds both switches."/>
+                </UniformGrid>
+                <Label Content="Plane mesh pitch [mm] (0 = graded)"/>
+                <TextBox Text="{Binding PlanePitchMm}"
+                         ToolTip="The return plane's PEEC mesh. Graded (0) is the accurate default and can take minutes; a uniform pitch such as 0.6 mm is quicker and coarser."/>
+            </UniformGrid>
+            <Button x:Name="EmiReadBoardButton" Content="Read the hot loop from the board" Command="{Binding ReadBoardCommand}"
+                    IsEnabled="{Binding HasBoard}" Margin="0,3,0,0"/>
+            <CheckBox Content="Include the board's copper in the estimate" IsChecked="{Binding IncludeBoard}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,0"
+                      ToolTip="Adds the loop inductance, resistance and switch-node capacitance read off the board to the values above, and takes the loop area from it when the area below is 0."/>
+            <TextBlock Text="{Binding BoardResult}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+
+            <TextBlock Text="Limits and the radiated estimate" FontWeight="Bold" Margin="0,6,0,2"/>
+            <UniformGrid Columns="2">
+                <Label Content="Conducted limit"/>
+                <ComboBox x:Name="EmiConductedLimitCombo" ItemsSource="{Binding ConductedLimits}" SelectedItem="{Binding ConductedLimit}"
+                          DisplayMemberPath="Label"/>
+                <Label Content="Radiated limit"/>
+                <ComboBox ItemsSource="{Binding RadiatedLimits}" SelectedItem="{Binding RadiatedLimit}" DisplayMemberPath="Label"/>
+                <Label Content="Hot loop area [mm²] (0 = board's)"/>
+                <TextBox Text="{Binding LoopAreaMm2}"/>
+                <Label Content="Input cable [m] / distance [m]"/>
+                <UniformGrid Columns="2">
+                    <TextBox Text="{Binding CableLengthM}" Margin="0,0,2,0" ToolTip="Carries the common-mode current; capped at a quarter wavelength."/>
+                    <TextBox Text="{Binding DistanceM}" Margin="2,0,0,0"/>
+                </UniformGrid>
+            </UniformGrid>
+            <UniformGrid Columns="2" Margin="0,3,0,0">
+                <Button Content="Load a limit line (CSV)…" Command="{Binding LoadLimitFileCommand}"
+                        ToolTip="Rows of f0 [MHz], f1 [MHz], limit at f0, limit at f1 [dBµV] — linear in log f, as the standards draw them."/>
+                <Button x:Name="EmiEstimateButton" Content="Estimate emissions" Command="{Binding EstimateCommand}" Margin="2,0,0,0"/>
+            </UniformGrid>
+            <TextBlock x:Name="EmiResultText" Text="{Binding Result}" TextWrapping="Wrap"
+                       FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,3,0,0"/>
+            <Image Source="{Binding ConductedPlot}" MaxHeight="300" Margin="0,4,0,0" Stretch="Uniform"
+                   AutomationProperties.AutomationId="EmiConductedImage"/>
+            <ItemsControl ItemsSource="{Binding StrongestLines}" Margin="0,2,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" FontSize="11" FontFamily="Consolas"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Image Source="{Binding RadiatedPlot}" MaxHeight="300" Margin="0,4,0,0" Stretch="Uniform"
+                   AutomationProperties.AutomationId="EmiRadiatedImage"/>
+            <UniformGrid Columns="2" Margin="0,3,0,0">
+                <Button Content="Save lines (CSV)" Command="{Binding SaveCsvCommand}" IsEnabled="{Binding HasResult}"/>
+                <Button Content="Save report" Command="{Binding SaveReportCommand}" IsEnabled="{Binding HasResult}" Margin="2,0,0,0"/>
+            </UniformGrid>
+            <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
+                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+        </StackPanel>
+    </GroupBox>
+</UserControl>

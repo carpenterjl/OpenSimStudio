@@ -41,6 +41,11 @@ public partial class AntennaViewModel : ObservableObject
     public const string ProbeFedCoveredPatchMode = "Probe-fed covered patch (wizard, RWG + coax + cover)";
     public const string IslandMode = "Copper island (PCB, RWG)";
     public const string WireFedPlateMode = "Wire-fed plate (wizard, RWG + attached wire)";
+    // FU-47: the ported modes (pins, printed antennas, sheet metal) — their own partials.
+    public const string PinnedPatchMode = "Patch with pins (wizard, RWG + feed and shorting pins)";
+    public const string IslandPinsMode = "Copper island with pins (PCB, RWG + vias as pins)";
+    public const string PrintedMode = "Printed antenna with its ground pour (PCB, RWG)";
+    public const string SheetMetalMode = "Sheet metal in air (plates and port lines, RWG)";
 
     private readonly ILogService _log;
     private readonly ElectrodesViewModel _electrodes;
@@ -65,7 +70,7 @@ public partial class AntennaViewModel : ObservableObject
     public ObservableCollection<string> SourceModes { get; } =
         new() { NetMode, DipoleMode, LoopMode, MonopoleMode, PlateMode, PatchMode,
             ProbeFedPatchMode, CoveredPatchMode, ProbeFedCoveredPatchMode, IslandMode,
-            WireFedPlateMode };
+            WireFedPlateMode, PinnedPatchMode, IslandPinsMode, PrintedMode, SheetMetalMode };
 
     /// <summary>Surface (RWG) modes solve sheets; the others solve thin wires. The two were once
     /// disjoint by construction, so no combined request could even be expressed; <see
@@ -283,6 +288,9 @@ public partial class AntennaViewModel : ObservableObject
         _board = board;
         _options = meshOptions;
         foreach (var net in board.Nets) Nets.Add(net);
+        // The printed antenna's ground pour: a net named as a ground, when the board has one.
+        GroundPourNet = Nets.FirstOrDefault(n => n.Name is { } name
+            && (name.StartsWith("GND", StringComparison.OrdinalIgnoreCase) || name.Equals("0V", StringComparison.OrdinalIgnoreCase)));
         SourceMode = NetMode;
 
         // Seed the island-antenna substrate from the board stackup (editable; only
@@ -313,11 +321,13 @@ public partial class AntennaViewModel : ObservableObject
         _board = null;
         _options = null;
         AntennaNet = null;
+        GroundPourNet = null;
         Nets.Clear();
         ZinSweep.Clear();
         AntennaResult = "";
         FieldResult = "";
         AntennaAssumptions = "";
+        ClearMultiPortResults();
         ClearOverlays();
     }
 
@@ -340,6 +350,7 @@ public partial class AntennaViewModel : ObservableObject
     {
         AntennaIslands.Clear();
         AntennaIsland = null;
+        RefreshPrintedLayers(value);
         if (value is null) return;
         foreach (var island in value.Islands.OrderByDescending(
                      i => Math.Abs(OpenSim.Core.Geometry2D.Polygon2.RingArea(i.Shape.Outer))))
@@ -364,6 +375,11 @@ public partial class AntennaViewModel : ObservableObject
             return;
         }
 
+        if (IsPortedMode)
+        {
+            await SolvePortedAsync();
+            return;
+        }
         if (IsWireFedPlateMode)
         {
             await SolveWireFedPlateAsync();
@@ -431,6 +447,11 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ComputeNearField()
     {
         FieldResult = "";
+        if (IsPortedMode)
+        {
+            await ComputePortedNearFieldAsync();
+            return;
+        }
         if (IsWireFedPlateMode)
         {
             FieldResult = "Not computable: the wire↔sheet hybrid near field is a named "
@@ -508,6 +529,11 @@ public partial class AntennaViewModel : ObservableObject
     private async Task ShowFarField()
     {
         FieldResult = "";
+        if (IsPortedMode)
+        {
+            await ShowPortedFarFieldAsync();
+            return;
+        }
         if (IsWireFedPlateMode)
         {
             await ShowWireFedPlateFarFieldAsync();
@@ -578,6 +604,11 @@ public partial class AntennaViewModel : ObservableObject
         if (OverlayOverBoard && _board is not null && SourceMode is NetMode or IslandMode)
         {
             await ShowBoardOverlayAsync(n, mode, opacity, magnetic);
+            return;
+        }
+        if (IsPortedMode)
+        {
+            await ShowPortedFieldOverlayAsync(n, mode, opacity, magnetic);
             return;
         }
         if (IsWireFedPlateMode)

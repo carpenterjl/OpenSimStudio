@@ -101,10 +101,21 @@ public static class PrintedAntennaBuilder
     {
         CopperNet Net(string name) => board.Nets.FirstOrDefault(n => string.Equals(n.Name, name, StringComparison.Ordinal))
             ?? throw new ArgumentException($"No net named '{name}' on the board.");
-        var antennaIslands = Net(antennaNet).Islands.Where(i => i.LayerOrder == layerOrder).ToList();
-        var groundIslands = Net(groundNet).Islands.Where(i => i.LayerOrder == layerOrder).Select(i => i.Shape).ToList();
-        if (antennaIslands.Count == 0) throw new ArgumentException($"Net '{antennaNet}' has no copper on layer {layerOrder}.");
-        if (groundIslands.Count == 0) throw new ArgumentException($"Net '{groundNet}' has no copper on layer {layerOrder}.");
+        return FromNets(layerOrder, Net(antennaNet), Net(groundNet), feedNear, bridgeWidth, maxEdgeLength, groundClip, maxUnknowns);
+    }
+
+    /// <summary>The same from the nets themselves — for a board whose nets carry no names (a Gerber
+    /// set without X2 attributes), which <see cref="FromBoard"/> cannot look up.</summary>
+    public static PrintedAntennaModel FromNets(int layerOrder, CopperNet antennaNet, CopperNet groundNet,
+        Point2 feedNear, double bridgeWidth, double maxEdgeLength, Polygon2? groundClip = null, int maxUnknowns = 2500)
+    {
+        if (ReferenceEquals(antennaNet, groundNet) || antennaNet.Id == groundNet.Id)
+            throw new ArgumentException("The antenna and the ground are the same net; pick the ground pour's own net.");
+        string Label(CopperNet net) => net.Name ?? $"Net {net.Id}";
+        var antennaIslands = antennaNet.Islands.Where(i => i.LayerOrder == layerOrder).ToList();
+        var groundIslands = groundNet.Islands.Where(i => i.LayerOrder == layerOrder).Select(i => i.Shape).ToList();
+        if (antennaIslands.Count == 0) throw new ArgumentException($"Net '{Label(antennaNet)}' has no copper on layer {layerOrder}.");
+        if (groundIslands.Count == 0) throw new ArgumentException($"Net '{Label(groundNet)}' has no copper on layer {layerOrder}.");
         var antenna = antennaIslands.OrderBy(i => (NearestOnBoundary(i.Shape, feedNear) - feedNear).Length).First().Shape;
         return Build(antenna, groundIslands, feedNear, bridgeWidth, maxEdgeLength, groundClip, maxUnknowns);
     }

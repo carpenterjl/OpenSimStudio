@@ -1,6 +1,7 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.AntennaPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:OpenSim.App.ViewModels">
     <!-- Moved verbatim out of ElectricalSetupPanel when RF became its own workspace (design screens 11-12); bindings go through the shell DataContext unchanged. -->
     <GroupBox Header="Antenna (method of moments)">
         <StackPanel>
@@ -115,6 +116,206 @@
                 <TextBox x:Name="PatchGapWidthBox" Text="{Binding Antenna.PatchGapWidthMm}"
                          ToolTip="Edge-fed patch only: the physical width of the series gap, centred on the position above. The port's impedance depends on it (a gap is a capacitor), and converges under mesh refinement for a fixed width. 0 = one eighteenth of the patch length."/>
             </UniformGrid>
+
+            <!-- FU-47: pins on the wizard patch or a board island (Feature 12) -->
+            <StackPanel Visibility="{Binding Antenna.IsPinPanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
+                <TextBlock Text="Pins" FontWeight="Bold" Margin="0,0,0,2"/>
+                <TextBlock Text="Vertical pins from the ground up to the metal, solved together: a feed is a port at its base (left a port, shorted, open, or closed by a lumped part), a shorting pin is welded to the ground — an inverted-F, a PIFA, a patch with two feeds. On the wizard patch x, y are from its centre, over the slab set by the patch height and substrate εr above; on a board island they are board coordinates and the pins stand on the plane under it. Tube segments: the probe field above."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="44"/>
+                        <ColumnDefinition Width="44"/>
+                        <ColumnDefinition Width="34"/>
+                        <ColumnDefinition Width="56"/>
+                        <ColumnDefinition Width="62"/>
+                        <ColumnDefinition Width="38"/>
+                        <ColumnDefinition Width="30"/>
+                        <ColumnDefinition Width="20"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Name" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                    <TextBlock Grid.Column="1" Text="x mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                    <TextBlock Grid.Column="2" Text="y mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                    <TextBlock Grid.Column="3" Text="r mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                    <TextBlock Grid.Column="4" Text="Role" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                    <TextBlock Grid.Column="5" Text="Port" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                    <TextBlock Grid.Column="6" Text="Value" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                    <TextBlock Grid.Column="7" Text="Q" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                </Grid>
+                <ItemsControl x:Name="AntennaPinList" ItemsSource="{Binding Antenna.Pins}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="44"/>
+                                    <ColumnDefinition Width="44"/>
+                                    <ColumnDefinition Width="34"/>
+                                    <ColumnDefinition Width="56"/>
+                                    <ColumnDefinition Width="62"/>
+                                    <ColumnDefinition Width="38"/>
+                                    <ColumnDefinition Width="30"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding Name}"/>
+                                <TextBox Grid.Column="1" Text="{Binding XMm}"/>
+                                <TextBox Grid.Column="2" Text="{Binding YMm}"/>
+                                <TextBox Grid.Column="3" Text="{Binding RadiusMm}" ToolTip="Tube radius [mm]; each tube segment must be at least twice this long."/>
+                                <ComboBox Grid.Column="4" ItemsSource="{x:Static vm:AntennaPinRow.Roles}" SelectedItem="{Binding Role}"/>
+                                <ComboBox Grid.Column="5" ItemsSource="{x:Static vm:PortLoads.All}" SelectedItem="{Binding Load}"
+                                          IsEnabled="{Binding IsFeed}"
+                                          ToolTip="A feed's port: left a port, shorted, open (the pin floats), or closed by a resistor, an inductor or a capacitor."/>
+                                <TextBox Grid.Column="6" Text="{Binding Value}" IsEnabled="{Binding IsFeed}" ToolTip="The part's value: Ω, nH or pF."/>
+                                <TextBox Grid.Column="7" Text="{Binding Q}" IsEnabled="{Binding IsFeed}" ToolTip="The part's Q; 0 = ideal."/>
+                                <Button Grid.Column="8" Content="×" Padding="0" ToolTip="Remove this pin"
+                                        Command="{Binding DataContext.Antenna.RemovePinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <UniformGrid Columns="2" Margin="0,2,0,0">
+                    <Button Content="Add a pin" Command="{Binding Antenna.AddPinCommand}"/>
+                    <Button x:Name="PinsFromViasButton" Content="Pins from the island's vias" Command="{Binding Antenna.PinsFromViasCommand}"
+                            Visibility="{Binding Antenna.IsIslandPinsPanelVisible, Converter={StaticResource BoolToVis}}" Margin="2,0,0,0"
+                            ToolTip="Every plated via on the island whose barrel reaches the ground layer: one the net uses to join the island to the plane is a shorting pin, one rising through the plane's antipad a feed."/>
+                </UniformGrid>
+            </StackPanel>
+
+            <!-- FU-47: a printed antenna with its coplanar ground pour (Feature 12, FU-36) -->
+            <StackPanel Visibility="{Binding Antenna.IsPrintedPanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
+                <TextBlock Text="Printed antenna" FontWeight="Bold" Margin="0,0,0,2"/>
+                <TextBlock Text="The selected net's copper and a ground pour on the same layer, joined at the feed by a bridge with the port across it (the feed's two terminals). The bridge leaves the antenna copper at its point nearest the selected source pad, or nearest the point below. On the board's laminate the board is an infinite slab with no ground plane under it; in air there is no dielectric."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <UniformGrid Columns="2">
+                    <Label Content="Ground pour net"/>
+                    <ComboBox x:Name="PrintedGroundCombo" ItemsSource="{Binding Antenna.Nets}" SelectedItem="{Binding Antenna.GroundPourNet}"
+                              DisplayMemberPath="Label"/>
+                    <Label Content="Layer"/>
+                    <ComboBox ItemsSource="{Binding Antenna.PrintedLayers}" SelectedItem="{Binding Antenna.PrintedLayer}" ItemStringFormat="L{0}"/>
+                    <Label Content="Feed bridge width [mm]"/>
+                    <TextBox Text="{Binding Antenna.BridgeWidthMm}"/>
+                    <Label Content="Feed point x / y [mm] (no source pad)"/>
+                    <UniformGrid Columns="2">
+                        <TextBox Text="{Binding Antenna.FeedXMm}" Margin="0,0,2,0"/>
+                        <TextBox Text="{Binding Antenna.FeedYMm}" Margin="2,0,0,0"/>
+                    </UniformGrid>
+                    <Label Content="Keep pour within [mm] (0 = all)"/>
+                    <TextBox Text="{Binding Antenna.GroundClipMm}"
+                             ToolTip="Clips the ground pour to the antenna copper's bounds plus this margin, to bound the unknowns. Copper outside the clip is not in the model."/>
+                </UniformGrid>
+                <CheckBox Content="On the board's laminate (ungrounded slab)" IsChecked="{Binding Antenna.PrintedOnLaminate}"
+                          Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,0"
+                          ToolTip="The board's dielectric gaps as one infinite slab (thickness-weighted εr and tanδ) with the copper on its top or bottom face; the edges of the board are not in the model. Off: in air."/>
+            </StackPanel>
+
+            <!-- FU-47: sheet metal in air (Feature 12's air model) -->
+            <StackPanel Visibility="{Binding Antenna.IsSheetMetalPanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
+                <TextBlock Text="Sheet metal in air" FontWeight="Bold" Margin="0,0,0,2"/>
+                <TextBlock Text="Axis-aligned plates on one shared graded grid — a PIFA's top plate and tabs over a finite ground plate of its real size, or over an infinite image ground at z = 0 — with ports as straight cuts along mesh lines (their ends become grid lines). No dielectric."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <UniformGrid Columns="2">
+                    <Label Content="PIFA ground W × L [mm]"/>
+                    <UniformGrid Columns="2">
+                        <TextBox Text="{Binding Antenna.PifaGroundWidthMm}" Margin="0,0,2,0"/>
+                        <TextBox Text="{Binding Antenna.PifaGroundLengthMm}" Margin="2,0,0,0"/>
+                    </UniformGrid>
+                    <Label Content="Top plate W × L [mm] / height [mm]"/>
+                    <UniformGrid Columns="3">
+                        <TextBox Text="{Binding Antenna.PifaTopWidthMm}" Margin="0,0,2,0"/>
+                        <TextBox Text="{Binding Antenna.PifaTopLengthMm}" Margin="2,0,2,0"/>
+                        <TextBox Text="{Binding Antenna.PifaHeightMm}" Margin="2,0,0,0"/>
+                    </UniformGrid>
+                    <Label Content="Tab width / feed-to-short [mm]"/>
+                    <UniformGrid Columns="2">
+                        <TextBox Text="{Binding Antenna.PifaTabWidthMm}" Margin="0,0,2,0"/>
+                        <TextBox Text="{Binding Antenna.PifaFeedSpacingMm}" Margin="2,0,0,0" ToolTip="Centre-to-centre spacing of the feed tab from the shorting tab."/>
+                    </UniformGrid>
+                    <Label Content="Finest element [mm] (0 = uniform)"/>
+                    <TextBox Text="{Binding Antenna.SheetMinEdgeMm}" ToolTip="The grid grades down to this near part edges and port lines."/>
+                </UniformGrid>
+                <CheckBox Content="Image ground at z = 0 instead of a ground plate" IsChecked="{Binding Antenna.SheetImageGround}"
+                          Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,0"
+                          ToolTip="An infinite perfect ground (image theory). With it, leave no plate at z = 0 — plates touching it are grounded there."/>
+                <Button x:Name="FillPifaButton" Content="Fill the parts with this PIFA" Command="{Binding Antenna.FillPifaCommand}" Margin="0,2,0,0"
+                        ToolTip="Replaces the plates and ports below with the PIFA and centres the sweep on its quarter-wave estimate."/>
+                <TextBlock Text="Plates (x0, y0, z0 → x1, y1, z1 mm; one axis equal)" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,4,0,1"/>
+                <ItemsControl x:Name="SheetPartList" ItemsSource="{Binding Antenna.SheetParts}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Text="{Binding Name}"/>
+                                <TextBox Grid.Column="1" Text="{Binding X0Mm}"/>
+                                <TextBox Grid.Column="2" Text="{Binding Y0Mm}"/>
+                                <TextBox Grid.Column="3" Text="{Binding Z0Mm}"/>
+                                <TextBox Grid.Column="4" Text="{Binding X1Mm}"/>
+                                <TextBox Grid.Column="5" Text="{Binding Y1Mm}"/>
+                                <TextBox Grid.Column="6" Text="{Binding Z1Mm}"/>
+                                <Button Grid.Column="7" Content="×" Padding="0" ToolTip="Remove this plate"
+                                        Command="{Binding DataContext.Antenna.RemoveSheetPartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="Port lines (name, current direction, port; then from → to mm)" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,4,0,1"/>
+                <ItemsControl x:Name="SheetPortList" ItemsSource="{Binding Antenna.SheetPorts}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,1,0,3">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="46"/>
+                                        <ColumnDefinition Width="62"/>
+                                        <ColumnDefinition Width="44"/>
+                                        <ColumnDefinition Width="34"/>
+                                        <ColumnDefinition Width="20"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Text="{Binding Name}"/>
+                                    <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:SheetPortRow.Directions}" SelectedItem="{Binding Direction}"
+                                              ToolTip="The direction the positive current crosses the cut."/>
+                                    <ComboBox Grid.Column="2" ItemsSource="{x:Static vm:PortLoads.All}" SelectedItem="{Binding Load}"/>
+                                    <TextBox Grid.Column="3" Text="{Binding Value}" ToolTip="The part's value: Ω, nH or pF."/>
+                                    <TextBox Grid.Column="4" Text="{Binding Q}" ToolTip="The part's Q; 0 = ideal."/>
+                                    <Button Grid.Column="5" Content="×" Padding="0" ToolTip="Remove this port"
+                                            Command="{Binding DataContext.Antenna.RemoveSheetPortCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                </Grid>
+                                <UniformGrid Columns="6" Margin="0,1,0,0">
+                                    <TextBox Text="{Binding FromXMm}" ToolTip="From x [mm]"/>
+                                    <TextBox Text="{Binding FromYMm}" ToolTip="From y [mm]"/>
+                                    <TextBox Text="{Binding FromZMm}" ToolTip="From z [mm]"/>
+                                    <TextBox Text="{Binding ToXMm}" ToolTip="To x [mm]"/>
+                                    <TextBox Text="{Binding ToYMm}" ToolTip="To y [mm]"/>
+                                    <TextBox Text="{Binding ToZMm}" ToolTip="To z [mm]"/>
+                                </UniformGrid>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <UniformGrid Columns="2" Margin="0,2,0,0">
+                    <Button Content="Add a plate" Command="{Binding Antenna.AddSheetPartCommand}"/>
+                    <Button Content="Add a port line" Command="{Binding Antenna.AddSheetPortCommand}" Margin="2,0,0,0"/>
+                </UniformGrid>
+            </StackPanel>
+
+            <UniformGrid Columns="2" Visibility="{Binding Antenna.IsPortedPanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
+                <Label Content="Driven port (fields)"/>
+                <ComboBox x:Name="FarFieldPortCombo" ItemsSource="{Binding Antenna.PortChoices}" SelectedItem="{Binding Antenna.FarFieldPort}"
+                          ToolTip="The far field, near field and overlay drive this port with 1 V; the other ports stay closed as set, a port left a port in the reference impedance (the embedded pattern)."/>
+            </UniformGrid>
             <CheckBox Content="Mesh convergence check (re-solve 1.5× finer)"
                       IsChecked="{Binding Antenna.CheckMeshConvergence}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
@@ -161,6 +362,15 @@
                    AutomationProperties.AutomationId="AntennaSmithImage"/>
             <Button Content="Save S11 (Touchstone .s1p)" Command="{Binding Antenna.ExportS1pCommand}"
                     IsEnabled="{Binding Antenna.HasSParameters}"/>
+            <!-- FU-47: the N-port result (Feature 8) of pins and sheet-port lines -->
+            <StackPanel Visibility="{Binding Antenna.HasMultiPort, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
+                <TextBlock Text="Multi-port S-parameters" FontWeight="Bold"/>
+                <TextBlock x:Name="MultiPortResultText" Text="{Binding Antenna.MultiPortResult}" TextWrapping="Wrap"
+                           FontSize="11" FontFamily="Consolas" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                <Image Source="{Binding Antenna.MultiPortImage}" MaxHeight="240" Margin="0,4,0,0" Stretch="Uniform"
+                       AutomationProperties.AutomationId="AntennaMultiPortImage"/>
+                <Button Content="Save S-parameters (Touchstone .sNp)" Command="{Binding Antenna.ExportSnpCommand}"/>
+            </StackPanel>
             <TextBlock Text="Matching network (L-section)" FontWeight="Bold" Margin="0,6,0,0"/>
             <UniformGrid Columns="2">
                 <Label Content="Design frequency [MHz] (0 = best match)"/>

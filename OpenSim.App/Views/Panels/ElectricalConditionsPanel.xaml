@@ -17,6 +17,15 @@
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,2,0"
                       ToolTip="One potential over the whole face, found by the solve, carrying the total current — a metal pad or a bus bar end. Unchecked: the current enters at uniform density and the face is not an equipotential."/>
             <Button Content="Add current flow" Command="{Binding Conditions.AddCurrentCommand}"/>
+            <!-- FU-42 / FU-47: a prescribed charge (electrostatics) -->
+            <StackPanel Visibility="{Binding Session.IsElectrostaticAnalysis, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
+                <UniformGrid Columns="2">
+                    <Label Content="Charge [C]"/>
+                    <TextBox x:Name="ChargeValueBox" Text="{Binding Conditions.ChargeValue}"/>
+                </UniformGrid>
+                <Button x:Name="AddChargeButton" Content="Add charge" Command="{Binding Conditions.AddChargeCommand}"
+                        ToolTip="On a conductor: the whole conductor floats at the potential this net charge gives it (the solve reports it). On a dielectric face: a uniform surface charge, total exact."/>
+            </StackPanel>
         </StackPanel>
     </GroupBox>
 </UserControl>

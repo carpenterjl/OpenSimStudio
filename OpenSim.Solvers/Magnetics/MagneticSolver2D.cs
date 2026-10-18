@@ -736,6 +736,83 @@ public sealed class MagneticSolution2D
         return FluxDensity(e);
     }
 
+    /// <summary>B at many points — each from exactly the element <see cref="FluxDensityAt"/> takes (the
+    /// one whose centroid is nearest; of equals, the first), found through a bucket grid of the
+    /// centroids instead of a scan of every element, so a field picture costs about one lookup per
+    /// point rather than one mesh scan.</summary>
+    public (Complex Bx, Complex By)[] SampleFluxDensity(IReadOnlyList<(double X, double Y)> points)
+    {
+        var elements = _mesh.Elements;
+        var result = new (Complex Bx, Complex By)[points.Count];
+        if (points.Count == 0 || elements.Count == 0) return result;
+        double minX = double.MaxValue, maxX = double.MinValue, minY = double.MaxValue, maxY = double.MinValue;
+        foreach (var e in elements)
+        {
+            minX = Math.Min(minX, e.Cx); maxX = Math.Max(maxX, e.Cx);
+            minY = Math.Min(minY, e.Cy); maxY = Math.Max(maxY, e.Cy);
+        }
+        // About two centroids per bucket on a square-ish grid.
+        int side = Math.Max(1, (int)Math.Sqrt(elements.Count / 2.0));
+        double width = Math.Max(maxX - minX, 1e-300) / side, height = Math.Max(maxY - minY, 1e-300) / side;
+        int Column(double x) => Math.Clamp((int)Math.Floor((x - minX) / width), 0, side - 1);
+        int Row(double y) => Math.Clamp((int)Math.Floor((y - minY) / height), 0, side - 1);
+        var buckets = new List<int>[side * side];
+        for (int k = 0; k < elements.Count; k++)
+        {
+            int b = Row(elements[k].Cy) * side + Column(elements[k].Cx);
+            (buckets[b] ??= new List<int>()).Add(k);
+        }
+        // A bucket's index can sit one off its centroid's true cell through rounding; the stop test
+        // gives the block that much slack, so a nearer centroid is never left unvisited.
+        double slack = 1e-9 * (width + height);
+        for (int p = 0; p < points.Count; p++)
+        {
+            var (x, y) = points[p];
+            int cx = Column(x), cy = Row(y);
+            int best = -1;
+            double bestDistance = double.MaxValue;
+            for (int ring = 0; ; ring++)
+            {
+                int x0 = cx - ring, x1 = cx + ring, y0 = cy - ring, y1 = cy + ring;
+                for (int row = Math.Max(y0, 0); row <= Math.Min(y1, side - 1); row++)
+                    for (int column = Math.Max(x0, 0); column <= Math.Min(x1, side - 1); column++)
+                    {
+                        // Only the ring's own buckets: the inner block was searched already.
+                        if (ring > 0 && row > y0 && row < y1 && column > x0 && column < x1) continue;
+                        if (buckets[row * side + column] is not { } bucket) continue;
+                        foreach (int k in bucket)
+                        {
+                            var el = elements[k];
+                            double d = (el.Cx - x) * (el.Cx - x) + (el.Cy - y) * (el.Cy - y);
+                            if (d < bestDistance || (d == bestDistance && k < best)) { bestDistance = d; best = k; }
+                        }
+                    }
+                bool everything = x0 <= 0 && y0 <= 0 && x1 >= side - 1 && y1 >= side - 1;
+                if (everything) break;
+                if (best < 0) continue;
+                // The nearest any unsearched centroid can be: the distance from the point to the edge of
+                // the searched block (a side the block already reaches past the grid on is no limit).
+                double reach = double.MaxValue;
+                if (x0 > 0) reach = Math.Min(reach, x - (minX + x0 * width));
+                if (x1 < side - 1) reach = Math.Min(reach, minX + (x1 + 1) * width - x);
+                if (y0 > 0) reach = Math.Min(reach, y - (minY + y0 * height));
+                if (y1 < side - 1) reach = Math.Min(reach, minY + (y1 + 1) * height - y);
+                reach -= slack;
+                if (reach > 0 && reach * reach > bestDistance) break;
+            }
+            result[p] = FluxDensity(elements[best]);
+        }
+        return result;
+    }
+
+    /// <summary>The peak |B| over a cycle of a field given by its complex components — the length of
+    /// the ellipse's major axis for an elliptical field, |B| for a static one.</summary>
+    public static double PeakMagnitude(Complex bx, Complex by)
+    {
+        double sum = bx.Magnitude * bx.Magnitude + by.Magnitude * by.Magnitude;
+        return Math.Sqrt(0.5 * (sum + (bx * bx + by * by).Magnitude));
+    }
+
     /// <summary>The largest peak |B| in a region, or anywhere when <paramref name="region"/> is null.</summary>
     public double MaxFluxDensity(string? region = null)
     {
