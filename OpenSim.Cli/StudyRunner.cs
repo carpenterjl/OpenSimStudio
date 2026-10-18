@@ -107,18 +107,19 @@ public static class StudyRunner
 
         var solids = project.Bodies.Where(b => b.Role == BodyRole.Solid).ToList();
         if (solids.Count == 0) throw new InvalidOperationException("The project has no solid bodies.");
-        Material? Lookup(string name) =>
-            materialOverrides is not null && materialOverrides.TryGetValue(name, out var over) ? over
-            : materials.Materials.FirstOrDefault(m => m.Name == name);
+        // The project's own materials, not the library's of the same name (D24).
+        ProjectMaterialLookup Lookup(Body first) => new(
+            new[] { first }.Concat(solids).Select(b => b.Material), materials.Materials, materialOverrides, log);
 
         if (kind == "EnvironmentThermal")
-            return SolveEnvironment(project, solids, settings, Lookup, log, progress, cancellationToken);
+            return SolveEnvironment(project, solids, settings, Lookup(solids[0]), log, progress, cancellationToken);
         if (kind == "ConjugateThermal")
-            return SolveConjugate(project, solids, settings, Lookup, log, progress, cancellationToken);
+            return SolveConjugate(project, solids, settings, Lookup(solids[0]), log, progress, cancellationToken);
         if (kind is "Electrical" or "AcElectrical" && solids.Count > 1 && settings.BodyName is null)
         {
             if (project.Assembly?.ElectricalContactConductance is { } joint)
-                return SolveElectricalAssembly(project, kind, solids, settings, joint, Lookup, log, progress, cancellationToken);
+                return SolveElectricalAssembly(project, kind, solids, settings, joint, Lookup(solids[0]), log, progress,
+                    cancellationToken);
             log($"The project has {solids.Count} bodies; solving '{solids[0].Name}' alone. Set the assembly's " +
                 "electrical contact conductance (S/m²) to solve them as one assembly joined at their contacts, " +
                 "or name one body with --body.");
@@ -129,9 +130,8 @@ public static class StudyRunner
             : solids.FirstOrDefault(b => string.Equals(b.Name, settings.BodyName, StringComparison.OrdinalIgnoreCase))
               ?? throw new InvalidOperationException($"No body named '{settings.BodyName}'. Bodies: {string.Join(", ", solids.Select(b => b.Name))}.");
         if (body.Mesh is null) throw new InvalidOperationException($"Body '{body.Name}' has no mesh.");
-        var material = body.Material ?? throw new InvalidOperationException($"Body '{body.Name}' has no material.");
-        // A material the library knows by this name takes the library's current values.
-        material = Lookup(material.Name) ?? material;
+        var lookup = Lookup(body);
+        var material = lookup.Of(body.Material ?? throw new InvalidOperationException($"Body '{body.Name}' has no material."));
 
         bool transient = kind == "TransientThermal";
         var input = new SolveInput
@@ -139,7 +139,7 @@ public static class StudyRunner
             Mesh = body.Mesh,
             Material = material,
             BoundaryConditions = GeometryScopeResolver.ResolveForBody(body),
-            RegionMaterials = RegionMaterialResolver.Resolve(body.Name, body.RegionMaterialNames, Lookup),
+            RegionMaterials = RegionMaterialResolver.Resolve(body.Name, body.RegionMaterialNames, lookup.ByName),
             TransientThermal = transient
                 ? new TransientThermalSettings
                 {
@@ -189,7 +189,7 @@ public static class StudyRunner
     }
 
     private static StudyRun SolveEnvironment(SimProject project, List<Body> bodies, StudySettings settings,
-        Func<string, Material?> lookup, Action<string> log, IProgress<SolverProgress>? progress, CancellationToken ct)
+        ProjectMaterialLookup lookup, Action<string> log, IProgress<SolverProgress>? progress, CancellationToken ct)
     {
         var environment = project.Environment
                           ?? throw new InvalidOperationException("The project has no environment settings; an environment heat-flow study needs them.");
@@ -197,7 +197,7 @@ public static class StudyRunner
         {
             if (body.Mesh is null) throw new InvalidOperationException($"Body '{body.Name}' has no mesh.");
             if (body.Material is null) throw new InvalidOperationException($"Body '{body.Name}' has no material.");
-            body.Material = lookup(body.Material.Name) ?? body.Material;
+            body.Material = lookup.Of(body.Material);
         }
         var detection = (project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
         var merged = FeMeshAssembler.Assemble(bodies);
@@ -238,7 +238,7 @@ public static class StudyRunner
     /// flow's notes and the outlet ledger join the log.
     /// </summary>
     private static StudyRun SolveConjugate(SimProject project, List<Body> bodies, StudySettings settings,
-        Func<string, Material?> lookup, Action<string> log, IProgress<SolverProgress>? progress, CancellationToken ct)
+        ProjectMaterialLookup lookup, Action<string> log, IProgress<SolverProgress>? progress, CancellationToken ct)
     {
         var environment = project.Environment
                           ?? throw new InvalidOperationException("The project has no environment settings; a conjugate study needs them.");
@@ -254,7 +254,7 @@ public static class StudyRunner
         {
             if (body.Mesh is null) throw new InvalidOperationException($"Body '{body.Name}' has no mesh.");
             if (body.Material is null) throw new InvalidOperationException($"Body '{body.Name}' has no material.");
-            body.Material = lookup(body.Material.Name) ?? body.Material;
+            body.Material = lookup.Of(body.Material);
         }
         var detection = (project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
         var merged = FeMeshAssembler.Assemble(bodies);
@@ -296,14 +296,14 @@ public static class StudyRunner
     /// voltages and currents on the merged mesh (FU-27).
     /// </summary>
     private static StudyRun SolveElectricalAssembly(SimProject project, string kind, List<Body> bodies,
-        StudySettings settings, double jointConductance, Func<string, Material?> lookup, Action<string> log,
+        StudySettings settings, double jointConductance, ProjectMaterialLookup lookup, Action<string> log,
         IProgress<SolverProgress>? progress, CancellationToken ct)
     {
         foreach (var body in bodies)
         {
             if (body.Mesh is null) throw new InvalidOperationException($"Body '{body.Name}' has no mesh.");
             if (body.Material is null) throw new InvalidOperationException($"Body '{body.Name}' has no material.");
-            body.Material = lookup(body.Material.Name) ?? body.Material;
+            body.Material = lookup.Of(body.Material);
         }
         var detection = (project.Assembly ?? new AssemblySettings()).ToDetectionSettings();
         var merged = FeMeshAssembler.Assemble(bodies);

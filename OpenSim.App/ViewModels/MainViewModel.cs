@@ -296,6 +296,7 @@ public partial class MainViewModel : ObservableObject
         Session.Project = new Core.Model.SimProject();
         Session.Body = new Core.Model.Body { Name = "Body 1" };
         Session.Project.Bodies.Add(Session.Body);
+        Materials.ForgetProjectCopies();
         Session.ActiveWorkspace = WorkspaceKind.Structural;
         Session.IsHomeActive = false;
         Session.RaiseGeometryReplaced(leavingPcbMode: true);
@@ -404,7 +405,12 @@ public partial class MainViewModel : ObservableObject
             }
             Solve.LoadSolverSettings(project.Solver);
 
-            Materials.AdoptProjectMaterial(Session.Body.Material);
+            // The previous project's material copies leave the list first. The loaded body's
+            // material is read before that: dropping a selected copy writes through to the
+            // active body, and adopting the project's own values writes them back.
+            var loadedMaterial = Session.Body.Material;
+            Materials.ForgetProjectCopies();
+            Materials.AdoptProjectMaterial(loadedMaterial);
             Meshing.TargetEdgeLength = Session.Body.MeshSettings.TargetEdgeLength;
 
             // The events fan out: PCB teardown, condition/result resync, scene + mesh

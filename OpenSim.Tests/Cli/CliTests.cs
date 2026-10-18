@@ -44,7 +44,7 @@ public class CliTests : IDisposable
     }
 
     /// <summary>A 10 × 10 × 20 mm bar, 300 K at z = 0 and 400 K at z = 20 mm.</summary>
-    private string WriteBarProject(string name = "bar")
+    private string WriteBarProject(string name = "bar", Material? material = null)
     {
         var body = new Body
         {
@@ -52,7 +52,7 @@ public class CliTests : IDisposable
             Geometry = PrimitiveFactory.CreateBox(0.01, 0.01, 0.02),
             GeometrySource = "Box 10 × 10 × 20 mm",
             MeshSettings = new MeshSettings { TargetEdgeLength = 0.005, Method = MeshMethod.StructuredLattice },
-            Material = new Material
+            Material = material ?? new Material
             {
                 Name = "TestCopper", YoungsModulus = 110e9, PoissonRatio = 0.34, Density = 8960,
                 ThermalConductivity = 400, SpecificHeat = 385, ElectricalConductivity = 5.96e7
@@ -105,6 +105,31 @@ public class CliTests : IDisposable
         Assert.True(outputs.ContainsKey("Max Heat flux (recovered) (W/m²)"));
 
         Assert.Equal(1, Run("solve", project, "--out", outDir, "--probe", "cut:0,0:0,0,1").Code);
+    }
+
+    [Fact]
+    public void Solve_KeepsTheProjectsOwnMaterial_AndLogsWhereTheLibraryDiffers()
+    {
+        // D24: a project saved with a library material's name but other values solves with the
+        // project's values — the library's used to replace them without a word.
+        var library = new MaterialLibrary().Materials.First(m => m.ThermalConductivity is > 0);
+        double k = library.ThermalConductivity!.Value / 2;
+        string project = WriteBarProject("diverged", library with { ThermalConductivity = k });
+        string outDir = Path.Combine(_dir, "diverged-results");
+        var (code, stdout, err) = Run("solve", project, "--out", outDir, "--probe", "cut:0,0,0.0073:0,0,1");
+        Assert.Equal(0, code);
+        Assert.Equal("", err);
+        var outputs = JsonSerializer.Deserialize<Dictionary<string, double>>(File.ReadAllText(Path.Combine(outDir, "summary.json")))!;
+        double flow = k * 100 * 0.01 * 0.01 / 0.02;
+        Assert.Equal(-flow, outputs["Probe 'cut' heat flow (W)"], flow * 1e-8);
+        Assert.Contains($"Material '{library.Name}': the project's values differ from the library's (thermal conductivity ", stdout);
+
+        // The library's own values: the same solve, no line.
+        string same = WriteBarProject("same", library);
+        (code, stdout, err) = Run("solve", same, "--out", Path.Combine(_dir, "same-results"), "--probe", "cut:0,0,0.0073:0,0,1");
+        Assert.Equal(0, code);
+        Assert.Equal("", err);
+        Assert.DoesNotContain("differ from the library", stdout);
     }
 
     [Fact]
