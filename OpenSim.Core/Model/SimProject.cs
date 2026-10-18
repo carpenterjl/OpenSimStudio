@@ -202,6 +202,14 @@ public sealed class SimProject
     /// application last solved with. Null — every older project — means the defaults.</summary>
     public SolverSettings? Solver { get; set; }
 
+    /// <summary>The antenna panel's inputs as the application last saved them (D23). Null —
+    /// every older project — leaves the panel as it is.</summary>
+    public AntennaSettings? Antenna { get; set; }
+
+    /// <summary>The signal-integrity panels' inputs as the application last saved them (D23).
+    /// Null — every older project — leaves the panels as they are.</summary>
+    public SignalIntegritySettings? SignalIntegrity { get; set; }
+
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
     public List<Body> Bodies { get; } = new();
 }

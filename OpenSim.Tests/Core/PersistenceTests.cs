@@ -162,6 +162,72 @@ public class ProjectSerializerTests
         }
     }
 
+    /// <summary>D23: the antenna and SI panels' settings round-trip — every field, each set by
+    /// reflection to a value unlike its default, so a field added later without reaching the file
+    /// fails here; a version-2 file (solver settings, no panels) loads with both null, which
+    /// leaves the panels as they are.</summary>
+    [Fact]
+    public void PanelSettings_RoundTripEveryField_AndOlderProjectsLoadWithoutThem()
+    {
+        int counter = 0;
+        var antenna = (AntennaSettings)Filled(typeof(AntennaSettings), ref counter);
+        var si = (SignalIntegritySettings)Filled(typeof(SignalIntegritySettings), ref counter);
+        var project = new SimProject { Name = "Panels", Antenna = antenna, SignalIntegrity = si };
+        string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".ossproj");
+        try
+        {
+            var serializer = new ProjectSerializer();
+            serializer.Save(project, path);
+            var loaded = serializer.Load(path);
+            Assert.True(ProjectSerializer.CurrentFormatVersion >= 3);            // the panels arrived in 3
+            Assert.Equal(ProjectSerializer.CurrentFormatVersion, loaded.FormatVersion);
+            Assert.Equal(System.Text.Json.JsonSerializer.Serialize(antenna), System.Text.Json.JsonSerializer.Serialize(loaded.Antenna));
+            Assert.Equal(System.Text.Json.JsonSerializer.Serialize(si), System.Text.Json.JsonSerializer.Serialize(loaded.SignalIntegrity));
+            Assert.Equal(2, loaded.Antenna!.Pins!.Count);
+            Assert.Equal(si.Channel, loaded.SignalIntegrity!.Channel);         // record equality: every field
+            Assert.Equal(si.Calculator, loaded.SignalIntegrity.Calculator);
+
+            File.WriteAllText(path, """{ "formatVersion": 2, "name": "Older", "solver": { "duration": 5 }, "bodies": [] }""");
+            var older = serializer.Load(path);
+            Assert.Equal(2, older.FormatVersion);
+            Assert.Equal(5, older.Solver!.Duration);
+            Assert.Null(older.Antenna);
+            Assert.Null(older.SignalIntegrity);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>An instance of a settings record with every public property unlike its default:
+    /// numbers from a running counter (an int past 1000, a double on a quarter, which no default
+    /// is), booleans flipped, labels "label n", lists of two filled rows, nested records filled.</summary>
+    private static object Filled(Type type, ref int counter)
+    {
+        var instance = Activator.CreateInstance(type)!;
+        foreach (var property in type.GetProperties().Where(p => p.CanWrite))
+        {
+            counter++;
+            var t = property.PropertyType;
+            object value;
+            if (t == typeof(double)) value = counter + 0.25;
+            else if (t == typeof(int)) value = 1000 + counter;
+            else if (t == typeof(bool)) value = !(bool)property.GetValue(instance)!;
+            else if (t == typeof(string)) value = $"label {counter}";
+            else if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                var list = (System.Collections.IList)Activator.CreateInstance(t)!;
+                for (int i = 0; i < 2; i++) list.Add(Filled(t.GetGenericArguments()[0], ref counter));
+                value = list;
+            }
+            else value = Filled(t, ref counter);
+            Assert.NotEqual(property.GetValue(instance), value);
+            property.SetValue(instance, value);
+        }
+        return instance;
+    }
+
     [Fact]
     public void AssemblySettings_EnvironmentAndPerBodyHeatSource_RoundTrip()
     {

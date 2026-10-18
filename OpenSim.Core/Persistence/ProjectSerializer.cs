@@ -12,8 +12,9 @@ public sealed class ProjectSerializer
     public const string FileFilter = "OpenSim Studio project (*.ossproj)|*.ossproj";
 
     /// <summary>The format this build writes: 1 = the original schema (unversioned files
-    /// read as 0), 2 = the solver settings and this number (FU-46).</summary>
-    public const int CurrentFormatVersion = 2;
+    /// read as 0), 2 = the solver settings and this number (FU-46), 3 = the antenna and
+    /// signal-integrity panels' settings (D23).</summary>
+    public const int CurrentFormatVersion = 3;
 
     private static readonly JsonSerializerOptions Options = new()
     {

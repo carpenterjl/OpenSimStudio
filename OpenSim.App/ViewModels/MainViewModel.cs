@@ -366,6 +366,8 @@ public partial class MainViewModel : ObservableObject
             Session.Project.Name = Path.GetFileNameWithoutExtension(dialog.FileName);
             Session.Project.AnalysisType = Session.SelectedAnalysis.Kind.ToString();
             Session.Project.Solver = Solve.ToSolverSettings();
+            Session.Project.Antenna = Antenna.ToSettings();
+            Session.Project.SignalIntegrity = SignalIntegrity.ToSettings();
             _serializer.Save(Session.Project, dialog.FileName);
             _recentProjects.Add(dialog.FileName);
             Log.Append($"Project saved to {dialog.FileName}");
@@ -404,6 +406,8 @@ public partial class MainViewModel : ObservableObject
                 Pcb.PcbBoardThickness = project.Stackup.BoardThickness;
             }
             Solve.LoadSolverSettings(project.Solver);
+            foreach (var note in Antenna.LoadSettings(project.Antenna).Concat(SignalIntegrity.LoadSettings(project.SignalIntegrity)))
+                Log.Append("Project: " + note);
 
             // The previous project's material copies leave the list first. The loaded body's
             // material is read before that: dropping a selected copy writes through to the
