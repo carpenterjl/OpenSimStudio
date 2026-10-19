@@ -1,0 +1,54 @@
+FU-15 exploration output (OpenSim, Release build, 2026-10-18), human-readable lines only.
+explore1: the filter on the 0.4 mm mesh with calibration lines of 6 and 11 mm (the 11 mm line off the grid; see the
+  comment in SheenCircuitsTests.cs). explore2: the same mesh and 0.6 and 0.8 mm meshes with lines of 6 and 12 mm, and the
+  first patch pass (2.5 mm cells, stub 5 mm, port 10 mm). Mesh a/b/c = largest edge mm / smallest edge mm / growth.
+unknowns = short calibration line / long calibration line / circuit. line Z0 <re; im> and eeff come from the two-line
+  calibration, "2D" from the 2D cross-section solve. |S11|, |S21| = 50 ohm reference; own-Z0 = the line's own Z0;
+  raw = before de-embedding.
+
+== explore1
+Passed Explore_Filter(maxEdge: 0.00040000000000000002, minEdge: 0.0001, growth: 1.3) [11 m 27 s]
+f 3.00 GHz: unknowns 1333/1717/4373, 116.5 s; line Z0 <54.06; -0.04> (2D 50.47), eeff 1.7388 (2D 1.8847), alpha 4.94E-002; |S11| -8.45 dB, |S21| -0.68 dB; raw -0.05/-19.72; recip 1.1E-016, lost 0.0004
+f 5.55 GHz: unknowns 1333/1717/4373, 125.9 s; line Z0 <53.51; -0.30> (2D 50.46), eeff 1.8584 (2D 1.8840), alpha 3.48E-001; |S11| -4.53 dB, |S21| -2.28 dB; raw -0.25/-13.32; recip 1.6E-015, lost 0.0102
+f 7.00 GHz: unknowns 1333/1717/4373, 173.9 s; line Z0 <52.73; -0.61> (2D 50.46), eeff 1.8785 (2D 1.8837), alpha 5.80E-001; |S11| -0.22 dB, |S21| -34.44 dB; raw -0.96/-21.52; recip 9.7E-014, lost 0.1909
+f 8.00 GHz: unknowns 1333/1717/4373, 136.7 s; line Z0 <52.25; -0.88> (2D 50.46), eeff 1.8877 (2D 1.8836), alpha 7.02E-001; |S11| -0.22 dB, |S21| -33.13 dB; raw -0.22/-31.59; recip 1.4E-015, lost 0.0496
+f 10.80 GHz: unknowns 1333/1717/4373, 134.2 s; line Z0 <51.46; -1.66> (2D 50.45), eeff 1.9101 (2D 1.8833), alpha 8.15E-001; |S11| -18.39 dB, |S21| -0.88 dB; raw -5.22/-3.70; recip 3.0E-015, lost 0.2722
+
+== explore2
+Passed Explore_Filter(maxEdge: 0.00040000000000000002, minEdge: 0.0001, growth: 1.3, ghz: "5.55 10.8") [4 m 45 s]
+mesh 0.4/0.1/1.3 f 5.55 GHz: unknowns 1333/1813/4373, table 0.1 s, cal 27.1 s, dut 113.2 s; line Z0 <51.22; -0.32> (2D 50.46), eeff 1.8995 (2D 1.8840), alpha 3.37E-001; |S11| -4.24 dB, |S21| -2.46 dB; own-Z0 -4.05/-2.59; raw -0.25/-13.32; recip 1.6E-015, lost 0.0102
+mesh 0.4/0.1/1.3 f 10.80 GHz: unknowns 1333/1813/4373, table 0.1 s, cal 24.5 s, dut 120.3 s; line Z0 <51.24; -1.69> (2D 50.45), eeff 1.9242 (2D 1.8833), alpha 7.77E-001; |S11| -18.39 dB, |S21| -0.88 dB; own-Z0 -18.74/-0.89; raw -5.22/-3.70; recip 3.0E-015, lost 0.2722
+Passed Explore_Filter(maxEdge: 0.00059999999999999995, minEdge: 0.00014999999999999999, growth: 1.3999999999999999, ghz: "5.55 10.8") [1 m 11 s]
+mesh 0.6/0.15/1.4 f 5.55 GHz: unknowns 682/912/2223, table 0.1 s, cal 9.3 s, dut 28.6 s; line Z0 <51.46; -0.32> (2D 50.46), eeff 1.8977 (2D 1.8840), alpha 3.36E-001; |S11| -4.24 dB, |S21| -2.46 dB; own-Z0 -4.01/-2.61; raw -0.26/-13.21; recip 3.5E-015, lost 0.0103
+mesh 0.6/0.15/1.4 f 10.80 GHz: unknowns 682/912/2223, table 0.0 s, cal 7.3 s, dut 26.5 s; line Z0 <51.37; -1.69> (2D 50.45), eeff 1.9235 (2D 1.8833), alpha 7.75E-001; |S11| -18.10 dB, |S21| -0.88 dB; own-Z0 -18.40/-0.89; raw -5.35/-3.60; recip 1.1E-015, lost 0.2712
+Passed Explore_Filter(maxEdge: 0.00080000000000000004, minEdge: 0.00020000000000000001, growth: 1.5, ghz: "5.55 10.8") [26 s]
+mesh 0.8/0.2/1.5 f 5.55 GHz: unknowns 368/504/1252, table 0.0 s, cal 3.8 s, dut 10.5 s; line Z0 <47.83; -0.31> (2D 50.46), eeff 1.9643 (2D 1.8840), alpha 3.32E-001; |S11| -3.59 dB, |S21| -2.93 dB; own-Z0 -3.91/-2.69; raw -0.26/-13.14; recip 4.1E-016, lost 0.0103
+mesh 0.8/0.2/1.5 f 10.80 GHz: unknowns 368/504/1252, table 0.0 s, cal 3.7 s, dut 8.3 s; line Z0 <51.32; -1.68> (2D 50.45), eeff 1.9456 (2D 1.8833), alpha 7.93E-001; |S11| -17.68 dB, |S21| -0.88 dB; own-Z0 -17.94/-0.90; raw -5.63/-3.45; recip 2.3E-015, lost 0.2744
+Passed Explore_Patch(maxEdge: 0.0025000000000000001, minEdge: 0.00059999999999999995, growth: 1.3999999999999999) [1 m 28 s]
+f 2.150 GHz: unknowns 247/303/1755, 23.1 s; line Z0 <51.15; -0.12> (2D 49.81), eeff 2.1293 (2D 2.1271); Zedge 8.0 +60.1j
+f 2.250 GHz: unknowns 247/303/1755, 20.0 s; line Z0 <51.17; -0.13> (2D 49.81), eeff 2.1322 (2D 2.1271); Zedge 193.9 +181.3j
+f 2.300 GHz: unknowns 247/303/1755, 20.4 s; line Z0 <51.18; -0.14> (2D 49.81), eeff 2.1336 (2D 2.1271); Zedge 73.4 -133.3j
+f 2.400 GHz: unknowns 247/303/1755, 24.7 s; line Z0 <51.20; -0.17> (2D 49.81), eeff 2.1362 (2D 2.1271); Zedge 5.7 -35.0j
+
+== coarse (temporary Explore_Coarse theory, Release, 2026-10-18; run alongside a Debug test run, so the times are not clean)
+0.8 mm cells with the test's lengths (the mesher grades and stretches each interval, so none is a whole number of cells): ports 2.4 mm beyond the reference planes, 2.4 mm stubs,
+  calibration lines 6.4 and 12.8 mm. Z0 and eeff from the calibration; |S11|, |S21| in the line's own Z0. Features by the
+  test's two-point rules (FeatureOf). The growth-1.4 row is the test's configuration.
+Passed Explore_Coarse(maxEdge: 0.00080000000000000004, minEdge: 0.00020000000000000001, growth: 1.3999999999999999, shift: 0.0023999999999999998, stub: 0.0023999999999999998, shortLength: 0.0064000000000000003, longLength: 0.012800000000000001) [10 m 33 s]
+3 GHz: Z0 51.48, eeff 1.8678, |S11| -7.05, |S21| -0.96
+5.55 GHz: Z0 51.78, eeff 1.8961, |S11| -4.04, |S21| -2.60
+10.8 GHz: Z0 51.51, eeff 1.9232, |S11| -18.39, |S21| -0.89
+Corner 5.55-5.6: 5.5867 GHz (-3.0 dB)
+ReflectionNull 4.95-5.05: 4.9999 GHz (-31.5 dB)
+TransmissionNull 7-7.1: 7.0447 GHz (-34.6 dB)
+TransmissionNull 8.2-8.3: 8.2434 GHz (-38.7 dB)
+ReflectionNull 10.9-11: 10.9213 GHz (-22.4 dB)
+Passed Explore_Coarse(maxEdge: 0.00080000000000000004, minEdge: 0.00020000000000000001, growth: 1.5, shift: 0.0023999999999999998, stub: 0.0023999999999999998, shortLength: 0.0064000000000000003, longLength: 0.012800000000000001) [6 m 2 s]
+3 GHz: Z0 51.44, eeff 1.8744, |S11| -7.40, |S21| -0.88
+5.55 GHz: Z0 51.80, eeff 1.8985, |S11| -4.12, |S21| -2.54
+10.8 GHz: Z0 51.63, eeff 1.9243, |S11| -18.85, |S21| -0.87
+Corner 5.55-5.6: 5.5924 GHz (-3.0 dB)
+ReflectionNull 4.95-5.05: 4.9998 GHz (-30.7 dB)
+TransmissionNull 7-7.1: 7.0468 GHz (-34.6 dB)
+TransmissionNull 8.2-8.3: 8.2415 GHz (-38.8 dB)
+ReflectionNull 10.9-11: 10.9057 GHz (-22.4 dB)

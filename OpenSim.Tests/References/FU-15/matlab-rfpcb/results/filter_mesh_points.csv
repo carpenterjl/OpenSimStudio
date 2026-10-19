@@ -1,0 +1,7 @@
+label,mel_mm,source,S11_null_~4.9,S21_-3dB_falling,S21_-10dB_falling,S21_stopband_min1_~7.1,S21_stopband_min2_~8.1,S11_null_~11,S11_dB@2.0,S11_dB@3.0,S11_dB@4.0
+interp100,1.0,"""F_m100_gx3948.csv""","[4.8893, -32.9, ""parabola""]",5.4949,5.9942,"[7.0816, -39.42, ""parabola""]","[8.0613, -42.77, ""parabola""]","[10.8629, -23.24, ""parabola""]",-8.395,-6.738,-7.83
+direct100,1.0,"""D_F_m100_gx3948.csv""","[4.8898, -32.87, ""parabola""]",5.4948,null,"[7.0815, -39.4, ""parabola""]","[8.0606, -42.77, ""parabola""]","[10.8638, -23.22, ""parabola""]",null,null,null
+interp070,0.7,"""F_m070_gx3948.csv""","[4.9027, -33.34, ""parabola""]",5.5215,6.0266,"[7.0925, -38.98, ""parabola""]","[8.0906, -42.51, ""parabola""]","[11.0405, -23.94, ""parabola""]",-8.287,-6.7,-7.844
+direct070,0.7,"""D_F_m070_gx3948.csv""",null,null,null,null,null,"[11.041, -23.94, ""parabola""]",null,null,null
+direct060,0.6,"""D_F_m060_gx3948.csv""","[4.9216, -33.45, ""parabola""]","[5.5493, ""extrapolated""]",6.0582,"[7.1264, -38.84, ""parabola""]","[8.1401, -42.48, ""parabola""]","[11.0892, -23.83, ""parabola""]",-8.424,-6.812,-7.902
+direct050,0.5,"""D_F_m050_gx3948.csv""","[4.9416, -33.69, ""parabola""]",5.5707,null,"[7.1472, -38.67, ""parabola""]","[8.1659, -42.6, ""parabola""]","[11.1148, -23.45, ""parabola""]",-8.528,-6.882,null

@@ -1,0 +1,54 @@
+﻿filter  |S21| -3 dB corner (falling)                         meas 5.5509    fdtd 5.6003    MoM(0.5 mm) 5.5707    range [5.4949, 5.5707] dMeas% 0.36 dFDTD% -0.53 dMeas None
+        sens {"1.0mm_margin10": 5.5024, "1.0mm_ports8.464": 5.5222} | by mesh {"1.0": 5.4949, "0.7": 5.5215, "0.6": 5.5493, "0.5": 5.5707}
+filter  |S21| -10 dB (falling)                               meas 5.9969    fdtd 6.1145    MoM(0.6 mm) 6.0582    range [5.9942, 6.0582] dMeas% 1.02 dFDTD% -0.92 dMeas None
+        sens {"1.0mm_margin10": 5.9987, "1.0mm_ports8.464": 5.9865} | by mesh {"1.0": 5.9942, "0.7": 6.0266, "0.6": 6.0582, "0.5": null}
+filter  |S21| stop-band minimum 1 (freq)                     meas 6.9393    fdtd None      MoM(0.5 mm) 7.1472    range [7.0816, 7.1472] dMeas% 3.0 dFDTD% None dMeas None
+        sens {"1.0mm_margin10": 7.06, "1.0mm_ports8.464": 7.0} | by mesh {"1.0": 7.0816, "0.7": 7.0925, "0.6": 7.1264, "0.5": 7.1472}
+filter  |S21| stop-band minimum 1 (depth)                    meas -38.732   fdtd None      MoM(0.5 mm) -38.67    range [-39.42, -38.67] dMeas% None dFDTD% None dMeas 0.062
+        sens {"1.0mm_margin10": -43.468, "1.0mm_ports8.464": -37.194} | by mesh {"1.0": -39.42, "0.7": -38.98, "0.6": -38.84, "0.5": -38.67}
+filter  |S21| stop-band minimum 2 / FD-TD null (freq)        meas 7.951     fdtd 8.0117    MoM(0.5 mm) 8.1659    range [8.0613, 8.1659] dMeas% 2.7 dFDTD% 1.92 dMeas None
+        sens {"1.0mm_margin10": 8.1, "1.0mm_ports8.464": 8.16} | by mesh {"1.0": 8.0613, "0.7": 8.0906, "0.6": 8.1401, "0.5": 8.1659}
+filter  |S21| stop-band minimum 2 (depth)                    meas -35.371   fdtd None      MoM(0.5 mm) -42.6     range [-42.77, -42.48] dMeas% None dFDTD% None dMeas -7.229
+        sens {"1.0mm_margin10": -44.779, "1.0mm_ports8.464": -41.11} | by mesh {"1.0": -42.77, "0.7": -42.51, "0.6": -42.48, "0.5": -42.6}
+filter  |S11| null near 5 GHz (freq)                         meas 4.9769    fdtd 5.0044    MoM(0.5 mm) 4.9416    range [4.8893, 4.9416] dMeas% -0.71 dFDTD% -1.25 dMeas None
+        sens {"1.0mm_margin10": 4.8988, "1.0mm_ports8.464": 4.9376} | by mesh {"1.0": 4.8893, "0.7": 4.9027, "0.6": 4.9216, "0.5": 4.9416}
+filter  |S11| null near 5 GHz (depth)                        meas -28.484   fdtd -30.472   MoM(0.5 mm) -33.69    range [-33.69, -32.9] dMeas% None dFDTD% None dMeas -5.206
+        sens {"1.0mm_margin10": -35.058, "1.0mm_ports8.464": -36.551} | by mesh {"1.0": -32.9, "0.7": -33.34, "0.6": -33.45, "0.5": -33.69}
+filter  |S11| null near 11 GHz (freq)                        meas 10.802    fdtd 10.9928   MoM(0.5 mm) 11.1148   range [10.8629, 11.1148] dMeas% 2.9 dFDTD% 1.11 dMeas None
+        sens {"1.0mm_margin10": 10.8458, "1.0mm_ports8.464": 10.6368} | by mesh {"1.0": 10.8629, "0.7": 11.0405, "0.6": 11.0892, "0.5": 11.1148}
+filter  |S11| null near 11 GHz (depth)                       meas -40.972   fdtd -19.032   MoM(0.5 mm) -23.45    range [-23.94, -23.24] dMeas% None dFDTD% None dMeas 17.522
+        sens {"1.0mm_margin10": -25.2, "1.0mm_ports8.464": -21.912} | by mesh {"1.0": -23.24, "0.7": -23.94, "0.6": -23.83, "0.5": -23.45}
+filter  passband |S11| at 2.0 GHz (all meshes)               meas -7.813    fdtd -8.996    MoM(0.5 mm) -8.528    range [-8.528, -8.287] dMeas% None dFDTD% None dMeas -0.715
+        sens {"1.0mm_margin10": -8.379, "1.0mm_ports8.464": -8.624} | by mesh {"1.0": -8.395, "0.7": -8.287, "0.6": -8.424, "0.5": -8.528}
+filter  passband |S11| at 3.0 GHz (all meshes)               meas -6.973    fdtd -7.053    MoM(0.5 mm) -6.882    range [-6.882, -6.7] dMeas% None dFDTD% None dMeas 0.091
+        sens {"1.0mm_margin10": -6.733, "1.0mm_ports8.464": -6.972} | by mesh {"1.0": -6.738, "0.7": -6.7, "0.6": -6.812, "0.5": -6.882}
+filter  passband |S11| at 4.0 GHz (all meshes)               meas -9.077    fdtd -7.891    MoM(0.6 mm) -7.902    range [-7.902, -7.83] dMeas% None dFDTD% None dMeas 1.175
+        sens {"1.0mm_margin10": -7.715, "1.0mm_ports8.464": -7.791} | by mesh {"1.0": -7.83, "0.7": -7.844, "0.6": -7.902, "0.5": null}
+filter  passband |S11| at 2.5 GHz (dense sweeps)             meas -7.102    fdtd -7.736    MoM(0.7 mm) -7.212    range [-7.285, -7.212] dMeas% None dFDTD% None dMeas -0.11
+        sens {"1.0mm_margin10": -7.278, "1.0mm_ports8.464": -7.531} | by mesh {"1.0": -7.285, "0.7": -7.212}
+filter  passband |S11| at 3.5 GHz (dense sweeps)             meas -7.355    fdtd -6.999    MoM(0.7 mm) -6.785    range [-6.791, -6.785] dMeas% None dFDTD% None dMeas 0.57
+        sens {"1.0mm_margin10": -6.745, "1.0mm_ports8.464": -6.953} | by mesh {"1.0": -6.791, "0.7": -6.785}
+filter  passband |S11| at 4.5 GHz (dense sweeps)             meas -12.599   fdtd -11.279   MoM(0.7 mm) -11.69    range [-11.754, -11.69] dMeas% None dFDTD% None dMeas 0.909
+        sens {"1.0mm_margin10": -11.51, "1.0mm_ports8.464": -11.081} | by mesh {"1.0": -11.754, "0.7": -11.69}
+filter  passband worst |S11| 2-4.5 GHz (level)               meas -6.963    fdtd -6.982    MoM(0.7 mm) -6.652    range [-6.676, -6.652] dMeas% None dFDTD% None dMeas 0.311
+        sens {} | by mesh {"1.0": -6.676, "0.7": -6.652}
+filter  passband |S21| at 2.5 GHz (dense sweeps)             meas -1.121    fdtd -0.497    MoM(0.7 mm) -0.92     range [-0.92, -0.903] dMeas% None dFDTD% None dMeas 0.201
+        sens {} | by mesh {"1.0": -0.903, "0.7": -0.92}
+filter  passband |S21| at 3.0 GHz (dense sweeps)             meas -1.165    fdtd -0.588    MoM(0.7 mm) -1.054    range [-1.054, -1.044] dMeas% None dFDTD% None dMeas 0.111
+        sens {} | by mesh {"1.0": -1.044, "0.7": -1.054}
+filter  passband |S21| at 3.5 GHz (dense sweeps)             meas -1.104    fdtd -0.627    MoM(0.7 mm) -1.045    range [-1.045, -1.043] dMeas% None dFDTD% None dMeas 0.059
+        sens {} | by mesh {"1.0": -1.043, "0.7": -1.045}
+filter  passband |S21| at 4.8 GHz (dense sweeps)             meas -0.427    fdtd 0.112     MoM(0.7 mm) -0.218    range [-0.218, -0.218] dMeas% None dFDTD% None dMeas 0.209
+        sens {} | by mesh {"1.0": -0.218, "0.7": -0.218}
+filter  passband |S21| at 5.0 GHz (dense sweeps)             meas -0.445    fdtd 0.066     MoM(0.7 mm) -0.283    range [-0.304, -0.283] dMeas% None dFDTD% None dMeas 0.162
+        sens {} | by mesh {"1.0": -0.304, "0.7": -0.283}
+patch   resonance f0 (parallel-RLC fit of Zin at the patch edge) meas 2.27489   fdtd 2.28573   MoM(1.6 mm) 2.20631   range [2.19005, 2.24999] dMeas% -3.01 dFDTD% -3.47 dMeas None
+        sens {"margin16.75_4.0mm": 2.25602, "margin16.75_3.0mm": 2.22305, "margin33.5_4.0mm": 2.2541, "feed6mm_2.0mm": 2.18932, "eps_scaled_4.0mm": 2.2586, "eps_scaled_3.0mm": 2.2565, "eps_scaled_2.5mm": 2.2856, "eps_scaled_2.0mm": 2.2475, "eps_scaled_1.6mm": 2.2544} | by mesh {"4.0": 2.24999, "3.0": 2.2188, "2.5": 2.19005, "2.0": 2.19542, "1.6": 2.20631}
+patch   |S11| minimum (50 ohm)                               meas -2.138    fdtd -2.441    MoM(1.6 mm) -3.198    range [-3.803, -3.198] dMeas% None dFDTD% None dMeas -1.06
+        sens {"margin16.75_4.0mm": -3.237, "margin16.75_3.0mm": -3.026, "margin33.5_4.0mm": -2.89, "feed6mm_2.0mm": -2.968} | by mesh {"4.0": -3.803, "3.0": -3.588, "2.5": -3.365, "2.0": -3.478, "1.6": -3.198}
+patch   |S11| minimum frequency (50 ohm)                     meas None      fdtd 2.307     MoM(1.6 mm) 2.234     range [2.215, 2.2745] dMeas% None dFDTD% -3.16 dMeas None
+        sens {"margin16.75_4.0mm": 2.2805, "margin16.75_3.0mm": 2.25} | by mesh {"4.0": 2.2745, "3.0": 2.245, "2.5": 2.215, "2.0": 2.2226, "1.6": 2.234}
+patch   R0 (RLC fit, ohm)                                    meas 411.7     fdtd 394.2     MoM(1.6 mm) 289.2     range [244.8, 289.2] dMeas% None dFDTD% None dMeas None
+        sens {"margin16.75_4.0mm": 286.7, "margin16.75_3.0mm": 307.9} | by mesh {"4.0": 244.8, "3.0": 260.5, "2.5": 274.4, "2.0": 268.6, "1.6": 289.2}
+patch   Q (RLC fit)                                          meas 70.8      fdtd 78.2      MoM(1.6 mm) 51.6      range [50.7, 52.2] dMeas% None dFDTD% None dMeas None
+        sens {"margin16.75_4.0mm": 59.6, "margin16.75_3.0mm": 60.9} | by mesh {"4.0": 50.7, "3.0": 51.6, "2.5": 52.2, "2.0": 52.0, "1.6": 51.6}

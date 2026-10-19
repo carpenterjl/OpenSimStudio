@@ -1,0 +1,37 @@
+{
+ "fig3_34": {
+  "removed_measured_rows": 107,
+  "removed_range_GHz": [
+   1.95,
+   5.52
+  ],
+  "added_measured_rows": 104,
+  "note": "measured rows 1.95-5.52 GHz replaced by verifier re-digitisation (dash-dot line below the FD-TD line; dash gaps 2.63-2.93, 3.05-3.35, 4.41-4.69, 5.27-5.46 GHz left empty instead of copying the FD-TD trace)"
+ },
+ "fig3_33": {
+  "removed_measured_rows": 31,
+  "removed_measured_range_GHz": [
+   18.88,
+   20.0
+  ],
+  "added_measured_rows": 24,
+  "removed_fdtd_rows_below_0p19GHz": 75,
+  "added_fdtd_tip": "0.130 GHz, -33.26 dB (ink bottom -33.44..-33.55 dB at 0.09-0.18 GHz plus half line width)"
+ },
+ "fig4_14": {
+  "old": {
+   "freq_GHz": "2.20031",
+   "value": "19.284",
+   "quantity": "Zin_R_ohm",
+   "curve": "measured",
+   "figure": "Fig. 4.14",
+   "thesis_page": "162",
+   "pdf_page": "162",
+   "u_freq": "0.00046",
+   "u_value": "1.235"
+  },
+  "new_value": 21.92,
+  "new_freq": 2.1996,
+  "new_u_value": 0.7
+ }
+}

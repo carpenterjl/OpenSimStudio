@@ -1,0 +1,153 @@
+== thesis features from the verified digitisation (Figs. 3.33, 3.34)
+  corner  measured 5.5509 GHz (-3.00 dB)   FD-TD 5.6003 GHz (-3.00 dB)
+  s11_5   measured 4.9769 GHz (-28.48 dB)   FD-TD 5.0044 GHz (-30.47 dB)
+  s21_7   measured 6.9393 GHz (-38.73 dB)   FD-TD -
+  s21_8   measured 7.9510 GHz (-35.37 dB)   FD-TD 8.0117 GHz
+  s11_11  measured 10.8020 GHz (-40.97 dB)   FD-TD 10.9928 GHz (-19.03 dB)
+  FD-TD |S21| -40 dB crossings 7.7680 and 8.2554 GHz (its null near 8 GHz is off the plot)
+
+== OpenSim filter, mesh 0.6/0.15/1.4 mm, 34 frequencies
+   f GHz   50-ohm |S11| |S21|   own-Z0 |S11| |S21|   measured |S11| |S21|   FD-TD |S11| |S21|   cal Z0  eps_eff (2D)
+    2.50     -7.98   -0.76        -7.67   -0.82         -7.10   -1.12        -7.74   -0.50   50.86  1.8543 (1.8849)
+    3.00     -7.27   -0.91        -6.95   -0.99         -6.97   -1.17        -7.05   -0.59   51.06  1.8694 (1.8847)
+    3.50     -7.07   -0.96        -6.76   -1.04         -7.36   -1.10        -7.00   -0.63   51.19  1.8790 (1.8845)
+    4.00     -7.65   -0.84        -7.38   -0.89         -9.08   -0.87        -7.89   -0.52   51.28  1.8857 (1.8844)
+    4.80    -15.63   -0.19       -15.72   -0.19        -18.50   -0.43       -18.56    0.11   51.39  1.8930 (1.8842)
+    4.90    -20.25   -0.13       -20.69   -0.12        -23.99   -0.43       -24.17    0.15   51.40  1.8937 (1.8841)
+    5.00    -31.25   -0.11       -31.47   -0.11        -26.98   -0.45       -26.75    0.07   51.41  1.8944 (1.8841)
+    5.10    -20.89   -0.16       -19.71   -0.18        -18.32   -0.59       -18.63   -0.11   51.42  1.8951 (1.8841)
+    5.20    -14.02   -0.34       -13.33   -0.38        -13.27   -0.91       -13.41   -0.44   51.43  1.8957 (1.8841)
+    5.50     -5.04   -1.98        -4.78   -2.12         -5.61   -2.70        -5.69   -1.91   51.46  1.8975 (1.8840)
+    5.55     -4.24   -2.46        -4.01   -2.61         -4.90   -2.99        -4.95   -2.60   51.46  1.8977 (1.8840)
+    5.60     -3.56   -2.99        -3.36   -3.16         -4.26   -3.48        -4.30   -3.00   51.46  1.8980 (1.8840)
+    5.65     -2.98   -3.58        -2.82   -3.76         -3.68   -4.05        -3.73   -3.52   51.47  1.8982 (1.8840)
+    5.70     -2.50   -4.22        -2.36   -4.40         -3.19   -4.79        -3.22   -4.14   51.47  1.8985 (1.8840)
+    6.80     -0.23  -28.13        -0.13  -28.10         -0.44  -32.79        -0.46  -21.59   51.54  1.9033 (1.8838)
+    6.90     -0.23  -31.73        -0.12  -31.67         -0.43  -36.88        -0.45  -23.91   51.54  1.9037 (1.8838)
+    7.00     -0.23  -34.40        -0.11  -34.32         -0.42  -38.04        -0.43  -26.74   51.54  1.9041 (1.8837)
+    7.10     -0.22  -34.30        -0.11  -34.20         -0.42  -36.93        -0.43  -29.73   51.54  1.9045 (1.8837)
+    7.20     -0.23  -32.74        -0.11  -32.62         -0.41  -35.57        -0.43  -33.29   51.55  1.9049 (1.8837)
+    7.30     -0.23  -31.32        -0.10  -31.17         -0.41  -34.35        -0.43  -35.72   51.55  1.9053 (1.8837)
+    7.80     -0.23  -30.46        -0.10  -30.23         -0.34  -34.09        -0.36  -40.69   51.55  1.9073 (1.8836)
+    7.90     -0.23  -31.47        -0.09  -31.23         -0.37  -35.17        -0.38  -43.82   51.54  1.9077 (1.8836)
+    8.00     -0.23  -33.04        -0.09  -32.77         -0.36  -35.33        -0.38  -48.06   51.54  1.9081 (1.8836)
+    8.10     -0.23  -35.30        -0.10  -35.02         -0.33  -35.25        -0.35  -48.29   51.54  1.9085 (1.8836)
+    8.20     -0.23  -37.91        -0.10  -37.63         -0.44  -34.15        -0.36  -44.84   51.54  1.9089 (1.8836)
+    8.30     -0.23  -37.82        -0.10  -37.52         -0.59  -32.17        -0.42  -37.88   51.53  1.9094 (1.8836)
+   10.60    -11.08   -1.23       -11.28   -1.28        -15.83   -1.91       -10.37   -1.82   51.38  1.9221 (1.8833)
+   10.70    -14.18   -1.01       -14.36   -1.05        -22.13   -1.67       -12.89   -1.60   51.38  1.9228 (1.8833)
+   10.80    -18.10   -0.88       -18.40   -0.89        -40.25   -1.57       -15.66   -1.43   51.37  1.9235 (1.8833)
+   10.90    -21.20   -0.81       -22.42   -0.81        -25.52   -1.60       -18.38   -1.31   51.36  1.9242 (1.8833)
+   11.00    -19.48   -0.80       -21.09   -0.77        -18.81   -1.65       -19.03   -1.20   51.36  1.9249 (1.8833)
+   11.10    -16.34   -0.83       -17.51   -0.78        -16.60   -1.76       -16.69   -1.16   51.35  1.9256 (1.8833)
+   11.20    -13.91   -0.88       -14.81   -0.81        -14.65   -1.81       -14.70   -1.15   51.35  1.9263 (1.8833)
+   11.30    -12.13   -0.94       -12.88   -0.86        -12.88   -1.88       -12.99   -1.17   51.34  1.9270 (1.8833)
+  (measured/FD-TD columns: np.interp of the digitised points, across dash gaps and hidden stretches; for orientation only)
+
+  [50 ohm]
+    -3 dB corner 5.6010 GHz: vs measured +0.90 %, vs FD-TD +0.01 %
+    s11_5   quadratic       5.0114 GHz ( -31.9 dB): vs measured +0.69 %, vs FD-TD +0.14 %
+            chord  5.00- 5.10 5.0077 GHz ( -31.6 dB): vs measured +0.62 %, vs FD-TD +0.06 %; 3.7 MHz from the quadratic
+            the test pair 4.95-5.05 GHz is not in the sweep
+    s21_7   quadratic       7.0441 GHz ( -34.7 dB): vs measured +1.51 %
+            chord  7.00- 7.10 7.0456 GHz ( -34.6 dB): vs measured +1.53 %; 1.5 MHz from the quadratic
+    s21_8   quadratic       8.2502 GHz ( -38.5 dB): vs measured +3.76 %, vs FD-TD +2.98 %
+            chord  8.20- 8.30 8.2482 GHz ( -38.6 dB): vs measured +3.74 %, vs FD-TD +2.95 %; 2.0 MHz from the quadratic
+    s11_11  quadratic       10.9148 GHz ( -21.3 dB): vs measured +1.04 %, vs FD-TD -0.71 %
+            chord 10.90-11.00 10.9016 GHz ( -21.2 dB): vs measured +0.92 %, vs FD-TD -0.83 %; 13.2 MHz from the quadratic
+
+  [line's own Z0 (as the test)]
+    -3 dB corner 5.5854 GHz: vs measured +0.62 %, vs FD-TD -0.27 %
+    s11_5   quadratic       5.0010 GHz ( -31.5 dB): vs measured +0.48 %, vs FD-TD -0.07 %
+            chord  5.00- 5.10 4.9972 GHz ( -31.5 dB): vs measured +0.41 %, vs FD-TD -0.15 %; 3.8 MHz from the quadratic
+            the test pair 4.95-5.05 GHz is not in the sweep
+    s21_7   quadratic       7.0434 GHz ( -34.6 dB): vs measured +1.50 %
+            chord  7.00- 7.10 7.0445 GHz ( -34.5 dB): vs measured +1.52 %; 1.1 MHz from the quadratic
+    s21_8   quadratic       8.2500 GHz ( -38.2 dB): vs measured +3.76 %, vs FD-TD +2.97 %
+            chord  8.20- 8.30 8.2481 GHz ( -38.3 dB): vs measured +3.74 %, vs FD-TD +2.95 %; 2.0 MHz from the quadratic
+    s11_11  quadratic       10.9283 GHz ( -22.7 dB): vs measured +1.17 %, vs FD-TD -0.59 %
+            chord 10.90-11.00 10.9219 GHz ( -22.6 dB): vs measured +1.11 %, vs FD-TD -0.64 %; 6.4 MHz from the quadratic
+  calibration at 3 GHz: eps_eff 1.8694 against the 2D solve 1.8847 (-0.81 %)
+
+== filter mesh study and calibration lines (mesh_study.txt)
+  run       mesh mm        f GHz  circuit unknowns  dut s   cal Z0  eps_eff (2D, diff)       50-ohm |S11| |S21|  own-Z0 |S11| |S21|
+  explore1  0.4/0.1/1.3     3.00             4373  116.5    54.06  1.7388 (1.8847, -7.74 %)     -8.45  -0.68          -      -
+  explore1  0.4/0.1/1.3     5.55             4373  125.9    53.51  1.8584 (1.8840, -1.36 %)     -4.53  -2.28          -      -
+  explore1  0.4/0.1/1.3     7.00             4373  173.9    52.73  1.8785 (1.8837, -0.28 %)     -0.22 -34.44          -      -
+  explore1  0.4/0.1/1.3     8.00             4373  136.7    52.25  1.8877 (1.8836, +0.22 %)     -0.22 -33.13          -      -
+  explore1  0.4/0.1/1.3    10.80             4373  134.2    51.46  1.9101 (1.8833, +1.42 %)    -18.39  -0.88          -      -
+  explore2  0.4/0.1/1.3     5.55             4373  113.2    51.22  1.8995 (1.8840, +0.82 %)     -4.24  -2.46      -4.05  -2.59
+  explore2  0.4/0.1/1.3    10.80             4373  120.3    51.24  1.9242 (1.8833, +2.17 %)    -18.39  -0.88     -18.74  -0.89
+  explore2  0.6/0.15/1.4    5.55             2223   28.6    51.46  1.8977 (1.8840, +0.73 %)     -4.24  -2.46      -4.01  -2.61
+  explore2  0.6/0.15/1.4   10.80             2223   26.5    51.37  1.9235 (1.8833, +2.13 %)    -18.10  -0.88     -18.40  -0.89
+  explore2  0.8/0.2/1.5     5.55             1252   10.5    47.83  1.9643 (1.8840, +4.26 %)     -3.59  -2.93      -3.91  -2.69
+  explore2  0.8/0.2/1.5    10.80             1252    8.3    51.32  1.9456 (1.8833, +3.31 %)    -17.68  -0.88     -17.94  -0.90
+  (explore1: calibration lines 6 and 11 mm, and its time is the whole frequency point; explore2: 6 and 12 mm)
+
+== patch, thesis (Fig. 4.14 p.162 markers and FD-TD curve; Fig. 4.15 p.163)
+  measured markers (fig4_14_Zin_verified.csv) at 2.25 / 2.30 GHz: 117.284+192.547j / 118.378-180.379j ohm
+  measured, two-point rule 2.25-2.30: f0 2.27472 GHz, R0 412.6 ohm, Q 71.9
+  measured, five-parameter fit, 7 markers: f0 2.27489 GHz, R0 411.7 ohm, Q 70.8, X0 5.09, X1 -22.2, rms 6.00 ohm
+  measured, verifier re-read (my_checkpoints_fig4_14_4_15.csv), two-point: f0 2.27474 GHz, R0 412.6 ohm, Q 71.9
+  measured, verifier re-read, five-parameter fit: f0 2.27492 GHz, R0 411.7 ohm, Q 70.8, X0 5.08, X1 -22.1, rms 5.99 ohm
+  measured, Fig. 4.15 Smith points (50 ohm), five-parameter fit: f0 2.27502 GHz, R0 406.2 ohm, Q 69.1, X0 5.36, X1 -24.2, rms 6.31 ohm
+  FD-TD curve at 2.25 / 2.30 GHz: 50.436+147.115j / 201.943-184.794j ohm
+  FD-TD, two-point rule: f0 2.28558 GHz, R0 397.0 ohm, Q 77.6
+  FD-TD, five-parameter fit at the 7 frequencies: f0 2.28589 GHz, R0 389.4 ohm, Q 78.1, X0 7.35, X1 10.2, rms 3.70 ohm
+
+== patch, OpenSim (Zedge = load at the patch edge after taking off the port and the calibrated line)
+  mesh 1.5/0.4/1.3 mm, stub 5.0 mm, port 10.0 mm from the patch; circuit unknowns 3917
+     2.250 GHz  Z   200.57  +174.20j   cal Z0 49.37 eps_eff 2.1749   measured  117.28  +192.55j
+     2.300 GHz  Z    67.60  -127.09j   cal Z0 49.40 eps_eff 2.1745   measured  118.38  -180.38j
+    two-point 2.25-2.30: f0 2.26435 GHz, R0 337.5 ohm, Q 65.7; vs measured f0 -0.46 % R0 -18.2 % Q -8.6 %; vs FD-TD f0 -0.93 % R0 -15.0 % Q -15.2 %
+  mesh 2.0/0.5/1.35 mm, stub 5.0 mm, port 10.0 mm from the patch; circuit unknowns 2503
+     2.100 GHz  Z     4.25   +47.43j   cal Z0 53.87 eps_eff 2.0271   measured    2.58   +42.02j
+     2.150 GHz  Z     8.85   +64.54j   cal Z0 53.86 eps_eff 2.0330   measured    8.50   +59.83j
+     2.200 GHz  Z    27.46  +104.64j   cal Z0 53.84 eps_eff 2.0386   measured   21.92   +94.53j
+     2.250 GHz  Z   248.87  +176.19j   cal Z0 53.82 eps_eff 2.0438   measured  117.28  +192.55j
+     2.275 GHz  Z   233.20  -163.33j   cal Z0 53.81 eps_eff 2.0463
+     2.300 GHz  Z    63.78  -128.28j   cal Z0 53.79 eps_eff 2.0487   measured  118.38  -180.38j
+     2.350 GHz  Z    13.73   -59.40j   cal Z0 53.76 eps_eff 2.0533   measured   17.48   -93.61j
+     2.400 GHz  Z     5.60   -34.71j   cal Z0 53.73 eps_eff 2.0577   measured    7.64   -44.61j
+    two-point 2.25-2.30: f0 2.26163 GHz, R0 360.1 ohm, Q 66.3; vs measured f0 -0.58 % R0 -12.7 % Q -7.8 %; vs FD-TD f0 -1.05 % R0 -9.3 % Q -14.5 %
+    two-point 2.25-2.275: f0 2.26212 GHz, R0 360.5 ohm, Q 63.8
+    five-parameter fit, 7 measured frequencies: f0 2.26178 GHz, R0 359.6 ohm, Q 63.8, X0 10.69, X1 5.5, rms 0.78 ohm
+  mesh 2.0/0.5/1.35 mm, stub 23.0 mm, port 10.0 mm from the patch; circuit unknowns 2673
+     2.250 GHz  Z   207.02  +188.14j   cal Z0 50.57 eps_eff 2.1287   measured  117.28  +192.55j
+     2.300 GHz  Z    66.15  -134.47j   cal Z0 50.56 eps_eff 2.1288   measured  118.38  -180.38j
+    two-point 2.25-2.30: f0 2.26432 GHz, R0 366.1 ohm, Q 69.6; vs measured f0 -0.46 % R0 -11.3 % Q -3.3 %; vs FD-TD f0 -0.93 % R0 -7.8 % Q -10.3 %
+  mesh 2.5/0.6/1.4 mm, stub 5.0 mm, port 10.0 mm from the patch; circuit unknowns 1755
+     2.100 GHz  Z     3.92   +44.37j   cal Z0 51.13 eps_eff 2.1277   measured    2.58   +42.02j
+     2.150 GHz  Z     8.00   +60.06j   cal Z0 51.15 eps_eff 2.1293   measured    8.50   +59.83j
+     2.200 GHz  Z    23.67   +95.79j   cal Z0 51.16 eps_eff 2.1308   measured   21.92   +94.53j
+     2.250 GHz  Z   193.85  +181.31j   cal Z0 51.17 eps_eff 2.1322   measured  117.28  +192.55j
+     2.275 GHz  Z   274.45  -133.54j   cal Z0 51.17 eps_eff 2.1329
+     2.300 GHz  Z    73.38  -133.26j   cal Z0 51.18 eps_eff 2.1336   measured  118.38  -180.38j
+     2.350 GHz  Z    14.46   -60.47j   cal Z0 51.19 eps_eff 2.1349   measured   17.48   -93.61j
+     2.400 GHz  Z     5.72   -34.97j   cal Z0 51.20 eps_eff 2.1362   measured    7.64   -44.61j
+    two-point 2.25-2.30: f0 2.26544 GHz, R0 347.1 ohm, Q 65.5; vs measured f0 -0.41 % R0 -15.9 % Q -8.9 %; vs FD-TD f0 -0.88 % R0 -12.6 % Q -15.5 %
+    two-point 2.25-2.275: f0 2.26606 GHz, R0 347.6 ohm, Q 63.1
+    five-parameter fit, 7 measured frequencies: f0 2.26569 GHz, R0 346.7 ohm, Q 63.8, X0 9.86, X1 6.0, rms 0.81 ohm
+  mesh 2.5/0.6/1.4 mm, stub 12.0 mm, port 10.0 mm from the patch; circuit unknowns 1811
+     2.150 GHz  Z     8.02   +59.67j   cal Z0 50.73 eps_eff 2.1421   measured    8.50   +59.83j
+     2.250 GHz  Z   199.46  +181.89j   cal Z0 50.75 eps_eff 2.1434   measured  117.28  +192.55j
+     2.300 GHz  Z    69.59  -132.28j   cal Z0 50.75 eps_eff 2.1440   measured  118.38  -180.38j
+     2.400 GHz  Z     5.34   -34.69j   cal Z0 50.77 eps_eff 2.1451   measured    7.64   -44.61j
+    two-point 2.25-2.30: f0 2.26483 GHz, R0 351.0 ohm, Q 66.9; vs measured f0 -0.43 % R0 -14.9 % Q -7.0 %; vs FD-TD f0 -0.91 % R0 -11.6 % Q -13.7 %
+  mesh 2.5/0.6/1.4 mm, stub 23.0 mm, port 10.0 mm from the patch; circuit unknowns 1867
+     2.150 GHz  Z     8.01   +59.54j   cal Z0 50.76 eps_eff 2.1421   measured    8.50   +59.83j
+     2.250 GHz  Z   194.15  +188.52j   cal Z0 50.76 eps_eff 2.1424   measured  117.28  +192.55j
+     2.300 GHz  Z    69.24  -136.77j   cal Z0 50.77 eps_eff 2.1426   measured  118.38  -180.38j
+     2.400 GHz  Z     4.81   -35.05j   cal Z0 50.77 eps_eff 2.1428   measured    7.64   -44.61j
+    two-point 2.25-2.30: f0 2.26533 GHz, R0 364.7 ohm, Q 69.4; vs measured f0 -0.41 % R0 -11.6 % Q -3.6 %; vs FD-TD f0 -0.89 % R0 -8.1 % Q -10.6 %
+  mesh 2.5/0.6/1.4 mm, stub 23.0 mm, port 16.75 mm from the patch; circuit unknowns 1909
+     2.250 GHz  Z   188.93  +199.65j   cal Z0 50.76 eps_eff 2.1424   measured  117.28  +192.55j
+     2.300 GHz  Z    67.80  -140.03j   cal Z0 50.77 eps_eff 2.1426   measured  118.38  -180.38j
+    two-point 2.25-2.30: f0 2.26568 GHz, R0 385.4 ohm, Q 73.6; vs measured f0 -0.40 % R0 -6.6 % Q +2.3 %; vs FD-TD f0 -0.87 % R0 -2.9 % Q -5.1 %
+
+== patch, spread of the two-point results
+  2.5 mm cells, ports 10 / 16.75 mm, stubs 5 / 12 / 23 mm: 4 runs; f0 2.2648-2.2657 GHz, R0 347.1-385.4 ohm, Q 65.5-73.6
+  stub 5 mm, port 10 mm, cells 2.5 / 2.0 / 1.5 mm: 3 runs; f0 2.2616-2.2654 GHz, R0 337.5-360.1 ohm, Q 65.5-66.3
+  stub 23 mm, port 10 mm, cells 2.5 / 2.0 mm: 2 runs; f0 2.2643-2.2653 GHz, R0 364.7-366.1 ohm, Q 69.4-69.6
+  2.0 against 2.5 mm cells (stub 23, port 10): f0 -0.045 %, R0 +0.38 %, Q +0.30 %
+  2.0 against 2.5 mm cells (stub 5, port 10):  f0 -0.168 %, R0 +3.75 %, Q +1.26 %

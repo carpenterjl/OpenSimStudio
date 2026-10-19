@@ -1,0 +1,303 @@
+{
+ "source": "computed by features_v.py from fig3_33_S11_dB_verified.csv / fig3_34_S21_dB_verified.csv (verifier)",
+ "fig3_34_measured": {
+  "value_at_2.0GHz": null,
+  "value_at_2.5GHz": -1.121,
+  "value_at_3.0GHz": -1.165,
+  "value_at_3.5GHz": -1.104,
+  "value_at_4.0GHz": {
+   "value": -0.867,
+   "note": "interpolated across a dash gap 3.97-4.29 GHz"
+  },
+  "value_at_4.8GHz": -0.427,
+  "value_at_5.0GHz": -0.445,
+  "passband_max_2_5.2GHz": {
+   "freq_GHz": 4.71,
+   "value": -0.391
+  },
+  "minus1dB_falling_GHz": 5.224,
+  "minus3dB_falling_GHz": 5.551,
+  "minus10dB_falling_GHz": 5.997,
+  "minus20dB_falling_GHz": 6.457,
+  "note": "the +0.2 dB \"measured peak at 4.83 GHz\" in the original features.json belongs to the FD-TD line; the measured dash at 4.71-5.13 GHz is at -0.43 dB (Figs. 3.34, 3.28 and 3.30 agree)"
+ },
+ "fig3_34_fdtd": {
+  "passband_max_2_5.2GHz": {
+   "freq_GHz": 4.877,
+   "value": 0.161
+  },
+  "minus1dB_falling_GHz": 5.325,
+  "minus3dB_falling_GHz": 5.6
+ },
+ "measured_power_balance_2_4GHz": {
+  "points": [
+   [
+    2.0,
+    0.961
+   ],
+   [
+    2.05,
+    0.963
+   ],
+   [
+    2.1,
+    0.966
+   ],
+   [
+    2.15,
+    0.965
+   ],
+   [
+    2.2,
+    0.96
+   ],
+   [
+    2.25,
+    0.958
+   ],
+   [
+    2.3,
+    0.961
+   ],
+   [
+    2.35,
+    0.961
+   ],
+   [
+    2.4,
+    0.96
+   ],
+   [
+    2.45,
+    0.964
+   ],
+   [
+    2.5,
+    0.967
+   ],
+   [
+    2.55,
+    0.958
+   ],
+   [
+    2.6,
+    0.959
+   ],
+   [
+    2.95,
+    0.961
+   ],
+   [
+    3.0,
+    0.966
+   ],
+   [
+    3.05,
+    0.962
+   ],
+   [
+    3.35,
+    0.976
+   ],
+   [
+    3.4,
+    0.968
+   ],
+   [
+    3.45,
+    0.958
+   ],
+   [
+    3.5,
+    0.959
+   ],
+   [
+    3.55,
+    0.954
+   ],
+   [
+    3.6,
+    0.955
+   ],
+   [
+    3.65,
+    0.95
+   ],
+   [
+    3.7,
+    0.945
+   ],
+   [
+    3.75,
+    0.952
+   ],
+   [
+    3.8,
+    0.949
+   ],
+   [
+    3.85,
+    0.94
+   ],
+   [
+    3.9,
+    0.935
+   ],
+   [
+    3.95,
+    0.945
+   ],
+   [
+    4.0,
+    0.943
+   ]
+  ],
+  "min": 0.935,
+  "max": 0.976
+ },
+ "fdtd_power_balance_2_4.5GHz": {
+  "points": [
+   [
+    2.0,
+    1.056
+   ],
+   [
+    2.25,
+    1.059
+   ],
+   [
+    2.5,
+    1.06
+   ],
+   [
+    2.75,
+    1.065
+   ],
+   [
+    3.0,
+    1.07
+   ],
+   [
+    3.25,
+    1.061
+   ],
+   [
+    3.5,
+    1.065
+   ],
+   [
+    3.75,
+    1.072
+   ],
+   [
+    4.0,
+    1.05
+   ],
+   [
+    4.25,
+    1.044
+   ],
+   [
+    4.5,
+    1.065
+   ]
+  ],
+  "min": 1.044,
+  "max": 1.072
+ },
+ "fig3_33": {
+  "fdtd_low_frequency_null": {
+   "freq_GHz": 0.13,
+   "value": -33.26,
+   "u_value": 0.25,
+   "evidence": "ink bottom -33.44..-33.55 dB over 0.09-0.18 GHz (Fig. 3.33 p.115), plus half line width 0.21 dB"
+  },
+  "measured_null_10.8GHz": {
+   "freq_GHz": 10.84,
+   "value": -40.71,
+   "evidence": "deepest ink -40.92 dB + half line width"
+  },
+  "measured_19.9GHz": -4.394,
+  "measured_19.95GHz": -4.555
+ },
+ "fig4_14_vs_fig4_15_crosscheck_verifier": [
+  {
+   "freq_GHz": 2.1,
+   "R_fig414_verifier": 2.57,
+   "X_fig414_verifier": 41.98,
+   "S11_dB_from_fig414": -0.524,
+   "G_re_smith_verifier": -0.1452,
+   "G_im_smith_verifier": 0.9064,
+   "R_smith": 3.7,
+   "X_smith": 42.5,
+   "S11_dB_smith": -0.744
+  },
+  {
+   "freq_GHz": 2.15,
+   "R_fig414_verifier": 8.41,
+   "X_fig414_verifier": 59.79,
+   "S11_dB_from_fig414": -1.196,
+   "G_re_smith_verifier": 0.1879,
+   "G_im_smith_verifier": 0.826,
+   "R_smith": 10.5,
+   "X_smith": 61.6,
+   "S11_dB_smith": -1.442
+  },
+  {
+   "freq_GHz": 2.2,
+   "R_fig414_verifier": 21.92,
+   "X_fig414_verifier": 94.49,
+   "S11_dB_from_fig414": -1.617,
+   "G_re_smith_verifier": 0.4947,
+   "G_im_smith_verifier": 0.6558,
+   "R_smith": 23.7,
+   "X_smith": 95.7,
+   "S11_dB_smith": -1.708
+  },
+  {
+   "freq_GHz": 2.25,
+   "R_fig414_verifier": 117.11,
+   "X_fig414_verifier": 192.5,
+   "S11_dB_from_fig414": -1.941,
+   "G_re_smith_verifier": 0.7416,
+   "G_im_smith_verifier": 0.2943,
+   "R_smith": 118.5,
+   "X_smith": 191.8,
+   "S11_dB_smith": -1.962
+  },
+  {
+   "freq_GHz": 2.3,
+   "R_fig414_verifier": 118.55,
+   "X_fig414_verifier": -180.43,
+   "S11_dB_from_fig414": -2.139,
+   "G_re_smith_verifier": 0.7234,
+   "G_im_smith_verifier": -0.2914,
+   "R_smith": 121.4,
+   "X_smith": -180.5,
+   "S11_dB_smith": -2.159
+  },
+  {
+   "freq_GHz": 2.35,
+   "R_fig414_verifier": 17.72,
+   "X_fig414_verifier": -93.66,
+   "S11_dB_from_fig414": -1.339,
+   "G_re_smith_verifier": 0.4951,
+   "G_im_smith_verifier": -0.6962,
+   "R_smith": 18.3,
+   "X_smith": -94.1,
+   "S11_dB_smith": -1.367
+  },
+  {
+   "freq_GHz": 2.4,
+   "R_fig414_verifier": 7.7,
+   "X_fig414_verifier": -44.66,
+   "S11_dB_from_fig414": -1.483,
+   "G_re_smith_verifier": -0.0704,
+   "G_im_smith_verifier": -0.828,
+   "R_smith": 8.4,
+   "X_smith": -45.2,
+   "S11_dB_smith": -1.608
+  }
+ ],
+ "fig4_14_measured_X_zero_linear_GHz": 2.2758
+}

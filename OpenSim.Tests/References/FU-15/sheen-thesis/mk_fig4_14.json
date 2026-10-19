@@ -1,0 +1,16 @@
+[
+ {"name": "R_meas_2.10", "type": "star", "X": 2.10, "Y": 0},
+ {"name": "R_meas_2.15", "type": "star", "X": 2.15, "Y": 5},
+ {"name": "R_meas_2.20", "type": "star", "X": 2.20, "Y": 20},
+ {"name": "R_meas_2.25", "type": "star", "X": 2.25, "Y": 113},
+ {"name": "R_meas_2.30", "type": "star", "X": 2.30, "Y": 113},
+ {"name": "R_meas_2.35", "type": "star", "X": 2.35, "Y": 12},
+ {"name": "R_meas_2.40", "type": "star", "X": 2.40, "Y": 5},
+ {"name": "X_meas_2.10", "type": "o", "X": 2.10, "Y": 40},
+ {"name": "X_meas_2.15", "type": "o", "X": 2.15, "Y": 58},
+ {"name": "X_meas_2.20", "type": "o", "X": 2.20, "Y": 92},
+ {"name": "X_meas_2.25", "type": "o", "X": 2.25, "Y": 190},
+ {"name": "X_meas_2.30", "type": "o", "X": 2.30, "Y": -185},
+ {"name": "X_meas_2.35", "type": "o", "X": 2.35, "Y": -98},
+ {"name": "X_meas_2.40", "type": "o", "X": 2.40, "Y": -52}
+]

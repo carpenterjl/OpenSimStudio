@@ -1,0 +1,280 @@
+{
+ "thesis": "D. M. Sheen, 'Numerical modeling of microstrip circuits and antennas', PhD thesis, MIT, 1991 (PDF 238 pages; printed page number = PDF page index in this scan, verified on pp.7, 73, 108, 112, 159, 162, 163, 233)",
+ "units": "mm unless stated",
+ "low_pass_filter": {
+  "source": "Sec. 3.4 'Low Pass Filter', thesis pp.108-116 (PDF pp.108-116); page images pages/p108..p116_pdf*_render_w5088.png",
+  "design_reference": "designed per criteria of ref.[25] D'Inzeo, Giannini, Sorrentino, 'Novel microwave integrated low-pass filters', Electronics Letters 15(9) 258-260, Apr. 1979 (p.108 text; bibliography p.233)",
+  "layout": "two collinear-offset feed lines (ports 1 and 2, along y) attached to opposite long sides of a long rectangular patch (along x); each port line is set back 5.65 mm from the nearer patch end (Fig. 3.25)",
+  "substrate": {
+   "er": 2.2,
+   "er_src": "Fig. 3.25 p.108 ('e = 2.2')",
+   "h_mm": 0.794,
+   "h_src": "Fig. 3.25 p.108 (0.794 mm)",
+   "loss_tangent": null,
+   "loss_note": "not stated; FD-TD excludes dielectric and conductor loss (p.136 text)"
+  },
+  "conductor": {
+   "model": "perfect conductor, tangential E set to zero on strips (p.76 Sec.3.1.2); thickness not given (zero-thickness sheet in FD-TD)",
+   "metal_of_measured_board": "not stated",
+   "thickness_of_measured_board": "not stated"
+  },
+  "dimensions_mm_drawing": {
+   "patch_length_x": 20.32,
+   "patch_length_src": "Fig. 3.25 p.108 ('20.32 mm', arrow parallel to the patch, x)",
+   "patch_width_y": 2.54,
+   "patch_width_src": "Fig. 3.25 p.108 ('2.54 mm')",
+   "port_line_width": 2.413,
+   "port_line_width_src": "Fig. 3.25 p.108 ('2.413 mm')",
+   "patch_end_to_near_edge_of_port_line": 5.65,
+   "offset_src": "Fig. 3.25 p.108 ('5.65 mm', both ports)",
+   "patch_end_to_port_centreline": 6.8565,
+   "arith_centre": "5.65 + 2.413/2 = 6.8565 (matches TL-model stub 6.857, Fig. 3.26)",
+   "port_centre_spacing_x": 6.607,
+   "arith_spacing": "20.32 - 2*6.8565 = 6.6070 (TL model: 6.607 mm, Fig. 3.26)",
+   "inner_edge_gap_between_port_lines_x": 4.194,
+   "arith_gap": "20.32 - 2*5.65 - 2*2.413 = 4.1940",
+   "TL_model_check": "stub + spacing + stub = 6.857 + 6.607 + 6.857 = 20.321 mm = patch length 20.32 (Fig. 3.26 p.109)",
+   "port_line_length": "not stated (Fig. 3.25 draws lines to the board edge; board size not dimensioned)",
+   "board_size": "not stated"
+  },
+  "transmission_line_model_p108_109": {
+   "Z0_feed_ohm": 50.77,
+   "Z0_filter_sections_ohm": 49.05,
+   "eps_eff": 1.895,
+   "open_end_dl_mm": 0.378,
+   "stub_length_mm": "6.857 + 0.378",
+   "junction_spacing_mm": 6.607,
+   "src": "text p.108-109 and Fig. 3.26 p.109"
+  },
+  "planar_model_p109": {
+   "eps_eff": 1.895,
+   "l_mm": 4.438,
+   "b_mm": 21.078,
+   "W1_W2_mm": 4.294,
+   "p1_mm": 7.236,
+   "p2_mm": 13.843,
+   "note": "effective (fringing-extended) planar-circuit dimensions, eqs.(A.3),(A.5),(A.6); p2-p1 = 6.607 mm = port spacing",
+   "src": "text p.109"
+  },
+  "fdtd_model_p112": {
+   "dx_mm": 0.3948,
+   "dy_mm": 0.4232,
+   "dz_mm": 0.265,
+   "mesh_cells_xyz": [
+    70,
+    45,
+    16
+   ],
+   "domain_mm_xyz": [
+    27.636,
+    19.044,
+    4.24
+   ],
+   "arith_domain": "70*0.3948=27.636, 45*0.4232=19.044, 16*0.265=4.240",
+   "patch_cells": [
+    50,
+    6
+   ],
+   "patch_mm": [
+    19.74,
+    2.5392
+   ],
+   "arith_patch": "50*0.3948=19.740 mm, 6*0.4232=2.5392 mm",
+   "port_width_cells": 6,
+   "port_width_mm": 2.3688,
+   "arith_port": "6*0.3948=2.3688 mm (drawing 2.413)",
+   "substrate_cells": 3,
+   "substrate_mm": 0.795,
+   "arith_sub": "0.794/0.265 = 2.996 -> 3 cells = 0.795 mm (thickness not stated in cells for this circuit; corner p.94 uses 3 dz)",
+   "source_plane_to_patch_edge_cells": 30,
+   "source_plane_to_patch_edge_mm": 12.696,
+   "arith_src": "30*0.4232=12.696",
+   "port_reference_planes_from_patch_edges_cells": 10,
+   "ref_plane_mm": 4.232,
+   "arith_ref": "10*0.4232=4.232",
+   "port_offset_in_cells_if_drawing_held": 14.31,
+   "arith_off": "5.65/0.3948 = 14.31 cells (thesis: port locations/widths modelled 'with some slight error smaller than the step size', p.109/112)",
+   "source_inside_domain_cells": 4,
+   "dt_ps": 0.6,
+   "gaussian_T_ps": 15,
+   "gaussian_t0_ps": 45,
+   "source_off_and_line_connected_at_steps": 180,
+   "n_steps": 2000,
+   "boundaries": "first-order Mur-type ABC (2.51) on sides; top first- or second-order (2.62) (p.76; not stated which for this circuit)",
+   "INCONSISTENCIES": [
+    "50*dx = 19.74 mm but Fig. 3.25 gives 20.32 mm (would need dx = 20.32/50 = 0.4064 mm); p.109 says dx, dy were chosen to match the patch exactly",
+    "45 cells in y cannot hold 4 (source) + 30 (source->patch) + 6 (patch) + 10 (patch->port-2 reference plane) = 50 cells",
+    "p.109/p.112 also say the port locations and widths carry an error smaller than one step, which is consistent with 6 dx = 2.369 mm for the 2.413 mm lines, but not with 50 dx = 19.74 mm for the 20.32 mm patch"
+   ],
+   "src": "text p.112 (crop crops/p112_steps_hi.png)"
+  },
+  "measurement": {
+   "who": "circuits and measurements provided by Mohamed Abouzahra (Acknowledgements p.5)",
+   "instrument": "a network analyzer, model not stated; analyzer and connectors rated only to 18 GHz (p.136)",
+   "connectors": "microstrip-to-coaxial transitions, type not stated; NOT compensated (no de-embedding) in the measurement (p.136)",
+   "calibration": "not stated (beyond the transitions being uncompensated)",
+   "reference_planes": "not stated for the measurement; FD-TD reference planes 10 dy = 4.232 mm from the patch edges (p.112)",
+   "frequency_range": "measured dash-dot |S21| starts at 1.98-1.99 GHz and |S11| at about 1.98 GHz (Figs. 3.33/3.34); plotted to 20 GHz; data above 18 GHz are beyond the analyzer/connector rating (p.136)"
+  },
+  "figures": {
+   "Fig. 3.25": "configuration, p.108",
+   "Fig. 3.26": "TL model, p.109",
+   "Fig. 3.27/3.28": "TL |S11|/|S21| vs measured, p.110",
+   "Fig. 3.29/3.30": "planar |S11|/|S21| vs measured, p.111",
+   "Fig. 3.31": "Ez distributions, p.114",
+   "Fig. 3.32": "transients, p.115",
+   "Fig. 3.33": "|S11| FD-TD (solid) vs Meas (dash-dot), p.115",
+   "Fig. 3.34": "|S21| FD-TD (solid) vs Meas (dash-dot), p.116"
+  }
+ },
+ "line_fed_patch": {
+  "source": "Sec. 4.3 'Line Fed Rectangular Patch Antenna', thesis pp.158-163 (PDF pp.158-163)",
+  "substrate": {
+   "er": 2.55,
+   "h_mm": 1.59,
+   "src": "text p.158 and Fig. 4.11 p.159",
+   "loss_tangent": null,
+   "loss_note": "not stated"
+  },
+  "conductor": "perfectly conducting, tangential E = 0 (p.144 Sec.4.1.2); thickness not stated",
+  "dimensions_mm": {
+   "patch_L": 40.2,
+   "patch_W": 40.2,
+   "src_patch": "text p.158, Fig. 4.11 p.159 (40.2 mm x 40.2 mm)",
+   "feed_width": 4.48,
+   "src_feed": "text p.158 ('nominally 50 ohm', 'width of 4.48 mm'), Fig. 4.11",
+   "feed_position": "centre of one edge (p.158); Fig. 4.11: 20.1 mm from the patch corner to the feed centreline (20.1 = 40.2/2)",
+   "feed_offset_from_centre_mm": 0.0,
+   "inset": "none (edge feed)",
+   "feed_line_length": "not stated",
+   "ground_plane_size": "not stated"
+  },
+  "fdtd_model_p158_159": {
+   "cells_xyz": [
+    59,
+    66,
+    27
+   ],
+   "dx_mm": 1.11667,
+   "dy_mm": 1.11667,
+   "dz_mm": 0.53,
+   "variable_grid": "3:1 variable gridding in x and y only: p.158 says spacings three times larger are used around the antenna, and p.159 says the 3-to-1 variable gridding is in the x and y directions (visible in Fig. 4.12). Outer cells 3*1.11667 = 3.35 mm in x/y; nothing in the text supports a 3x (1.59 mm) z cell.",
+   "patch_cells": [
+    36,
+    36
+   ],
+   "patch_mm": [
+    40.2,
+    40.2
+   ],
+   "arith_patch": "36*1.11667 = 40.200 mm",
+   "substrate_cells": 3,
+   "substrate_mm": 1.59,
+   "arith_sub": "3*0.530 = 1.590 mm",
+   "line_width_cells": 4,
+   "line_width_mm": 4.4667,
+   "arith_line": "4*1.11667 = 4.4667 mm (nominal 4.48)",
+   "S11_reference_plane_mm_from_patch_edge": 16.75,
+   "ref_cells": 15.0,
+   "arith_ref": "16.75/1.11667 = 15.000 cells",
+   "eps_eff_for_k_in_eq4.5": 2.14,
+   "dt_ps": 1.4,
+   "gaussian_T_ps": 60,
+   "gaussian_t0_ps": 180,
+   "source_off_and_line_connected_at_steps": 300,
+   "n_steps": 6000,
+   "Zin_reference": "input impedance referenced to the front (feed) edge of the patch (pp.159-160)",
+   "boundaries": "first-order ABC on the 4 side walls, second-order ABC on top, PEC ground (p.144)",
+   "src": "text pp.158-159 (crop crops/p158_text.png)",
+   "n_steps_note": "p.159: the run stops when the reference-plane response has decayed to about zero, or at 6000 dt (6000 is a cap, not a fixed length)"
+  },
+  "measurement": {
+   "who": "Deshpande and Bailey, ref.[22] 'Input impedance of microstrip antennas', IEEE Trans. AP-30(4) 645-650, July 1982 (bibliography p.233); Fig. 4.15 legend 'Measured by Deshpande and Bailey 82'",
+   "instrument_connectors_calibration": "not stated in the thesis",
+   "reference_plane": "plotted relative to the patch front edge together with the FD-TD (Fig. 4.14); Fig. 4.15 Smith chart: same values (cross-check: R, X from Fig. 4.15 with Z0 = 50 ohm agree with Fig. 4.14 markers within a few ohm)",
+   "frequencies_GHz": [
+    2.1,
+    2.15,
+    2.2,
+    2.25,
+    2.3,
+    2.35,
+    2.4
+   ],
+   "what_is_plotted": "Zin = R + jX (ohm) at 7 frequencies (markers); no |S11| in dB is plotted; Smith chart Fig. 4.15 (normalisation not printed; consistent with 50 ohm)",
+   "thesis_statements": "fundamental resonance approximately 2.275 GHz (p.158); FD-TD shows a small frequency shift of about 0.4 % (p.160)"
+  },
+  "figures": {
+   "Fig. 4.11": "configuration p.159",
+   "Fig. 4.12": "Ez distributions p.161",
+   "Fig. 4.13": "transients p.162",
+   "Fig. 4.14": "Zin R,X: FD-TD (solid R, dashed X) and measured (* R, o X), p.162",
+   "Fig. 4.15": "Smith chart: x FD-TD, o measured (Deshpande & Bailey), * MoM (Deshpande & Bailey), p.163"
+  }
+ },
+ "branch_line_coupler": {
+  "source": "Sec. 3.5 'Branch Line Coupler', thesis pp.117-121",
+  "substrate": {
+   "er": 2.2,
+   "h_mm": 0.794,
+   "src": "Fig. 3.35 p.118"
+  },
+  "dimensions_mm": {
+   "centre_to_centre_both_directions": 9.75,
+   "wide_strip_width": 3.96,
+   "port_line_width": 2.413,
+   "src": "Fig. 3.35 p.118, text p.117"
+  },
+  "fdtd_model": {
+   "dx_mm": 0.39,
+   "dy_mm": 0.39,
+   "dz_mm": 0.265,
+   "cells_xyz": [
+    54,
+    70,
+    16
+   ],
+   "centre_to_centre_cells": 24,
+   "arith": "24*0.390 = 9.36 mm",
+   "wide_strips_cells": 10,
+   "wide_strips_mm": 3.9,
+   "port_width_cells": 6,
+   "port_width_mm": 2.34,
+   "source_to_coupler_cells": 30,
+   "ref_planes_cells_from_edges": 10,
+   "dt_ps": 0.6,
+   "gaussian_T_ps": 15,
+   "gaussian_t0_ps": 45,
+   "n_steps": 2000,
+   "src": "text p.117",
+   "INCONSISTENCIES": [
+    "p.117 says dx and dy are chosen to match the 9.75 mm centre-to-centre distance exactly, but the stated centre-to-centre distance 24*dx = 24*0.390 = 9.36 mm; 9.75 mm would need 25 cells of 0.390 mm or dx = 9.75/24 = 0.40625 mm",
+    "p.117 says dz matches the substrate exactly: 3*0.265 = 0.795 mm vs 0.794 mm (Fig. 3.35), i.e. exact to 0.001 mm"
+   ]
+  },
+  "measured_figures": "Fig. 3.38 p.120 |S11|,|S21|,|S31|,|S41| FD-TD solid vs Meas dash-dot 0-10 GHz; Fig. 3.39 p.121 phase difference S31-S41 (not digitised)"
+ },
+ "verification": "Checked by the verifier against own 5088-px renders (pages/pdfNNN_w5088.png in sheen-thesis-verify): every dimension, substrate value, cell size, time parameter and arithmetic in this file was re-read and recomputed. Changes are listed under \"verifier_changes\".",
+ "verifier_changes": [
+  {
+   "path": "line_fed_patch.fdtd_model_p158_159.variable_grid",
+   "old": "3x these spacings surrounding the antenna (3.35 mm x/y, 1.59 mm z)",
+   "new": "3:1 variable gridding in x and y only: p.158 says spacings three times larger are used around the antenna, and p.159 says the 3-to-1 variable gridding is in the x and y directions (visible in Fig. 4.12). Outer cells 3*1.11667 = 3.35 mm in x/y; nothing in the text supports a 3x (1.59 mm) z cell."
+  },
+  {
+   "path": "line_fed_patch.fdtd_model_p158_159.n_steps_note",
+   "new": "p.159: the run stops when the reference-plane response has decayed to about zero, or at 6000 dt (6000 is a cap, not a fixed length)"
+  },
+  {
+   "path": "branch_line_coupler.fdtd_model.INCONSISTENCIES",
+   "new": [
+    "p.117 says dx and dy are chosen to match the 9.75 mm centre-to-centre distance exactly, but the stated centre-to-centre distance 24*dx = 24*0.390 = 9.36 mm; 9.75 mm would need 25 cells of 0.390 mm or dx = 9.75/24 = 0.40625 mm",
+    "p.117 says dz matches the substrate exactly: 3*0.265 = 0.795 mm vs 0.794 mm (Fig. 3.35), i.e. exact to 0.001 mm"
+   ]
+  },
+  {
+   "path": "low_pass_filter.measurement.frequency_range",
+   "new": "measured dash-dot |S21| starts at 1.98-1.99 GHz and |S11| at about 1.98 GHz (Figs. 3.33/3.34); plotted to 20 GHz; data above 18 GHz are beyond the analyzer/connector rating (p.136)"
+  }
+ ]
+}

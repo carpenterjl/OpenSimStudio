@@ -1,0 +1,8 @@
+filter line 2.413 mm, er 2.2, h 0.794 mm @ 1.00 GHz: Z0 = 50.787 ohm, eps_eff = 1.8712 (txlineMicrostrip closed form)
+filter line 2.413 mm, er 2.2, h 0.794 mm @ 2.00 GHz: Z0 = 50.895 ohm, eps_eff = 1.8737 (txlineMicrostrip closed form)
+filter line 2.413 mm, er 2.2, h 0.794 mm @ 5.00 GHz: Z0 = 51.324 ohm, eps_eff = 1.8833 (txlineMicrostrip closed form)
+filter patch 2.54 mm, er 2.2, h 0.794 mm @ 1.00 GHz: Z0 = 49.059 ohm, eps_eff = 1.8769 (txlineMicrostrip closed form)
+filter patch 2.54 mm, er 2.2, h 0.794 mm @ 2.00 GHz: Z0 = 49.166 ohm, eps_eff = 1.8794 (txlineMicrostrip closed form)
+filter patch 2.54 mm, er 2.2, h 0.794 mm @ 5.00 GHz: Z0 = 49.591 ohm, eps_eff = 1.8893 (txlineMicrostrip closed form)
+patch feed 4.48 mm, er 2.55, h 1.59 mm @ 1.00 GHz: Z0 = 50.250 ohm, eps_eff = 2.1186 (txlineMicrostrip closed form)
+patch feed 4.48 mm, er 2.55, h 1.59 mm @ 2.28 GHz: Z0 = 50.635 ohm, eps_eff = 2.1303 (txlineMicrostrip closed form)

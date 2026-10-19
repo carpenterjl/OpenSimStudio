@@ -1,0 +1,29 @@
+figure,page,quantity,freq_GHz,mine,theirs,diff,source
+Fig. 4.14,162,R_meas_ohm,2.1,2.57,2.575,-0.01,mk2 star
+Fig. 4.14,162,X_meas_ohm,2.1,41.98,42.021,-0.04,mk2 ring
+Fig. 4.15,163,Gamma_re,2.1,-0.1452,-0.1454,0.0002,smith_v ring hole
+Fig. 4.15,163,Gamma_im,2.1,0.9064,0.9063,0.0001,smith_v ring hole
+Fig. 4.14,162,R_meas_ohm,2.15,8.41,8.498,-0.09,mk2 star
+Fig. 4.14,162,X_meas_ohm,2.15,59.79,59.83,-0.04,mk2 ring
+Fig. 4.15,163,Gamma_re,2.15,0.1879,0.1876,0.0003,smith_v ring hole
+Fig. 4.15,163,Gamma_im,2.15,0.826,0.8258,0.0002,smith_v ring hole
+Fig. 4.14,162,R_meas_ohm,2.2,21.92,19.284,2.64,top tip 34.55 - 12.63
+Fig. 4.14,162,X_meas_ohm,2.2,94.49,94.535,-0.05,mk2 ring
+Fig. 4.15,163,Gamma_re,2.2,0.4947,0.4944,0.0003,smith_v ring hole
+Fig. 4.15,163,Gamma_im,2.2,0.6558,0.6556,0.0002,smith_v ring hole
+Fig. 4.14,162,R_meas_ohm,2.25,117.11,117.284,-0.17,mk comp bbox
+Fig. 4.14,162,X_meas_ohm,2.25,192.5,192.547,-0.05,mk2 ring
+Fig. 4.15,163,Gamma_re,2.25,0.7416,0.7412,0.0004,smith_v ring hole
+Fig. 4.15,163,Gamma_im,2.25,0.2943,0.2942,0.0001,smith_v ring hole
+Fig. 4.14,162,R_meas_ohm,2.3,118.55,118.378,0.17,mk comp bbox
+Fig. 4.14,162,X_meas_ohm,2.3,-180.43,-180.379,-0.05,mk2 ring
+Fig. 4.15,163,Gamma_re,2.3,0.7234,0.7229,0.0005,smith_v ring hole
+Fig. 4.15,163,Gamma_im,2.3,-0.2914,-0.2915,0.0001,smith_v ring hole
+Fig. 4.14,162,R_meas_ohm,2.35,17.72,17.477,0.24,mk2 star
+Fig. 4.14,162,X_meas_ohm,2.35,-93.66,-93.607,-0.05,mk2 ring
+Fig. 4.15,163,Gamma_re,2.35,0.4951,0.4945,0.0006,smith_v ring hole
+Fig. 4.15,163,Gamma_im,2.35,-0.6962,-0.6963,0.0001,smith_v ring hole
+Fig. 4.14,162,R_meas_ohm,2.4,7.7,7.642,0.06,mk2 star
+Fig. 4.14,162,X_meas_ohm,2.4,-44.66,-44.606,-0.05,mk2 ring
+Fig. 4.15,163,Gamma_re,2.4,-0.0704,-0.0709,0.0005,smith_v ring hole
+Fig. 4.15,163,Gamma_im,2.4,-0.828,-0.8279,-0.0001,smith_v ring hole

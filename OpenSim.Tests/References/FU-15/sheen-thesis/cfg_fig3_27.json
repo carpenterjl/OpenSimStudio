@@ -1,0 +1,75 @@
+{
+ "figure": "fig3_27",
+ "image": "pages/p110_pdf110_render_w5088.png",
+ "thesis_page": 110,
+ "pdf_page": 110,
+ "quantity": "S11_dB",
+ "box": [
+  1766,
+  1160,
+  4026,
+  2855
+ ],
+ "xticks": {
+  "sides": [
+   "bottom",
+   "top"
+  ],
+  "first": [
+   1,
+   1879
+  ],
+  "last": [
+   19,
+   3913
+  ],
+  "step": 1,
+  "band": [
+   8,
+   17
+  ]
+ },
+ "yticks": {
+  "sides": [
+   "left",
+   "right"
+  ],
+  "first": [
+   0,
+   1445
+  ],
+  "last": [
+   -40,
+   2575
+  ],
+  "step": 10,
+  "band": [
+   8,
+   17
+  ]
+ },
+ "view_grid": {
+  "x": [
+   0,
+   20,
+   0.5
+  ],
+  "y": [
+   -50,
+   10,
+   2
+  ]
+ },
+ "x_range": [
+  0,
+  20
+ ],
+ "y_range": [
+  -50,
+  10
+ ],
+ "tick_blank_len": 54,
+ "masks": [],
+ "track_grid": true,
+ "curves": []
+}
