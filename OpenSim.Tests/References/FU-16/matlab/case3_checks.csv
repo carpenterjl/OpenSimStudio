@@ -1,0 +1,16 @@
+case,parameter,quantity,value,mesh_level,nodes
+check1_linear_vs_femodel,NI=20 mur=2000,lambda_rel_diff,1.13109521749e-12,1,5355
+check1_linear_vs_femodel,NI=20 mur=2000,W_rel_diff,2.2630786134e-12,1,5355
+check1_linear_vs_femodel,NI=20 mur=2000,max_rel_diff_A,3.48006260387e-12,1,5355
+check2_nonlinear_plates,H=3000A/m,B_gap_max_rel_err,1.42108547152e-14,1,7517
+check2_nonlinear_plates,H=3000A/m,lambda_rel_err,-1.33226762955e-15,1,7517
+check2_nonlinear_plates,H=3000A/m,W_rel_err,1.33226762955e-14,1,7517
+check2_nonlinear_plates,H=3000A/m,B_interpolant_minus_analytic_T,-1.02633938062e-05,-,0
+check2_nonlinear_plates,H=3000A/m,newton_iterations,9,1,7517
+check3_femodel_nonlinear_plates,H=3000A/m,failed,1,1,0
+check2_nonlinear_plates,H=50000A/m,B_gap_max_rel_err,1.13242748512e-14,1,7517
+check2_nonlinear_plates,H=50000A/m,lambda_rel_err,-1.22124532709e-15,1,7517
+check2_nonlinear_plates,H=50000A/m,W_rel_err,4.4408920985e-15,1,7517
+check2_nonlinear_plates,H=50000A/m,B_interpolant_minus_analytic_T,1.68058872774e-06,-,0
+check2_nonlinear_plates,H=50000A/m,newton_iterations,5,1,7517
+check3_femodel_nonlinear_plates,H=50000A/m,failed,1,1,0

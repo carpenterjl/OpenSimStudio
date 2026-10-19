@@ -1,0 +1,16 @@
+case,parameter,quantity,value,mesh_level,nodes
+check_a_ring_dc,analytic,R_ohm,0.000594174287798,-,0
+check_a_ring_dc,f=1Hz,R_ohm,0.000594174287898,1,2065
+check_a_ring_dc,f=1Hz,R_rel_err,1.6826673388e-10,1,2065
+check_a_ring_dc,f=1Hz,R_ohm,0.000594174287898,2,6953
+check_a_ring_dc,f=1Hz,R_rel_err,1.67493574565e-10,2,6953
+check_b_mu_jump,mur=2000 core,max_rel_err_psi,1.15894692205e-10,1,6747
+check_b_mu_jump,mur=2000 core,psi_b_rel_err,-1.59948720935e-11,1,6747
+check_b_mu_jump,mur=2000 core,max_rel_err_psi,1.53378864075e-10,2,24483
+check_b_mu_jump,mur=2000 core,psi_b_rel_err,1.40050637754e-10,2,24483
+check_c_eddy_cylinder,delta=1mm b=3mm,psi_b_rel_err,3.37168930717e-06,1,6747
+check_c_eddy_cylinder,delta=1mm b=3mm,max_rel_err_psi_in_cylinder,5.5034659989e-06,1,6747
+check_c_eddy_cylinder,delta=1mm b=3mm,psi_b_rel_err,4.03051197929e-07,2,24483
+check_c_eddy_cylinder,delta=1mm b=3mm,max_rel_err_psi_in_cylinder,6.92356796893e-07,2,24483
+check_d_solvepde,f=100kHz ring,max_rel_diff_psi,7.657870282e-06,1,2065
+check_d_solvepde,f=100kHz ring,Z_rel_diff,1.06420951596e-07,1,2065

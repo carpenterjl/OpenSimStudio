@@ -1,0 +1,5 @@
+case,parameter,quantity,value,mesh_level,nodes
+probe_er_outer_corners_refined,NI=5A,lambda_Wb_per_m,0.00220000884289,3,150461
+probe_er_outer_corners_refined,NI=5A,W_J_per_m,0.00537689343989,3,150461
+probe_er_outer_corners_refined,NI=17.5A,lambda_Wb_per_m,0.00569066219505,3,150461
+probe_er_outer_corners_refined,NI=17.5A,W_J_per_m,0.0416300350333,3,150461

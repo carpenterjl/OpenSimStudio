@@ -1,0 +1,10 @@
+case,parameter,quantity,value,mesh_level,nodes
+case3_femodel_xcheck,NI=17.5A tol=0.0001,lambda_femodel_Wb_per_m,0.00568938751797,1,12617
+case3_femodel_xcheck,NI=17.5A tol=0.0001,lambda_rel_diff_vs_newton,8.77637204402e-05,1,12617
+case3_femodel_xcheck,NI=17.5A tol=0.0001,W_rel_diff_vs_newton,0.000287801795725,1,12617
+case3_femodel_xcheck,NI=17.5A tol=0.0001,max_rel_diff_A,0.00103073994081,1,12617
+case3_femodel_xcheck,NI=17.5A tol=1e-07,failed_too_many_iterations,1,1,12617
+case3_femodel_xcheck,NI=17.5A tol=0.0001,lambda_femodel_Wb_per_m,0.00569042397201,2,42021
+case3_femodel_xcheck,NI=17.5A tol=0.0001,lambda_rel_diff_vs_newton,3.0894765721e-05,2,42021
+case3_femodel_xcheck,NI=17.5A tol=0.0001,W_rel_diff_vs_newton,9.52051793994e-05,2,42021
+case3_femodel_xcheck,NI=17.5A tol=0.0001,max_rel_diff_A,0.000425005222119,2,42021

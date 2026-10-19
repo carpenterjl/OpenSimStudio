@@ -1,0 +1,11 @@
+case,parameter,quantity,value,mesh_level,nodes
+case0_parallel_plates,exact,L_per_m_H,2.93215314335e-07,-,0
+case0_parallel_plates,I=1A,L_per_m_flux_H,2.93215314335e-07,1,2025
+case0_parallel_plates,I=1A,L_per_m_energy_H,2.93215314335e-07,1,2025
+case0_parallel_plates,I=1A,rel_err_flux,-2.18713935851e-14,1,2025
+case0_parallel_plates,I=1A,L_per_m_flux_H,2.93215314335e-07,2,7517
+case0_parallel_plates,I=1A,L_per_m_energy_H,2.93215314335e-07,2,7517
+case0_parallel_plates,I=1A,rel_err_flux,7.1054273576e-15,2,7517
+case0_parallel_plates,I=1A,L_per_m_flux_H,2.93215314335e-07,3,29197
+case0_parallel_plates,I=1A,L_per_m_energy_H,2.93215314335e-07,3,29197
+case0_parallel_plates,I=1A,rel_err_flux,3.08642000846e-14,3,29197
