@@ -1,0 +1,20 @@
+{
+ "citation": "S. J. Haefner, 'Alternating-current resistance of rectangular conductors', Proc. I.R.E., vol. 25, no. 4, pp. 434-447, April 1937",
+ "download_url": "https://www.worldradiohistory.com/Archive-IRE/30s/IRE-1937-04.pdf",
+ "local_file": "(download folder)/IRE-1937-04.pdf",
+ "bytes": 7353971,
+ "sha256": "E87587CD2FAB9B1CCC9C6C036F888F3DD3D5BD0C3499735CB73847042A3E0BDE",
+ "pdf_pages_total": 180,
+ "page_map": {"434": 76, "435": 77, "436": 78, "437": 79, "438": 80, "439": 81, "440": 82, "441": 83, "442": 84, "443": 85, "444": 86, "445": 87, "446": 88, "447": 89},
+ "scan_structure": "each page = one 1-bit JBIG2 image mask (~1748x2740 px, 300 dpi, text and some figure lettering) + DCT/JPEG greyscale images at 150 dpi (figures, incl. all curve ink); OCR text layer present",
+ "rendering": "pages rendered with the Windows built-in PDF engine (Windows.Data.Pdf) at 1748 px (≈300 dpi) and 3496 px widths; figure JPEGs also extracted raw with pypdf",
+ "figures": {
+  "Fig. 1": "p.437 bridge circuit", "Fig. 2": "p.438 photo, apparatus", "Fig. 3": "p.438 photo, Brooks inductometer", "Fig. 4": "p.439 photo, rotor/stator connection",
+  "Fig. 5": "p.440 test and theoretical values, round wire (R_ac/R_dc vs p, p 0-9)",
+  "Fig. 6": "p.443 experimental evidence of truth of similitude principle (p 0-8)",
+  "Fig. 7": "p.444 test and theoretical (Dwight thin strip) values, small resistance ratio (p 0-5, R 1.0-1.5)",
+  "Fig. 8": "p.445 test and theoretical (Cockroft) values, large resistance ratio (p 0-12)",
+  "Fig. 9": "p.446 elliptic-function solution, J. D. Cockroft: f(a/c) vs shape ratio a/c"
+ },
+ "tables": {"Table I": "p.442 average dimensions of test specimens", "Table II": "p.442 comparison of test and theoretical values for round wires"}
+}

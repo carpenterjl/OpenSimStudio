@@ -1,0 +1,17 @@
+Row 1:  ns  to  nps, port name: loop
+Impedance matrix for frequency = 100 1 x 1
+    0.00830894  +1.83933e-06j 
+Impedance matrix for frequency = 1000 1 x 1
+    0.00830896  +1.83932e-05j 
+Impedance matrix for frequency = 10000 1 x 1
+    0.00831099  +0.000183809j 
+Impedance matrix for frequency = 100000 1 x 1
+    0.00845838   +0.00175073j 
+Impedance matrix for frequency = 1e+06 1 x 1
+    0.00919741    +0.0149121j 
+Impedance matrix for frequency = 1e+07 1 x 1
+     0.0128347     +0.141567j 
+Impedance matrix for frequency = 1e+08 1 x 1
+     0.0349925      +1.36452j 
+Impedance matrix for frequency = 1e+09 1 x 1
+      0.108838       +13.409j 

@@ -1,0 +1,38 @@
+--- /dev/null
++++ b/win_compat.c
+@@ -0,0 +1,21 @@
++/* win_compat.c -- MSVC portability shims for FastHenry; no numerical code.
++   fh_user_cpu_seconds(): the process's user CPU time (what getrusage's ru_utime gives the
++   FOUR timer branch on Unix), for the WINTIMER branch of resusage.h.
++   sbrk(): Unix break pointer, only printed in debug/out-of-memory messages; returns 0 here. */
++#include <windows.h>
++
++double fh_user_cpu_seconds(void)
++{
++  FILETIME created, exited, kernel, user;
++  ULARGE_INTEGER t;
++  if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) return 0.0;
++  t.LowPart = user.dwLowDateTime;
++  t.HighPart = user.dwHighDateTime;
++  return (double)t.QuadPart * 1.0e-7;   /* 100 ns units */
++}
++
++char *sbrk(int increment)
++{
++  (void)increment;
++  return (char *)0;
++}
+--- /dev/null
++++ b/win_compat.h
+@@ -0,0 +1,11 @@
++/* win_compat.h -- MSVC portability shims for FastHenry (force-included with /FI).
++   Name mappings only; no numerical code. */
++#ifndef WIN_COMPAT_H
++#define WIN_COMPAT_H
++#ifdef _MSC_VER
++#include <string.h>
++#include <float.h>
++#define strncasecmp _strnicmp   /* POSIX name -> MSVC CRT name */
++#define finite _finite          /* BSD name -> MSVC CRT name */
++#endif
++#endif

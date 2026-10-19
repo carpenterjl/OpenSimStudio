@@ -1,0 +1,31 @@
+* slotted pour, matched grid pitch 0.3 mm, plane nhinc 3, trace 7x5 r2, f 1000 Hz
+* FastHenry deck written by pour_decks.py -- OpenSim pour loop (ExtractionTests.AReturnThroughAPour_GoesRoundASlot)
+.units mm
+.default sigma=58000
+* return pour: uniform plane, corner nodes half a cell inside the 12 x 6 mm outline so the
+* node cells tile the pour exactly; pitch 0.3 mm, 40 x 20 nodes
+Gpour x1=-2.85 y1=-2.85 z1=-0.0175
++ x2=8.85 y2=-2.85 z2=-0.0175
++ x3=8.85 y3=2.85 z3=-0.0175
++ thick=0.035 seg1=39 seg2=19 sigma=58000
++ nhinc=3 rh=2
+* slot: remove nodes i=19..20, j=3..16 (cell centres inside x 2.7..3.3, y -2..2); removed cells span x 2.7..3.3, y -2.1..2.1
++ hole rect (2.85,-1.95,-0.0175,3.15,1.95,-0.0175)
++ nps (-0.15,-0.15,-0.0175)
++ npe (5.85,-0.15,-0.0175)
+* the trace (one segment: its current is the same along its whole length)
+Ns x=0 y=0 z=0.335
+Ne x=6 y=0 z=0.335
+Etr Ns Ne w=0.4 h=0.035 nwinc=7 nhinc=5 rw=2 rh=2
+* far end joined by the real connection below; port from the trace start to the plane under it
+* real end connection (OpenSim IdealEndConnections = false): wire of radius 0.2 mm as one
+* square filament of the same area, from the trace end down to the plane mid-plane z=-0.0175
+Nv x=6 y=0 z=-0.0175
+Ewire Ne Nv w=0.354490770181 h=0.354490770181
+* plane copper over to the grid node standing in for the spot (single filament)
+Nb x=5.85 y=-0.15 z=-0.0175
+Ebar Nv Nb w=0.4 h=0.035
+.equiv Nb npe
+.external Ns nps loop
+.freq fmin=1000 fmax=1000 ndec=1
+.end

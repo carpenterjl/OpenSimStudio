@@ -1,0 +1,24 @@
+* slotted pour, matched grid pitch 0.3 mm, plane nhinc 3, trace 7x5 r2, f 100 Hz
+* FastHenry deck written by pour_decks.py -- OpenSim pour loop (ExtractionTests.AReturnThroughAPour_GoesRoundASlot)
+.units mm
+.default sigma=58000
+* return pour: uniform plane, corner nodes half a cell inside the 12 x 6 mm outline so the
+* node cells tile the pour exactly; pitch 0.3 mm, 40 x 20 nodes
+Gpour x1=-2.85 y1=-2.85 z1=-0.0175
++ x2=8.85 y2=-2.85 z2=-0.0175
++ x3=8.85 y3=2.85 z3=-0.0175
++ thick=0.035 seg1=39 seg2=19 sigma=58000
++ nhinc=3 rh=2
+* slot: remove nodes i=19..20, j=3..16 (cell centres inside x 2.7..3.3, y -2..2); removed cells span x 2.7..3.3, y -2.1..2.1
++ hole rect (2.85,-1.95,-0.0175,3.15,1.95,-0.0175)
++ nps (-0.15,-0.15,-0.0175)
++ npe (5.85,-0.15,-0.0175)
+* the trace (one segment: its current is the same along its whole length)
+Ns x=0 y=0 z=0.335
+Ne x=6 y=0 z=0.335
+Etr Ns Ne w=0.4 h=0.035 nwinc=7 nhinc=5 rw=2 rh=2
+* far end shorted ideally to the plane node under it; port from the trace start to the plane under it
+.equiv Ne npe
+.external Ns nps loop
+.freq fmin=100 fmax=100 ndec=1
+.end

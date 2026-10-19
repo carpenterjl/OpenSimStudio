@@ -119,6 +119,63 @@ public static class LoopExtraction
     private static double FinestSkinDepth(IReadOnlyList<double> frequenciesHz, LoopExtractionOptions options) =>
         PeecModel.SkinDepth(frequenciesHz.Max(), options.ConductivitySiemensPerMeter);
 
+    /// <summary>The outermost strip a section is cut into, as a fraction of a skin depth, that
+    /// <see cref="PeecModel.StripsFor"/> aims for.</summary>
+    private const double StripTarget = 0.7;
+
+    /// <summary>
+    /// FU-13: a note when the strip caps (<see cref="LoopExtractionOptions.MaxStripsAcrossWidth"/>,
+    /// <see cref="LoopExtractionOptions.MaxStripsAcrossThickness"/>, and at most 3 through an
+    /// automatically cut plane) leave a trace section's or the plane's outermost strip thicker than
+    /// <see cref="StripTarget"/> skin depths at the highest frequency. Above the frequency where it
+    /// reaches that target the current's crowding into the copper's surface is not resolved and the
+    /// resistance reads low; the inductance hardly moves. Null when every strip meets its target.
+    /// </summary>
+    private static string? ResolutionNote(IEnumerable<TraceSegment3D> sections, double? planeThickness, int planeStrips,
+        IReadOnlyList<double> frequenciesHz, LoopExtractionOptions options)
+    {
+        double sigma = options.ConductivitySiemensPerMeter, delta = FinestSkinDepth(frequenciesHz, options);
+        double trace = 0;
+        foreach (var s in sections.Where(s => s.Profile == SegmentProfile.Bar && Math.Abs(s.Direction.Z) < 1e-6))
+        {
+            int across = PeecModel.StripsFor(s.Width, delta, max: options.MaxStripsAcrossWidth);
+            int through = PeecModel.StripsFor(s.Thickness, delta, max: options.MaxStripsAcrossThickness);
+            trace = Math.Max(trace, Math.Max(PeecModel.Graded(across)[0] * s.Width, PeecModel.Graded(through)[0] * s.Thickness));
+        }
+        // A plane cut into one strip on request already says its resistance stays the DC sheet's.
+        double plane = planeThickness is double t && options.PlaneStripsAcrossThickness != 1
+            ? PeecModel.Graded(planeStrips)[0] * t : 0;
+        var coarse = new List<string>();
+        double onset = double.MaxValue;
+        foreach (var (outer, what) in new[] { (trace, "trace"), (plane, "plane") })
+        {
+            if (!(outer > StripTarget * delta * (1 + 1e-9))) continue;
+            // δ = outer/target at f = 1/(πµ₀σδ²). Conservative for sections thinner than a skin depth:
+            // across a thin section's width the current redistributes over δ²/t rather than δ.
+            double at = 1 / (Math.PI * 4e-7 * Math.PI * sigma * Math.Pow(outer / StripTarget, 2));
+            onset = Math.Min(onset, at);
+            coarse.Add($"the {what}'s outermost strip is {outer / delta:g2} skin depths thick at {Hertz(frequenciesHz.Max())}");
+        }
+        if (coarse.Count == 0) return null;
+        return $"Resistance under-resolved above about {Hertz(onset)}: {string.Join(" and ", coarse)} (target {StripTarget} — "
+            + "the strip caps bind), so the current's crowding into the copper's surface is not resolved and R reads "
+            + "low, increasingly with frequency; L hardly moves. On a 0.4 mm trace 0.3 mm over a pour the default caps "
+            + "read R 13 % low at 100 MHz, 25 % at 300 MHz and 45 % at 1 GHz against 15 × 9 trace and 9 plane strips "
+            + "(which matched FastHenry), L within 1 %. Raise MaxStripsAcrossWidth, MaxStripsAcrossThickness and "
+            + "PlaneStripsAcrossThickness for R there (about 3× the filaments).";
+    }
+
+    private static string Hertz(double f) => f >= 1e9 ? $"{f / 1e9:g3} GHz" : f >= 1e6 ? $"{f / 1e6:g3} MHz"
+        : f >= 1e3 ? $"{f / 1e3:g3} kHz" : $"{f:g3} Hz";
+
+    private static List<string> Notes(string what, IEnumerable<TraceSegment3D> sections, IReadOnlyList<double> frequenciesHz,
+        LoopExtractionOptions options)
+    {
+        var notes = Common.Append(what).ToList();
+        if (ResolutionNote(sections, null, 0, frequenciesHz, options) is { } note) notes.Add(note);
+        return notes;
+    }
+
     /// <summary>The chain by itself, end to end: its partial resistance and inductance.</summary>
     public static LoopExtractionResult Chain(IReadOnlyList<TraceSegment3D> chain, IReadOnlyList<double> frequenciesHz,
         LoopExtractionOptions? options = null, CancellationToken cancellationToken = default)
@@ -128,8 +185,9 @@ public static class LoopExtraction
         var (start, end) = Add(model, chain, FinestSkinDepth(frequenciesHz, options), options);
         model.AddPort("end to end", start, end);
         return new LoopExtractionResult(model.PortNames, model.Solve(frequenciesHz, false, cancellationToken),
-            model.FilamentCount, Common.Append(
-                "Partial values: the chain end to end with no return conductor. A loop needs its return.").ToList());
+            model.FilamentCount, Notes(
+                "Partial values: the chain end to end with no return conductor. A loop needs its return.",
+                chain, frequenciesHz, options));
     }
 
     /// <summary>Out on one chain and back on the other: joined at their far ends, seen
@@ -149,9 +207,9 @@ public static class LoopExtraction
         model.AddShort(aEnd, far);
         model.AddPort("loop", aStart, near);
         return new LoopExtractionResult(model.PortNames, model.Solve(frequenciesHz, false, cancellationToken),
-            model.FilamentCount, Common.Append(
+            model.FilamentCount, Notes(
                 "Loop: the two chains joined ideally at their far ends and seen between their near ends; the "
-                + "connections that close it there are not modelled.").ToList());
+                + "connections that close it there are not modelled.", chain.Concat(returnChain), frequenciesHz, options));
     }
 
     /// <summary>Two chains as two ports: each chain's own R and L and what they share.</summary>
@@ -167,9 +225,9 @@ public static class LoopExtraction
         model.AddPort(nameA, aStart, aEnd);
         model.AddPort(nameB, bStart, bEnd);
         return new LoopExtractionResult(model.PortNames, model.Solve(frequenciesHz, false, cancellationToken),
-            model.FilamentCount, Common.Append(
+            model.FilamentCount, Notes(
                 "Partial values of each chain end to end, and their mutual; the sign of the mutual follows the "
-                + "direction each chain is traversed in.").ToList());
+                + "direction each chain is traversed in.", chainA.Concat(chainB), frequenciesHz, options));
     }
 
     /// <summary>
@@ -317,6 +375,7 @@ public static class LoopExtraction
                 : "The chain joins the plane through a real connection under its far end (its own barrel or a wire of "
                   + "its width, and plane copper over to the mesh); at the near end the loop is seen between the chain "
                   + "and the plane under it."));
+        if (ResolutionNote(chain, planeThickness, acrossThickness, frequenciesHz, options) is { } coarse) notes.Add(coarse);
         var points = model.Solve(frequenciesHz, false, cancellationToken);
         if (model.SolvedIteratively)
             notes.Add("Solved by the compressed iterative solve (far couplings in low-rank blocks): it matches the "

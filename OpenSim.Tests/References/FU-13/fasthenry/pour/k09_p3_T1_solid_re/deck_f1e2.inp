@@ -1,0 +1,26 @@
+* solid pour, conv grid pitch 0.315789 mm, plane nhinc 3, trace 7x5 r2, f 100 Hz
+* FastHenry deck written by pour_decks.py -- OpenSim pour loop (ExtractionTests.AReturnThroughAPour_GoesRoundASlot)
+.units mm
+.default sigma=58000
+* return pour: uniform plane, corner nodes half a cell inside the 12 x 6 mm outline so the
+* node cells tile the pour exactly; pitch 0.315789474 mm, 38 x 19 nodes
+Gpour x1=-2.84210526316 y1=-2.84210526316 z1=-0.0175
++ x2=8.84210526316 y2=-2.84210526316 z2=-0.0175
++ x3=8.84210526316 y3=2.84210526316 z3=-0.0175
++ thick=0.035 seg1=37 seg2=18 sigma=58000
++ nhinc=3 rh=2
++ nps (0,0,-0.0175)
++ npe (6,0,-0.0175)
+* the trace (one segment: its current is the same along its whole length)
+Ns x=0 y=0 z=0.335
+Ne x=6 y=0 z=0.335
+Etr Ns Ne w=0.4 h=0.035 nwinc=7 nhinc=5 rw=2 rh=2
+* far end joined by the real connection below; port from the trace start to the plane under it
+* real end connection (OpenSim IdealEndConnections = false): wire of radius 0.2 mm as one
+* square filament of the same area, from the trace end down to the plane mid-plane z=-0.0175
+Nv x=6 y=0 z=-0.0175
+Ewire Ne Nv w=0.354490770181 h=0.354490770181
+.equiv Nv npe
+.external Ns nps loop
+.freq fmin=100 fmax=100 ndec=1
+.end

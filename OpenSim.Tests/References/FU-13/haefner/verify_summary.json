@@ -1,0 +1,40 @@
+{
+ "item": "haefner (S. J. Haefner, Proc. IRE 25(4) 434-447, April 1937)",
+ "pdf_sha256": "E87587CD2FAB9B1CCC9C6C036F888F3DD3D5BD0C3499735CB73847042A3E0BDE",
+ "pdf_bytes": 7353971,
+ "re_extraction": "pypdf raw DCT images img/v_p*_I*.jpg; Windows.Data.Pdf renders img/v_p<printed>_pdf<pdf>_w3496.png for PDF pp. 76-89",
+ "confirmed": {
+  "table1": "all 15 rows, every cell, incl. '25?' and '3?' (p.442, work/T1a-d.png)",
+  "table2": "all 16 frequency columns x 5 quantities (p.442, work/T2a-b.png)",
+  "computed": "areas, ratios, implied rho, p at 8 kHz (cgs = SI), Bessel vs calc (max 0.00116), %Diff, No.4 p offset 0.33-0.37%, p.439 1.0003254, p.445 p=3.912424, 0.418647, 3.191538 (vchecks.json)",
+  "text_equations": "p.434-447 statements and equations listed in the reporter's findings, re-read on the renders",
+  "fig5": "theirs vs Bessel rms 0.0051 mean +0.0006 max 0.0125 reproduced; mine vs Bessel rms 0.0056 mean +0.0022 max 0.0144",
+  "fig6": "all 7 curves, mean (theirs-mine) -0.0006..-0.0013, max 0.0043",
+  "fig7": "271 rows confirmed (2400 p<=2.25 and >=2.85; 5/8/10/16/24 p>=3.0 rms 0.0003-0.0005; round 0.85-1.0 and 1.55-3.45; dashed 1.3-2.05)",
+  "fig8": "269 rows confirmed (sf1, sf18, sf12 4.7-10.6, sf6 3.9-8.7, sf2 3.2-3.3 and 4.2-8.0, within 0.005); chord slopes 0.3845/0.3795/0.3168/0.2562/0.2291",
+  "repo_citations": "ProximityExtractor.cs:140 = SolveConductorImpedance declaration (isolated when groundImage false); ProximityExtractorTests.cs:110 = groundImage:false call inside the gate method at :90"
+ },
+ "discrepancies": [
+  {"what": "Fig. 9 f(a/c), A and B scales (all 34 rows)", "reported": "f(2)=1.7416, f(5)=1.4868, f(10)=1.2695, f(20)=1.0256, f(48)=0.7446; B f(50)=0.7478, f(100)=0.5673", "found": "1.7055, 1.4643, 1.2563, 1.0160, 0.7471; 0.7358, 0.5592 (reported - verified +0.036..-0.0025, mean +0.012). Cause: no-skew one-band calibration; extrapolated verified f(1)=1.860 vs printed 1.86 (their cal: 1.907)", "where": "fig9_digitized.csv; p.446 Fig. 9, img/v_p446_pdf88_w3496.png"},
+  {"what": "Cockroft slopes f/(pi*sqrt2) for shapes 2, 6, 12, 18", "reported": "0.392, 0.323, 0.272, 0.239", "found": "0.384, 0.318, 0.269, 0.237", "where": "fig9_cockroft_vs_fig8.json and findings table"},
+  {"what": "Fig. 9 calibration residuals", "reported": "rms 0.025 a/c, 0.0021 f", "found": "calibration error across the plot up to +0.25 a/c (upper half) and +0.016 f (left third)", "where": "work/fig9_digitized.json calibration; theircal_check.py on mesh_fig9.json"},
+  {"what": "Fig. 7 round, p 1.05-1.50", "reported": "1.0076..1.0295", "found": "1.0058..1.0255 (+0.0018..+0.0043 high; Bessel 1.0063..1.0258)", "where": "fig7_digitized.csv; p.444, work/f7_inkov_low.png"},
+  {"what": "Fig. 7 dashed_C, p 0.95/1.00/1.05/1.10/1.25", "reported": "1.0082/1.0097/1.0118/1.0141/1.0222", "found": "1.0060/1.0076/1.0092/1.0114/1.0191", "where": "fig7_digitized.csv; p.444"},
+  {"what": "Fig. 7 merged group ratio_5/8/10/16/24, p 1.05-1.35", "reported": "1.0181..1.0343", "found": "1.0168..1.0327 (+0.0013..+0.0020)", "where": "fig7_digitized.csv (merged_zone=1)"},
+  {"what": "Fig. 7 ratio_8 at p 2.80", "reported": "1.2583 (non-monotone; 2.85 row 1.2460)", "found": "1.2384", "where": "fig7_digitized.csv (merged_zone=1)"},
+  {"what": "Fig. 7 ratio_5 p 2.10-2.40 identity", "reported": "unmerged 5:1 rows on the lower stroke", "found": "values confirmed within 0.0005, but which of the two separating strokes is 5:1 is ambiguous", "where": "p.444, work/f7_inkov_x.png"},
+  {"what": "Fig. 8 sf2_test p 3.4-4.1", "reported": "1.4601, 1.4871, 1.5096, 1.5454, 1.5838, 1.6253, 1.6631, 1.7019", "found": "curve drawn as two strokes (upper 1.466..1.6712, lower 1.4388..1.6568); reported rows switch strokes; midline 1.4525, 1.4856, 1.5218, 1.5564, 1.5924, 1.6297, 1.6640, 1.7001 with u 0.007-0.014", "where": "fig8_digitized.csv; p.445, work/f8_inkov_2.png"},
+  {"what": "Fig. 8 sf6_test p 3.4", "reported": "1.3962", "found": "spurious (6 curve still on trunk ~1.36); removed", "where": "fig8_digitized.csv; p.445"},
+  {"what": "Fig. 8 sf12_test p 3.5", "reported": "1.3493", "found": "spurious (12/18 single stroke 1.332-1.334); removed", "where": "fig8_digitized.csv; p.445, work/f8_inkov_12.png"},
+  {"what": "Fig. 8 stroke-end overshoot sf6 p 8.8, sf12 p 10.7, 10.8", "reported": "2.8161, 2.8616, 2.898", "found": "2.8017, 2.8537, 2.884", "where": "fig8_digitized.csv; p.445"},
+  {"what": "Dwight check at p=2", "reported": "1.813% (matches printed 1.81%)", "found": "1.70% (dashed 1.0861, group 1.1049); agreement within +-0.13% reading uncertainty, exactness not significant", "where": "digitized_checks.json"},
+  {"what": "No. 0 Table II p vs Table I R_dc", "reported": "within 0.05%", "found": "max 0.057% (4000 cycles)", "where": "findings text; vchecks.json"},
+  {"what": "Inductometer winding", "reported": "90-strand No. 30 litz", "found": "printed 'ninety strands of No. 30 B. & S. gage enamel-insulated wire' (no 'litz')", "where": "p.437"},
+  {"what": "Worked example readings", "reported": "Fig. 6 '5' 1.488, Fig. 7 '5' 1.485", "found": "both beyond the CSV ranges (extrapolations); verifier 1.483-1.488 (Fig. 6, extrapolated from p 4.1-4.7) and 1.4839 (Fig. 7, traced to p 3.917); consistent with printed 1.48", "where": "digitized_checks.json"}
+ ],
+ "corrected_files": [
+  "fig9_digitized_verified.csv",
+  "fig7_digitized_verified.csv",
+  "fig8_digitized_verified.csv"
+ ]
+}

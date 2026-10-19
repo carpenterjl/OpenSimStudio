@@ -1,0 +1,506 @@
+config,kind,pitch_mm,plane_nhinc,trace,slot,solver,options,f_Hz,R_ohm,L_H,filaments,meshes,wall_s,exit,error,zc
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.0087584,3.79588e-09,625,336,0.108,0,,k06_p1_T1_slot\Zc_gmres_f1e2.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00875841,3.79586e-09,625,336,0.077,0,,k06_p1_T1_slot\Zc_gmres_f1e3.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875985,3.79479e-09,625,336,0.073,0,,k06_p1_T1_slot\Zc_gmres_f1e4.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00887706,3.71028e-09,625,336,0.064,0,,k06_p1_T1_slot\Zc_gmres_f1e5.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00983797,3.28647e-09,625,336,0.073,0,,k06_p1_T1_slot\Zc_gmres_f1e6.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0129329,3.14544e-09,625,336,0.087,0,,k06_p1_T1_slot\Zc_gmres_f1e7.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0261155,3.09041e-09,625,336,0.077,0,,k06_p1_T1_slot\Zc_gmres_f1e8.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0391136,3.07673e-09,625,336,0.079,0,,k06_p1_T1_slot\Zc_gmres_f3e8.mat
+k06_p1_T1_slot,conv,0.461538462,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0538645,3.06953e-09,625,336,0.088,0,,k06_p1_T1_slot\Zc_gmres_f1e9.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00824958,2.92057e-09,672,335,0.142,0,,k06_p1_T1_solid\Zc_gmres_f1e2.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0082496,2.92054e-09,672,335,0.119,0,,k06_p1_T1_solid\Zc_gmres_f1e3.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00825158,2.91865e-09,672,335,0.118,0,,k06_p1_T1_solid\Zc_gmres_f1e4.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00839679,2.78298e-09,672,335,0.118,0,,k06_p1_T1_solid\Zc_gmres_f1e5.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00913513,2.37146e-09,672,335,0.138,0,,k06_p1_T1_solid\Zc_gmres_f1e6.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0120959,2.25543e-09,672,335,0.148,0,,k06_p1_T1_solid\Zc_gmres_f1e7.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.025467,2.20011e-09,672,335,0.169,0,,k06_p1_T1_solid\Zc_gmres_f1e8.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0386672,2.18629e-09,672,335,0.158,0,,k06_p1_T1_solid\Zc_gmres_f3e8.mat
+k06_p1_T1_solid,conv,0.461538462,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0536398,2.17897e-09,672,335,0.148,0,,k06_p1_T1_solid\Zc_gmres_f1e9.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.0087584,3.79588e-09,1805,1516,0.685,0,,k06_p3_T1_slot\Zc_gmres_f1e2.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00875841,3.79586e-09,1805,1516,0.626,0,,k06_p3_T1_slot\Zc_gmres_f1e3.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875985,3.79479e-09,1805,1516,0.638,0,,k06_p3_T1_slot\Zc_gmres_f1e4.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00887711,3.71028e-09,1805,1516,0.652,0,,k06_p3_T1_slot\Zc_gmres_f1e5.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00984292,3.28645e-09,1805,1516,0.78,0,,k06_p3_T1_slot\Zc_gmres_f1e6.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.013356,3.14274e-09,1805,1516,0.857,0,,k06_p3_T1_slot\Zc_gmres_f1e7.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0308987,3.07077e-09,1805,1516,0.864,0,,k06_p3_T1_slot\Zc_gmres_f1e8.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0456855,3.05335e-09,1805,1516,0.877,0,,k06_p3_T1_slot\Zc_gmres_f3e8.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0607892,3.04545e-09,1805,1516,0.875,0,,k06_p3_T1_slot\Zc_gmres_f1e9.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,100,0.0087584,3.79588e-09,1805,1516,9.619,0,,k06_p3_T1_slot\Zc_lu_f1e2.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,1000,0.00875841,3.79586e-09,1805,1516,9.24,0,,k06_p3_T1_slot\Zc_lu_f1e3.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,10000,0.00875985,3.79479e-09,1805,1516,10.9,0,,k06_p3_T1_slot\Zc_lu_f1e4.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,100000,0.00887711,3.71028e-09,1805,1516,10.82,0,,k06_p3_T1_slot\Zc_lu_f1e5.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,1e+06,0.00984292,3.28645e-09,1805,1516,12.541,0,,k06_p3_T1_slot\Zc_lu_f1e6.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,1e+07,0.013356,3.14274e-09,1805,1516,12.675,0,,k06_p3_T1_slot\Zc_lu_f1e7.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,3e+08,0.0456855,3.05335e-09,1805,1516,14.861,0,,k06_p3_T1_slot\Zc_lu_f3e8.mat
+k06_p3_T1_slot,conv,0.461538462,3,T1,True,lu,-s ludecomp -a off,1e+09,0.0607892,3.04545e-09,1805,1516,14.794,0,,k06_p3_T1_slot\Zc_lu_f1e9.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00824958,2.92057e-09,1946,1609,0.64,0,,k06_p3_T1_solid\Zc_gmres_f1e2.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0082496,2.92054e-09,1946,1609,0.6,0,,k06_p3_T1_solid\Zc_gmres_f1e3.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00825158,2.91865e-09,1946,1609,0.76,0,,k06_p3_T1_solid\Zc_gmres_f1e4.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00839685,2.78298e-09,1946,1609,0.784,0,,k06_p3_T1_solid\Zc_gmres_f1e5.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00914146,2.37142e-09,1946,1609,0.985,0,,k06_p3_T1_solid\Zc_gmres_f1e6.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0126241,2.25184e-09,1946,1609,1.199,0,,k06_p3_T1_solid\Zc_gmres_f1e7.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0301617,2.17694e-09,1946,1609,1.339,0,,k06_p3_T1_solid\Zc_gmres_f1e8.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0447082,2.16003e-09,1946,1609,1.348,0,,k06_p3_T1_solid\Zc_gmres_f3e8.mat
+k06_p3_T1_solid,conv,0.461538462,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0599514,2.15216e-09,1946,1609,1.343,0,,k06_p3_T1_solid\Zc_gmres_f1e9.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.0087584,3.79588e-09,1905,1616,0.671,0,,k06_p3_T2_slot\Zc_gmres_f1e2.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00875841,3.79586e-09,1905,1616,0.688,0,,k06_p3_T2_slot\Zc_gmres_f1e3.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875985,3.79479e-09,1905,1616,0.712,0,,k06_p3_T2_slot\Zc_gmres_f1e4.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00887718,3.71028e-09,1905,1616,0.77,0,,k06_p3_T2_slot\Zc_gmres_f1e5.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00984831,3.28604e-09,1905,1616,0.863,0,,k06_p3_T2_slot\Zc_gmres_f1e6.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0134573,3.14103e-09,1905,1616,0.981,0,,k06_p3_T2_slot\Zc_gmres_f1e7.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0348315,3.06322e-09,1905,1616,1.059,0,,k06_p3_T2_slot\Zc_gmres_f1e8.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0563788,3.04093e-09,1905,1616,1.058,0,,k06_p3_T2_slot\Zc_gmres_f3e8.mat
+k06_p3_T2_slot,conv,0.461538462,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0950525,3.02915e-09,1905,1616,1.067,0,,k06_p3_T2_slot\Zc_gmres_f1e9.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00824958,2.92057e-09,2046,1709,0.793,0,,k06_p3_T2_solid\Zc_gmres_f1e2.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0082496,2.92054e-09,2046,1709,0.868,0,,k06_p3_T2_solid\Zc_gmres_f1e3.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00825158,2.91865e-09,2046,1709,0.991,0,,k06_p3_T2_solid\Zc_gmres_f1e4.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00839692,2.78298e-09,2046,1709,0.892,0,,k06_p3_T2_solid\Zc_gmres_f1e5.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00914668,2.37101e-09,2046,1709,1.093,0,,k06_p3_T2_solid\Zc_gmres_f1e6.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127244,2.25016e-09,2046,1709,1.178,0,,k06_p3_T2_solid\Zc_gmres_f1e7.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0339908,2.16958e-09,2046,1709,1.302,0,,k06_p3_T2_solid\Zc_gmres_f1e8.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0551327,2.14793e-09,2046,1709,1.334,0,,k06_p3_T2_solid\Zc_gmres_f3e8.mat
+k06_p3_T2_solid,conv,0.461538462,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0937922,2.13627e-09,2046,1709,1.269,0,,k06_p3_T2_solid\Zc_gmres_f1e9.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.0087584,3.79588e-09,3085,2796,2.028,0,,k06_p5_T2_slot\Zc_gmres_f1e2.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00875841,3.79586e-09,3085,2796,2.127,0,,k06_p5_T2_slot\Zc_gmres_f1e3.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875985,3.79479e-09,3085,2796,2.265,0,,k06_p5_T2_slot\Zc_gmres_f1e4.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00887718,3.71028e-09,3085,2796,2.294,0,,k06_p5_T2_slot\Zc_gmres_f1e5.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00984883,3.28604e-09,3085,2796,2.636,0,,k06_p5_T2_slot\Zc_gmres_f1e6.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0134928,3.14064e-09,3085,2796,2.842,0,,k06_p5_T2_slot\Zc_gmres_f1e7.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0356956,3.06216e-09,3085,2796,2.908,0,,k06_p5_T2_slot\Zc_gmres_f1e8.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0610605,3.0382e-09,3085,2796,3.161,0,,k06_p5_T2_slot\Zc_gmres_f3e8.mat
+k06_p5_T2_slot,conv,0.461538462,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.105583,3.02396e-09,3085,2796,3.281,0,,k06_p5_T2_slot\Zc_gmres_f1e9.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00824958,2.92057e-09,3320,2983,2.13,0,,k06_p5_T2_solid\Zc_gmres_f1e2.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0082496,2.92054e-09,3320,2983,2.195,0,,k06_p5_T2_solid\Zc_gmres_f1e3.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00825158,2.91865e-09,3320,2983,2.36,0,,k06_p5_T2_solid\Zc_gmres_f1e4.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00839693,2.78298e-09,3320,2983,2.364,0,,k06_p5_T2_solid\Zc_gmres_f1e5.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0091473,2.37101e-09,3320,2983,2.78,0,,k06_p5_T2_solid\Zc_gmres_f1e6.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127622,2.24964e-09,3320,2983,3.442,0,,k06_p5_T2_solid\Zc_gmres_f1e7.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0347201,2.16874e-09,3320,2983,3.728,0,,k06_p5_T2_solid\Zc_gmres_f1e8.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.059518,2.1455e-09,3320,2983,3.931,0,,k06_p5_T2_solid\Zc_gmres_f3e8.mat
+k06_p5_T2_solid,conv,0.461538462,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.103438,2.13156e-09,3320,2983,3.688,0,,k06_p5_T2_solid\Zc_gmres_f1e9.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.0087584,3.79588e-09,4265,3976,2.48,0,,k06_p7_T2_slot\Zc_gmres_f1e2.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00875841,3.79586e-09,4265,3976,2.535,0,,k06_p7_T2_slot\Zc_gmres_f1e3.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875985,3.79479e-09,4265,3976,2.597,0,,k06_p7_T2_slot\Zc_gmres_f1e4.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00887718,3.71028e-09,4265,3976,2.959,0,,k06_p7_T2_slot\Zc_gmres_f1e5.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00984897,3.28604e-09,4265,3976,4.132,0,,k06_p7_T2_slot\Zc_gmres_f1e6.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0135015,3.14052e-09,4265,3976,6.827,0,,k06_p7_T2_slot\Zc_gmres_f1e7.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0358029,3.06187e-09,4265,3976,8.106,0,,k06_p7_T2_slot\Zc_gmres_f1e8.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0614214,3.03784e-09,4265,3976,9.228,0,,k06_p7_T2_slot\Zc_gmres_f3e8.mat
+k06_p7_T2_slot,conv,0.461538462,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.110415,3.02351e-09,4265,3976,9.17,0,,k06_p7_T2_slot\Zc_gmres_f1e9.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00824958,2.92057e-09,4594,4257,5.21,0,,k06_p7_T2_solid\Zc_gmres_f1e2.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0082496,2.92054e-09,4594,4257,5.602,0,,k06_p7_T2_solid\Zc_gmres_f1e3.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00825158,2.91865e-09,4594,4257,5.866,0,,k06_p7_T2_solid\Zc_gmres_f1e4.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00839693,2.78298e-09,4594,4257,6.526,0,,k06_p7_T2_solid\Zc_gmres_f1e5.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00914747,2.37101e-09,4594,4257,6.39,0,,k06_p7_T2_solid\Zc_gmres_f1e6.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127714,2.2495e-09,4594,4257,8.526,0,,k06_p7_T2_solid\Zc_gmres_f1e7.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0348132,2.16852e-09,4594,4257,9.823,0,,k06_p7_T2_solid\Zc_gmres_f1e8.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0598476,2.14516e-09,4594,4257,10.817,0,,k06_p7_T2_solid\Zc_gmres_f3e8.mat
+k06_p7_T2_solid,conv,0.461538462,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.107756,2.13115e-09,4594,4257,10.164,0,,k06_p7_T2_solid\Zc_gmres_f1e9.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.0087584,3.79588e-09,5445,5156,5.264,0,,k06_p9_T2_slot\Zc_gmres_f1e2.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00875841,3.79586e-09,5445,5156,5.511,0,,k06_p9_T2_slot\Zc_gmres_f1e3.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875985,3.79479e-09,5445,5156,7.497,0,,k06_p9_T2_slot\Zc_gmres_f1e4.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00887718,3.71028e-09,5445,5156,8.832,0,,k06_p9_T2_slot\Zc_gmres_f1e5.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00984902,3.28604e-09,5445,5156,12.718,0,,k06_p9_T2_slot\Zc_gmres_f1e6.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0135046,3.14048e-09,5445,5156,21.054,0,,k06_p9_T2_slot\Zc_gmres_f1e7.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0358248,3.06178e-09,5445,5156,22.022,0,,k06_p9_T2_slot\Zc_gmres_f1e8.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0614815,3.03773e-09,5445,5156,18.605,0,,k06_p9_T2_slot\Zc_gmres_f3e8.mat
+k06_p9_T2_slot,conv,0.461538462,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.11108,3.02336e-09,5445,5156,18.718,0,,k06_p9_T2_slot\Zc_gmres_f1e9.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00824958,2.92057e-09,5868,5531,9.014,0,,k06_p9_T2_solid\Zc_gmres_f1e2.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0082496,2.92054e-09,5868,5531,10.184,0,,k06_p9_T2_solid\Zc_gmres_f1e3.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00825158,2.91865e-09,5868,5531,13.961,0,,k06_p9_T2_solid\Zc_gmres_f1e4.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00839693,2.78298e-09,5868,5531,14.791,0,,k06_p9_T2_solid\Zc_gmres_f1e5.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00914753,2.37101e-09,5868,5531,16.816,0,,k06_p9_T2_solid\Zc_gmres_f1e6.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127747,2.24943e-09,5868,5531,20.168,0,,k06_p9_T2_solid\Zc_gmres_f1e7.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0348324,2.16844e-09,5868,5531,22.596,0,,k06_p9_T2_solid\Zc_gmres_f1e8.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0599017,2.14507e-09,5868,5531,23.655,0,,k06_p9_T2_solid\Zc_gmres_f3e8.mat
+k06_p9_T2_solid,conv,0.461538462,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.108353,2.13101e-09,5868,5531,23.459,0,,k06_p9_T2_solid\Zc_gmres_f1e9.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,1355,702,0.269,0,,k09_p1_T1_slot\Zc_gmres_f1e2.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,1355,702,0.271,0,,k09_p1_T1_slot\Zc_gmres_f1e3.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,1355,702,0.292,0,,k09_p1_T1_slot\Zc_gmres_f1e4.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00885973,3.57971e-09,1355,702,0.238,0,,k09_p1_T1_slot\Zc_gmres_f1e5.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00992764,3.11052e-09,1355,702,0.308,0,,k09_p1_T1_slot\Zc_gmres_f1e6.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0131007,2.95699e-09,1355,702,0.319,0,,k09_p1_T1_slot\Zc_gmres_f1e7.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0263197,2.90155e-09,1355,702,0.328,0,,k09_p1_T1_slot\Zc_gmres_f1e8.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0393547,2.88785e-09,1355,702,0.339,0,,k09_p1_T1_slot\Zc_gmres_f3e8.mat
+k09_p1_T1_slot,conv,0.315789474,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0541461,2.88062e-09,1355,702,0.345,0,,k09_p1_T1_slot\Zc_gmres_f1e9.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,1422,701,0.303,0,,k09_p1_T1_solid\Zc_gmres_f1e2.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,1422,701,0.312,0,,k09_p1_T1_solid\Zc_gmres_f1e3.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,1422,701,0.336,0,,k09_p1_T1_solid\Zc_gmres_f1e4.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00845824,2.78639e-09,1422,701,0.318,0,,k09_p1_T1_solid\Zc_gmres_f1e5.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00918486,2.37378e-09,1422,701,0.392,0,,k09_p1_T1_solid\Zc_gmres_f1e6.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0121439,2.2592e-09,1422,701,0.365,0,,k09_p1_T1_solid\Zc_gmres_f1e7.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0255246,2.20383e-09,1422,701,0.379,0,,k09_p1_T1_solid\Zc_gmres_f1e8.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0387317,2.19001e-09,1422,701,0.362,0,,k09_p1_T1_solid\Zc_gmres_f3e8.mat
+k09_p1_T1_solid,conv,0.315789474,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0537127,2.18268e-09,1422,701,0.369,0,,k09_p1_T1_solid\Zc_gmres_f1e9.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,3995,3342,2.846,0,,k09_p3_T1_slot\Zc_gmres_f1e2.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,3995,3342,1.897,0,,k09_p3_T1_slot\Zc_gmres_f1e3.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,3995,3342,2.359,0,,k09_p3_T1_slot\Zc_gmres_f1e4.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00885979,3.57971e-09,3995,3342,2.612,0,,k09_p3_T1_slot\Zc_gmres_f1e5.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00993317,3.11049e-09,3995,3342,3.526,0,,k09_p3_T1_slot\Zc_gmres_f1e6.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0135737,2.95395e-09,3995,3342,4.283,0,,k09_p3_T1_slot\Zc_gmres_f1e7.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0314878,2.87981e-09,3995,3342,4.824,0,,k09_p3_T1_slot\Zc_gmres_f1e8.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0464168,2.86214e-09,3995,3342,5.546,0,,k09_p3_T1_slot\Zc_gmres_f3e8.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0615848,2.85417e-09,3995,3342,5.569,0,,k09_p3_T1_slot\Zc_gmres_f1e9.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,4660,3988,5.706,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e2.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,4660,3988,6.809,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e3.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,4660,3988,7.348,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e4.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,100000,0.00885979,3.57971e-09,4660,3988,7.439,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e5.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+06,0.00993386,3.11044e-09,4660,3988,8.699,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e6.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+07,0.013581,2.95371e-09,4660,3988,11.03,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e7.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+08,0.0315347,2.87937e-09,4660,3988,12.29,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e8.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,3e+08,0.0464963,2.86166e-09,4660,3988,12.766,0,,k09_p3_T1_slot\Zc_gmres_aon_f3e8.mat
+k09_p3_T1_slot,conv,0.315789474,3,T1,True,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+09,0.0617001,2.85368e-09,4660,3988,11.055,0,,k09_p3_T1_slot\Zc_gmres_aon_f1e9.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00877553,3.74307e-09,3996,3342,1.881,0,,k09_p3_T1_slot_re\Zc_gmres_f1e2.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00877554,3.74305e-09,3996,3342,1.978,0,,k09_p3_T1_slot_re\Zc_gmres_f1e3.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00877716,3.74183e-09,3996,3342,2.207,0,,k09_p3_T1_slot_re\Zc_gmres_f1e4.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00890815,3.64583e-09,3996,3342,2.337,0,,k09_p3_T1_slot_re\Zc_gmres_f1e5.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00998154,3.17661e-09,3996,3342,2.933,0,,k09_p3_T1_slot_re\Zc_gmres_f1e6.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.013622,3.02004e-09,3996,3342,3.902,0,,k09_p3_T1_slot_re\Zc_gmres_f1e7.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0315362,2.94593e-09,3996,3342,4.427,0,,k09_p3_T1_slot_re\Zc_gmres_f1e8.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0464651,2.92824e-09,3996,3342,4.587,0,,k09_p3_T1_slot_re\Zc_gmres_f3e8.mat
+k09_p3_T1_slot_re,conv,0.315789474,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0616331,2.92029e-09,3996,3342,4.474,0,,k09_p3_T1_slot_re\Zc_gmres_f1e9.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,4196,3475,3.721,0,,k09_p3_T1_solid\Zc_gmres_f1e2.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,4196,3475,3.639,0,,k09_p3_T1_solid\Zc_gmres_f1e3.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,4196,3475,3.9,0,,k09_p3_T1_solid\Zc_gmres_f1e4.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00845831,2.78639e-09,4196,3475,4.104,0,,k09_p3_T1_solid\Zc_gmres_f1e5.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919132,2.37375e-09,4196,3475,5.606,0,,k09_p3_T1_solid\Zc_gmres_f1e6.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0126831,2.25553e-09,4196,3475,6.755,0,,k09_p3_T1_solid\Zc_gmres_f1e7.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0303005,2.18022e-09,4196,3475,7.042,0,,k09_p3_T1_solid\Zc_gmres_f1e8.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0448794,2.16326e-09,4196,3475,7.599,0,,k09_p3_T1_solid\Zc_gmres_f3e8.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0601368,2.15537e-09,4196,3475,7.712,0,,k09_p3_T1_solid\Zc_gmres_f1e9.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,4861,4121,12.548,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e2.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,4861,4121,12.675,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e3.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,4861,4121,12.872,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e4.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,100000,0.00845832,2.78639e-09,4861,4121,13.24,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e5.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+06,0.0091918,2.3737e-09,4861,4121,13.145,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e6.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+07,0.0126842,2.25538e-09,4861,4121,15.65,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e7.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+08,0.0303046,2.18006e-09,4861,4121,17.334,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e8.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,3e+08,0.044887,2.1631e-09,4861,4121,17.674,0,,k09_p3_T1_solid\Zc_gmres_aon_f3e8.mat
+k09_p3_T1_solid,conv,0.315789474,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+09,0.0601474,2.15521e-09,4861,4121,14.618,0,,k09_p3_T1_solid\Zc_gmres_aon_f1e9.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00835731,2.9935e-09,4197,3475,2.261,0,,k09_p3_T1_solid_re\Zc_gmres_f1e2.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00835733,2.99347e-09,4197,3475,2.381,0,,k09_p3_T1_solid_re\Zc_gmres_f1e3.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00835935,2.99151e-09,4197,3475,2.527,0,,k09_p3_T1_solid_re\Zc_gmres_f1e4.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00850667,2.85249e-09,4197,3475,2.689,0,,k09_p3_T1_solid_re\Zc_gmres_f1e5.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00923969,2.43985e-09,4197,3475,3.424,0,,k09_p3_T1_solid_re\Zc_gmres_f1e6.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127315,2.32162e-09,4197,3475,4.776,0,,k09_p3_T1_solid_re\Zc_gmres_f1e7.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0303489,2.24633e-09,4197,3475,5.394,0,,k09_p3_T1_solid_re\Zc_gmres_f1e8.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0449278,2.22936e-09,4197,3475,5.413,0,,k09_p3_T1_solid_re\Zc_gmres_f3e8.mat
+k09_p3_T1_solid_re,conv,0.315789474,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0601851,2.22147e-09,4197,3475,5.22,0,,k09_p3_T1_solid_re\Zc_gmres_f1e9.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,4095,3442,2.783,0,,k09_p3_T2_slot\Zc_gmres_f1e2.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,4095,3442,2.764,0,,k09_p3_T2_slot\Zc_gmres_f1e3.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,4095,3442,3.066,0,,k09_p3_T2_slot\Zc_gmres_f1e4.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00885986,3.57971e-09,4095,3442,3.157,0,,k09_p3_T2_slot\Zc_gmres_f1e5.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00993853,3.11008e-09,4095,3442,3.56,0,,k09_p3_T2_slot\Zc_gmres_f1e6.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0136748,2.95224e-09,4095,3442,5.082,0,,k09_p3_T2_slot\Zc_gmres_f1e7.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0354005,2.87232e-09,4095,3442,5.623,0,,k09_p3_T2_slot\Zc_gmres_f1e8.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0570578,2.84979e-09,4095,3442,5.977,0,,k09_p3_T2_slot\Zc_gmres_f3e8.mat
+k09_p3_T2_slot,conv,0.315789474,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0957646,2.83796e-09,4095,3442,6.133,0,,k09_p3_T2_slot\Zc_gmres_f1e9.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,4296,3575,3.02,0,,k09_p3_T2_solid\Zc_gmres_f1e2.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,4296,3575,4.218,0,,k09_p3_T2_solid\Zc_gmres_f1e3.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,4296,3575,4.505,0,,k09_p3_T2_solid\Zc_gmres_f1e4.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00845838,2.78637e-09,4296,3575,5.102,0,,k09_p3_T2_solid\Zc_gmres_f1e5.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919654,2.37335e-09,4296,3575,6.409,0,,k09_p3_T2_solid\Zc_gmres_f1e6.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127835,2.25386e-09,4296,3575,7.375,0,,k09_p3_T2_solid\Zc_gmres_f1e7.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0341345,2.17286e-09,4296,3575,7.649,0,,k09_p3_T2_solid\Zc_gmres_f1e8.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.055318,2.15114e-09,4296,3575,7.454,0,,k09_p3_T2_solid\Zc_gmres_f3e8.mat
+k09_p3_T2_solid,conv,0.315789474,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0940148,2.13946e-09,4296,3575,7.124,0,,k09_p3_T2_solid\Zc_gmres_f1e9.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,4191,3538,6.304,0,,k09_p3_T3_slot\Zc_gmres_f1e2.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,4191,3538,6.366,0,,k09_p3_T3_slot\Zc_gmres_f1e3.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,4191,3538,6.269,0,,k09_p3_T3_slot\Zc_gmres_f1e4.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00885991,3.5797e-09,4191,3538,6.192,0,,k09_p3_T3_slot\Zc_gmres_f1e5.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00994198,3.10962e-09,4191,3538,7.833,0,,k09_p3_T3_slot\Zc_gmres_f1e6.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0136603,2.9518e-09,4191,3538,9.121,0,,k09_p3_T3_slot\Zc_gmres_f1e7.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0353021,2.87184e-09,4191,3538,9.891,0,,k09_p3_T3_slot\Zc_gmres_f1e8.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0567399,2.84961e-09,4191,3538,10.868,0,,k09_p3_T3_slot\Zc_gmres_f3e8.mat
+k09_p3_T3_slot,conv,0.315789474,3,T3,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0951091,2.83778e-09,4191,3538,10.992,0,,k09_p3_T3_slot\Zc_gmres_f1e9.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,4392,3671,6.828,0,,k09_p3_T3_solid\Zc_gmres_f1e2.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,4392,3671,6.852,0,,k09_p3_T3_solid\Zc_gmres_f1e3.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,4392,3671,7.168,0,,k09_p3_T3_solid\Zc_gmres_f1e4.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00845843,2.78637e-09,4392,3671,7.745,0,,k09_p3_T3_solid\Zc_gmres_f1e5.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919989,2.37289e-09,4392,3671,8.824,0,,k09_p3_T3_solid\Zc_gmres_f1e6.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127705,2.25341e-09,4392,3671,10.293,0,,k09_p3_T3_solid\Zc_gmres_f1e7.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0340353,2.1724e-09,4392,3671,10.414,0,,k09_p3_T3_solid\Zc_gmres_f1e8.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0549965,2.15097e-09,4392,3671,10.129,0,,k09_p3_T3_solid\Zc_gmres_f3e8.mat
+k09_p3_T3_solid,conv,0.315789474,3,T3,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0933563,2.1393e-09,4392,3671,10.818,0,,k09_p3_T3_solid\Zc_gmres_f1e9.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,6735,6082,11.557,0,,k09_p5_T2_slot\Zc_gmres_f1e2.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,6735,6082,11.377,0,,k09_p5_T2_slot\Zc_gmres_f1e3.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,6735,6082,11.947,0,,k09_p5_T2_slot\Zc_gmres_f1e4.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00885986,3.57971e-09,6735,6082,12.525,0,,k09_p5_T2_slot\Zc_gmres_f1e5.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0099391,3.11008e-09,6735,6082,15.725,0,,k09_p5_T2_slot\Zc_gmres_f1e6.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0137135,2.9518e-09,6735,6082,20.583,0,,k09_p5_T2_slot\Zc_gmres_f1e7.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0363207,2.87119e-09,6735,6082,22.523,0,,k09_p5_T2_slot\Zc_gmres_f1e8.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0620985,2.84687e-09,6735,6082,22.968,0,,k09_p5_T2_slot\Zc_gmres_f3e8.mat
+k09_p5_T2_slot,conv,0.315789474,5,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.107087,2.8324e-09,6735,6082,23.316,0,,k09_p5_T2_slot\Zc_gmres_f1e9.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,7070,6349,9.664,0,,k09_p5_T2_solid\Zc_gmres_f1e2.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,7070,6349,11.467,0,,k09_p5_T2_solid\Zc_gmres_f1e3.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,7070,6349,13.779,0,,k09_p5_T2_solid\Zc_gmres_f1e4.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00845838,2.78637e-09,7070,6349,18.062,0,,k09_p5_T2_solid\Zc_gmres_f1e5.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919718,2.37333e-09,7070,6349,21.081,0,,k09_p5_T2_solid\Zc_gmres_f1e6.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.012822,2.25333e-09,7070,6349,23.677,0,,k09_p5_T2_solid\Zc_gmres_f1e7.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0348779,2.172e-09,7070,6349,24.973,0,,k09_p5_T2_solid\Zc_gmres_f1e8.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0597828,2.14867e-09,7070,6349,25.876,0,,k09_p5_T2_solid\Zc_gmres_f3e8.mat
+k09_p5_T2_solid,conv,0.315789474,5,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.103835,2.13467e-09,7070,6349,21.986,0,,k09_p5_T2_solid\Zc_gmres_f1e9.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,9375,8722,39.417,0,,k09_p7_T2_slot\Zc_gmres_f1e2.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,9375,8722,40.697,0,,k09_p7_T2_slot\Zc_gmres_f1e3.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,9375,8722,42.483,0,,k09_p7_T2_slot\Zc_gmres_f1e4.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00885986,3.57971e-09,9375,8722,41.994,0,,k09_p7_T2_slot\Zc_gmres_f1e5.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00993926,3.11008e-09,9375,8722,55.427,0,,k09_p7_T2_slot\Zc_gmres_f1e6.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0137229,2.95167e-09,9375,8722,65.552,0,,k09_p7_T2_slot\Zc_gmres_f1e7.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0364358,2.8709e-09,9375,8722,70.135,0,,k09_p7_T2_slot\Zc_gmres_f1e8.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0624863,2.84648e-09,9375,8722,70.819,0,,k09_p7_T2_slot\Zc_gmres_f3e8.mat
+k09_p7_T2_slot,conv,0.315789474,7,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.112259,2.83191e-09,9375,8722,65.815,0,,k09_p7_T2_slot\Zc_gmres_f1e9.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,9844,9123,63.443,0,,k09_p7_T2_solid\Zc_gmres_f1e2.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,9844,9123,63.745,0,,k09_p7_T2_solid\Zc_gmres_f1e3.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,9844,9123,67.126,0,,k09_p7_T2_solid\Zc_gmres_f1e4.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00845838,2.78637e-09,9844,9123,70.395,0,,k09_p7_T2_solid\Zc_gmres_f1e5.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919735,2.37333e-09,9844,9123,62.051,0,,k09_p7_T2_solid\Zc_gmres_f1e6.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0128313,2.25317e-09,9844,9123,72.566,0,,k09_p7_T2_solid\Zc_gmres_f1e7.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0349729,2.17178e-09,9844,9123,77.451,0,,k09_p7_T2_solid\Zc_gmres_f1e8.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0601181,2.14832e-09,9844,9123,79.595,0,,k09_p7_T2_solid\Zc_gmres_f3e8.mat
+k09_p7_T2_solid,conv,0.315789474,7,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.108231,2.13425e-09,9844,9123,80.751,0,,k09_p7_T2_solid\Zc_gmres_f1e9.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00872716,3.67696e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00872718,3.67696e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087288,3.67573e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00885986,3.57971e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00993931,3.11008e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0137262,2.95162e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0364594,2.87081e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0625509,2.84636e-09,12015,11362,104.574,0,,k09_p9_T2_slot\Zc_gmres_f3e8.mat
+k09_p9_T2_slot,conv,0.315789474,9,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.112972,2.83173e-09,12015,11362,302.26,0,,k09_p9_T2_slot\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00830894,2.92738e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00830896,2.92737e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831099,2.92541e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00845838,2.78637e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919741,2.37333e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0128347,2.25311e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0349925,2.1717e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.060173,2.14823e-09,12618,11897,99.491,0,,k09_p9_T2_solid\Zc_gmres_f3e8.mat
+k09_p9_T2_solid,conv,0.315789474,9,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.108838,2.13411e-09,12618,11897,310.246,0,,k09_p9_T2_solid\Zc_gmres_sweep.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00878593,3.62319e-09,6389,3276,10.725,0,,k20_p1_T1_slot\Zc_gmres_f1e2.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00878594,3.62318e-09,6389,3276,10.164,0,,k20_p1_T1_slot\Zc_gmres_f1e3.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00878762,3.6219e-09,6389,3276,11.709,0,,k20_p1_T1_slot\Zc_gmres_f1e4.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00892289,3.52223e-09,6389,3276,12.157,0,,k20_p1_T1_slot\Zc_gmres_f1e5.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0100526,3.03881e-09,6389,3276,11.976,0,,k20_p1_T1_slot\Zc_gmres_f1e6.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0134492,2.86921e-09,6389,3276,11.966,0,,k20_p1_T1_slot\Zc_gmres_f1e7.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0266995,2.81268e-09,6389,3276,12.124,0,,k20_p1_T1_slot\Zc_gmres_f1e8.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0397501,2.79896e-09,6389,3276,11.52,0,,k20_p1_T1_slot\Zc_gmres_f3e8.mat
+k20_p1_T1_slot,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0545582,2.79172e-09,6389,3276,11.384,0,,k20_p1_T1_slot\Zc_gmres_f1e9.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00883429,3.68929e-09,6390,3276,9.369,0,,k20_p1_T1_slot_re\Zc_gmres_f1e2.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00883431,3.68928e-09,6390,3276,8.741,0,,k20_p1_T1_slot_re\Zc_gmres_f1e3.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00883598,3.688e-09,6390,3276,8.642,0,,k20_p1_T1_slot_re\Zc_gmres_f1e4.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00897126,3.58832e-09,6390,3276,10.751,0,,k20_p1_T1_slot_re\Zc_gmres_f1e5.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0101009,3.10492e-09,6390,3276,12.812,0,,k20_p1_T1_slot_re\Zc_gmres_f1e6.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0134975,2.93533e-09,6390,3276,14.285,0,,k20_p1_T1_slot_re\Zc_gmres_f1e7.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0267479,2.87878e-09,6390,3276,14.952,0,,k20_p1_T1_slot_re\Zc_gmres_f1e8.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0397985,2.86506e-09,6390,3276,11.355,0,,k20_p1_T1_slot_re\Zc_gmres_f3e8.mat
+k20_p1_T1_slot_re,conv,0.146341463,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0546065,2.85783e-09,6390,3276,10.369,0,,k20_p1_T1_slot_re\Zc_gmres_f1e9.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00842945,2.93486e-09,6636,3275,13.274,0,,k20_p1_T1_solid\Zc_gmres_f1e2.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00842947,2.93485e-09,6636,3275,13.581,0,,k20_p1_T1_solid\Zc_gmres_f1e3.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00843153,2.93284e-09,6636,3275,13.552,0,,k20_p1_T1_solid\Zc_gmres_f1e4.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00858032,2.79131e-09,6636,3275,12.817,0,,k20_p1_T1_solid\Zc_gmres_f1e5.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00929646,2.3779e-09,6636,3275,12.615,0,,k20_p1_T1_solid\Zc_gmres_f1e6.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0122469,2.26493e-09,6636,3275,13.182,0,,k20_p1_T1_solid\Zc_gmres_f1e7.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0256292,2.20958e-09,6636,3275,12.802,0,,k20_p1_T1_solid\Zc_gmres_f1e8.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0388391,2.19575e-09,6636,3275,12.95,0,,k20_p1_T1_solid\Zc_gmres_f3e8.mat
+k20_p1_T1_solid,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0538229,2.18843e-09,6636,3275,14.064,0,,k20_p1_T1_solid\Zc_gmres_f1e9.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00847782,3.00096e-09,6637,3275,14.428,0,,k20_p1_T1_solid_re\Zc_gmres_f1e2.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00847784,3.00095e-09,6637,3275,16.061,0,,k20_p1_T1_solid_re\Zc_gmres_f1e3.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00847989,2.99894e-09,6637,3275,15.862,0,,k20_p1_T1_solid_re\Zc_gmres_f1e4.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00862869,2.8574e-09,6637,3275,15.195,0,,k20_p1_T1_solid_re\Zc_gmres_f1e5.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00934482,2.444e-09,6637,3275,11.941,0,,k20_p1_T1_solid_re\Zc_gmres_f1e6.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0122953,2.33103e-09,6637,3275,18.8,0,,k20_p1_T1_solid_re\Zc_gmres_f1e7.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0256776,2.27568e-09,6637,3275,19.475,0,,k20_p1_T1_solid_re\Zc_gmres_f1e8.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0388874,2.26186e-09,6637,3275,19.681,0,,k20_p1_T1_solid_re\Zc_gmres_f3e8.mat
+k20_p1_T1_solid_re,conv,0.146341463,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0538713,2.25453e-09,6637,3275,16.466,0,,k20_p1_T1_solid_re\Zc_gmres_f1e9.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00878593,3.62319e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00878594,3.62318e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00878762,3.6219e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00892295,3.52223e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0100585,3.03879e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0139529,2.86597e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0321765,2.78962e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0472688,2.77166e-09,19097,15984,264.58,0,,k20_p3_T1_slot\Zc_gmres_f3e8.mat
+k20_p3_T1_slot,conv,0.146341463,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.062488,2.76363e-09,19097,15984,1178.476,0,,k20_p3_T1_slot\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00842945,2.93486e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00842947,2.93485e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00843153,2.93284e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00858039,2.79131e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00930308,2.37785e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0127974,2.26116e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0305053,2.1855e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0451328,2.16845e-09,19838,16477,272.676,0,,k20_p3_T1_solid\Zc_gmres_f3e8.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0604032,2.16054e-09,19838,16477,1384.046,0,,k20_p3_T1_solid\Zc_gmres_sweep.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi,-s iterative -m multi -o 3 -t 1e-6 -c 1000,100,0.00842945,2.9313e-09,21203,17803,2.88,0,,k20_p3_T1_solid\Zc_multi_f1e2.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi,-s iterative -m multi -o 3 -t 1e-6 -c 1000,1e+08,0.0304511,2.18166e-09,21203,17803,18.211,0,,k20_p3_T1_solid\Zc_multi_f1e8.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_aoff,-s iterative -m multi -a off -o 3 -t 1e-6 -c 1000,100,0.00842945,2.9447e-09,19838,16477,1.466,0,,k20_p3_T1_solid\Zc_multi_aoff_f1e2.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_aoff,-s iterative -m multi -a off -o 3 -t 1e-6 -c 1000,1e+08,0.00675625,2.26859e-09,19838,16477,10.79,0,,k20_p3_T1_solid\Zc_multi_aoff_f1e8.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_aoff_o4,-s iterative -m multi -a off -o 4 -t 1e-7 -c 1000,100,0.00842945,2.94596e-09,19838,16477,1.714,0,,k20_p3_T1_solid\Zc_multi_aoff_o4_f1e2.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_aoff_o4,-s iterative -m multi -a off -o 4 -t 1e-7 -c 1000,1e+08,0.00666463,2.27235e-09,19838,16477,17.575,0,,k20_p3_T1_solid\Zc_multi_aoff_o4_f1e8.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,100,0.00842945,2.93486e-09,21203,17803,288.055,0,,k20_p3_T1_solid\Zc_gmres_aon_f1e2.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,gmres_aon,-s iterative -m direct -t 1e-7 -c 1000,1e+08,0.0305089,2.18532e-09,21203,17803,374.383,0,,k20_p3_T1_solid\Zc_gmres_aon_f1e8.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_o5,-s iterative -m multi -o 5 -t 1e-7 -c 1000,100,0.00842945,2.92921e-09,20503,17123,12.873,0,,k20_p3_T1_solid\Zc_multi_o5_f1e2.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_o5,-s iterative -m multi -o 5 -t 1e-7 -c 1000,1e+08,0.0304129,2.18216e-09,20503,17123,41.268,0,,k20_p3_T1_solid\Zc_multi_o5_f1e8.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_o7,-s iterative -m multi -o 7 -t 1e-7 -c 1000,100,0.00842945,2.93039e-09,20503,17123,12.775,0,,k20_p3_T1_solid\Zc_multi_o7_f1e2.mat
+k20_p3_T1_solid,conv,0.146341463,3,T1,False,multi_o7,-s iterative -m multi -o 7 -t 1e-7 -c 1000,1e+08,0.0304712,2.18278e-09,20503,17123,46.027,0,,k20_p3_T1_solid\Zc_multi_o7_f1e8.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00878593,3.62319e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00878594,3.62318e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00878762,3.6219e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00892302,3.52223e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0100638,3.03838e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0140539,2.86428e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0360779,2.78214e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0578803,2.75934e-09,19197,16084,277.549,0,,k20_p3_T2_slot\Zc_gmres_f3e8.mat
+k20_p3_T2_slot,conv,0.146341463,3,T2,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0966157,2.74744e-09,19197,16084,1075.891,0,,k20_p3_T2_slot\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00842945,2.93486e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00842947,2.93485e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00843153,2.93284e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00858045,2.79129e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00930829,2.37746e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0128977,2.25949e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0343358,2.17815e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0555618,2.15635e-09,19938,16577,397.935,0,,k20_p3_T2_solid\Zc_gmres_f3e8.mat
+k20_p3_T2_solid,conv,0.146341463,3,T2,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0942625,2.14464e-09,19938,16577,1322.872,0,,k20_p3_T2_solid\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00884765,3.63278e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00884767,3.63278e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00884934,3.6315e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.0089842,3.53217e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0101206,3.05035e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0136583,2.87544e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0269385,2.81785e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0399885,2.80412e-09,13269,6822,126.129,0,,k29_p1_T1_slot\Zc_gmres_f3e8.mat
+k29_p1_T1_slot,conv,0.101694915,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0547957,2.79689e-09,13269,6822,362.676,0,,k29_p1_T1_slot\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00848651,2.93665e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00848653,2.93662e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00848859,2.93461e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.0086376,2.79271e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00935181,2.37925e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0123011,2.26656e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0256835,2.21122e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0388934,2.19739e-09,13782,6821,81.027,0,,k29_p1_T1_solid\Zc_gmres_f3e8.mat
+k29_p1_T1_solid,conv,0.101694915,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0538774,2.19007e-09,13782,6821,349.017,0,,k29_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00889575,3.62345e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00889576,3.62343e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00889745,3.62214e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00903363,3.52169e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.010181,3.03596e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0138546,2.85715e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0272042,2.7981e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0402597,2.78434e-09,26399,13566,400.468,0,,k41_p1_T1_slot\Zc_gmres_f3e8.mat
+k41_p1_T1_slot,conv,0.0722891566,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0550719,2.77711e-09,26399,13566,1437.707,0,,k41_p1_T1_slot\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00854002,2.93771e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00854004,2.93768e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0085421,2.93568e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00869121,2.7936e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00940448,2.38015e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0123534,2.26758e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0257359,2.21222e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0389459,2.19841e-09,27342,13565,445.005,0,,k41_p1_T1_solid\Zc_gmres_f3e8.mat
+k41_p1_T1_solid,conv,0.0722891566,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.05393,2.19107e-09,27342,13565,2096.69,0,,k41_p1_T1_solid\Zc_gmres_sweep.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00875348,3.69599e-09,1503,777,0.357,0,,os03_p1_T1_slot\Zc_gmres_f1e2.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0087535,3.69598e-09,1503,777,0.365,0,,os03_p1_T1_slot\Zc_gmres_f1e3.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875514,3.69473e-09,1503,777,0.362,0,,os03_p1_T1_slot\Zc_gmres_f1e4.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00888782,3.59724e-09,1503,777,0.353,0,,os03_p1_T1_slot\Zc_gmres_f1e5.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00996971,3.12254e-09,1503,777,0.379,0,,os03_p1_T1_slot\Zc_gmres_f1e6.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0131633,2.96684e-09,1503,777,0.439,0,,os03_p1_T1_slot\Zc_gmres_f1e7.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.026385,2.91131e-09,1503,777,0.416,0,,os03_p1_T1_slot\Zc_gmres_f1e8.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0394209,2.89761e-09,1503,777,0.424,0,,os03_p1_T1_slot\Zc_gmres_f3e8.mat
+os03_p1_T1_slot,matched,0.3,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0542136,2.89038e-09,1503,777,0.449,0,,os03_p1_T1_slot\Zc_gmres_f1e9.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00831747,2.9402e-09,1575,776,0.326,0,,os03_p1_T1_solid\Zc_gmres_f1e2.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00831749,2.94018e-09,1575,776,0.328,0,,os03_p1_T1_solid\Zc_gmres_f1e3.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831952,2.93821e-09,1575,776,0.333,0,,os03_p1_T1_solid\Zc_gmres_f1e4.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.008467,2.79885e-09,1575,776,0.376,0,,os03_p1_T1_solid\Zc_gmres_f1e5.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919316,2.38602e-09,1575,776,0.404,0,,os03_p1_T1_solid\Zc_gmres_f1e6.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0121574,2.2713e-09,1575,776,0.567,0,,os03_p1_T1_solid\Zc_gmres_f1e7.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0255361,2.21591e-09,1575,776,0.528,0,,os03_p1_T1_solid\Zc_gmres_f1e8.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0387397,2.20209e-09,1575,776,0.561,0,,os03_p1_T1_solid\Zc_gmres_f3e8.mat
+os03_p1_T1_solid,matched,0.3,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0537172,2.19476e-09,1575,776,0.505,0,,os03_p1_T1_solid\Zc_gmres_f1e9.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00875348,3.69599e-09,4439,3713,3.203,0,,os03_p3_T1_slot\Zc_gmres_f1e2.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0087535,3.69598e-09,4439,3713,3.321,0,,os03_p3_T1_slot\Zc_gmres_f1e3.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00875514,3.69473e-09,4439,3713,3.709,0,,os03_p3_T1_slot\Zc_gmres_f1e4.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00888787,3.59724e-09,4439,3713,3.777,0,,os03_p3_T1_slot\Zc_gmres_f1e5.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00997531,3.12252e-09,4439,3713,5.923,0,,os03_p3_T1_slot\Zc_gmres_f1e6.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.013643,2.96375e-09,4439,3713,6.213,0,,os03_p3_T1_slot\Zc_gmres_f1e7.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.031634,2.88927e-09,4439,3713,6.445,0,,os03_p3_T1_slot\Zc_gmres_f1e8.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0465989,2.87152e-09,4439,3713,5.839,0,,os03_p3_T1_slot\Zc_gmres_f3e8.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0617759,2.86355e-09,4439,3713,5.371,0,,os03_p3_T1_slot\Zc_gmres_f1e9.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,100,0.00875348,3.69599e-09,4439,3713,191.619,0,,os03_p3_T1_slot\Zc_lu_f1e2.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,1000,0.0087535,3.69598e-09,4439,3713,164.247,0,,os03_p3_T1_slot\Zc_lu_f1e3.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,10000,0.00875514,3.69473e-09,4439,3713,154.383,0,,os03_p3_T1_slot\Zc_lu_f1e4.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,100000,0.00888787,3.59724e-09,4439,3713,155.025,0,,os03_p3_T1_slot\Zc_lu_f1e5.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,1e+06,0.00997531,3.12252e-09,4439,3713,154.399,0,,os03_p3_T1_slot\Zc_lu_f1e6.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,1e+07,0.013643,2.96375e-09,4439,3713,155.001,0,,os03_p3_T1_slot\Zc_lu_f1e7.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,3e+08,0.0465989,2.87152e-09,4439,3713,154.432,0,,os03_p3_T1_slot\Zc_lu_f3e8.mat
+os03_p3_T1_slot,matched,0.3,3,T1,True,lu,-s ludecomp -a off,1e+09,0.0617759,2.86355e-09,4439,3713,153.776,0,,os03_p3_T1_slot\Zc_lu_f1e9.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00906309,3.73465e-09,4441,3713,2.943,0,,os03_p3_T1_slot_re\Zc_gmres_f1e2.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00906311,3.73465e-09,4441,3713,2.547,0,,os03_p3_T1_slot_re\Zc_gmres_f1e3.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00906466,3.73349e-09,4441,3713,2.777,0,,os03_p3_T1_slot_re\Zc_gmres_f1e4.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00919069,3.64237e-09,4441,3713,3.045,0,,os03_p3_T1_slot_re\Zc_gmres_f1e5.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.0102668,3.18499e-09,4441,3713,4.171,0,,os03_p3_T1_slot_re\Zc_gmres_f1e6.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0139522,3.02495e-09,4441,3713,6.212,0,,os03_p3_T1_slot_re\Zc_gmres_f1e7.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0319322,2.95041e-09,4441,3713,7.048,0,,os03_p3_T1_slot_re\Zc_gmres_f1e8.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0468911,2.93268e-09,4441,3713,7.316,0,,os03_p3_T1_slot_re\Zc_gmres_f3e8.mat
+os03_p3_T1_slot_re,matched,0.3,3,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0620708,2.92471e-09,4441,3713,6.32,0,,os03_p3_T1_slot_re\Zc_gmres_f1e9.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00831747,2.9402e-09,4655,3856,4.465,0,,os03_p3_T1_solid\Zc_gmres_f1e2.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00831749,2.94018e-09,4655,3856,4.321,0,,os03_p3_T1_solid\Zc_gmres_f1e3.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00831952,2.93821e-09,4655,3856,4.609,0,,os03_p3_T1_solid\Zc_gmres_f1e4.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00846706,2.79885e-09,4655,3856,5.197,0,,os03_p3_T1_solid\Zc_gmres_f1e5.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00919964,2.38597e-09,4655,3856,6.489,0,,os03_p3_T1_solid\Zc_gmres_f1e6.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0126983,2.26762e-09,4655,3856,7.851,0,,os03_p3_T1_solid\Zc_gmres_f1e7.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0303246,2.19223e-09,4655,3856,9.363,0,,os03_p3_T1_solid\Zc_gmres_f1e8.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0449039,2.17527e-09,4655,3856,9.833,0,,os03_p3_T1_solid\Zc_gmres_f3e8.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.060159,2.16739e-09,4655,3856,9.492,0,,os03_p3_T1_solid\Zc_gmres_f1e9.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,100,0.00831747,2.9402e-09,4655,3856,225.12,0,,os03_p3_T1_solid\Zc_lu_f1e2.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,1000,0.00831749,2.94018e-09,4655,3856,224.761,0,,os03_p3_T1_solid\Zc_lu_f1e3.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,10000,0.00831952,2.93821e-09,4655,3856,225.528,0,,os03_p3_T1_solid\Zc_lu_f1e4.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,100000,0.00846706,2.79885e-09,4655,3856,225.709,0,,os03_p3_T1_solid\Zc_lu_f1e5.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,1e+06,0.00919964,2.38597e-09,4655,3856,224.812,0,,os03_p3_T1_solid\Zc_lu_f1e6.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,1e+07,0.0126983,2.26762e-09,4655,3856,225.548,0,,os03_p3_T1_solid\Zc_lu_f1e7.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,1e+08,0.0303246,2.19223e-09,4655,3856,60.733,0,,os03_p3_T1_solid\Zc_lu_f1e8.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,3e+08,0.0449039,2.17527e-09,4655,3856,224.57,0,,os03_p3_T1_solid\Zc_lu_f3e8.mat
+os03_p3_T1_solid,matched,0.3,3,T1,False,lu,-s ludecomp -a off,1e+09,0.060159,2.16739e-09,4655,3856,224.262,0,,os03_p3_T1_solid\Zc_lu_f1e9.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00862708,2.98564e-09,4657,3856,6.217,0,,os03_p3_T1_solid_re\Zc_gmres_f1e2.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.0086271,2.98562e-09,4657,3856,6.881,0,,os03_p3_T1_solid_re\Zc_gmres_f1e3.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00862903,2.98376e-09,4657,3856,6.226,0,,os03_p3_T1_solid_re\Zc_gmres_f1e4.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00876979,2.8516e-09,4657,3856,6.925,0,,os03_p3_T1_solid_re\Zc_gmres_f1e5.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00949589,2.45444e-09,4657,3856,6.096,0,,os03_p3_T1_solid_re\Zc_gmres_f1e6.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0130145,2.33441e-09,4657,3856,7.552,0,,os03_p3_T1_solid_re\Zc_gmres_f1e7.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.03064,2.25895e-09,4657,3856,8.806,0,,os03_p3_T1_solid_re\Zc_gmres_f1e8.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0452202,2.24198e-09,4657,3856,9.387,0,,os03_p3_T1_solid_re\Zc_gmres_f3e8.mat
+os03_p3_T1_solid_re,matched,0.3,3,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0604808,2.23409e-09,4657,3856,7.472,0,,os03_p3_T1_solid_re\Zc_gmres_f1e9.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00865436,3.62644e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00865437,3.62642e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00865605,3.62514e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00879141,3.52539e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00993176,3.04198e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0134807,2.86638e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0267638,2.80872e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0398142,2.79499e-09,13729,7063,94.717,0,,x10_p1_T1_slot\Zc_gmres_f3e8.mat
+x10_p1_T1_slot,exact,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0546217,2.78776e-09,13729,7063,319.163,0,,x10_p1_T1_slot\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00828737,2.92697e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00828739,2.92695e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00828945,2.92495e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00843851,2.78298e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00915316,2.36945e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.012105,2.25659e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0254862,2.20124e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0386948,2.18741e-09,14255,7062,97.468,0,,x10_p1_T1_solid\Zc_gmres_f3e8.mat
+x10_p1_T1_solid,exact,0.1,1,T1,False,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0536773,2.18009e-09,14255,7062,417.868,0,,x10_p1_T1_solid\Zc_gmres_sweep.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.0087039,3.66534e-09,13703,7063,67.79,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e2.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00870391,3.66532e-09,13703,7063,132.228,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e3.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.0087056,3.66403e-09,13703,7063,132.905,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e4.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00884143,3.56391e-09,13703,7063,135.491,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e5.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00999002,3.07884e-09,13703,7063,72.115,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e6.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0135597,2.90144e-09,13703,7063,150.142,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e7.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.026842,2.84369e-09,13703,7063,75.501,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e8.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0398902,2.82996e-09,13703,7063,153.3,0,,x10s_long_p1_T1_slot\Zc_gmres_f3e8.mat
+x10s_long_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0546951,2.82272e-09,13703,7063,74.921,0,,x10s_long_p1_T1_slot\Zc_gmres_f1e9.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100,0.00869124,3.69219e-09,13567,7063,66.146,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e2.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1000,0.00869126,3.69217e-09,13567,7063,85.462,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e3.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,10000,0.00869284,3.69096e-09,13567,7063,84.519,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e4.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,100000,0.00882139,3.59708e-09,13567,7063,81.565,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e5.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+06,0.00993218,3.1344e-09,13567,7063,73.59,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e6.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+07,0.0134804,2.96017e-09,13567,7063,74.09,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e7.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+08,0.0267455,2.90259e-09,13567,7063,83.833,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e8.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,3e+08,0.0397763,2.88887e-09,13567,7063,71.987,0,,x10s_wide_p1_T1_slot\Zc_gmres_f3e8.mat
+x10s_wide_p1_T1_slot,exact-variant,0.1,1,T1,True,gmres,-s iterative -m direct -a off -t 1e-7 -c 1000,1e+09,0.0545625,2.88164e-09,13567,7063,84.338,0,,x10s_wide_p1_T1_slot\Zc_gmres_f1e9.mat

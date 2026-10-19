@@ -79,6 +79,15 @@ public class ExtractionTests
         var a = LoopExtraction.ChainOverPlane(chain, new[] { solid }, (-35e-6, 0), f, options);
         var b = LoopExtraction.ChainOverPlane(chain, new[] { slotted }, (-35e-6, 0), f, options);
         _output.WriteLine($"over the solid pour {a.Points[0].Inductance(0, 0) * 1e9:f3} nH, over the slot {b.Points[0].Inductance(0, 0) * 1e9:f3} nH ({a.Filaments} filaments)");
+        // FU-13: the 1.3 holds only on this coarse 0.3 mm grid. Converged on an exact 0.6 × 4 mm slot,
+        // FastHenry puts the physical ratio at 1.267 (ideal ends, 100 MHz). On the same filaments as here
+        // it gives 1.306 with the real end joins this test uses (os03_p3_T1_slot_re / _solid_re, 2.95041 /
+        // 2.25895 nH in References/FU-13/fasthenry/pour/pour_results.csv) and 1.318 with ideal ones, so
+        // the bound has about 0.5 % of margin. Part of the excess over 1.267 comes from dropping every
+        // node whose cell centre is in the slot, which makes it 4.2 mm long (an exact 0.6 × 4.2 mm slot on
+        // a 0.1 mm grid gives 1.292), the rest from the grid itself. OpenSim matches FastHenry on this
+        // grid to 1.1e-5 with ideal ends only: with real ends the far end is not a grid node, and the
+        // diagonal join puts L 0.5 % off (PeecReferenceTests).
         Assert.True(b.Points[0].Inductance(0, 0) > 1.3 * a.Points[0].Inductance(0, 0));
 
         // No copper under an end: refused.
