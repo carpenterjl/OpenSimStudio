@@ -27,32 +27,16 @@ public class StriplineRlgcTests
             traces.Select(t => TraceCrossSection.Copper(t.Center, t.Width)).ToArray(),
             topGround: true);
 
-    /// <summary>Complete elliptic integral of the first kind by the AGM, K = π / (2·AGM(1, k′)),
-    /// taken as a function of the COMPLEMENTARY modulus k′ = √(1 − k²) — for a wide strip
-    /// tanh(πw/2b) rounds to exactly 1 and forming k′ from it would lose everything.</summary>
-    private static double EllipticKOfComplement(double complementaryModulus)
-    {
-        double a = 1, b = complementaryModulus;
-        for (int i = 0; i < 60 && Math.Abs(a - b) > 1e-16 * a; i++)
-            (a, b) = (0.5 * (a + b), Math.Sqrt(a * b));
-        return Math.PI / (2 * a);
-    }
-
     /// <summary>Cohn (1954): zero-thickness strip of width w centred between planes b apart,
-    /// Z0·√εr = 30π·K(k)/K(k′), k = sech(πw/2b), k′ = tanh(πw/2b).</summary>
-    private static double CohnZ0(double w, double b, double epsR)
-    {
-        double x = Math.PI * w / (2 * b);
-        double sech = 1 / Math.Cosh(x), tanh = Math.Tanh(x);
-        return 30 * Math.PI / Math.Sqrt(epsR) * EllipticKOfComplement(tanh) / EllipticKOfComplement(sech);
-    }
+    /// Z0·√εr = (η₀/4)·K(k)/K(k′), k = sech(πw/2b), k′ = tanh(πw/2b) (ExactLines).</summary>
+    private static double CohnZ0(double w, double b, double epsR) => ExactLines.StriplineZ0(w, b, epsR);
 
     [Fact]
     public void CohnFormula_HasItsKnownLimits()
     {
-        // k = k′ = 1/√2 at πw/2b = asinh(1): K/K′ = 1, so Z0√εr = 30π exactly.
+        // k = k′ = 1/√2 at πw/2b = asinh(1): K/K′ = 1, so Z0√εr = η₀/4 exactly.
         double b = 1e-3, w = 2 * b * Math.Asinh(1) / Math.PI;
-        Assert.Equal(30 * Math.PI, CohnZ0(w, b, 1), 1e-9);
+        Assert.Equal(ExactLines.QuarterEta0, CohnZ0(w, b, 1), 1e-9);
         // Wide strip → two parallel plates of height b/2 in parallel, plus fringing:
         // Z0 just below η₀·(b/2)/(2w).
         double wide = CohnZ0(20e-3, 1e-3, 1);

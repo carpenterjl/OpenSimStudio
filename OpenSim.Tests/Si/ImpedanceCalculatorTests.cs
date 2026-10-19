@@ -36,7 +36,7 @@ public class ImpedanceCalculatorTests
 
     /// <summary>Cohn (1955), zero-thickness strips of width w, gap s, centred between planes
     /// b apart: k_e = tanh(πw/2b)·tanh(π(w+s)/2b), k_o = tanh(πw/2b)·coth(π(w+s)/2b),
-    /// Z·√εr = 30π·K(k′)/K(k).</summary>
+    /// Z·√εr = (η₀/4)·K(k′)/K(k) (η₀ = µ₀c; the often-quoted 30π is 0.07 % high).</summary>
     [Theory]
     [InlineData(0.15e-3, 0.15e-3, 0.4e-3, 4.4)]
     [InlineData(0.10e-3, 0.10e-3, 0.4e-3, 3.5)]
@@ -53,8 +53,8 @@ public class ImpedanceCalculatorTests
         }, panelsPerTrace: 64);
 
         double tw = Math.Tanh(Math.PI * w / (2 * b)), tws = Math.Tanh(Math.PI * (w + s) / (2 * b));
-        double even = 30 * Math.PI / Math.Sqrt(epsR) * ComplementRatio(tw * tws);
-        double odd = 30 * Math.PI / Math.Sqrt(epsR) * ComplementRatio(tw / tws);
+        double even = ExactLines.QuarterEta0 / Math.Sqrt(epsR) * ComplementRatio(tw * tws);
+        double odd = ExactLines.QuarterEta0 / Math.Sqrt(epsR) * ComplementRatio(tw / tws);
         // The lossless mode impedances, from L and C alone.
         var l = report.Rlgc.InductanceHenriesPerMeter;
         var c = report.Rlgc.CapacitanceFaradsPerMeter;
@@ -207,7 +207,7 @@ public class ImpedanceCalculatorTests
     /// plane to a half plane with the conductors on [0, a²] and [b², c²] and flux walls
     /// between; two such intervals have C = ε·K(k)/K(k′) with
     /// k = (a/b)·√((1 − b²/c²)/(1 − a²/c²)), four quarters make the line, and
-    /// Z0 = (30π/√ε_eff)·K(k′)/K(k). With the pattern on the face of a thick dielectric the
+    /// Z0 = (η₀/4)/√ε_eff·K(k′)/K(k). With the pattern on the face of a thick dielectric the
     /// field is the same in both halves and ε_eff = (εr + 1)/2 exactly.
     /// The solver always has a plane under the dielectric; here it is fifty times further
     /// away than the pattern is wide.
@@ -228,7 +228,7 @@ public class ImpedanceCalculatorTests
 
         double k = a / b * Math.Sqrt((1 - b * b / (c * c)) / (1 - a * a / (c * c)));
         double epsEff = (epsR + 1) / 2;
-        double expected = 30 * Math.PI / Math.Sqrt(epsEff) * ComplementRatio(k);
+        double expected = ExactLines.QuarterEta0 / Math.Sqrt(epsEff) * ComplementRatio(k);
         double l = report.Rlgc.InductanceHenriesPerMeter[0, 0], cap = report.Rlgc.CapacitanceFaradsPerMeter[0, 0];
         double z0 = Math.Sqrt(l / cap);
         double eps = cap / report.Rlgc.AirCapacitanceFaradsPerMeter[0, 0];

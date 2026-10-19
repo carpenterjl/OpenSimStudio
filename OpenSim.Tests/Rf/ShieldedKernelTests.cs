@@ -212,8 +212,10 @@ public class ShieldedKernelTests
         // lumped L, and a short stub is a large series reactance (−1220 Ω at 0.25 mm) that multiplies
         // any departure from it — measured in one dielectric with four graded cells across:
         // Z₀ 73.8 Ω with a 0.25 mm stub, 64.5 at 0.5, 61.4 at 1.5, 61.3 at 3 (series −136 Ω), against
-        // the exact zero-thickness 60.57 Ω (Cohn's conformal map) and the 2D solver's 60.48. The
-        // remaining 1.3 % is the mesh across the strip, as εeff's 0.3 % is.
+        // the exact zero-thickness 60.52 Ω (Cohn's conformal map with η₀ = µ₀c; 60.57 with the
+        // usual 30π, which Rautio's 1994 paper notes is 0.07 % high — see StriplineStandardTests)
+        // and the 2D solver's 60.48. The remaining 1.3 % is the mesh across the strip, as εeff's
+        // 0.3 % is.
         double f = 3e9, k0 = 2 * Math.PI * f / C0, w = 0.5e-3, below = 0.8e-3, above = 0.8e-3, reference = 50;
         var stackup = new LayeredStackup(new[]
         {
@@ -258,7 +260,7 @@ public class ShieldedKernelTests
 
     /// <summary>K₀(x) = ∫₀^∞ e^{−x cosh t} dt by the trapezoidal rule, which converges
     /// geometrically for this doubly-exponentially decaying integrand.</summary>
-    private static double K0(double x)
+    internal static double K0(double x)
     {
         double end = Math.Acosh(Math.Max(1, 700 / x)) + 1, h = end / 4000, sum = 0.5 * Math.Exp(-x);
         for (int i = 1; i <= 4000; i++) sum += Math.Exp(-x * Math.Cosh(i * h));

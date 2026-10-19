@@ -63,22 +63,6 @@ public class BoardReferencePlaneTests
         },
     };
 
-    private static double EllipticKOfComplement(double complementaryModulus)
-    {
-        double a = 1, b = complementaryModulus;
-        for (int i = 0; i < 60 && Math.Abs(a - b) > 1e-16 * a; i++)
-            (a, b) = (0.5 * (a + b), Math.Sqrt(a * b));
-        return Math.PI / (2 * a);
-    }
-
-    /// <summary>Cohn's exact zero-thickness symmetric stripline impedance.</summary>
-    private static double CohnZ0(double w, double b, double epsR)
-    {
-        double x = Math.PI * w / (2 * b);
-        return 30 * Math.PI / Math.Sqrt(epsR)
-            * EllipticKOfComplement(Math.Tanh(x)) / EllipticKOfComplement(1 / Math.Cosh(x));
-    }
-
     [Fact]
     public void InnerLayerPair_BetweenTwoPlanes_IsExtractedAsStripline()
     {
@@ -113,7 +97,7 @@ public class BoardReferencePlaneTests
 
         const double c0 = 299792458.0;
         double z0 = 1 / (c0 * Math.Sqrt(group.CapacitanceFaradsPerMeter * group.AirCapacitanceFaradsPerMeter));
-        double cohn = CohnZ0(W, 0.4e-3, 4.4);
+        double cohn = ExactLines.StriplineZ0(W, 0.4e-3, 4.4);
         Assert.InRange(cohn, 55, 56);
         Assert.Equal(cohn, z0, 0.02 * cohn);
 
