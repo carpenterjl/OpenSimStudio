@@ -151,18 +151,9 @@ public partial class PcbViewModel
         }
     }
 
-    /// <summary>The stackup as the panel has it (gap thicknesses), or the board's own.</summary>
-    private BoardStackup BuildBoardStackup()
-    {
-        if (_board is null) return new BoardStackup();
-        var fromBoard = BoardStackup.FromBoard(_board);
-        if (DielectricGaps.Count == 0) return fromBoard;
-        return fromBoard with
-        {
-            GapThickness = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.ThicknessMeters),
-            GapPermittivity = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.RelativePermittivity),
-            LayerThickness = LayerFilters.ToDictionary(f => f.LayerOrder, f => f.ThicknessMeters),
-            Source = "from the stackup panel"
-        };
-    }
+    /// <summary>The stackup as the panel has it — the same object every other board
+    /// analysis reads (<see cref="BuildNetMeshOptions"/>), or the board's own before one is
+    /// installed.</summary>
+    internal BoardStackup BuildBoardStackup() =>
+        _board is null ? new BoardStackup() : BuildNetMeshOptions().Stackup with { Source = "from the stackup panel" };
 }

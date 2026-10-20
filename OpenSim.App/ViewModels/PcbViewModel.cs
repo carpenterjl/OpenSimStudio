@@ -132,13 +132,7 @@ public partial class PcbViewModel : ObservableObject
         if (LayerFilters.Count == 0) return new Dictionary<int, double>();
         int minL = LayerFilters.Min(f => f.LayerOrder);
         int maxL = LayerFilters.Max(f => f.LayerOrder);
-        var (layerZ, _) = NetMesher.BuildStackupZ(minL, maxL, new NetMeshOptions
-        {
-            CopperThickness = PcbCopperThickness,
-            LayerThickness = LayerFilters.ToDictionary(f => f.LayerOrder, f => f.ThicknessMeters),
-            DielectricGapThickness = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.ThicknessMeters),
-            DefaultDielectricThickness = PcbBoardThickness
-        });
+        var (layerZ, _) = NetMesher.BuildStackupZ(minL, maxL, BuildNetMeshOptions());
         return layerZ.ToDictionary(kv => kv.Key, kv => (kv.Value.zLo + kv.Value.zHi) / 2);
     }
 
@@ -327,56 +321,73 @@ public partial class PcbViewModel : ObservableObject
                 return (b, BuildPreviewCache(b));
             });
             importTimer.Stop();
-            _board = board;
-            _previewCache = previewCache;
-            _layerZMapCache = null;
-            _inductance.LoadBoard(board, BuildNetMeshOptions);
-            _antenna.LoadBoard(board, BuildNetMeshOptions);
             // GetFileName also yields the folder name for a Gerber directory import —
             // the DC-nets CSV report names its source board with it.
-            _signalIntegrity.LoadBoard(board, BuildNetMeshOptions, Path.GetFileName(archive));
-            _magnetics.LoadBoard(board, BuildNetMeshOptions, Path.GetFileName(archive));
-            _emi.LoadBoard(board, BuildNetMeshOptions, Path.GetFileName(archive));
-
-            _log.Append($"PCB archive: {board.Layers.Count} layers classified " +
-                        $"(import {importTimer.ElapsedMilliseconds} ms).");
-            foreach (var layer in board.Layers)
-                _log.Append($"  • {layer.Type} — {layer.FileName}");
-            foreach (var w in board.Warnings) _log.Append($"PCB: {w}");
-            foreach (var n in board.Notes) _log.Append($"PCB note: {n}");
-
-            // The board workflow is electrical: land in the Electrical workspace and
-            // switch the analysis right away (Joule stays — it includes the electrical
-            // setup); PCB mode hides the generic primitive/material panels.
-            _session.ActiveWorkspace = WorkspaceKind.Electrical;
-            _session.IsPcbMode = true;
-            if (_session.SelectedAnalysis.Kind is not (AnalysisType.Electrical or AnalysisType.JouleCoupled))
-                _session.SelectedAnalysis = AnalysisOption.All.First(o => o.Kind == AnalysisType.Electrical);
-
-            // Reset to a board-preview state: no active FE body, so clicks pick nets.
-            _session.Body = new Body { Name = "Board preview" };
-            PopulateNets(board);
-            SelectedNet = null;
-            SelectedNetRow = null;
-            ShowCopperPreview = true;
-            RefreshCopperPreview();
-            // Board profile at z = 0, the bottom of the stackup the layers sit above.
-            BoardOutlinePoints = SceneBuilder.BuildOutline(board.Outline);
-            ShowBoardOutline = true;
-            SelectedNetOutlines = new Point3DCollection();
-            BoardInfo = $"{board.Nets.Count} nets, {board.Islands.Count} copper islands, " +
-                        $"{board.Vias.Count(v => v.Plated)} plated vias";
-
-            // The FE scene stays empty until a net is meshed; these events clear the
-            // previous body's conditions/results/scene and refit the view.
-            _session.RaiseGeometryReplaced(leavingPcbMode: false);
-            _session.RaiseMeshChanged();
-
-            _log.Append($"Board imported. {board.Nets.Count} nets found — select a net and click " +
-                        "\"Mesh selected net\" to simulate it.");
+            InstallBoard(board, previewCache, Path.GetFileName(archive), importTimer.ElapsedMilliseconds);
         }
         catch (Exception ex) { _session.ReportError(ex); }
         finally { _session.IsBusy = false; _session.StatusText = "Ready"; }
+    }
+
+    /// <summary>Installs an already-read board: the test seam behind
+    /// <see cref="ImportPcbAsync"/>, which only adds the file dialog and the reading.</summary>
+    internal void InstallBoard(PcbBoard board, string sourceName) =>
+        InstallBoard(board, BuildPreviewCache(board), sourceName);
+
+    /// <summary>Makes <paramref name="board"/> the panel's board: seeds the net, layer
+    /// and gap rows, hands the board (with the options builder, so every analysis reads
+    /// the panel's stackup) to the inductance, antenna, SI, magnetics and EMI view models,
+    /// and resets the session to the board-preview state. The rows are seeded BEFORE the
+    /// hand-off: the antenna view model reads the options once at load to seed its
+    /// substrate, so it must see this board's stackup, not the previous board's rows.</summary>
+    private void InstallBoard(PcbBoard board, Dictionary<(int NetId, int LayerOrder), GeometryModel3D> previewCache,
+        string sourceName, long? importMilliseconds = null)
+    {
+        _board = board;
+        _previewCache = previewCache;
+        _layerZMapCache = null;
+        PopulateNets(board);
+        _inductance.LoadBoard(board, BuildNetMeshOptions);
+        _antenna.LoadBoard(board, BuildNetMeshOptions);
+        _signalIntegrity.LoadBoard(board, BuildNetMeshOptions, sourceName);
+        _magnetics.LoadBoard(board, BuildNetMeshOptions, sourceName);
+        _emi.LoadBoard(board, BuildNetMeshOptions, sourceName);
+
+        _log.Append($"PCB archive: {board.Layers.Count} layers classified" +
+                    (importMilliseconds is { } ms ? $" (import {ms} ms)." : "."));
+        foreach (var layer in board.Layers)
+            _log.Append($"  • {layer.Type} — {layer.FileName}");
+        foreach (var w in board.Warnings) _log.Append($"PCB: {w}");
+        foreach (var n in board.Notes) _log.Append($"PCB note: {n}");
+
+        // The board workflow is electrical: land in the Electrical workspace and
+        // switch the analysis right away (Joule stays — it includes the electrical
+        // setup); PCB mode hides the generic primitive/material panels.
+        _session.ActiveWorkspace = WorkspaceKind.Electrical;
+        _session.IsPcbMode = true;
+        if (_session.SelectedAnalysis.Kind is not (AnalysisType.Electrical or AnalysisType.JouleCoupled))
+            _session.SelectedAnalysis = AnalysisOption.All.First(o => o.Kind == AnalysisType.Electrical);
+
+        // Reset to a board-preview state: no active FE body, so clicks pick nets.
+        _session.Body = new Body { Name = "Board preview" };
+        SelectedNet = null;
+        SelectedNetRow = null;
+        ShowCopperPreview = true;
+        RefreshCopperPreview();
+        // Board profile at z = 0, the bottom of the stackup the layers sit above.
+        BoardOutlinePoints = SceneBuilder.BuildOutline(board.Outline);
+        ShowBoardOutline = true;
+        SelectedNetOutlines = new Point3DCollection();
+        BoardInfo = $"{board.Nets.Count} nets, {board.Islands.Count} copper islands, " +
+                    $"{board.Vias.Count(v => v.Plated)} plated vias";
+
+        // The FE scene stays empty until a net is meshed; these events clear the
+        // previous body's conditions/results/scene and refit the view.
+        _session.RaiseGeometryReplaced(leavingPcbMode: false);
+        _session.RaiseMeshChanged();
+
+        _log.Append($"Board imported. {board.Nets.Count} nets found — select a net and click " +
+                    "\"Mesh selected net\" to simulate it.");
     }
 
     /// <summary>One frozen ribbon model per (net, layer): the pieces every later
@@ -426,53 +437,27 @@ public partial class PcbViewModel : ObservableObject
         DielectricGaps.Clear();
         _soloSnapshot = null;
 
-        var layerNames = board.Layers
-            .Where(l => l.CopperOrder > 0)
-            .GroupBy(l => l.CopperOrder)
-            .ToDictionary(g => g.Key, g => g.First().FileName);
-        // Every copper layer of the board gets a row, including one with no copper on it:
-        // it still occupies its place in the stack, and without rows for it and its gaps
-        // the z model would fall back to a whole-board-thick default gap there.
-        var orders = board.Islands.Select(i => i.LayerOrder)
-            .Concat(layerNames.Keys)
-            .Distinct().OrderBy(o => o).ToList();
-        foreach (var order in orders)
+        // The rows come from StackupPanel.Seed (OpenSim.Pcb): every copper layer of the
+        // board, including one with no copper on it, and one gap between each adjacent
+        // pair — from the file's stackup (IPC-2581) where it has one, else from the two
+        // boxes. The board box takes the file's thickness when the file carries gaps.
+        var seed = StackupPanel.Seed(board, PcbCopperThickness, PcbBoardThickness);
+        PcbBoardThickness = seed.BoardThickness;
+        foreach (var layer in seed.Layers)
         {
-            // IPC-2581 names its layers and declares per-layer copper thickness; Gerber
-            // has neither, so fall back to "L{n}" and the copper box's value.
-            var filter = new LayerFilter(order, board.Stackup is null
-                ? null : layerNames.GetValueOrDefault(order));
-            if (board.Stackup is not null && order - 1 < board.Stackup.CopperLayerThicknesses.Count)
-                filter.ThicknessMicrons = board.Stackup.CopperLayerThicknesses[order - 1] * 1e6;
-            else if (PcbCopperThickness > 0)
-                filter.ThicknessMicrons = PcbCopperThickness * 1e6;
+            var filter = new LayerFilter(layer.LayerOrder, layer.Name) { ThicknessMicrons = layer.ThicknessMeters * 1e6 };
             filter.PropertyChanged += OnLayerFilterChanged;
             LayerFilters.Add(filter);
         }
-
-        // One editable dielectric gap between each adjacent copper-layer pair, seeded from
-        // the file's stackup when it has one (IPC-2581), else by splitting the board
-        // thickness evenly across the gaps.
-        if (board.Stackup is not null && board.Stackup.DielectricGapThicknesses.Count > 0)
-            PcbBoardThickness = board.Stackup.BoardThickness;
-        int gapCount = Math.Max(1, orders.Count - 1);
-        double defaultGapMicrons = PcbBoardThickness / gapCount * 1e6;
-        for (int i = 0; i + 1 < orders.Count; i++)
+        foreach (var g in seed.Gaps)
         {
-            var gaps = board.Stackup?.DielectricGapThicknesses;
-            double microns = gaps is not null && orders[i] - 1 < gaps.Count
-                ? gaps[orders[i] - 1] * 1e6
-                : defaultGapMicrons;
-            // RF materials: from the file's stackup when it names them, else FR4 (the gap
-            // ctor's default). Index matches the thickness list — one entry per gap.
-            var perms = board.Stackup?.DielectricGapPermittivities;
-            var losses = board.Stackup?.DielectricGapLossTangents;
-            double eps = perms is not null && orders[i] - 1 < perms.Count ? perms[orders[i] - 1] : 4.4;
-            double tand = losses is not null && orders[i] - 1 < losses.Count ? losses[orders[i] - 1] : 0.02;
-            var gap = new DielectricGap(orders[i], microns, eps, tand);
+            var gap = new DielectricGap(g.UpperLayerOrder, g.ThicknessMeters * 1e6, g.RelativePermittivity, g.LossTangent);
             gap.PropertyChanged += OnDielectricGapChanged;
             DielectricGaps.Add(gap);
         }
+        // The board-box write above may have cached a z-map over the half-built rows
+        // (synchronously, when there is no dispatcher): the next recompose rebuilds it.
+        _layerZMapCache = null;
         foreach (var net in board.Nets)
         {
             var row = new NetRow(net);
@@ -640,60 +625,31 @@ public partial class PcbViewModel : ObservableObject
         finally { _session.IsBusy = false; _session.StatusText = "Ready"; }
     }
 
-    /// <summary>The stackup persisted with the project: copper/board thickness plus the
-    /// per-gap thicknesses AND RF materials (εr/tanδ), indexed by (UpperLayerOrder − 1) so
-    /// the import seeder reads them back at the same index. Empty when there are no gaps.</summary>
-    private PcbStackupSettings BuildStackupSettings()
-    {
-        int maxOrder = DielectricGaps.Count == 0 ? 0 : DielectricGaps.Max(g => g.UpperLayerOrder);
-        if (maxOrder == 0)
-            return new PcbStackupSettings
-            {
-                CopperThickness = PcbCopperThickness,
-                BoardThickness = PcbBoardThickness
-            };
-        var thick = new double[maxOrder];
-        var perm = new double[maxOrder];
-        var loss = new double[maxOrder];
-        for (int i = 0; i < maxOrder; i++)
-        {
-            thick[i] = PcbBoardThickness / maxOrder;   // benign default for any unlisted gap
-            perm[i] = 4.4;
-            loss[i] = 0.02;
-        }
-        foreach (var g in DielectricGaps)
-        {
-            int idx = g.UpperLayerOrder - 1;
-            thick[idx] = g.ThicknessMeters;
-            perm[idx] = g.RelativePermittivity;
-            loss[idx] = g.LossTangent;
-        }
-        return new PcbStackupSettings
-        {
-            CopperThickness = PcbCopperThickness,
-            BoardThickness = PcbBoardThickness,
-            DielectricGapThicknesses = thick,
-            DielectricGapPermittivities = perm,
-            DielectricGapLossTangents = loss
-        };
-    }
+    /// <summary>The panel's copper rows as the plain records <see cref="StackupPanel"/> reads.</summary>
+    private List<PanelCopperRow> CopperRows() =>
+        LayerFilters.Select(f => new PanelCopperRow(f.LayerOrder, f.ThicknessMeters)).ToList();
+
+    /// <summary>The panel's gap rows as the plain records <see cref="StackupPanel"/> reads.</summary>
+    private List<PanelGapRow> GapRows() =>
+        DielectricGaps.Select(g => new PanelGapRow(g.UpperLayerOrder, g.ThicknessMeters, g.RelativePermittivity, g.LossTangent))
+            .ToList();
+
+    /// <summary>The stackup persisted with the project and handed to the board thermal
+    /// mesher: the two boxes plus per-layer copper and per-gap thickness and RF materials
+    /// (εr/tanδ), indexed by (order − 1) so the import seeder reads them back at the same
+    /// index (<see cref="StackupPanel.ToSettings"/>).</summary>
+    internal PcbStackupSettings BuildStackupSettings() =>
+        StackupPanel.ToSettings(PcbCopperThickness, PcbBoardThickness, CopperRows(), GapRows());
 
     /// <summary>The options every board analysis shares — the net mesher, the copper
     /// preview, the inductance chain builder, and (through
     /// <see cref="NetMeshOptions.Stackup"/>) the SI, capacitance and antenna paths. One
     /// stackup: where copper is drawn, meshed and composed for PEEC is the same place,
-    /// over the same dielectric the transmission-line and antenna solves use.</summary>
-    private NetMeshOptions BuildNetMeshOptions() => new()
-    {
-        TargetEdgeLength = _meshing.TargetEdgeLength,
-        CopperThickness = PcbCopperThickness,
-        LayerThickness = LayerFilters.ToDictionary(f => f.LayerOrder, f => f.ThicknessMeters),
-        DielectricGapThickness = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.ThicknessMeters),
-        DielectricGapPermittivity = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.RelativePermittivity),
-        DielectricGapLossTangent = DielectricGaps.ToDictionary(g => g.UpperLayerOrder, g => g.LossTangent),
-        DefaultDielectricThickness = PcbBoardThickness,
-        ViaPlatingThickness = ViaPlatingMicrons * 1e-6
-    };
+    /// over the same dielectric the transmission-line and antenna solves use
+    /// (<see cref="StackupPanel.ToMeshOptions"/>).</summary>
+    internal NetMeshOptions BuildNetMeshOptions() =>
+        StackupPanel.ToMeshOptions(PcbCopperThickness, PcbBoardThickness, CopperRows(), GapRows(),
+            _meshing.TargetEdgeLength, ViaPlatingMicrons * 1e-6);
 
     /// <summary>Hands the meshed net's 3D trace-chain builder to the electrodes view
     /// model for the lumped AC impedance estimate. A builder delegate, not a one-shot

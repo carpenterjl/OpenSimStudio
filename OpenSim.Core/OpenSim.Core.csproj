@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="OpenSim.Tests" />
+    <InternalsVisibleTo Include="OpenSim.App.Tests" />
   </ItemGroup>
 
 </Project>
