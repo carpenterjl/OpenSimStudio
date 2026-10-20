@@ -8,10 +8,13 @@ namespace OpenSim.Tests.Pcb;
 
 public class MacroExpressionTests
 {
-    private static IReadOnlyList<MacroPrimitive> Eval(string body, params double[] parameters)
+    private static IReadOnlyList<MacroPrimitive> Eval(string body, params double[] parameters) =>
+        Eval(new List<string>(), body, parameters);
+
+    private static IReadOnlyList<MacroPrimitive> Eval(List<string> warnings, string body, params double[] parameters)
     {
         var statements = body.Split('*', StringSplitOptions.RemoveEmptyEntries);
-        return MacroEvaluator.Evaluate(new MacroDefinition("TEST", statements), parameters, 1e-3, new List<string>());
+        return MacroEvaluator.Evaluate(new MacroDefinition("TEST", statements), parameters, 1e-3, warnings);
     }
 
     private static double CircleDiameterMm(string expression, params double[] parameters)
@@ -40,13 +43,87 @@ public class MacroExpressionTests
         Assert.Equal(1.5e-3, circle.Diameter, 12);
     }
 
+    // Gerber Layer Format Specification, Revision 2026.05, 4.5.4.2 (p. 74), the variable
+    // rules verbatim in OpenSim.Tests/References/FU-20/README.md: $1…$n are the AD
+    // command's n parameters, undefined variables are 0, a variable cannot be redefined.
+    // PCB-19 / FU-20: the evaluator used to throw on an undefined $n.
+
     [Fact]
-    public void UndefinedVariable_AndDivisionByZero_ThrowWithContext()
+    public void UndefinedVariable_ReadsZero_AndWarnsOnce()
     {
-        var undefined = Assert.Throws<InvalidDataException>(() => Eval("1,1,$4,0,0*"));
-        Assert.Contains("TEST", undefined.Message);
-        Assert.Contains("$4", undefined.Message);
-        Assert.Throws<InvalidDataException>(() => Eval("1,1,1/0,0,0*"));
+        var warnings = new List<string>();
+        // $4 appears twice (diameter and X); $1 is supplied. One warning, not two.
+        var circle = Assert.IsType<MacroCircle>(Assert.Single(Eval(warnings, "1,1,$1+$4,$4,0*", 2.0)));
+        Assert.Equal(2.0e-3, circle.Diameter, 12);
+        Assert.Equal(0.0, circle.Center.X, 12);
+
+        var warning = Assert.Single(warnings);
+        Assert.Contains("TEST", warning);
+        Assert.Contains("$4", warning);
+        Assert.Contains("4.5.4.2", warning);
+        Assert.Contains("$4 is undefined", warning);
+        Assert.DoesNotContain("$1 is undefined", warning);
+    }
+
+    [Fact]
+    public void UndefinedVariable_InAnAssignment_ReadsZero()
+    {
+        // $5 = $4 x 0.25 with $4 unsupplied: $4 reads 0, so $5 = 0 and the circle has no size.
+        var warnings = new List<string>();
+        var circle = Assert.IsType<MacroCircle>(Assert.Single(Eval(warnings, "$5=$4x0.25*1,1,$5,0,0*", 0.02)));
+        Assert.Equal(0.0, circle.Diameter, 12);
+        Assert.Contains("$4", Assert.Single(warnings));
+    }
+
+    [Fact]
+    public void SpecExample_Donutcal_ParametersAndNewVariable()
+    {
+        // Spec 4.5.4.2 worked example: %AMDONUTCAL* 1,1,$1,$2,$3* $5=$4x0.25* 1,0,$5,$2,$3*%
+        // with %ADD35DONUTCAL,0.020X0X0X0.06*% → $1 = 0.02, $2 = 0, $3 = 0, $4 = 0.06,
+        // $5 = 0.06 × 0.25 = 0.015. Nothing is undefined, so no warning.
+        var warnings = new List<string>();
+        var primitives = Eval(warnings, "1,1,$1,$2,$3*$5=$4x0.25*1,0,$5,$2,$3*", 0.020, 0, 0, 0.06);
+        Assert.Empty(warnings);
+        Assert.Equal(2, primitives.Count);
+
+        var outer = Assert.IsType<MacroCircle>(primitives[0]);
+        Assert.True(outer.Exposure);
+        Assert.Equal(0.020e-3, outer.Diameter, 15);
+        Assert.Equal(0.0, outer.Center.X, 15);
+        Assert.Equal(0.0, outer.Center.Y, 15);
+
+        var inner = Assert.IsType<MacroCircle>(primitives[1]);
+        Assert.False(inner.Exposure);
+        Assert.Equal(0.015e-3, inner.Diameter, 15);
+    }
+
+    [Fact]
+    public void RedefinedVariable_Throws()
+    {
+        // Spec 4.5.4.2: a redefinition makes the file invalid — a new variable, and an AD parameter.
+        var twice = Assert.Throws<InvalidDataException>(() => Eval("$3=$1x0.75*$3=1*1,1,$3,0,0*", 2.0));
+        Assert.Contains("$3", twice.Message);
+        Assert.Contains("TEST", twice.Message);
+        var parameter = Assert.Throws<InvalidDataException>(() => Eval("$1=2*1,1,$1,0,0*", 1.0));
+        Assert.Contains("$1", parameter.Message);
+    }
+
+    [Fact]
+    public void DivisionByZero_ThrowsWithContext()
+    {
+        var ex = Assert.Throws<InvalidDataException>(() => Eval("1,1,1/0,0,0*"));
+        Assert.Contains("TEST", ex.Message);
+    }
+
+    [Fact]
+    public void DollarZero_IsNotAVariable()
+    {
+        // Spec 4.5 (p. 59) and the grammar (p. 39): a name is '$' + an integer > 0, so $0
+        // is malformed, not an undefined variable that reads 0.
+        var warnings = new List<string>();
+        Assert.Throws<InvalidDataException>(() => Eval(warnings, "1,1,$0,0,0*"));
+        Assert.Throws<InvalidDataException>(() => Eval(warnings, "$0=1*1,1,1,0,0*"));
+        Assert.Empty(warnings);
     }
 
     [Fact]
@@ -158,6 +235,41 @@ public class MacroGeometryTests
         // 90° rotation about the origin maps vertex (1.0, 0) → (0, 1.0).
         Assert.Equal(0.0, triangle.Vertices[1].X, 12);
         Assert.Equal(1.0e-3, triangle.Vertices[1].Y, 12);
+    }
+
+    [Fact]
+    public void ShortAdCommand_ParsesWithZeroedVariables_AndWarnsPerVariable()
+    {
+        // Spec 4.5.5.2's DONUTVAR body (1,1,$1,$2,$3* 1,0,$4,$2,$3*) called with one AD
+        // parameter instead of its four (the spec's call is ,0.100X0X0X0.080): $2, $3, $4
+        // read 0 — an on-circle of 0.100 at the origin and an off-circle of no size — and
+        // the import succeeds with one warning per missing variable (PCB-19 used to fail it).
+        var doc = new GerberParser().Parse(
+            "%FSLAX46Y46*%\n%MOMM*%\n%AMDONUTVAR*\n1,1,$1,$2,$3*\n1,0,$4,$2,$3*%\n" +
+            "%ADD34DONUTVAR,0.100*%\nD34*\nX0Y0D03*\nM02*");
+
+        var macro = Assert.IsType<MacroAperture>(doc.Apertures[34]);
+        Assert.Equal(2, macro.Primitives.Count);
+        var on = Assert.IsType<MacroCircle>(macro.Primitives[0]);
+        Assert.Equal(0.100e-3, on.Diameter, 15);
+        Assert.Equal(0.0, on.Center.X, 15);
+        Assert.Equal(0.0, on.Center.Y, 15);
+        var off = Assert.IsType<MacroCircle>(macro.Primitives[1]);
+        Assert.Equal(0.0, off.Diameter, 15);
+        Assert.Equal(0.100e-3, macro.BoundingSize, 15);
+
+        var undefined = doc.Warnings.Where(w => w.Contains("DONUTVAR") && w.Contains("undefined")).ToList();
+        Assert.Equal(3, undefined.Count);
+        foreach (var name in new[] { "$2", "$3", "$4" })
+            Assert.Single(undefined, w => w.Contains(name + " "));
+
+        // The spec's own four-parameter call defines everything: no warning at all.
+        var full = new GerberParser().Parse(
+            "%FSLAX46Y46*%\n%MOMM*%\n%AMDONUTVAR*\n1,1,$1,$2,$3*\n1,0,$4,$2,$3*%\n" +
+            "%ADD34DONUTVAR,0.100X0X0X0.080*%\nM02*");
+        Assert.Empty(full.Warnings);
+        Assert.Equal(0.080e-3, Assert.IsType<MacroCircle>(
+            Assert.IsType<MacroAperture>(full.Apertures[34]).Primitives[1]).Diameter, 15);
     }
 
     [Fact]

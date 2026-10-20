@@ -10,8 +10,11 @@ namespace OpenSim.Pcb.Gerber;
 /// primitives 0 (comment), 1, 4, 5, 20, 21, 7, moiré 6 as a warned circle
 /// approximation, in-macro variable assignments ($n=expr), and arithmetic
 /// expressions with + − x/X / (unary ±, parentheses, $n substitution).
-/// An undefined $n or a division by zero throws — a parameter silently becoming 0
-/// would be a silent misrender.
+/// Variable rules follow spec 4.5.4.2 (Revision 2026.05, p. 74): $1…$n take the AD
+/// command's n parameters, an assignment defines a new one, an undefined $n reads 0,
+/// and redefining a variable makes the file invalid. The 0 is reported as a warning
+/// (not an error — the file is valid) so a short %AD does not become a silent
+/// misrender; a redefinition or a division by zero throws.
 /// </summary>
 public static class MacroEvaluator
 {
@@ -22,6 +25,16 @@ public static class MacroEvaluator
         for (int i = 0; i < parameters.Count; i++)
             variables[i + 1] = parameters[i];                     // $1 is the first AD parameter
 
+        // Spec 4.5.4.2: "Undefined variables are 0." Warn once per variable per
+        // evaluation — a short %AD is the usual cause and the user should see it.
+        var reported = new HashSet<int>();
+        void Undefined(string statement, int index)
+        {
+            if (reported.Add(index))
+                warnings.Add($"Macro '{macro.Name}', statement '{statement}*': ${index} is undefined and " +
+                             $"reads 0 (Gerber spec 4.5.4.2); the %AD command supplies {parameters.Count} parameter(s).");
+        }
+
         var primitives = new List<MacroPrimitive>();
         foreach (var statement in macro.BodyStatements)
         {
@@ -30,10 +43,14 @@ public static class MacroEvaluator
             if (statement[0] == '$')                              // variable assignment: $4=$1x0.75
             {
                 int eq = statement.IndexOf('=');
-                if (eq < 2 || !int.TryParse(statement[1..eq], NumberStyles.None, CultureInfo.InvariantCulture, out int index))
+                if (eq < 2 || !int.TryParse(statement[1..eq], NumberStyles.None, CultureInfo.InvariantCulture, out int index)
+                    || index == 0)                                // a name is '$' + an integer > 0 (spec 4.5)
                     throw Error(macro, statement, "malformed variable assignment");
+                if (variables.ContainsKey(index))                 // spec 4.5.4.2: redefinition → invalid file
+                    throw Error(macro, statement,
+                        $"macro variable ${index} is already defined; the specification (4.5.4.2) forbids redefining one");
                 variables[index] = MacroExpression.Evaluate(statement[(eq + 1)..], variables,
-                    reason => Error(macro, statement, reason));
+                    reason => Error(macro, statement, reason), i => Undefined(statement, i));
                 continue;
             }
 
@@ -49,7 +66,7 @@ public static class MacroEvaluator
             double[] p = new double[fields.Length - 1];
             for (int i = 1; i < fields.Length; i++)
                 p[i - 1] = MacroExpression.Evaluate(fields[i], variables,
-                    reason => Error(macro, statement, reason));
+                    reason => Error(macro, statement, reason), index => Undefined(statement, index));
 
             primitives.Add(BuildPrimitive(macro, statement, code, p, unitScale, warnings));
         }
@@ -179,41 +196,42 @@ public static class MacroEvaluator
 
 /// <summary>
 /// Recursive-descent evaluator for macro arithmetic (spec 4.5.4): decimals, $n,
-/// binary + − x X / with the usual precedence, unary ±, parentheses.
+/// binary + − x X / with the usual precedence, unary ±, parentheses. An undefined
+/// $n evaluates to 0 (spec 4.5.4.2) and is reported through <c>undefined</c>.
 /// </summary>
 internal static class MacroExpression
 {
     public static double Evaluate(string text, IReadOnlyDictionary<int, double> variables,
-        Func<string, Exception> error)
+        Func<string, Exception> error, Action<int> undefined)
     {
         int pos = 0;
-        double value = ParseSum(text, ref pos, variables, error);
+        double value = ParseSum(text, ref pos, variables, error, undefined);
         if (pos != text.Length)
             throw error($"unexpected '{text[pos]}' in expression '{text}'");
         return value;
     }
 
     private static double ParseSum(string s, ref int pos, IReadOnlyDictionary<int, double> vars,
-        Func<string, Exception> error)
+        Func<string, Exception> error, Action<int> undefined)
     {
-        double value = ParseProduct(s, ref pos, vars, error);
+        double value = ParseProduct(s, ref pos, vars, error, undefined);
         while (pos < s.Length && (s[pos] == '+' || s[pos] == '-'))
         {
             char op = s[pos++];
-            double rhs = ParseProduct(s, ref pos, vars, error);
+            double rhs = ParseProduct(s, ref pos, vars, error, undefined);
             value = op == '+' ? value + rhs : value - rhs;
         }
         return value;
     }
 
     private static double ParseProduct(string s, ref int pos, IReadOnlyDictionary<int, double> vars,
-        Func<string, Exception> error)
+        Func<string, Exception> error, Action<int> undefined)
     {
-        double value = ParseFactor(s, ref pos, vars, error);
+        double value = ParseFactor(s, ref pos, vars, error, undefined);
         while (pos < s.Length && (s[pos] is 'x' or 'X' or '/'))
         {
             char op = s[pos++];
-            double rhs = ParseFactor(s, ref pos, vars, error);
+            double rhs = ParseFactor(s, ref pos, vars, error, undefined);
             if (op == '/')
             {
                 if (rhs == 0) throw error($"division by zero in expression '{s}'");
@@ -228,16 +246,16 @@ internal static class MacroExpression
     }
 
     private static double ParseFactor(string s, ref int pos, IReadOnlyDictionary<int, double> vars,
-        Func<string, Exception> error)
+        Func<string, Exception> error, Action<int> undefined)
     {
         if (pos >= s.Length) throw error($"expression '{s}' ended unexpectedly");
         char c = s[pos];
-        if (c == '+') { pos++; return ParseFactor(s, ref pos, vars, error); }
-        if (c == '-') { pos++; return -ParseFactor(s, ref pos, vars, error); }
+        if (c == '+') { pos++; return ParseFactor(s, ref pos, vars, error, undefined); }
+        if (c == '-') { pos++; return -ParseFactor(s, ref pos, vars, error, undefined); }
         if (c == '(')
         {
             pos++;
-            double inner = ParseSum(s, ref pos, vars, error);
+            double inner = ParseSum(s, ref pos, vars, error, undefined);
             if (pos >= s.Length || s[pos] != ')') throw error($"missing ')' in expression '{s}'");
             pos++;
             return inner;
@@ -249,8 +267,13 @@ internal static class MacroExpression
             while (pos < s.Length && char.IsDigit(s[pos])) pos++;
             if (pos == start) throw error($"'$' without a variable number in expression '{s}'");
             int index = int.Parse(s[start..pos], System.Globalization.CultureInfo.InvariantCulture);
+            if (index == 0)                                       // not a variable name (spec 4.5: integer > 0)
+                throw error($"'$0' is not a macro variable name in expression '{s}'");
             if (!vars.TryGetValue(index, out double value))
-                throw error($"undefined macro variable ${index}");
+            {
+                undefined(index);                                 // spec 4.5.4.2: undefined variables are 0
+                return 0;
+            }
             return value;
         }
         if (char.IsDigit(c) || c == '.')
