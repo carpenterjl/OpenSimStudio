@@ -198,6 +198,7 @@ public class Ipc2152CouponTests
     /// imply — on the conservative side.
     /// </summary>
     [Theory]
+    [Trait("Category", "Slow")]
     [InlineData(2.0, 3, 10.0, 1.118)]      // 2 oz, 100 mil, 10 A: the fit's 40 °C, Brooks & Adam's own worked example
     [InlineData(3.0, 3, 10.0, 1.102)]      // 3 oz, 100 mil, 10 A: the other chart the fit was made from (26.6 °C)
     public void ExternalTrace_InStillAir_RisesAsTheIpcChartsSay(double ounces, int conductor, double amps, double measuredRatio)
@@ -223,6 +224,7 @@ public class Ipc2152CouponTests
     /// range for external traces is 10 at low temperature to about 14 at high).
     /// </summary>
     [Fact]
+    [Trait("Category", "Slow")]
     public void ExternalTrace_WithThePapersFilm_RisesAsTheIpcChartsSay()
     {
         var film = new BoundaryCondition[]

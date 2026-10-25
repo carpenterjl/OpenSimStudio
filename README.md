@@ -52,7 +52,8 @@ Requirements: Windows, [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet
 
 ```
 dotnet build OpenSimStudio.sln          # build everything
-dotnet test  OpenSim.Tests              # run the full test + regression-benchmark suite
+dotnet test  OpenSim.Tests              # run the test + regression-benchmark suite (minus the slow gates)
+dotnet test  OpenSim.Tests -c Release --settings OpenSim.Tests/slow.runsettings   # the slow reference gates
 dotnet run   --project OpenSim.App      # launch the app
 ```
 

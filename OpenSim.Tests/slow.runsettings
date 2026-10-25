@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The slow reference gates only (the tests tagged [Trait("Category", "Slow")]), in place of
+  default.runsettings:
+      dotnet test OpenSim.Tests -c Release - -settings OpenSim.Tests/slow.runsettings   (two dashes)
+  Release is the sensible configuration; these take tens of minutes each in Debug.
+-->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>Category=Slow</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

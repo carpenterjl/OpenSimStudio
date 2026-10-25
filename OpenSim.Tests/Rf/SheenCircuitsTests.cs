@@ -148,6 +148,7 @@ public class SheenCircuitsTests
     // (its depth a lower bound); and the FD-TD |S21| null near 8 GHz, below the plot: the centre of its
     // −40 dB crossings.
     [Theory]
+    [Trait("Category", "Slow")]
     [InlineData(Feature.Corner, 5.55, 5.60, 5.551, 5.600, 0.01, 0.005, double.NaN)]
     [InlineData(Feature.ReflectionNull, 4.95, 5.05, 4.977, 5.004, 0.01, 0.005, -26.5)]
     [InlineData(Feature.TransmissionNull, 7.0, 7.1, 6.939, double.NaN, 0.025, double.NaN, -29.6)]
@@ -217,6 +218,7 @@ public class SheenCircuitsTests
     }
 
     [Fact]
+    [Trait("Category", "Slow")]
     public void TheLineFedPatch_ResonatesWhereItWasMeasured()
     {
         // Fig. 4.14's measured markers at 2.25 and 2.30 GHz (117.284 + j192.547 and 118.378 − j180.379 Ω,

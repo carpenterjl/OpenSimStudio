@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Picked up by every `dotnet test OpenSim.Tests` through RunSettingsFilePath in the project file.
+  The ordinary run leaves out the tests tagged [Trait("Category", "Slow")] - the reference
+  gates that take minutes to tens of minutes each in Debug (the IPC-2152 coupon, the Rautio
+  stripline standard, Sheen's circuits). A -filter given on the command line is ANDed with
+  this one (vstest combines them: `(Category!=Slow)&(yours)`), so a filter of your own still
+  leaves the slow tests out, and `Category=Slow` on the command line selects nothing. To run
+  the slow tests, replace this file with slow.runsettings:
+      dotnet test OpenSim.Tests -c Release - -settings OpenSim.Tests/slow.runsettings   (two dashes)
+-->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>Category!=Slow</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

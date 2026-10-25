@@ -119,6 +119,7 @@ public class StriplineStandardTests
         100 * s[0, 0].Magnitude + Math.Abs(90 + s[1, 0].Phase * 180 / Math.PI) / 0.9;
 
     [Theory]
+    [Trait("Category", "Slow")]
     [InlineData(2, true, 5.9955)]
     [InlineData(4, true, 2.2373)]
     [InlineData(4, false, 3.5384)]
