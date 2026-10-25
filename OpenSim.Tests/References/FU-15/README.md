@@ -300,3 +300,37 @@ The test also checks the two reference values its rule gives (2.2747 and 2.2856 
 - MATLAB's .mat files, logs, full sweeps and Touchstone files, its plots, and `run_ml.ps1`.
 - `make_all.ps1`'s console files `filter_features_console.txt`, `filter_mesh_points_console.txt` and
   `patch_features_console.txt` (only `convergence_console.txt` is kept), and `digi.py`'s `fig*_shortcomps.json`.
+
+### TC-1 (2026-10-25): cause isolated
+
+Data: `opensim/calibration_drift_2026-10-25.txt` (every pair of nine line lengths on three meshes at
+3 and 5.55 GHz, each line's raw S, and the cells the mesher laid next to each port).
+
+The two lines are not the same line twice. Two mechanisms, both in the mesh, both amplified by the
+calibration:
+
+1. **The port neighbourhoods differ.** `SheetMetalAssembly` grades each grid interval by marching
+   from its start with cells of min(hMax, hMin + (growth - 1) x distance to the nearer end) and then
+   stretches every step to land on the far end - so the cell next to the far end of an interval is
+   whatever remained, not hMin. On 0.8/0.2/1.4 cells the line-side cell at the far port is 212-215 um
+   for 6.4, 8, 12, 12.8 and 16 mm lines, 271-274 um for 6, 10 and 18 mm, 314 um for 11 mm (the near
+   port's is 195-199 um for all). A gap port's error box depends on its adjacent cells, and the
+   method assumes both lines carry the same boxes. Pairs within one cluster calibrate together
+   (within 0.6-0.8 % of the 2D solve at 5.55 GHz); pairs across clusters drift by up to +-36 %, the
+   more the shorter dl (as 1/(beta dl)) and the more reflective the ports (|S11| 0.95 at 5.55 GHz,
+   0.99 at 3 GHz, where the amplification is worst). On 0.4/0.1/1.3 cells every length but 11 mm
+   lands 107-108 um at the far port; 11 mm lands 129 um - hence the 11 mm anomaly (-7.7 % at 3 GHz).
+2. **The interior cells differ.** The ramps meet at a length-dependent point and the stretch factor
+   differs, so the discrete line's own gamma differs slightly between the two lengths; the extraction
+   gamma = (gamma_L L - gamma_l l)/dl magnifies that by L/dl. On the coarse 0.8/0.2/1.5 cells, 12 and
+   12.8 mm have identical port cells (291.2 / 291.3 um) yet read +17.9 % (L/dl = 16); 12 and 16 mm
+   +4.1 %; 12 and 18 mm -0.3 %. On the 0.4 mesh this term is under 0.1 % for L/dl <= 2.
+
+Why the gate's choice works: on 0.8/0.2/1.4 cells 6.4 and 12.8 mm are in the same far-port cluster
+(212 / 215 um) with L/dl = 2 - +0.64 % at 5.55 GHz; the earlier 6 + 12 mm choice crossed clusters
+(271 / 214 um) - +3.4 %. Not a whole-number-of-cells effect, as noted before; a far-end-cell effect.
+
+Remedies (owner's decision pending, see the follow-up plan): make the interval grading symmetric
+(hMin cells at both ends, the remainder absorbed in the middle) so every length carries the same
+port neighbourhood; and/or a usage rule with a guard in the calibration - the two lines' port cells
+equal, long/short <= 3, beta dl >= 0.5 rad at the lowest frequency, cells along the line <= lambda/40.

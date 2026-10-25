@@ -1,0 +1,282 @@
+TC-1 (2026-10-25): why the two-length calibration drifts with the line lengths. Release, OpenSim.Tests scratch runs
+(ScratchCalibrationDrift, ScratchCalibrationGrid; not committed). Microstrip 2.413 mm on 0.794 mm of er 2.2 (the FU-15
+filter line), gap ports with 2.5 mm stubs (2.4 mm on the 0.8/0.2/1.4 mesh), lines of 6..18 mm, 3 and 5.55 GHz.
+LINE rows: each line's raw S (50 ohm) and an inexact replica of the grading ("first cell", "stretch" - the GRID block
+above has the real cells); PAIR rows: every pair's calibration (PortModel.ShuntAtTerminals) against the 2D
+cross-section solve's eeff. See README.md, "TC-1: cause isolated".
+
+GRID (port-adjacent cells, um, read from the meshes themselves; p1 = the port at y = stub, p2 = the port at y = stub + L)
+0.8/0.2/1.4: p1 line-side 195-199 for every length; p2 line-side 271/452/753 (6 mm), 212/353/588 (6.4), 213/355/592 (8), 273/455/758 (10), 314/523/798 (11), 214/357/596 (12), 215/358/596 (12.8), 215/359/598 (16), 274/456/761 (18)
+0.8/0.2/1.5: p1 line-side 197-200; p2 line-side 393/787/799 (6), 289/578/787 (6.4), 290/580/790 (8), 394/787/800 (10), 240/481/789 (11), 291/582/793 (12), 291/583/793 (12.8), 292/584/795 (16), 394/787/800 (18)
+0.4/0.1/1.3: p1 line-side 98.7-99.7; p2 line-side 107.4-108.4 for every length except 11 mm: 129.1/184.4/263.4
+
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 6 mm: unknowns 493, S21 0.12461 ang 60.3176 deg, S11 0.99219 ang -29.818 deg, first cell 200.7 um stretch 1.0036 steps 12
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 6.4 mm: unknowns 513, S21 0.12174 ang 59.8877 deg, S11 0.99255 ang -30.120 deg, first cell 214.1 um stretch 1.0705 steps 12
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 8 mm: unknowns 553, S21 0.11300 ang 58.8361 deg, S11 0.99357 ang -31.168 deg, first cell 211.1 um stretch 1.0557 steps 14
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 10 mm: unknowns 593, S21 0.10642 ang 57.8196 deg, S11 0.99429 ang -32.305 deg, first cell 200.4 um stretch 1.0022 steps 17
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 11 mm: unknowns 613, S21 0.10454 ang 57.3622 deg, S11 0.99448 ang -32.833 deg, first cell 204.1 um stretch 1.0206 steps 18
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 12 mm: unknowns 653, S21 0.10333 ang 56.6277 deg, S11 0.99460 ang -33.361 deg, first cell 207.3 um stretch 1.0364 steps 19
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 12.8 mm: unknowns 673, S21 0.10302 ang 56.2164 deg, S11 0.99463 ang -33.770 deg, first cell 206.8 um stretch 1.0341 steps 20
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 16 mm: unknowns 753, S21 0.10677 ang 54.5262 deg, S11 0.99419 ang -35.438 deg, first cell 205.4 um stretch 1.0271 steps 24
+LINE mesh 0.8/0.2/1.4 f 3 GHz L 18 mm: unknowns 793, S21 0.11384 ang 53.4730 deg, S11 0.99335 ang -36.595 deg, first cell 200.2 um stretch 1.0012 steps 27
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+6.4 mm (beta*dl 0.035 rad): eeff 4.4768 (+137.53 %), Z0 72.94+0.02j, alpha 2.83E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+8 mm (beta*dl 0.173 rad): eeff 2.3570 (+25.06 %), Z0 46.82-+0.02j, alpha 3.94E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+10 mm (beta*dl 0.345 rad): eeff 1.8649 (-+1.05 %), Z0 50.98-+0.04j, alpha 4.62E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+11 mm (beta*dl 0.432 rad): eeff 1.7525 (-+7.02 %), Z0 53.92-+0.04j, alpha 4.87E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+12 mm (beta*dl 0.518 rad): eeff 2.0346 (+7.95 %), Z0 47.39-+0.04j, alpha 4.65E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+12.8 mm (beta*dl 0.587 rad): eeff 2.0154 (+6.93 %), Z0 47.53-+0.04j, alpha 4.74E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+16 mm (beta*dl 0.863 rad): eeff 1.9730 (+4.69 %), Z0 47.76-+0.05j, alpha 4.99E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6+18 mm (beta*dl 1.036 rad): eeff 1.8783 (-+0.34 %), Z0 51.58-+0.06j, alpha 5.17E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6.4+8 mm (beta*dl 0.138 rad): eeff 1.8494 (-+1.87 %), Z0 50.90-+0.03j, alpha 4.43E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6.4+10 mm (beta*dl 0.311 rad): eeff 1.5887 (-+15.71 %), Z0 58.33-+0.04j, alpha 5.02E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6.4+11 mm (beta*dl 0.397 rad): eeff 1.5277 (-+18.94 %), Z0 61.98-+0.05j, alpha 5.23E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6.4+12 mm (beta*dl 0.483 rad): eeff 1.8672 (-+0.93 %), Z0 51.36-+0.04j, alpha 4.89E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6.4+12.8 mm (beta*dl 0.552 rad): eeff 1.8678 (-+0.90 %), Z0 51.48-+0.05j, alpha 4.95E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6.4+16 mm (beta*dl 0.829 rad): eeff 1.8729 (-+0.63 %), Z0 51.73-+0.06j, alpha 5.15E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 6.4+18 mm (beta*dl 1.001 rad): eeff 1.7930 (-+4.86 %), Z0 56.40-+0.07j, alpha 5.32E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 8+10 mm (beta*dl 0.173 rad): eeff 1.3808 (-+26.74 %), Z0 71.23-+0.05j, alpha 5.56E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 8+11 mm (beta*dl 0.259 rad): eeff 1.3564 (-+28.03 %), Z0 75.57-+0.05j, alpha 5.72E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 8+12 mm (beta*dl 0.345 rad): eeff 1.8743 (-+0.55 %), Z0 51.49-+0.05j, alpha 5.06E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 8+12.8 mm (beta*dl 0.414 rad): eeff 1.8739 (-+0.57 %), Z0 51.65-+0.05j, alpha 5.13E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 8+16 mm (beta*dl 0.691 rad): eeff 1.8775 (-+0.38 %), Z0 51.84-+0.06j, alpha 5.29E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 8+18 mm (beta*dl 0.863 rad): eeff 1.7837 (-+5.36 %), Z0 58.24-+0.08j, alpha 5.46E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 10+11 mm (beta*dl 0.086 rad): eeff 1.3058 (-+30.72 %), Z0 87.02-+0.06j, alpha 6.03E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 10+12 mm (beta*dl 0.173 rad): eeff 2.3766 (+26.10 %), Z0 37.33-+0.03j, alpha 4.77E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 10+12.8 mm (beta*dl 0.242 rad): eeff 2.2318 (+18.41 %), Z0 39.01-+0.04j, alpha 4.94E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 10+16 mm (beta*dl 0.518 rad): eeff 2.0455 (+8.53 %), Z0 42.76-+0.06j, alpha 5.24E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 10+18 mm (beta*dl 0.691 rad): eeff 1.8850 (+0.02 %), Z0 51.75-+0.08j, alpha 5.44E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 11+12 mm (beta*dl 0.086 rad): eeff 3.4838 (+84.85 %), Z0 -63.50+0.26j, alpha 4.16E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 11+12.8 mm (beta*dl 0.155 rad): eeff 2.7585 (+46.36 %), Z0 38.56+0.04j, alpha 4.60E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 11+16 mm (beta*dl 0.432 rad): eeff 2.1960 (+16.52 %), Z0 35.46-+0.05j, alpha 5.14E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 11+18 mm (beta*dl 0.604 rad): eeff 1.9689 (+4.47 %), Z0 45.73-+0.08j, alpha 5.38E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 12+12.8 mm (beta*dl 0.069 rad): eeff 1.8719 (-+0.68 %), Z0 52.60-+0.06j, alpha 5.43E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 12+16 mm (beta*dl 0.345 rad): eeff 1.8807 (-+0.21 %), Z0 52.18-+0.08j, alpha 5.51E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 12+18 mm (beta*dl 0.518 rad): eeff 1.7229 (-+8.59 %), Z0 67.24-+0.10j, alpha 5.70E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 12.8+16 mm (beta*dl 0.276 rad): eeff 1.8829 (-+0.10 %), Z0 52.03-+0.08j, alpha 5.53E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 12.8+18 mm (beta*dl 0.449 rad): eeff 1.6999 (-+9.81 %), Z0 70.63-+0.10j, alpha 5.74E-002
+PAIR mesh 0.8/0.2/1.4 f 3 GHz 16+18 mm (beta*dl 0.173 rad): eeff 1.4073 (-+25.33 %), Z0 124.15-+0.13j, alpha 6.12E-002
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 6 mm: unknowns 493, S21 0.28592 ang 31.4880 deg, S11 0.95757 ang -58.593 deg, first cell 200.7 um stretch 1.0036 steps 12
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 6.4 mm: unknowns 513, S21 0.28821 ang 30.1952 deg, S11 0.95679 ang -59.674 deg, first cell 214.1 um stretch 1.0705 steps 12
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 8 mm: unknowns 553, S21 0.31219 ang 25.4756 deg, S11 0.94862 ang -64.294 deg, first cell 211.1 um stretch 1.0557 steps 14
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 10 mm: unknowns 593, S21 0.38310 ang 17.8083 deg, S11 0.92057 ang -71.917 deg, first cell 200.4 um stretch 1.0022 steps 17
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 11 mm: unknowns 613, S21 0.44725 ang 12.2110 deg, S11 0.88934 ang -77.416 deg, first cell 204.1 um stretch 1.0206 steps 18
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 12 mm: unknowns 653, S21 0.54231 ang 3.8716 deg, S11 0.83127 ang -85.215 deg, first cell 207.3 um stretch 1.0364 steps 19
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 12.8 mm: unknowns 673, S21 0.65408 ang -5.6498 deg, S11 0.74098 ang -94.316 deg, first cell 206.8 um stretch 1.0341 steps 20
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 16 mm: unknowns 753, S21 0.84479 ang -87.2469 deg, S11 0.49350 ang -0.187 deg, first cell 205.4 um stretch 1.0271 steps 24
+LINE mesh 0.8/0.2/1.4 f 5.55 GHz L 18 mm: unknowns 793, S21 0.52455 ang -117.6160 deg, S11 0.84214 ang -28.880 deg, first cell 200.2 um stretch 1.0012 steps 27
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+6.4 mm (beta*dl 0.064 rad): eeff 2.6846 (+42.50 %), Z0 31.29-+0.10j, alpha 3.30E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+8 mm (beta*dl 0.319 rad): eeff 2.0515 (+8.89 %), Z0 44.98-+0.22j, alpha 3.55E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+10 mm (beta*dl 0.639 rad): eeff 1.8984 (+0.77 %), Z0 51.48-+0.28j, alpha 3.53E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+11 mm (beta*dl 0.798 rad): eeff 1.8629 (-+1.12 %), Z0 53.60-+0.30j, alpha 3.46E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+12 mm (beta*dl 0.958 rad): eeff 1.9484 (+3.42 %), Z0 48.59-+0.32j, alpha 3.34E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+12.8 mm (beta*dl 1.086 rad): eeff 1.9419 (+3.07 %), Z0 48.88-+0.34j, alpha 3.25E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+16 mm (beta*dl 1.597 rad): eeff 1.9271 (+2.29 %), Z0 49.62-+0.44j, alpha 2.88E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6+18 mm (beta*dl 1.916 rad): eeff 1.8972 (+0.70 %), Z0 51.85-+0.52j, alpha 2.64E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6.4+8 mm (beta*dl 0.255 rad): eeff 1.8958 (+0.63 %), Z0 51.49-+0.24j, alpha 3.62E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6.4+10 mm (beta*dl 0.575 rad): eeff 1.8127 (-+3.79 %), Z0 56.44-+0.30j, alpha 3.55E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6.4+11 mm (beta*dl 0.734 rad): eeff 1.7928 (-+4.84 %), Z0 58.11-+0.32j, alpha 3.48E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6.4+12 mm (beta*dl 0.894 rad): eeff 1.8966 (+0.67 %), Z0 51.71-+0.33j, alpha 3.34E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6.4+12.8 mm (beta*dl 1.022 rad): eeff 1.8961 (+0.64 %), Z0 51.78-+0.35j, alpha 3.25E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6.4+16 mm (beta*dl 1.533 rad): eeff 1.8959 (+0.63 %), Z0 51.90-+0.45j, alpha 2.86E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 6.4+18 mm (beta*dl 1.852 rad): eeff 1.8706 (-+0.71 %), Z0 53.92-+0.52j, alpha 2.61E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 8+10 mm (beta*dl 0.319 rad): eeff 1.7460 (-+7.33 %), Z0 61.72-+0.34j, alpha 3.49E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 8+11 mm (beta*dl 0.479 rad): eeff 1.7376 (-+7.77 %), Z0 62.91-+0.36j, alpha 3.39E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 8+12 mm (beta*dl 0.639 rad): eeff 1.8969 (+0.69 %), Z0 51.77-+0.37j, alpha 3.22E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 8+12.8 mm (beta*dl 0.766 rad): eeff 1.8962 (+0.65 %), Z0 51.84-+0.39j, alpha 3.12E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 8+16 mm (beta*dl 1.277 rad): eeff 1.8959 (+0.63 %), Z0 51.91-+0.48j, alpha 2.71E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 8+18 mm (beta*dl 1.597 rad): eeff 1.8665 (-+0.93 %), Z0 54.18-+0.55j, alpha 2.45E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 10+11 mm (beta*dl 0.160 rad): eeff 1.7204 (-+8.68 %), Z0 65.33-+0.41j, alpha 3.18E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 10+12 mm (beta*dl 0.319 rad): eeff 2.0484 (+8.73 %), Z0 41.79-+0.39j, alpha 2.99E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 10+12.8 mm (beta*dl 0.447 rad): eeff 2.0040 (+6.37 %), Z0 44.44-+0.42j, alpha 2.89E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 10+16 mm (beta*dl 0.958 rad): eeff 1.9461 (+3.30 %), Z0 48.21-+0.52j, alpha 2.46E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 10+18 mm (beta*dl 1.277 rad): eeff 1.8966 (+0.67 %), Z0 51.85-+0.58j, alpha 2.20E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 11+12 mm (beta*dl 0.160 rad): eeff 2.3772 (+26.18 %), Z0 24.66-+0.35j, alpha 2.85E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 11+12.8 mm (beta*dl 0.287 rad): eeff 2.1619 (+14.75 %), Z0 34.81-+0.42j, alpha 2.76E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 11+16 mm (beta*dl 0.798 rad): eeff 1.9914 (+5.70 %), Z0 45.03-+0.54j, alpha 2.33E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 11+18 mm (beta*dl 1.118 rad): eeff 1.9219 (+2.01 %), Z0 50.00-+0.60j, alpha 2.07E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 12+12.8 mm (beta*dl 0.128 rad): eeff 1.8930 (+0.48 %), Z0 52.16-+0.49j, alpha 2.64E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 12+16 mm (beta*dl 0.639 rad): eeff 1.8949 (+0.58 %), Z0 51.99-+0.58j, alpha 2.19E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 12+18 mm (beta*dl 0.958 rad): eeff 1.8462 (-+2.01 %), Z0 55.71-+0.64j, alpha 1.92E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 12.8+16 mm (beta*dl 0.511 rad): eeff 1.8954 (+0.60 %), Z0 51.96-+0.60j, alpha 2.08E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 12.8+18 mm (beta*dl 0.830 rad): eeff 1.8390 (-+2.39 %), Z0 56.29-+0.66j, alpha 1.81E-001
+PAIR mesh 0.8/0.2/1.4 f 5.55 GHz 16+18 mm (beta*dl 0.319 rad): eeff 1.7487 (-+7.18 %), Z0 63.93-+0.76j, alpha 1.36E-001
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 6 mm: unknowns 368, S21 0.13132 ang 60.3308 deg, S11 0.99133 ang -29.811 deg, first cell 212.4 um stretch 1.0619 steps 11
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 6.4 mm: unknowns 385, S21 0.12843 ang 59.7262 deg, S11 0.99170 ang -30.131 deg, first cell 226.5 um stretch 1.1327 steps 11
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 8 mm: unknowns 419, S21 0.11953 ang 58.6215 deg, S11 0.99281 ang -31.233 deg, first cell 220.7 um stretch 1.1034 steps 13
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 10 mm: unknowns 453, S21 0.11288 ang 57.5833 deg, S11 0.99357 ang -32.436 deg, first cell 207.3 um stretch 1.0363 steps 16
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 11 mm: unknowns 487, S21 0.11088 ang 56.7343 deg, S11 0.99379 ang -33.010 deg, first cell 210.5 um stretch 1.0526 steps 17
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 12 mm: unknowns 504, S21 0.10977 ang 56.4028 deg, S11 0.99391 ang -33.554 deg, first cell 213.3 um stretch 1.0667 steps 18
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 12.8 mm: unknowns 521, S21 0.10968 ang 55.8471 deg, S11 0.99391 ang -33.992 deg, first cell 212.4 um stretch 1.0622 steps 19
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 16 mm: unknowns 589, S21 0.11413 ang 54.0401 deg, S11 0.99336 ang -35.778 deg, first cell 209.8 um stretch 1.0492 steps 23
+LINE mesh 0.8/0.2/1.5 f 3 GHz L 18 mm: unknowns 623, S21 0.12202 ang 52.9389 deg, S11 0.99237 ang -37.027 deg, first cell 204.0 um stretch 1.0198 steps 26
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+6.4 mm (beta*dl 0.035 rad): eeff 7.3524 (+290.11 %), Z0 -481.56+0.79j, alpha 2.39E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+8 mm (beta*dl 0.173 rad): eeff 2.9124 (+54.53 %), Z0 48.45-+0.01j, alpha 3.62E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+10 mm (beta*dl 0.345 rad): eeff 2.0833 (+10.54 %), Z0 47.90-+0.03j, alpha 4.42E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+11 mm (beta*dl 0.432 rad): eeff 2.4379 (+29.35 %), Z0 43.81-+0.02j, alpha 4.23E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+12 mm (beta*dl 0.518 rad): eeff 2.0846 (+10.61 %), Z0 46.41-+0.04j, alpha 4.62E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+12.8 mm (beta*dl 0.587 rad): eeff 2.1822 (+15.79 %), Z0 44.60-+0.03j, alpha 4.59E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+16 mm (beta*dl 0.863 rad): eeff 2.0877 (+10.77 %), Z0 44.37-+0.05j, alpha 4.86E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6+18 mm (beta*dl 1.036 rad): eeff 1.9538 (+3.67 %), Z0 48.35-+0.06j, alpha 5.07E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6.4+8 mm (beta*dl 0.138 rad): eeff 1.8617 (-+1.22 %), Z0 50.87-+0.03j, alpha 4.44E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6.4+10 mm (beta*dl 0.311 rad): eeff 1.5329 (-+18.67 %), Z0 60.40-+0.04j, alpha 5.12E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6.4+11 mm (beta*dl 0.397 rad): eeff 2.0307 (+7.75 %), Z0 47.82-+0.04j, alpha 4.63E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6.4+12 mm (beta*dl 0.483 rad): eeff 1.7289 (-+8.27 %), Z0 55.32-+0.05j, alpha 5.07E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6.4+12.8 mm (beta*dl 0.552 rad): eeff 1.8755 (-+0.49 %), Z0 51.38-+0.05j, alpha 4.96E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6.4+16 mm (beta*dl 0.829 rad): eeff 1.8791 (-+0.30 %), Z0 51.58-+0.06j, alpha 5.15E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 6.4+18 mm (beta*dl 1.001 rad): eeff 1.7786 (-+5.63 %), Z0 57.31-+0.07j, alpha 5.35E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 8+10 mm (beta*dl 0.173 rad): eeff 1.2708 (-+32.57 %), Z0 77.97-+0.05j, alpha 5.79E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 8+11 mm (beta*dl 0.259 rad): eeff 2.1213 (+12.55 %), Z0 45.19-+0.04j, alpha 4.73E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 8+12 mm (beta*dl 0.345 rad): eeff 1.6755 (-+11.10 %), Z0 58.98-+0.05j, alpha 5.33E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 8+12.8 mm (beta*dl 0.414 rad): eeff 1.8801 (-+0.24 %), Z0 51.53-+0.05j, alpha 5.13E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 8+16 mm (beta*dl 0.691 rad): eeff 1.8826 (-+0.11 %), Z0 51.70-+0.06j, alpha 5.29E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 8+18 mm (beta*dl 0.863 rad): eeff 1.7650 (-+6.35 %), Z0 59.57-+0.08j, alpha 5.48E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 10+11 mm (beta*dl 0.086 rad): eeff 3.8722 (+105.45 %), Z0 -72.10+0.19j, alpha 3.89E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 10+12 mm (beta*dl 0.173 rad): eeff 2.0857 (+10.66 %), Z0 42.51-+0.04j, alpha 5.05E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 10+12.8 mm (beta*dl 0.242 rad): eeff 2.3218 (+23.19 %), Z0 37.50-+0.03j, alpha 4.87E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 10+16 mm (beta*dl 0.518 rad): eeff 2.0892 (+10.85 %), Z0 41.09-+0.06j, alpha 5.19E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 10+18 mm (beta*dl 0.691 rad): eeff 1.8890 (+0.23 %), Z0 51.63-+0.08j, alpha 5.43E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 11+12 mm (beta*dl 0.086 rad): eeff 0.3563 (-+81.10 %), Z0 347.17+0.69j, alpha 1.14E-001
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 11+12.8 mm (beta*dl 0.155 rad): eeff 1.4805 (-+21.45 %), Z0 80.47-+0.07j, alpha 5.93E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 11+16 mm (beta*dl 0.432 rad): eeff 1.7399 (-+7.68 %), Z0 62.70-+0.08j, alpha 5.65E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 11+18 mm (beta*dl 0.604 rad): eeff 1.6132 (-+14.41 %), Z0 77.35-+0.10j, alpha 5.83E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 12+12.8 mm (beta*dl 0.069 rad): eeff 2.9146 (+54.65 %), Z0 51.72+0.14j, alpha 4.55E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 12+16 mm (beta*dl 0.345 rad): eeff 2.0909 (+10.94 %), Z0 40.27-+0.06j, alpha 5.27E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 12+18 mm (beta*dl 0.518 rad): eeff 1.8236 (-+3.24 %), Z0 57.98-+0.09j, alpha 5.56E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 12.8+16 mm (beta*dl 0.276 rad): eeff 1.8862 (+0.08 %), Z0 51.90-+0.08j, alpha 5.52E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 12.8+18 mm (beta*dl 0.449 rad): eeff 1.6580 (-+12.03 %), Z0 75.08-+0.10j, alpha 5.79E-002
+PAIR mesh 0.8/0.2/1.5 f 3 GHz 16+18 mm (beta*dl 0.173 rad): eeff 1.2931 (-+31.39 %), Z0 146.83-+0.12j, alpha 6.31E-002
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 6 mm: unknowns 368, S21 0.30382 ang 31.0106 deg, S11 0.95198 ang -59.083 deg, first cell 212.4 um stretch 1.0619 steps 11
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 6.4 mm: unknowns 385, S21 0.30634 ang 29.3931 deg, S11 0.95106 ang -60.244 deg, first cell 226.5 um stretch 1.1327 steps 11
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 8 mm: unknowns 419, S21 0.33328 ang 24.3338 deg, S11 0.94127 ang -65.213 deg, first cell 220.7 um stretch 1.1034 steps 13
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 10 mm: unknowns 453, S21 0.41115 ang 16.0795 deg, S11 0.90805 ang -73.491 deg, first cell 207.3 um stretch 1.0363 steps 16
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 11 mm: unknowns 487, S21 0.47828 ang 9.5504 deg, S11 0.87251 ang -79.497 deg, first cell 210.5 um stretch 1.0526 steps 17
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 12 mm: unknowns 504, S21 0.58162 ang 1.0924 deg, S11 0.80336 ang -87.973 deg, first cell 213.3 um stretch 1.0667 steps 18
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 12.8 mm: unknowns 521, S21 0.69798 ang -9.4137 deg, S11 0.69839 ang -97.869 deg, first cell 212.4 um stretch 1.0622 steps 19
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 16 mm: unknowns 589, S21 0.83481 ang -89.0944 deg, S11 0.51347 ang -1.279 deg, first cell 209.8 um stretch 1.0492 steps 23
+LINE mesh 0.8/0.2/1.5 f 5.55 GHz L 18 mm: unknowns 623, S21 0.53379 ang -117.6627 deg, S11 0.83657 ang -28.654 deg, first cell 204.0 um stretch 1.0198 steps 26
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+6.4 mm (beta*dl 0.064 rad): eeff 3.5685 (+89.41 %), Z0 32.86+0.25j, alpha 3.13E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+8 mm (beta*dl 0.319 rad): eeff 2.2254 (+18.12 %), Z0 39.62-+0.19j, alpha 3.48E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+10 mm (beta*dl 0.639 rad): eeff 1.9683 (+4.47 %), Z0 48.31-+0.27j, alpha 3.49E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+11 mm (beta*dl 0.798 rad): eeff 2.0744 (+10.11 %), Z0 42.78-+0.27j, alpha 3.37E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+12 mm (beta*dl 0.958 rad): eeff 1.9643 (+4.26 %), Z0 47.83-+0.31j, alpha 3.32E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+12.8 mm (beta*dl 1.086 rad): eeff 1.9945 (+5.87 %), Z0 46.13-+0.33j, alpha 3.22E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+16 mm (beta*dl 1.597 rad): eeff 1.9634 (+4.21 %), Z0 47.38-+0.43j, alpha 2.85E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6+18 mm (beta*dl 1.916 rad): eeff 1.9216 (+1.99 %), Z0 50.16-+0.51j, alpha 2.62E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6.4+8 mm (beta*dl 0.255 rad): eeff 1.8996 (+0.83 %), Z0 51.45-+0.24j, alpha 3.62E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6.4+10 mm (beta*dl 0.575 rad): eeff 1.7963 (-+4.66 %), Z0 57.40-+0.30j, alpha 3.55E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6.4+11 mm (beta*dl 0.734 rad): eeff 1.9477 (+3.38 %), Z0 48.94-+0.30j, alpha 3.40E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6.4+12 mm (beta*dl 0.894 rad): eeff 1.8532 (-+1.64 %), Z0 54.31-+0.34j, alpha 3.34E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6.4+12.8 mm (beta*dl 1.022 rad): eeff 1.8987 (+0.78 %), Z0 51.74-+0.35j, alpha 3.23E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6.4+16 mm (beta*dl 1.533 rad): eeff 1.8980 (+0.75 %), Z0 51.86-+0.45j, alpha 2.84E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 6.4+18 mm (beta*dl 1.852 rad): eeff 1.8666 (-+0.92 %), Z0 54.26-+0.52j, alpha 2.59E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 8+10 mm (beta*dl 0.319 rad): eeff 1.7134 (-+9.05 %), Z0 63.83-+0.34j, alpha 3.48E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 8+11 mm (beta*dl 0.479 rad): eeff 1.9733 (+4.74 %), Z0 47.28-+0.33j, alpha 3.29E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 8+12 mm (beta*dl 0.639 rad): eeff 1.8345 (-+2.62 %), Z0 55.80-+0.37j, alpha 3.23E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 8+12.8 mm (beta*dl 0.766 rad): eeff 1.8984 (+0.76 %), Z0 51.81-+0.39j, alpha 3.10E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 8+16 mm (beta*dl 1.277 rad): eeff 1.8977 (+0.73 %), Z0 51.89-+0.47j, alpha 2.68E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 8+18 mm (beta*dl 1.597 rad): eeff 1.8613 (-+1.21 %), Z0 54.59-+0.54j, alpha 2.42E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 10+11 mm (beta*dl 0.160 rad): eeff 2.4955 (+32.46 %), Z0 22.28-+0.28j, alpha 3.03E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 10+12 mm (beta*dl 0.319 rad): eeff 1.9558 (+3.81 %), Z0 47.53-+0.41j, alpha 3.00E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 10+12.8 mm (beta*dl 0.447 rad): eeff 2.0310 (+7.80 %), Z0 43.16-+0.42j, alpha 2.87E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 10+16 mm (beta*dl 0.958 rad): eeff 1.9594 (+4.01 %), Z0 47.57-+0.51j, alpha 2.44E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 10+18 mm (beta*dl 1.277 rad): eeff 1.8981 (+0.75 %), Z0 51.87-+0.57j, alpha 2.17E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 11+12 mm (beta*dl 0.160 rad): eeff 1.4208 (-+24.58 %), Z0 95.08-+0.47j, alpha 3.00E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 11+12.8 mm (beta*dl 0.287 rad): eeff 1.7736 (-+5.86 %), Z0 61.41-+0.48j, alpha 2.76E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 11+16 mm (beta*dl 0.798 rad): eeff 1.8524 (-+1.68 %), Z0 55.27-+0.55j, alpha 2.30E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 11+18 mm (beta*dl 1.118 rad): eeff 1.8134 (-+3.74 %), Z0 58.18-+0.60j, alpha 2.03E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 12+12.8 mm (beta*dl 0.128 rad): eeff 2.2209 (+17.88 %), Z0 32.80-+0.43j, alpha 2.56E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 12+16 mm (beta*dl 0.639 rad): eeff 1.9612 (+4.10 %), Z0 47.46-+0.56j, alpha 2.15E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 12+18 mm (beta*dl 0.958 rad): eeff 1.8788 (-+0.27 %), Z0 53.22-+0.62j, alpha 1.89E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 12.8+16 mm (beta*dl 0.511 rad): eeff 1.8967 (+0.67 %), Z0 51.97-+0.59j, alpha 2.05E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 12.8+18 mm (beta*dl 0.830 rad): eeff 1.8268 (-+3.03 %), Z0 57.14-+0.64j, alpha 1.78E-001
+PAIR mesh 0.8/0.2/1.5 f 5.55 GHz 16+18 mm (beta*dl 0.319 rad): eeff 1.7149 (-+8.97 %), Z0 66.41-+0.75j, alpha 1.32E-001
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 6 mm: unknowns 1333, S21 0.13165 ang 58.0158 deg, S11 0.99128 ang -31.934 deg, first cell 104.3 um stretch 1.0433 steps 20
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 6.4 mm: unknowns 1365, S21 0.12878 ang 57.7101 deg, S11 0.99166 ang -32.238 deg, first cell 104.0 um stretch 1.0404 steps 21
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 8 mm: unknowns 1493, S21 0.11984 ang 56.6013 deg, S11 0.99277 ang -33.344 deg, first cell 103.2 um stretch 1.0321 steps 25
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 10 mm: unknowns 1653, S21 0.11309 ang 55.3835 deg, S11 0.99355 ang -34.557 deg, first cell 102.6 um stretch 1.0255 steps 30
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 11 mm: unknowns 1717, S21 0.11125 ang 54.9116 deg, S11 0.99375 ang -35.119 deg, first cell 100.4 um stretch 1.0045 steps 33
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 12 mm: unknowns 1813, S21 0.11015 ang 54.2587 deg, S11 0.99386 ang -35.673 deg, first cell 102.1 um stretch 1.0212 steps 35
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 12.8 mm: unknowns 1877, S21 0.10992 ang 53.8189 deg, S11 0.99388 ang -36.109 deg, first cell 102.0 um stretch 1.0198 steps 37
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 16 mm: unknowns 2133, S21 0.11435 ang 52.0081 deg, S11 0.99333 ang -37.898 deg, first cell 101.6 um stretch 1.0158 steps 45
+LINE mesh 0.4/0.1/1.3 f 3 GHz L 18 mm: unknowns 2293, S21 0.12214 ang 50.7366 deg, S11 0.99235 ang -39.151 deg, first cell 101.4 um stretch 1.0140 steps 50
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+6.4 mm (beta*dl 0.035 rad): eeff 1.8634 (-+1.13 %), Z0 49.83-+0.03j, alpha 4.17E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+8 mm (beta*dl 0.173 rad): eeff 1.8640 (-+1.10 %), Z0 50.29-+0.03j, alpha 4.41E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+10 mm (beta*dl 0.345 rad): eeff 1.8694 (-+0.81 %), Z0 50.61-+0.04j, alpha 4.67E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+11 mm (beta*dl 0.432 rad): eeff 1.7388 (-+7.74 %), Z0 54.06-+0.04j, alpha 4.94E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+12 mm (beta*dl 0.518 rad): eeff 1.8750 (-+0.52 %), Z0 50.77-+0.04j, alpha 4.88E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+12.8 mm (beta*dl 0.587 rad): eeff 1.8762 (-+0.45 %), Z0 50.83-+0.04j, alpha 4.95E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+16 mm (beta*dl 0.863 rad): eeff 1.8795 (-+0.28 %), Z0 51.05-+0.06j, alpha 5.15E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6+18 mm (beta*dl 1.036 rad): eeff 1.8803 (-+0.23 %), Z0 51.19-+0.06j, alpha 5.21E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6.4+8 mm (beta*dl 0.138 rad): eeff 1.8642 (-+1.09 %), Z0 50.42-+0.03j, alpha 4.47E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6.4+10 mm (beta*dl 0.311 rad): eeff 1.8700 (-+0.78 %), Z0 50.72-+0.04j, alpha 4.72E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6.4+11 mm (beta*dl 0.397 rad): eeff 1.7279 (-+8.32 %), Z0 54.76-+0.04j, alpha 5.00E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6.4+12 mm (beta*dl 0.483 rad): eeff 1.8758 (-+0.47 %), Z0 50.85-+0.04j, alpha 4.93E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6.4+12.8 mm (beta*dl 0.552 rad): eeff 1.8770 (-+0.41 %), Z0 50.91-+0.05j, alpha 4.99E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6.4+16 mm (beta*dl 0.829 rad): eeff 1.8802 (-+0.24 %), Z0 51.12-+0.06j, alpha 5.19E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 6.4+18 mm (beta*dl 1.001 rad): eeff 1.8809 (-+0.20 %), Z0 51.25-+0.07j, alpha 5.24E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 8+10 mm (beta*dl 0.173 rad): eeff 1.8747 (-+0.53 %), Z0 50.97-+0.04j, alpha 4.92E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 8+11 mm (beta*dl 0.259 rad): eeff 1.6551 (-+12.18 %), Z0 59.26-+0.05j, alpha 5.30E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 8+12 mm (beta*dl 0.345 rad): eeff 1.8804 (-+0.23 %), Z0 51.02-+0.05j, alpha 5.10E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 8+12.8 mm (beta*dl 0.414 rad): eeff 1.8812 (-+0.19 %), Z0 51.07-+0.05j, alpha 5.16E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 8+16 mm (beta*dl 0.691 rad): eeff 1.8833 (-+0.07 %), Z0 51.23-+0.06j, alpha 5.33E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 8+18 mm (beta*dl 0.863 rad): eeff 1.8836 (-+0.06 %), Z0 51.35-+0.07j, alpha 5.36E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 10+11 mm (beta*dl 0.086 rad): eeff 1.2185 (-+35.35 %), Z0 94.73-+0.06j, alpha 6.26E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 10+12 mm (beta*dl 0.173 rad): eeff 1.8861 (+0.07 %), Z0 51.01-+0.05j, alpha 5.29E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 10+12.8 mm (beta*dl 0.242 rad): eeff 1.8859 (+0.06 %), Z0 51.09-+0.06j, alpha 5.34E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 10+16 mm (beta*dl 0.518 rad): eeff 1.8862 (+0.08 %), Z0 51.27-+0.07j, alpha 5.46E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 10+18 mm (beta*dl 0.691 rad): eeff 1.8858 (+0.06 %), Z0 51.40-+0.08j, alpha 5.47E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 11+12 mm (beta*dl 0.086 rad): eeff 2.5638 (+36.03 %), Z0 34.41-+0.01j, alpha 4.75E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 11+12.8 mm (beta*dl 0.155 rad): eeff 2.2612 (+19.97 %), Z0 36.96-+0.04j, alpha 5.03E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 11+16 mm (beta*dl 0.432 rad): eeff 2.0212 (+7.24 %), Z0 43.28-+0.06j, alpha 5.36E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 11+18 mm (beta*dl 0.604 rad): eeff 1.9821 (+5.17 %), Z0 44.71-+0.08j, alpha 5.40E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 12+12.8 mm (beta*dl 0.069 rad): eeff 1.8853 (+0.03 %), Z0 51.30-+0.06j, alpha 5.46E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 12+16 mm (beta*dl 0.345 rad): eeff 1.8863 (+0.08 %), Z0 51.41-+0.08j, alpha 5.54E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 12+18 mm (beta*dl 0.518 rad): eeff 1.8857 (+0.05 %), Z0 51.55-+0.09j, alpha 5.53E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 12.8+16 mm (beta*dl 0.276 rad): eeff 1.8865 (+0.10 %), Z0 51.44-+0.08j, alpha 5.56E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 12.8+18 mm (beta*dl 0.449 rad): eeff 1.8857 (+0.05 %), Z0 51.59-+0.09j, alpha 5.54E-002
+PAIR mesh 0.4/0.1/1.3 f 3 GHz 16+18 mm (beta*dl 0.173 rad): eeff 1.8845 (-+0.01 %), Z0 51.86-+0.11j, alpha 5.51E-002
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 6 mm: unknowns 1333, S21 0.29788 ang 27.5235 deg, S11 0.95386 ang -62.272 deg, first cell 104.3 um stretch 1.0433 steps 20
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 6.4 mm: unknowns 1365, S21 0.30108 ang 26.3865 deg, S11 0.95275 ang -63.390 deg, first cell 104.0 um stretch 1.0404 steps 21
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 8 mm: unknowns 1493, S21 0.32719 ang 21.4224 deg, S11 0.94343 ang -68.256 deg, first cell 103.2 um stretch 1.0321 steps 25
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 10 mm: unknowns 1653, S21 0.40218 ang 13.1224 deg, S11 0.91212 ang -76.345 deg, first cell 102.6 um stretch 1.0255 steps 30
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 11 mm: unknowns 1717, S21 0.47029 ang 7.1925 deg, S11 0.87694 ang -82.202 deg, first cell 100.4 um stretch 1.0045 steps 33
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 12 mm: unknowns 1813, S21 0.57091 ang -1.5193 deg, S11 0.81114 ang -90.505 deg, first cell 102.1 um stretch 1.0212 steps 35
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 12.8 mm: unknowns 1877, S21 0.68587 ang -11.6052 deg, S11 0.71050 ang -100.151 deg, first cell 102.0 um stretch 1.0198 steps 37
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 16 mm: unknowns 2133, S21 0.83685 ang -91.8822 deg, S11 0.50899 ang -4.417 deg, first cell 101.6 um stretch 1.0158 steps 45
+LINE mesh 0.4/0.1/1.3 f 5.55 GHz L 18 mm: unknowns 2293, S21 0.53021 ang -121.1807 deg, S11 0.83869 ang -32.040 deg, first cell 101.4 um stretch 1.0140 steps 50
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+6.4 mm (beta*dl 0.064 rad): eeff 1.9040 (+1.06 %), Z0 50.60-+0.21j, alpha 3.67E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+8 mm (beta*dl 0.319 rad): eeff 1.9010 (+0.90 %), Z0 50.92-+0.24j, alpha 3.65E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+10 mm (beta*dl 0.639 rad): eeff 1.8998 (+0.84 %), Z0 51.12-+0.28j, alpha 3.54E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+11 mm (beta*dl 0.798 rad): eeff 1.8584 (-+1.36 %), Z0 53.51-+0.30j, alpha 3.48E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+12 mm (beta*dl 0.958 rad): eeff 1.8995 (+0.82 %), Z0 51.22-+0.32j, alpha 3.37E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+12.8 mm (beta*dl 1.086 rad): eeff 1.8992 (+0.81 %), Z0 51.26-+0.34j, alpha 3.28E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+16 mm (beta*dl 1.597 rad): eeff 1.8983 (+0.76 %), Z0 51.41-+0.44j, alpha 2.89E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6+18 mm (beta*dl 1.916 rad): eeff 1.8979 (+0.74 %), Z0 51.50-+0.51j, alpha 2.64E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6.4+8 mm (beta*dl 0.255 rad): eeff 1.9002 (+0.86 %), Z0 51.01-+0.24j, alpha 3.64E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6.4+10 mm (beta*dl 0.575 rad): eeff 1.8993 (+0.81 %), Z0 51.19-+0.28j, alpha 3.53E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6.4+11 mm (beta*dl 0.734 rad): eeff 1.8544 (-+1.57 %), Z0 53.84-+0.31j, alpha 3.46E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6.4+12 mm (beta*dl 0.894 rad): eeff 1.8992 (+0.80 %), Z0 51.27-+0.33j, alpha 3.35E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6.4+12.8 mm (beta*dl 1.022 rad): eeff 1.8989 (+0.79 %), Z0 51.30-+0.35j, alpha 3.26E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6.4+16 mm (beta*dl 1.533 rad): eeff 1.8981 (+0.75 %), Z0 51.43-+0.44j, alpha 2.86E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 6.4+18 mm (beta*dl 1.852 rad): eeff 1.8977 (+0.73 %), Z0 51.51-+0.52j, alpha 2.61E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 8+10 mm (beta*dl 0.319 rad): eeff 1.8986 (+0.77 %), Z0 51.32-+0.32j, alpha 3.44E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 8+11 mm (beta*dl 0.479 rad): eeff 1.8299 (-+2.87 %), Z0 55.76-+0.35j, alpha 3.36E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 8+12 mm (beta*dl 0.639 rad): eeff 1.8987 (+0.78 %), Z0 51.35-+0.37j, alpha 3.22E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 8+12.8 mm (beta*dl 0.766 rad): eeff 1.8985 (+0.77 %), Z0 51.38-+0.39j, alpha 3.13E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 8+16 mm (beta*dl 1.277 rad): eeff 1.8977 (+0.73 %), Z0 51.47-+0.47j, alpha 2.70E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 8+18 mm (beta*dl 1.597 rad): eeff 1.8972 (+0.70 %), Z0 51.52-+0.53j, alpha 2.44E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 10+11 mm (beta*dl 0.160 rad): eeff 1.6924 (-+10.17 %), Z0 66.79-+0.41j, alpha 3.18E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 10+12 mm (beta*dl 0.319 rad): eeff 1.8989 (+0.79 %), Z0 51.37-+0.41j, alpha 3.01E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 10+12.8 mm (beta*dl 0.447 rad): eeff 1.8984 (+0.76 %), Z0 51.41-+0.43j, alpha 2.90E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 10+16 mm (beta*dl 0.958 rad): eeff 1.8974 (+0.71 %), Z0 51.49-+0.52j, alpha 2.45E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 10+18 mm (beta*dl 1.277 rad): eeff 1.8969 (+0.69 %), Z0 51.53-+0.57j, alpha 2.19E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 11+12 mm (beta*dl 0.160 rad): eeff 2.1056 (+11.76 %), Z0 38.44-+0.41j, alpha 2.87E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 11+12.8 mm (beta*dl 0.287 rad): eeff 2.0130 (+6.85 %), Z0 43.79-+0.44j, alpha 2.77E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 11+16 mm (beta*dl 0.798 rad): eeff 1.9385 (+2.89 %), Z0 48.61-+0.54j, alpha 2.32E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 11+18 mm (beta*dl 1.118 rad): eeff 1.9262 (+2.24 %), Z0 49.51-+0.59j, alpha 2.06E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 12+12.8 mm (beta*dl 0.128 rad): eeff 1.8972 (+0.70 %), Z0 51.51-+0.48j, alpha 2.63E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 12+16 mm (beta*dl 0.639 rad): eeff 1.8966 (+0.67 %), Z0 51.55-+0.57j, alpha 2.18E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 12+18 mm (beta*dl 0.958 rad): eeff 1.8963 (+0.65 %), Z0 51.58-+0.61j, alpha 1.91E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 12.8+16 mm (beta*dl 0.511 rad): eeff 1.8965 (+0.66 %), Z0 51.56-+0.59j, alpha 2.06E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 12.8+18 mm (beta*dl 0.830 rad): eeff 1.8961 (+0.64 %), Z0 51.59-+0.63j, alpha 1.80E-001
+PAIR mesh 0.4/0.1/1.3 f 5.55 GHz 16+18 mm (beta*dl 0.319 rad): eeff 1.8955 (+0.61 %), Z0 51.63-+0.70j, alpha 1.39E-001
