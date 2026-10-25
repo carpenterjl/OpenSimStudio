@@ -104,7 +104,8 @@ public static class PlanarMagneticsStudy
         double frequency = input.FrequencyHz;
         bool solid = frequency > 0 && input.StrandDiameter == 0;
         var built = PlanarWindingSection.Build(input.Turns, new Dictionary<string, Complex> { [drive] = 1 }, input.Core,
-            solidTurns: solid, input.CopperConductivity, strandDiameter: input.StrandDiameter, strandsPerTurn: input.StrandsPerTurn);
+            solidTurns: solid, input.CopperConductivity, strandDiameter: input.StrandDiameter, strandsPerTurn: input.StrandsPerTurn,
+            frequencyHz: frequency);
         if (!built.Windings.ContainsKey(drive))
             throw new ArgumentException($"The driven winding '{drive}' has no turns in the cut.", nameof(input));
         var solver = new MagneticSolver2D();

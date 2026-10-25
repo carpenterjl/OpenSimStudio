@@ -253,10 +253,26 @@ public static class PlanarWindingSection
     /// <paramref name="currents"/> carries that current (static or complex amplitude) in every one of
     /// its turns; windings not listed carry none. <paramref name="solidTurns"/> makes every turn a
     /// solid copper conductor (skin and proximity effect in a time-harmonic solve); otherwise turns
-    /// are stranded (uniform current density).</summary>
+    /// are stranded (uniform current density).
+    ///
+    /// <para>Mesh: the grid starts at <see cref="MagneticModel2D.MinElement"/> on every region edge —
+    /// half the thinnest turn dimension by default — and grows by 1.35 to a sixth of the outer
+    /// radius. For solid turns at <paramref name="frequencyHz"/> &gt; 0 the current crowds into a
+    /// skin depth δ of the turn faces that see the field (a gap's fringing field, the neighbouring
+    /// turns), and when δ/8 is below that default the copper cells take δ/8 at the edges and grid
+    /// lines are added at δ and 2δ inside each turn, in r and in z wherever the turn is wider or
+    /// thicker than 4δ (so the lines never meet; a turn between 2δ and 4δ across is resolved by
+    /// the graded spacing from its two edges alone). Measured on the FU-16 pot core at 1 MHz
+    /// (δ = 66 µm, 0.8 mm × 35 µm turns): R +2.4 % of the reference at the plain default, +0.96 %
+    /// with this (Richardson +0.13 %), 1.9× the nodes and 4× the time; at 100 kHz δ/8 exceeds the
+    /// default and nothing changes, and a static solve never does. The cost grows with the turn
+    /// count (four r lines per wide turn span the whole domain height) — a many-turn winding at
+    /// several MHz pays for it. An explicit <paramref name="minElement"/> is kept as given (the
+    /// lines are still added).</para>
+    /// </summary>
     public static PlanarMagneticModel Build(IReadOnlyList<WindingTurn> turns, IReadOnlyDictionary<string, Complex> currents,
         AxisymmetricCore? core, bool solidTurns, double copperConductivity = 5.8e7, double? minElement = null,
-        double strandDiameter = 0, int strandsPerTurn = 1)
+        double strandDiameter = 0, int strandsPerTurn = 1, double frequencyHz = 0)
     {
         if (turns.Count == 0) throw new ArgumentException("No turns: the cut crossed no copper of the windings.", nameof(turns));
         double zMin = turns.Min(t => t.Z0), zMax = turns.Max(t => t.Z1), rMax = turns.Max(t => t.R1);
@@ -264,16 +280,36 @@ public static class PlanarWindingSection
         double thinnest = turns.Min(t => Math.Min(t.Z1 - t.Z0, t.R1 - t.R0));
         double outer = core?.OuterRadius ?? rMax;
         double halfHeight = core is null ? Math.Max(zMax - zMin, rMax) : core.WindowHeight / 2 + core.PlateThickness;
+        double defaultMin = Math.Max(thinnest / 2, 1e-6);
+        double skinDepth = solidTurns && frequencyHz > 0
+            ? Math.Sqrt(2 / (2 * Math.PI * frequencyHz * MagneticConstants.Mu0 * copperConductivity)) : double.PositiveInfinity;
+        bool skinBinds = skinDepth / 8 < defaultMin;
         var model = new MagneticModel2D
         {
             Geometry = MagneticGeometry.Axisymmetric,
             DomainX0 = 0, DomainX1 = 4 * outer,
             DomainY0 = zMid - halfHeight - 3 * outer, DomainY1 = zMid + halfHeight + 3 * outer,
             MaxElement = outer / 6,
-            MinElement = minElement ?? Math.Max(thinnest / 2, 1e-6),
+            MinElement = minElement ?? (skinBinds ? skinDepth / 8 : defaultMin),
             Growth = 1.35
         };
         var notes = new List<string>();
+        if (skinBinds)
+        {
+            foreach (var turn in turns)
+            {
+                if (turn.R1 - turn.R0 > 4 * skinDepth)
+                    model.ExtraLinesX.AddRange(new[] { turn.R0 + skinDepth, turn.R0 + 2 * skinDepth, turn.R1 - 2 * skinDepth, turn.R1 - skinDepth });
+                if (turn.Z1 - turn.Z0 > 4 * skinDepth)
+                    model.ExtraLinesY.AddRange(new[] { turn.Z0 + skinDepth, turn.Z0 + 2 * skinDepth, turn.Z1 - 2 * skinDepth, turn.Z1 - skinDepth });
+            }
+            notes.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"Mesh: skin depth {skinDepth * 1e6:g3} µm at {frequencyHz / 1e3:g4} kHz — ")
+                + (minElement is null
+                    ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"copper cells of δ/8 = {skinDepth / 8 * 1e6:g3} µm at the turn edges")
+                    : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"the given minimum element {minElement * 1e6:g3} µm kept at the edges (δ/8 would be {skinDepth / 8 * 1e6:g3} µm)"))
+                + ", grid lines at δ and 2δ inside each turn wider or thicker than 4δ.");
+        }
         if (core is not null)
         {
             if (core.WindowHeight <= zMax - zMin) throw new ArgumentException("The core window is shorter than the winding stack.", nameof(core));
@@ -330,12 +366,15 @@ public static class PlanarWindingSection
         for (int j = 0; j < nets.Count; j++)
         {
             var built = Build(turns, new Dictionary<string, Complex> { [nets[j]] = 1 }, core, solidTurns: true,
-                copperConductivity, minElement);
+                copperConductivity, minElement, frequencyHz: frequencyHz);
             var solution = solver.SolveTimeHarmonic(built.Model, frequencyHz);
             for (int i = 0; i < nets.Count; i++)
                 entries[i, j] = built.Windings[nets[i]].Aggregate(Complex.Zero, (s, t) => s + solution.ConductorVoltage(t.Name));
         }
         var notes = new List<string>();
+        // The mesh note of the (identical) per-winding builds, once.
+        var first = Build(turns, new Dictionary<string, Complex>(), core, solidTurns: true, copperConductivity, minElement, frequencyHz: frequencyHz);
+        notes.AddRange(first.Notes.Where(n => n.StartsWith("Mesh:", StringComparison.Ordinal)));
         foreach (var lead in leadOuts ?? Array.Empty<LeadOut>())
         {
             int i = nets.IndexOf(lead.Net);

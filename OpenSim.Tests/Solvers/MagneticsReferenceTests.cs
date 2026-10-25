@@ -74,12 +74,16 @@ public class MagneticsReferenceTests
     }
 
     [Theory]
-    [InlineData(true, 1e5, false, 0.104747675, 3.6809608e-6)]
-    [InlineData(true, 1e6, false, 0.399571209, 3.6175683e-6)]
-    [InlineData(true, 1e6, true, 0.399571209, 3.6175683e-6)]
-    [InlineData(false, 1e5, false, 0.0964069766, 2.38790411e-7)]
-    [InlineData(false, 1e6, false, 0.120920223, 2.34486917e-7)]
-    public void SolidTurns_HaveTheReferenceAcResistanceAndInductance(bool withCore, double frequency, bool refined,
+    [InlineData(true, 1e5, false, false, 0.104747675, 3.6809608e-6)]
+    [InlineData(true, 1e6, false, false, 0.399571209, 3.6175683e-6)]
+    [InlineData(true, 1e6, true, false, 0.399571209, 3.6175683e-6)]
+    [InlineData(false, 1e5, false, false, 0.0964069766, 2.38790411e-7)]
+    [InlineData(false, 1e6, false, false, 0.120920223, 2.34486917e-7)]
+    // Build told the frequency (as the study and the impedance matrix tell it): the skin-depth mesh.
+    [InlineData(true, 1e6, false, true, 0.399571209, 3.6175683e-6)]
+    [InlineData(true, 1e5, false, true, 0.104747675, 3.6809608e-6)]
+    [InlineData(false, 1e6, false, true, 0.120920223, 2.34486917e-7)]
+    public void SolidTurns_HaveTheReferenceAcResistanceAndInductance(bool withCore, double frequency, bool refined, bool skinMesh,
         double matlabR, double matlabL)
     {
         // The same four rings as solid copper in series at 1 A, gap 0.2 mm, with and without the
@@ -92,8 +96,18 @@ public class MagneticsReferenceTests
         // — the default 2 mm far cells and 1.35 growth leave the gap's field too coarse for R there;
         // refined to 1 mm / 8.75 µm / 1.25, +0.94 % and −0.15 %; to 0.5 mm / 4.4 µm / 1.18, +0.43 %
         // and −0.07 % (Richardson +0.13 %). In air R −0.006 % / +0.49 %, L −0.74 % / −0.75 %.
+        // The skin-depth mesh (2026-10-25, the owner's FU-16 follow-up): Build given the frequency
+        // puts δ/8 cells at the turn edges with grid lines at δ and 2δ inside each turn once δ/8 is
+        // under the default half-thickness — at 1 MHz (δ = 66 µm) R +0.96 % and L −0.24 % with the
+        // core (gate: within 1 % of the Richardson +0.13 %, so dr ≤ 0.0113), 57k nodes against 30k;
+        // in air R +0.17 % and L −0.67 % (was +0.49 / −0.75 %), 25k nodes; at 100 kHz δ/8 = 26 µm is
+        // above the 17.5 µm default and the mesh, and the numbers, are the old ones. The far cells
+        // (2 mm → 1 mm) were measured to change nothing.
         var core = withCore ? PotCore(0.2e-3) : null;
-        var built = PlanarWindingSection.Build(PotTurns(), new Dictionary<string, Complex> { ["P"] = 1 }, core, solidTurns: true);
+        var built = PlanarWindingSection.Build(PotTurns(), new Dictionary<string, Complex> { ["P"] = 1 }, core, solidTurns: true,
+            frequencyHz: skinMesh ? frequency : 0);
+        if (skinMesh && frequency < 5e5) Assert.DoesNotContain(built.Notes, n => n.StartsWith("Mesh: skin depth"));
+        if (skinMesh && frequency > 5e5) Assert.Contains(built.Notes, n => n.StartsWith("Mesh: skin depth 66.1 µm at 1000 kHz") && n.Contains("δ/8 = 8.26 µm"));
         var model = refined ? Remesh(built.Model, 1e-3, 8.75e-6, 1.25) : built.Model;
         var solution = new MagneticSolver2D().SolveTimeHarmonic(model, frequency);
         double r = built.Resistance(solution, "P"), l = built.Inductance(solution, "P").Real;
@@ -102,9 +116,16 @@ public class MagneticsReferenceTests
                        $"R {r:F6} Ω ({dr * 100:F3} %), L {l * 1e6:F6} µH ({dl * 100:F3} %), {solution.NodeCount} nodes");
         // L from below. R from above at 1 MHz; at 100 kHz within 0.02 % from either side (core
         // +0.018 % from above, air −0.006 % from below), so that band is two-sided.
-        double rBand = frequency < 5e5 ? 5e-4 : withCore ? (refined ? 0.012 : 0.03) : 0.007;
+        double rBand = frequency < 5e5 ? 5e-4 : withCore ? (refined ? 0.012 : skinMesh ? 0.0113 : 0.03) : skinMesh ? 0.004 : 0.007;
         Assert.InRange(dr, frequency < 5e5 ? -rBand : 0, rBand);
-        Assert.InRange(dl, withCore ? (refined ? -0.003 : -0.005) : -0.01, 0);
+        Assert.InRange(dl, withCore ? (refined || skinMesh ? -0.003 : -0.005) : skinMesh ? -0.008 : -0.01, 0);
+        if (skinMesh && frequency < 5e5)
+        {
+            // Untouched below the skin-depth threshold: the very grid Build lays without a frequency.
+            var plain = PlanarWindingSection.Build(PotTurns(), new Dictionary<string, Complex> { ["P"] = 1 }, core, solidTurns: true);
+            Assert.Equal(new MagneticSolver2D().SolveTimeHarmonic(plain.Model, frequency).NodeCount, solution.NodeCount);
+            Assert.Equal(29760, solution.NodeCount);
+        }
     }
 
     /// <summary>B(H) = µ0·H + (2·Js/π)·atan(π(µri − 1)µ0H/(2Js)), Js = 1.6 T, µri = 2000, tabulated

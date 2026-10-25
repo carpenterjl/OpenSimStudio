@@ -107,3 +107,29 @@ The inductor example's land −0.0015 % (L) and +0.033 % (force) off the converg
 
 Finding: Build's default mesh (2 mm far cells, growth 1.35) reads the 1 MHz solid-turn resistance 2.4 % high. At
 δ = 66 µm the gap's fringing field needs a finer mesh than the default.
+
+## 2026-10-25 follow-up: the skin-depth default mesh
+
+The finding above (Build's default mesh reads the 1 MHz solid-turn R 2.4 % high) is acted on
+(owner's decision 2026-10-25): `PlanarWindingSection.Build` given the frequency puts copper cells
+of δ/8 at the turn edges with grid lines at δ and 2δ inside each turn wider or thicker than 4δ,
+once δ/8 is under the default half-thickness (1 MHz: δ = 66 µm, δ/8 = 8.3 µm < 17.5 µm; 100 kHz:
+26 µm, untouched). Release measurements on the pot core with 0.2 mm gap, 1 MHz, 4 solid rings
+(MATLAB R 0.399571209 Ω; the Richardson value is +0.13 % of it):
+
+| mesh (max / min / growth, lines) | R vs MATLAB | vs Richardson | L vs MATLAB | nodes | s (Release) |
+|---|---|---|---|---|---|
+| default 2 mm / 17.5 µm / 1.35 | +2.371 % | +2.24 % | −0.325 % | 29 760 | 3.6 |
+| 1 mm / 17.5 µm / 1.35 (far cells only) | +2.371 % | +2.24 % | −0.325 % | 37 698 | 17.5 |
+| 2 mm / 8.75 µm / 1.35 | +1.581 % | +1.45 % | −0.243 % | 43 188 | 7.8 |
+| 2 mm / 17.5 µm / 1.25 | +1.697 % | +1.57 % | −0.246 % | 42 273 | 7.5 |
+| default + δ, 2δ lines | +1.687 % | +1.56 % | −0.317 % | 35 960 | 4.4 |
+| 2 mm / 8.25 µm / 1.35 + δ, 2δ lines (**the new default with the frequency**) | +0.963 % | +0.83 % | −0.239 % | 56 547 | 16.0 |
+| 2 mm / 8.25 µm / 1.25 | +0.931 % | +0.80 % | −0.149 % | 66 965 | 25.8 |
+| 1 mm / 8.75 µm / 1.25 (FU-16's "refined") | +0.945 % | +0.82 % | −0.154 % | 75 335 | 27.2 |
+| 2 mm / 8.25 µm / 1.25 + δ, 2δ lines | +0.597 % | +0.47 % | −0.145 % | 86 033 | 53.8 |
+
+The far cells change nothing; the copper cells do. In air at 1 MHz the same rule reads R +0.17 %
+and L −0.67 % (was +0.49 / −0.75 %) at 25 048 nodes. `MagneticsReferenceTests.SolidTurns…` has
+three more rows (Build told the frequency) with the bands 0 ≤ dr ≤ 1.13 % and dl ≥ −0.3 % (core),
+dr ≤ 0.4 % (air), and the 100 kHz grid asserted identical to the frequency-less one.
