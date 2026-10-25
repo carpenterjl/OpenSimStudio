@@ -26,9 +26,12 @@ dotnet test OpenSim.App.Tests/OpenSim.App.Tests.csproj
 ## How the view models are composed
 
 `Support/AppComposition.cs` builds the container with the application's own registrations
-(`OpenSim.App/Services/CompositionRoot.cs`, which `App.OnStartup` also uses) and replaces two
-things: the log (the app's marshals onto `Application.Current.Dispatcher`) and the material
-and colormap libraries (rooted at a private temporary directory instead of the user profile).
+(`OpenSim.App/Services/CompositionRoot.cs`, which `App.OnStartup` also uses) and replaces three
+things: the log (the app's marshals onto `Application.Current.Dispatcher`), and the material
+and colormap libraries and the recent-projects list (rooted at a private temporary directory
+instead of the user profile). `MainViewModel` itself resolves headless, so the project
+save/open plumbing behind the dialogs is testable (`CaptureProjectSettings`,
+`LoadProjectFromPath`).
 Brush-bearing view models construct on xunit's MTA worker threads; frozen Freezables need no
 dispatcher. `PcbViewModel.RefreshCopperPreview` recomposes synchronously when there is no
 `Application`, so the copper preview tree can be asserted directly.
@@ -40,4 +43,4 @@ files), touch `Application.Current.MainWindow` or `TryFindResource`, or wait on 
 `DispatcherTimer` / `Dispatcher.BeginInvoke`. Tests target the plumbing behind those, through
 `internal` seams (`InternalsVisibleTo("OpenSim.App.Tests")` in `OpenSim.App.csproj` and
 `OpenSim.Core.csproj`), e.g. `PcbViewModel.InstallBoard`, `BuildNetMeshOptions`,
-`BuildStackupSettings`.
+`BuildStackupSettings`, `LoadStackupSettings`; `MainViewModel.CaptureProjectSettings`, `LoadProjectFromPath`.

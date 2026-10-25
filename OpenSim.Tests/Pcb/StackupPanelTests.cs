@@ -258,4 +258,89 @@ public class StackupPanelTests
         Assert.Throws<ArgumentException>(() =>
             StackupPanel.ToSettings(35e-6, 1.6e-3, new[] { new PanelCopperRow(2, 35e-6), new PanelCopperRow(2, 70e-6) }, none));
     }
+
+    // ------------------------------------------------------------------ Seed from a reopened project
+
+    /// <summary>What a project saved from a three-layer board's panel (TC-2): 50 µm / 2.0 mm
+    /// in the boxes, edited copper rows, two edited gaps.</summary>
+    private static readonly PcbStackupSettings SavedThreeLayer = new()
+    {
+        CopperThickness = 50e-6,
+        BoardThickness = 2.0e-3,
+        CopperLayerThicknesses = new[] { 105e-6, 18e-6, 35e-6 },
+        DielectricGapThicknesses = new[] { 0.3e-3, 1.5e-3 },
+        DielectricGapPermittivities = new[] { 3.5, 4.6 },
+        DielectricGapLossTangents = new[] { 0.004, 0.015 },
+    };
+
+    [Fact]
+    public void Seed_SavedRows_StandInForAFileStackup_ButLeaveTheBoxAlone()
+    {
+        // A reopened project whose board box was edited to 1.8 mm since the save, and a
+        // Gerber set (no stackup of its own) re-imported.
+        var gerber = Board(new[] { 1, 2, 3 }, null, (1, "top.gbr"), (2, "in.gbr"), (3, "bot.gbr"));
+        var seed = StackupPanel.Seed(gerber, 50e-6, 1.8e-3, SavedThreeLayer);
+
+        Assert.Equal(1.8e-3, seed.BoardThickness, 12);                      // the box, not the saved 2.0 mm
+        AssertClose(new[] { 105e-6, 18e-6, 35e-6 }, seed.Layers.Select(l => l.ThicknessMeters));
+        Assert.All(seed.Layers, l => Assert.Null(l.Name));                   // names stay a file-stackup thing
+        AssertClose(new[] { 0.3e-3, 1.5e-3 }, seed.Gaps.Select(g => g.ThicknessMeters));
+        AssertClose(new[] { 3.5, 4.6 }, seed.Gaps.Select(g => g.RelativePermittivity));
+        AssertClose(new[] { 0.004, 0.015 }, seed.Gaps.Select(g => g.LossTangent));
+    }
+
+    [Fact]
+    public void Seed_AFileStackup_WinsOverSavedRows()
+    {
+        var seed = StackupPanel.Seed(Board(new[] { 1, 2, 3, 4 }, FourLayerFile), 50e-6, 2.0e-3, SavedThreeLayer);
+
+        Assert.Equal(1.4e-3, seed.BoardThickness, 12);
+        AssertClose(FourLayerFile.CopperLayerThicknesses, seed.Layers.Select(l => l.ThicknessMeters));
+        AssertClose(FourLayerFile.DielectricGapThicknesses, seed.Gaps.Select(g => g.ThicknessMeters));
+        AssertClose(FourLayerFile.DielectricGapPermittivities, seed.Gaps.Select(g => g.RelativePermittivity));
+    }
+
+    [Fact]
+    public void Seed_SavedRows_ShorterOrLongerThanTheBoard_TakeTheBoxesWhereTheyEnd()
+    {
+        // Saved for three layers, re-imported with four: L4 and the gap under L3 take the
+        // boxes (1.8 mm over three gaps) and FR4.
+        var four = StackupPanel.Seed(Board(new[] { 1, 2, 3, 4 }), 50e-6, 1.8e-3, SavedThreeLayer);
+        AssertClose(new[] { 105e-6, 18e-6, 35e-6, 50e-6 }, four.Layers.Select(l => l.ThicknessMeters));
+        AssertClose(new[] { 0.3e-3, 1.5e-3, 0.6e-3 }, four.Gaps.Select(g => g.ThicknessMeters));
+        Assert.Equal(4.4, four.Gaps[2].RelativePermittivity, 12);
+        Assert.Equal(0.02, four.Gaps[2].LossTangent, 12);
+
+        // Re-imported with two: the saved rows past the board are ignored.
+        var two = StackupPanel.Seed(Board(new[] { 1, 2 }), 50e-6, 1.8e-3, SavedThreeLayer);
+        AssertClose(new[] { 105e-6, 18e-6 }, two.Layers.Select(l => l.ThicknessMeters));
+        Assert.Equal(0.3e-3, Assert.Single(two.Gaps).ThicknessMeters, 12);
+
+        // A saved stackup that is only the two boxes changes nothing.
+        var boxesOnly = new PcbStackupSettings { CopperThickness = 70e-6, BoardThickness = 9e-3 };
+        var plain = StackupPanel.Seed(Board(new[] { 1, 2 }), 50e-6, 1.8e-3, boxesOnly);
+        Assert.All(plain.Layers, l => Assert.Equal(50e-6, l.ThicknessMeters, 12));
+        Assert.Equal(1.8e-3, Assert.Single(plain.Gaps).ThicknessMeters, 12);
+    }
+
+    [Fact]
+    public void Seed_ReadsBack_WhatToSettingsWrote_WhenTheBoardIsImportedAgain()
+    {
+        // The project's round trip: rows → settings → (save, reopen, re-import) → the same rows.
+        var edited = new[] { new PanelCopperRow(1, 105e-6), new PanelCopperRow(2, 18e-6), new PanelCopperRow(3, 35e-6) };
+        var gaps = new[] { new PanelGapRow(1, 0.3e-3, 3.5, 0.004), new PanelGapRow(2, 1.5e-3, 4.6, 0.015) };
+        var saved = StackupPanel.ToSettings(50e-6, 1.8e-3, edited, gaps);
+
+        var seed = StackupPanel.Seed(Board(new[] { 1, 2, 3 }), saved.CopperThickness, saved.BoardThickness, saved);
+        Assert.Equal(edited, seed.Layers.Select(l => new PanelCopperRow(l.LayerOrder, l.ThicknessMeters)));
+        Assert.Equal(gaps, seed.Gaps);
+    }
+
+    private static void AssertClose(IEnumerable<double> expected, IEnumerable<double> actual)
+    {
+        var e = expected.ToList();
+        var a = actual.ToList();
+        Assert.Equal(e.Count, a.Count);
+        for (int i = 0; i < e.Count; i++) Assert.Equal(e[i], a[i], 12);
+    }
 }

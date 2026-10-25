@@ -211,6 +211,14 @@ public partial class PcbViewModel : ObservableObject
                 foreach (var filter in LayerFilters) filter.ThicknessMicrons = value * 1e6;
             }
             finally { _applyingBulkLayers = false; }
+            // The same rule for the rows a reopened project has waiting (no board yet): the
+            // box sets every one of them, so the next import does not bring back the saved
+            // copper over a value typed here.
+            if (_board is null && _savedStackup is { CopperLayerThicknesses.Count: > 0 } saved)
+                _savedStackup = saved with
+                {
+                    CopperLayerThicknesses = Enumerable.Repeat(value, saved.CopperLayerThicknesses.Count).ToArray()
+                };
         }
         InvalidateLayerZ();
     }
@@ -426,6 +434,32 @@ public partial class PcbViewModel : ObservableObject
         return Math.Clamp(2.5e-4 * diag, 10e-6, 60e-6);
     }
 
+    /// <summary>The stackup a reopened project saved, waiting for the next board import
+    /// (the board itself is not persisted, so the rows cannot be shown before it is
+    /// imported again). Consumed by that import; see <see cref="LoadStackupSettings"/>.</summary>
+    private PcbStackupSettings? _savedStackup;
+
+    /// <summary>
+    /// Restores a project's stackup: the two boxes now, and the per-layer and per-gap rows
+    /// at the next board import (<see cref="StackupPanel.Seed"/>) — unless that board's file
+    /// carries a stackup of its own, which wins and drops them. The rows wait only while the
+    /// board workflow is the current one: leaving it (a primitive, an STL or STEP import, a
+    /// new or another project) forgets them, as it drops a loaded board's rows. While they
+    /// wait, <see cref="BuildStackupSettings"/> hands them back with the current boxes, so a
+    /// save without a re-import keeps them, and a copper-box edit sets every one of them, as
+    /// it sets every row of a loaded board. Null — a project without a stackup — forgets any
+    /// saved rows and leaves the boxes as they are.
+    /// </summary>
+    internal void LoadStackupSettings(PcbStackupSettings? settings)
+    {
+        _savedStackup = null;
+        if (settings is null) return;
+        PcbCopperThickness = settings.CopperThickness;
+        PcbBoardThickness = settings.BoardThickness;
+        if (settings.CopperLayerThicknesses is { Count: > 0 } || settings.DielectricGapThicknesses is { Count: > 0 })
+            _savedStackup = settings;
+    }
+
     /// <summary>Rebuilds the net rows and per-layer filters for a freshly imported board.</summary>
     private void PopulateNets(PcbBoard board)
     {
@@ -440,8 +474,26 @@ public partial class PcbViewModel : ObservableObject
         // The rows come from StackupPanel.Seed (OpenSim.Pcb): every copper layer of the
         // board, including one with no copper on it, and one gap between each adjacent
         // pair — from the file's stackup (IPC-2581) where it has one, else from the two
-        // boxes. The board box takes the file's thickness when the file carries gaps.
-        var seed = StackupPanel.Seed(board, PcbCopperThickness, PcbBoardThickness);
+        // boxes — or, once, from the rows a reopened project saved (a file stackup still
+        // wins). The board box takes the file's thickness when the file carries gaps.
+        var saved = _savedStackup;
+        _savedStackup = null;
+        var seed = StackupPanel.Seed(board, PcbCopperThickness, PcbBoardThickness, saved);
+        if (saved is not null && board.Stackup is not null)
+            _log.Append("Stackup: the board file's own stackup replaces the rows the project saved.");
+        else if (saved is not null)
+        {
+            int savedLayers = Math.Max(saved.CopperLayerThicknesses.Count, saved.DielectricGapThicknesses.Count + 1);
+            int boardLayers = seed.Layers.Count;
+            _log.Append(savedLayers == boardLayers
+                ? $"Stackup: {boardLayers} layer rows and {seed.Gaps.Count} gap rows restored from the project."
+                : $"Stackup: the rows restored from the project were saved for {savedLayers} copper layers and this board has " +
+                  $"{boardLayers}. The rows follow layer order (L1 first); " +
+                  (savedLayers > boardLayers
+                      ? $"the saved rows past L{boardLayers} are dropped. "
+                      : $"layers and gaps past L{savedLayers} take the boxes. ") +
+                  "Check the stackup panel.");
+        }
         PcbBoardThickness = seed.BoardThickness;
         foreach (var layer in seed.Layers)
         {
@@ -637,9 +689,14 @@ public partial class PcbViewModel : ObservableObject
     /// <summary>The stackup persisted with the project and handed to the board thermal
     /// mesher: the two boxes plus per-layer copper and per-gap thickness and RF materials
     /// (εr/tanδ), indexed by (order − 1) so the import seeder reads them back at the same
-    /// index (<see cref="StackupPanel.ToSettings"/>).</summary>
+    /// index (<see cref="StackupPanel.ToSettings"/>). What a save writes is the panel as it
+    /// is — boxes and rows — not the stackup a previously meshed body was built with. With
+    /// no board imported since a project was opened, the rows that project saved go back out
+    /// with the current boxes.</summary>
     internal PcbStackupSettings BuildStackupSettings() =>
-        StackupPanel.ToSettings(PcbCopperThickness, PcbBoardThickness, CopperRows(), GapRows());
+        _board is null && _savedStackup is not null
+            ? _savedStackup with { CopperThickness = PcbCopperThickness, BoardThickness = PcbBoardThickness }
+            : StackupPanel.ToSettings(PcbCopperThickness, PcbBoardThickness, CopperRows(), GapRows());
 
     /// <summary>The options every board analysis shares — the net mesher, the copper
     /// preview, the inductance chain builder, and (through
@@ -697,6 +754,7 @@ public partial class PcbViewModel : ObservableObject
     /// clear every board-related visual and collection.</summary>
     private void TearDownBoardState()
     {
+        _savedStackup = null;       // rows waiting for a re-import go with the board workflow
         if (_board is null && NetRows.Count == 0 && LayerFilters.Count == 0) return;
         _board = null;
         ClearThermalParts();

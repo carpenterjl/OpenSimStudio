@@ -16,10 +16,10 @@ public sealed class ListLogService : ILogService
 
 /// <summary>
 /// The application's container, composed exactly as the running application composes it
-/// (<see cref="CompositionRoot.Register"/>) with two services replaced: the log (see
-/// <see cref="ListLogService"/>) and the material and colormap libraries, which are rooted
-/// at a private temporary directory instead of the user's profile. Dispose it to remove
-/// that directory.
+/// (<see cref="CompositionRoot.Register"/>) with the log replaced (see
+/// <see cref="ListLogService"/>) and the three user-profile services — the material and
+/// colormap libraries and the recent-projects list — rooted at a private temporary directory
+/// instead of the user's profile. Dispose it to remove that directory.
 /// </summary>
 public sealed class AppComposition : IDisposable
 {
@@ -36,10 +36,14 @@ public sealed class AppComposition : IDisposable
         services.AddSingleton<ILogService>(Log);
         services.AddSingleton(new MaterialLibrary(_userDirectory));
         services.AddSingleton(new ColormapLibrary(_userDirectory));
+        services.AddSingleton(new RecentProjectsService(_userDirectory));
         Services = services.BuildServiceProvider();
     }
 
     public ListLogService Log { get; } = new();
+
+    /// <summary>The private profile directory; a test's own files go here too.</summary>
+    public string UserDirectory => _userDirectory;
 
     public ServiceProvider Services { get; }
 

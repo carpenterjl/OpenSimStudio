@@ -48,10 +48,23 @@ public static class StackupPanel
     /// has one, else by splitting the board thickness evenly across the gaps; the materials
     /// come from the file or default to FR4. Layer names are shown only for boards whose
     /// file carries a stackup (IPC-2581); Gerber layers read "L&lt;n&gt;".
+    ///
+    /// <para><paramref name="saved"/> is the stackup a reopened project persisted
+    /// (<see cref="ToSettings"/>): when the file carries no stackup of its own and the saved
+    /// one has rows, the rows come from it at the same (order − 1) index, so a re-imported
+    /// board shows the panel as it was saved. The file always wins over it; the saved board
+    /// thickness does not replace the box (the box already holds it, possibly edited since);
+    /// the rows follow layer order (L1 first), not layer identity, so saved rows past the
+    /// board's layers are ignored, copper layers past the saved rows take the copper box and
+    /// gaps past them an even share of the board box; a saved stackup without rows changes
+    /// nothing.</para>
     /// </summary>
-    public static PanelSeed Seed(PcbBoard board, double copperThickness, double boardThickness)
+    public static PanelSeed Seed(PcbBoard board, double copperThickness, double boardThickness,
+        PcbStackupSettings? saved = null)
     {
         var file = board.Stackup;
+        var rows = file ?? (saved is not null
+            && (saved.CopperLayerThicknesses is { Count: > 0 } || saved.DielectricGapThicknesses is { Count: > 0 }) ? saved : null);
         var layerNames = board.Layers
             .Where(l => l.CopperOrder > 0)
             .GroupBy(l => l.CopperOrder)
@@ -64,8 +77,8 @@ public static class StackupPanel
         foreach (int order in orders)
         {
             double thickness =
-                file is not null && order - 1 < file.CopperLayerThicknesses.Count
-                    ? file.CopperLayerThicknesses[order - 1]
+                rows is not null && order - 1 < rows.CopperLayerThicknesses.Count
+                    ? rows.CopperLayerThicknesses[order - 1]
                     : copperThickness > 0 ? copperThickness : PcbStackup.DefaultCopperThickness;
             layers.Add(new PanelCopperRow(order, thickness, file is null ? null : layerNames.GetValueOrDefault(order)));
         }
@@ -79,12 +92,12 @@ public static class StackupPanel
         {
             int index = orders[i] - 1;
             gaps.Add(new PanelGapRow(orders[i],
-                file is not null && index < file.DielectricGapThicknesses.Count
-                    ? file.DielectricGapThicknesses[index] : defaultGap,
-                file is not null && index < file.DielectricGapPermittivities.Count
-                    ? file.DielectricGapPermittivities[index] : DefaultPermittivity,
-                file is not null && index < file.DielectricGapLossTangents.Count
-                    ? file.DielectricGapLossTangents[index] : DefaultLossTangent));
+                rows is not null && index < rows.DielectricGapThicknesses.Count
+                    ? rows.DielectricGapThicknesses[index] : defaultGap,
+                rows is not null && index < rows.DielectricGapPermittivities.Count
+                    ? rows.DielectricGapPermittivities[index] : DefaultPermittivity,
+                rows is not null && index < rows.DielectricGapLossTangents.Count
+                    ? rows.DielectricGapLossTangents[index] : DefaultLossTangent));
         }
         return new PanelSeed(boardThickness, layers, gaps);
     }

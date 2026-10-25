@@ -300,6 +300,7 @@ public partial class MainViewModel : ObservableObject
         Session.ActiveWorkspace = WorkspaceKind.Structural;
         Session.IsHomeActive = false;
         Session.RaiseGeometryReplaced(leavingPcbMode: true);
+        Pcb.LoadStackupSettings(new Core.Model.PcbStackupSettings());   // a new project starts from the default boxes, no saved rows
         Session.RaiseMeshChanged();
         Log.Append("New project. Create a primitive or import an STL file to begin.");
     }
@@ -364,10 +365,7 @@ public partial class MainViewModel : ObservableObject
         {
             Session.Body.Material = Session.SelectedMaterial;
             Session.Project.Name = Path.GetFileNameWithoutExtension(dialog.FileName);
-            Session.Project.AnalysisType = Session.SelectedAnalysis.Kind.ToString();
-            Session.Project.Solver = Solve.ToSolverSettings();
-            Session.Project.Antenna = Antenna.ToSettings();
-            Session.Project.SignalIntegrity = SignalIntegrity.ToSettings();
+            CaptureProjectSettings();
             _serializer.Save(Session.Project, dialog.FileName);
             _recentProjects.Add(dialog.FileName);
             Log.Append($"Project saved to {dialog.FileName}");
@@ -383,7 +381,20 @@ public partial class MainViewModel : ObservableObject
         LoadProjectFromPath(dialog.FileName);
     }
 
-    private void LoadProjectFromPath(string path)
+    /// <summary>Writes the panels' state into the project before it is serialized: the
+    /// analysis, the solver, antenna and SI settings, and the stackup panel's boxes and rows
+    /// (<see cref="PcbViewModel.BuildStackupSettings"/>), which <see cref="LoadProjectFromPath"/>
+    /// hands back to the panel.</summary>
+    internal void CaptureProjectSettings()
+    {
+        Session.Project.AnalysisType = Session.SelectedAnalysis.Kind.ToString();
+        Session.Project.Solver = Solve.ToSolverSettings();
+        Session.Project.Antenna = Antenna.ToSettings();
+        Session.Project.SignalIntegrity = SignalIntegrity.ToSettings();
+        Session.Project.Stackup = Pcb.BuildStackupSettings();
+    }
+
+    internal void LoadProjectFromPath(string path)
     {
         try
         {
@@ -400,11 +411,6 @@ public partial class MainViewModel : ObservableObject
                 Session.ActiveWorkspace = AnalysisOption.WorkspaceOf(analysisKind);
                 Session.SelectedAnalysis = AnalysisOption.All.First(o => o.Kind == analysisKind);
             }
-            if (project.Stackup is not null)
-            {
-                Pcb.PcbCopperThickness = project.Stackup.CopperThickness;
-                Pcb.PcbBoardThickness = project.Stackup.BoardThickness;
-            }
             Solve.LoadSolverSettings(project.Solver);
             foreach (var note in Antenna.LoadSettings(project.Antenna).Concat(SignalIntegrity.LoadSettings(project.SignalIntegrity)))
                 Log.Append("Project: " + note);
@@ -419,7 +425,15 @@ public partial class MainViewModel : ObservableObject
 
             // The events fan out: PCB teardown, condition/result resync, scene + mesh
             // info/edges rebuild, zoom-to-fit.
-            Session.RaiseGeometryReplaced(leavingPcbMode: true);
+            try { Session.RaiseGeometryReplaced(leavingPcbMode: true); }
+            finally
+            {
+                // After the teardown, which forgets any rows the previous project had waiting:
+                // this project's boxes now, its rows at the next board import. In a finally so
+                // a handler that throws on this file cannot leave the previous project's boxes
+                // in place for the next save to write over the file's.
+                Pcb.LoadStackupSettings(project.Stackup);
+            }
             Session.RaiseMeshChanged();
             Session.IsHomeActive = false;
             _recentProjects.Add(path);

@@ -179,7 +179,11 @@ public sealed class SimProject
     /// </summary>
     public string? AnalysisType { get; set; }
 
-    /// <summary>The PCB stackup, when this project was built from a board import. Null otherwise.</summary>
+    /// <summary>The stackup panel as it was when the project was saved: the copper and board
+    /// boxes, and the per-layer and per-gap rows when a board had been imported. Written by
+    /// every save of the app (older files: written at mesh time, or null); read back into the
+    /// panel on open, the rows at the next board import. Not the stackup a persisted body was
+    /// meshed with when the panel was edited after meshing.</summary>
     public PcbStackupSettings? Stackup { get; set; }
 
     /// <summary>What surrounds the bodies (vacuum / still fluid / moving fluid) for

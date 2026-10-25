@@ -1,7 +1,9 @@
+using System.IO;
 using System.Windows.Media.Media3D;
 using OpenSim.App.Tests.Support;
 using OpenSim.App.ViewModels;
 using OpenSim.Core.Model;
+using OpenSim.Core.Persistence;
 using OpenSim.Pcb.Import;
 
 namespace OpenSim.App.Tests.ViewModels;
@@ -208,6 +210,201 @@ public sealed class PcbViewModelStackupTests : IDisposable
         Assert.Equal(1.4e-3, pcb.PcbBoardThickness, 12);
         Assert.Equal(1400.0, gap.ThicknessMicrons, 9);
         Assert.Equal(2, pcb.NetRows.Count);
+    }
+
+    /// <summary>What a project saved from a three-layer board's panel (TC-2).</summary>
+    private static readonly PcbStackupSettings SavedThreeLayer = new()
+    {
+        CopperThickness = 50e-6,
+        BoardThickness = 2.0e-3,
+        CopperLayerThicknesses = new[] { 105e-6, 18e-6, 35e-6 },
+        DielectricGapThicknesses = new[] { 0.3e-3, 1.5e-3 },
+        DielectricGapPermittivities = new[] { 3.5, 4.6 },
+        DielectricGapLossTangents = new[] { 0.004, 0.015 },
+    };
+
+    [Fact]
+    public void AReopenedProject_RestoresTheRows_AtTheNextImport_AndOnlyOnce()
+    {
+        var pcb = Pcb;
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        Assert.Equal(50e-6, pcb.PcbCopperThickness, 12);
+        Assert.Equal(2.0e-3, pcb.PcbBoardThickness, 12);
+        Assert.Empty(pcb.LayerFilters);                                      // the board is not persisted
+
+        // A save before any re-import keeps the rows, with the boxes as they are now.
+        pcb.PcbBoardThickness = 1.8e-3;
+        var kept = pcb.BuildStackupSettings();
+        Assert.Equal(1.8e-3, kept.BoardThickness, 12);
+        Assert.Equal(50e-6, kept.CopperThickness, 12);
+        AssertClose(SavedThreeLayer.CopperLayerThicknesses, kept.CopperLayerThicknesses);
+        AssertClose(SavedThreeLayer.DielectricGapThicknesses, kept.DielectricGapThicknesses);
+        AssertClose(SavedThreeLayer.DielectricGapLossTangents, kept.DielectricGapLossTangents);
+
+        // The re-import of a Gerber set (no stackup of its own) shows the saved rows; the box stays.
+        pcb.InstallBoard(Boards.Layers(3), "three-layer");
+        AssertClose(new[] { 105.0, 18.0, 35.0 }, pcb.LayerFilters.Select(l => l.ThicknessMicrons));
+        AssertClose(new[] { 300.0, 1500.0 }, pcb.DielectricGaps.Select(g => g.ThicknessMicrons));
+        AssertClose(new[] { 3.5, 4.6 }, pcb.DielectricGaps.Select(g => g.RelativePermittivity));
+        AssertClose(new[] { 0.004, 0.015 }, pcb.DielectricGaps.Select(g => g.LossTangent));
+        Assert.Equal(1.8e-3, pcb.PcbBoardThickness, 12);
+        var options = pcb.BuildNetMeshOptions();                             // and every consumer reads them
+        Assert.Equal(105e-6, options.Stackup.CopperThicknessOf(1), 12);
+        Assert.Equal(1.5e-3, options.Stackup.GapThicknessOf(2), 12);
+        AssertClose(new[] { 105e-6, 18e-6, 35e-6 }, pcb.BuildStackupSettings().CopperLayerThicknesses);
+
+        // Consumed: the next board seeds from the boxes again, as before.
+        pcb.InstallBoard(Boards.Layers(2), "two-layer");
+        Assert.All(pcb.LayerFilters, l => Assert.Equal(50.0, l.ThicknessMicrons, 9));
+        Assert.Equal(1800.0, Assert.Single(pcb.DielectricGaps).ThicknessMicrons, 9);
+    }
+
+    [Fact]
+    public void AFileStackup_StillWins_OverAReopenedProjectsRows()
+    {
+        var pcb = Pcb;
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        pcb.InstallBoard(Boards.Layers(4, FourLayerFile), "four-layer.cvg");
+
+        AssertClose(new[] { 70.0, 35.0, 35.0, 70.0 }, pcb.LayerFilters.Select(l => l.ThicknessMicrons));
+        AssertClose(new[] { 100.0, 1200.0, 100.0 }, pcb.DielectricGaps.Select(g => g.ThicknessMicrons));
+        Assert.Equal(1.4e-3, pcb.PcbBoardThickness, 12);
+    }
+
+    [Fact]
+    public void SaveThenReopen_RoundTripsTheEditedRows_ThroughTheProjectFile()
+    {
+        var main = _app.Resolve<MainViewModel>();
+        var session = _app.Resolve<OpenSim.App.Services.ProjectSession>();
+        var pcb = Pcb;
+        pcb.InstallBoard(Boards.Layers(3), "three-layer");
+        pcb.PcbCopperThickness = 50e-6;
+        pcb.LayerFilters[0].ThicknessMicrons = 105;
+        pcb.DielectricGaps[1].ThicknessMicrons = 1500;
+        pcb.DielectricGaps[1].RelativePermittivity = 4.6;
+        pcb.DielectricGaps[1].LossTangent = 0.015;
+
+        string path = Path.Combine(_app.UserDirectory, "round-trip.ossproj");
+        // Save: the panel's boxes and rows go into the project (what SaveProject writes before the serializer).
+        main.CaptureProjectSettings();
+        AssertClose(new[] { 105e-6, 50e-6, 50e-6 }, session.Project.Stackup!.CopperLayerThicknesses);
+        AssertClose(new[] { 800e-6, 1500e-6 }, session.Project.Stackup.DielectricGapThicknesses);
+        _app.Resolve<ProjectSerializer>().Save(session.Project, path);
+
+        // Meanwhile the boxes move on, so the restore below is seen to come from the file.
+        pcb.PcbCopperThickness = 35e-6;
+        pcb.PcbBoardThickness = 2.2e-3;
+
+        // Reopen: the board is torn down (it is not in the file), the boxes come back at once.
+        main.LoadProjectFromPath(path);
+        Assert.Contains(_app.Log.Entries, e => e.StartsWith("Project loaded from"));
+        Assert.False(session.IsPcbMode);
+        Assert.Empty(pcb.LayerFilters);
+        Assert.Equal(50e-6, pcb.PcbCopperThickness, 12);
+        Assert.Equal(1.6e-3, pcb.PcbBoardThickness, 12);
+
+        // Re-import the same board: the edited rows are back, and the log says so.
+        pcb.InstallBoard(Boards.Layers(3), "three-layer");
+        AssertClose(new[] { 105.0, 50.0, 50.0 }, pcb.LayerFilters.Select(l => l.ThicknessMicrons));
+        AssertClose(new[] { 800.0, 1500.0 }, pcb.DielectricGaps.Select(g => g.ThicknessMicrons));
+        AssertClose(new[] { 4.4, 4.6 }, pcb.DielectricGaps.Select(g => g.RelativePermittivity));
+        AssertClose(new[] { 0.02, 0.015 }, pcb.DielectricGaps.Select(g => g.LossTangent));
+        Assert.Contains("Stackup: 3 layer rows and 2 gap rows restored from the project.", _app.Log.Entries);
+    }
+
+    [Fact]
+    public void ACopperBoxEdit_WhileTheSavedRowsWait_SetsEveryOneOfThem()
+    {
+        // The box's rule with a board loaded — it sets EVERY layer — holds for the rows a
+        // reopened project has waiting, so the re-import cannot bring back the saved copper
+        // over a value typed into the box.
+        var pcb = Pcb;
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        pcb.PcbCopperThickness = 70e-6;
+
+        var kept = pcb.BuildStackupSettings();                               // a save before the re-import
+        Assert.Equal(70e-6, kept.CopperThickness, 12);
+        AssertClose(new[] { 70e-6, 70e-6, 70e-6 }, kept.CopperLayerThicknesses);
+        AssertClose(SavedThreeLayer.DielectricGapThicknesses, kept.DielectricGapThicknesses);
+
+        pcb.InstallBoard(Boards.Layers(3), "three-layer");                   // the re-import
+        Assert.All(pcb.LayerFilters, l => Assert.Equal(70.0, l.ThicknessMicrons, 9));
+        AssertClose(new[] { 300.0, 1500.0 }, pcb.DielectricGaps.Select(g => g.ThicknessMicrons));
+    }
+
+    [Fact]
+    public void TheSavedRows_AreForgotten_WhenTheBoardWorkflowIsLeft_OrAnotherProjectHasNone()
+    {
+        var pcb = Pcb;
+        var session = _app.Resolve<OpenSim.App.Services.ProjectSession>();
+
+        // A primitive, an STL or a STEP import leaves PCB mode: the waiting rows go with it.
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        session.RaiseGeometryReplaced(leavingPcbMode: true);
+        Assert.Empty(pcb.BuildStackupSettings().CopperLayerThicknesses);
+        Assert.Equal(50e-6, pcb.PcbCopperThickness, 12);                     // the boxes stay
+        pcb.InstallBoard(Boards.Layers(3), "three-layer");
+        Assert.All(pcb.LayerFilters, l => Assert.Equal(50.0, l.ThicknessMicrons, 9));
+        Assert.DoesNotContain(_app.Log.Entries, e => e.Contains("restored from the project"));
+
+        // Opening a project that saved no rows forgets them too, and takes that project's boxes
+        // (a project open tears the board down first, as LoadProjectFromPath does).
+        session.RaiseGeometryReplaced(leavingPcbMode: true);
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        pcb.LoadStackupSettings(new PcbStackupSettings { CopperThickness = 20e-6, BoardThickness = 1.0e-3 });
+        Assert.Empty(pcb.BuildStackupSettings().DielectricGapThicknesses);
+        Assert.Equal(20e-6, pcb.PcbCopperThickness, 12);
+        Assert.Equal(1.0e-3, pcb.PcbBoardThickness, 12);
+
+        // An older file with no stackup at all: the rows are forgotten, the boxes stay as they are.
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        pcb.LoadStackupSettings(null);
+        Assert.Empty(pcb.BuildStackupSettings().CopperLayerThicknesses);
+        Assert.Equal(50e-6, pcb.PcbCopperThickness, 12);
+        Assert.Equal(2.0e-3, pcb.PcbBoardThickness, 12);
+
+        // New project: the default boxes, no rows.
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        _app.Resolve<MainViewModel>().NewProjectCommand.Execute(null);
+        Assert.Equal(35e-6, pcb.PcbCopperThickness, 12);
+        Assert.Equal(1.6e-3, pcb.PcbBoardThickness, 12);
+        Assert.Empty(pcb.BuildStackupSettings().CopperLayerThicknesses);
+        pcb.InstallBoard(Boards.Layers(2), "two-layer");
+        Assert.All(pcb.LayerFilters, l => Assert.Equal(35.0, l.ThicknessMicrons, 9));
+        Assert.Equal(1600.0, Assert.Single(pcb.DielectricGaps).ThicknessMicrons, 9);
+    }
+
+    [Fact]
+    public void AnImportWithItsOwnStackup_UsesTheSavedRowsUp_AndADifferentLayerCountIsLogged()
+    {
+        var pcb = Pcb;
+
+        var session = _app.Resolve<OpenSim.App.Services.ProjectSession>();
+
+        // An IPC-2581 board after the reopen: its file wins, the saved rows are spent, the log says so.
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        pcb.InstallBoard(Boards.Layers(4, FourLayerFile), "four-layer.cvg");
+        Assert.Contains("Stackup: the board file's own stackup replaces the rows the project saved.", _app.Log.Entries);
+        pcb.InstallBoard(Boards.Layers(2), "two-layer");
+        Assert.All(pcb.LayerFilters, l => Assert.Equal(50.0, l.ThicknessMicrons, 9));   // the copper box
+        Assert.Equal(1400.0, Assert.Single(pcb.DielectricGaps).ThicknessMicrons, 9);  // the board box, the file's 1.4 mm
+        Assert.DoesNotContain(_app.Log.Entries, e => e.Contains("restored from the project"));
+
+        // A board with more layers than the rows were saved for: the rows follow layer
+        // order and the log says what happened (a project open tears the board down first).
+        session.RaiseGeometryReplaced(leavingPcbMode: true);
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        pcb.InstallBoard(Boards.Layers(4), "four-layer");
+        AssertClose(new[] { 105.0, 18.0, 35.0, 50.0 }, pcb.LayerFilters.Select(l => l.ThicknessMicrons));
+        Assert.Contains(_app.Log.Entries, e => e.StartsWith("Stackup: the rows restored from the project were saved for 3 copper layers and this board has 4. "
+            + "The rows follow layer order (L1 first); layers and gaps past L3 take the boxes."));
+
+        // And fewer: the saved rows past the board are dropped, and the log says that instead.
+        session.RaiseGeometryReplaced(leavingPcbMode: true);
+        pcb.LoadStackupSettings(SavedThreeLayer);
+        pcb.InstallBoard(Boards.Layers(2), "two-layer");
+        AssertClose(new[] { 105.0, 18.0 }, pcb.LayerFilters.Select(l => l.ThicknessMicrons));
+        Assert.Contains(_app.Log.Entries, e => e.Contains("this board has 2. The rows follow layer order (L1 first); the saved rows past L2 are dropped."));
     }
 
     /// <summary>Element-wise equality to 12 places: the rows hold microns, so a value that
