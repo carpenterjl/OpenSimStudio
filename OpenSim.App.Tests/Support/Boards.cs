@@ -41,4 +41,34 @@ public static class Boards
             Stackup = stackup,
         };
     }
+
+    /// <summary>FU-36's printed monopole as a two-layer Gerber board: on L1 a 1 × 30 mm trace
+    /// (net ANT) standing 1 mm above a 40 × 30 mm pour (net GND), the feed between them at
+    /// (0, 0.5 mm); on L2 a plane (net GND2), so the stackup panel has one gap.</summary>
+    public static PcbBoard PrintedMonopole()
+    {
+        var trace = new CopperIsland(0, 1, "L1", Rect(-0.5e-3, 1e-3, 0.5e-3, 31e-3));
+        var pour = new CopperIsland(1, 1, "L1", Rect(-20e-3, -30e-3, 20e-3, 0));
+        var plane = new CopperIsland(2, 2, "L2", Rect(-20e-3, -30e-3, 20e-3, 0));
+        return new PcbBoard
+        {
+            Outline = new[] { Rect(-25e-3, -35e-3, 25e-3, 35e-3) },
+            Islands = new[] { trace, pour, plane },
+            Pads = Array.Empty<CopperPad>(),
+            Vias = Array.Empty<Via>(),
+            Nets = new[]
+            {
+                new CopperNet(1, new[] { trace }) { Name = "ANT" },
+                new CopperNet(2, new[] { pour }) { Name = "GND" },
+                new CopperNet(3, new[] { plane }) { Name = "GND2" },
+            },
+            Layers = new[]
+            {
+                new BoardLayer("top.gbr", GerberLayerType.CopperSignal, 1, IsTopSide: true),
+                new BoardLayer("bottom.gbr", GerberLayerType.CopperPlane, 2, IsTopSide: false),
+            },
+            Warnings = Array.Empty<string>(),
+            Stackup = null,
+        };
+    }
 }

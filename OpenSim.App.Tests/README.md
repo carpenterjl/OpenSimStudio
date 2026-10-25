@@ -40,7 +40,11 @@ dispatcher. `PcbViewModel.RefreshCopperPreview` recomposes synchronously when th
 
 Code paths that open a file dialog (`Microsoft.Win32.*FileDialog`, 30 sites in 17 view-model
 files), touch `Application.Current.MainWindow` or `TryFindResource`, or wait on a
-`DispatcherTimer` / `Dispatcher.BeginInvoke`. Tests target the plumbing behind those, through
+`DispatcherTimer` / `Dispatcher.BeginInvoke`. An async command whose continuation touches
+Freezables (`await Task.Run(...)` then a `PointCollection`) CAN be run: `Support/DispatcherPump.cs`
+installs a WPF dispatcher on the test thread and pumps it until the command's task completes,
+as `AntennaViewModelPrintedTests` does for the antenna solve. Tests target the plumbing behind
+the rest, through
 `internal` seams (`InternalsVisibleTo("OpenSim.App.Tests")` in `OpenSim.App.csproj` and
 `OpenSim.Core.csproj`), e.g. `PcbViewModel.InstallBoard`, `BuildNetMeshOptions`,
 `BuildStackupSettings`, `LoadStackupSettings`; `MainViewModel.CaptureProjectSettings`, `LoadProjectFromPath`.
