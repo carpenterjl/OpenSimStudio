@@ -70,6 +70,11 @@ Z0/RLGC over the board's own reference planes — plus the `impedance` calculato
 checks, `emi` estimates and planar `magnetics`. Every command writes a report (Markdown and
 HTML) with its assumptions, CSV tables and the log, so a study is reproducible from a script.
 
+For loops, decisions between solves, post-processing and plots, drive the same libraries from
+JGraph (a MATLAB-compatible technical-computing environment on .NET 8) in-process through its
+`NET.addAssembly` interop — see
+[docs/Scripting-from-JGraph.md](docs/Scripting-from-JGraph.md) and the worked script in `examples/jgraph/`.
+
 ## Design principles
 
 The priority order is explicit and non-negotiable:
