@@ -4,7 +4,7 @@
     <!-- FU-47: EMI pre-compliance (Feature 14, FU-41) — the study the command line's 'emi' job runs. -->
     <GroupBox Header="EMI pre-compliance (conducted and radiated estimate)" DataContext="{Binding Emi}">
         <StackPanel>
-            <TextBlock Text="A hard-switched converter's conducted emission through two LISNs against a limit line, and a comparative radiated estimate of its hot loop and input cable. The switch current is the differential-mode source, the switch node's voltage through its capacitance to earth the common-mode one. With a board, the hot loop's inductance, resistance and area and the switch node's capacitance are read off the copper and add to the values below. The limit lines are typed as commonly reproduced — check them against your copy of the standard."
+            <TextBlock Text="A hard-switched converter's conducted emission through two LISNs against a limit line, and a comparative radiated estimate of its hot loop and input cable. The switch current is the differential-mode source, the switch node's voltage through its capacitance to earth the common-mode one. With a board, the hot loop's inductance, resistance and area and the switch node's capacitance are read off the copper and add to the values below. The FCC Part 15 limit lines are read from the regulation; the CISPR 32 lines are typed as commonly reproduced — check those against your copy of the standard."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
 
             <TextBlock Text="Converter" FontWeight="Bold" Margin="0,4,0,2"/>

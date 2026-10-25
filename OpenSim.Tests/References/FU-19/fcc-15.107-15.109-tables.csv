@@ -1,0 +1,24 @@
+# 47 CFR Part 15 subpart B, transcribed from the eCFR XML of Title 47 as of 2026-10-19 (see README.md).
+# A value "66 to 56" is a limit that decreases with the logarithm of the frequency across the band.
+section,class,quantity,detector,distance_m,f0_MHz,f1_MHz,limit,unit
+15.107(a),B,conducted,quasi-peak,,0.15,0.5,66 to 56,dBuV
+15.107(a),B,conducted,quasi-peak,,0.5,5,56,dBuV
+15.107(a),B,conducted,quasi-peak,,5,30,60,dBuV
+15.107(a),B,conducted,average,,0.15,0.5,56 to 46,dBuV
+15.107(a),B,conducted,average,,0.5,5,46,dBuV
+15.107(a),B,conducted,average,,5,30,50,dBuV
+15.107(b),A,conducted,quasi-peak,,0.15,0.5,79,dBuV
+15.107(b),A,conducted,quasi-peak,,0.5,30,73,dBuV
+15.107(b),A,conducted,average,,0.15,0.5,66,dBuV
+15.107(b),A,conducted,average,,0.5,30,60,dBuV
+15.109(a),B,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),3,30,88,100,uV/m
+15.109(a),B,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),3,88,216,150,uV/m
+15.109(a),B,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),3,216,960,200,uV/m
+15.109(a),B,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),3,960,above 960 (drawn to 1000),500,uV/m
+15.109(b),A,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),10,30,88,90,uV/m
+15.109(b),A,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),10,88,216,150,uV/m
+15.109(b),A,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),10,216,960,210,uV/m
+15.109(b),A,radiated field strength,quasi-peak (15.35(a) at or below 1000 MHz),10,960,above 960 (drawn to 1000),300,uV/m
+# Rules quoted: 15.107(a) "The lower limit applies at the band edges."; 15.107(a) table note "*Decreases with the logarithm of the frequency.";
+# 15.107(b) "The lower limit applies at the boundary between the frequency ranges."; 15.109(c) "the tighter limit applies at the band edges.";
+# 15.35(a) quasi-peak at or below 1000 MHz; 15.35(b) average above 1000 MHz with a peak limit 20 dB above the average limit.

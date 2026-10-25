@@ -299,14 +299,20 @@ public static class ConductedEmission
     {
         "Pre-compliance estimate: each spectral line's amplitude (what a peak detector with a 9 kHz bandwidth reads when the switching frequency is above 9 kHz). Quasi-peak and average readings of a steady line are not higher, so comparing with the quasi-peak limit is conservative; against the average limit it is not.",
         "Linear network: the converter is two ideal sources (switch current, switch-node voltage) with the turn-on ring and the diode's recovery added to them when their parameters are given; the inductor's own capacitance is not in it.",
-        "LISN as commonly drawn for the 50 Ω/50 µH + 5 Ω V-network; limit lines " + EmiLimits.Unverified + ".",
+        "LISN as commonly drawn for the 50 Ω/50 µH + 5 Ω V-network.",
     };
 
     /// <summary>The assumptions for one converter: the general ones, its edge model and its
     /// common-mode paths.</summary>
-    public static IReadOnlyList<string> AssumptionsFor(ConverterInput input)
+    public static IReadOnlyList<string> AssumptionsFor(ConverterInput input) => AssumptionsFor(input, null);
+
+    /// <summary>The same, naming where the limit line compared against comes from
+    /// (<see cref="EmiLimitLine.Source"/>: the regulation's text for the FCC lines, "typed as
+    /// commonly reproduced" for the CISPR 32 lines).</summary>
+    public static IReadOnlyList<string> AssumptionsFor(ConverterInput input, EmiLimitLine? limit)
     {
         var list = Assumptions.ToList();
+        if (limit is not null) list.Add($"Limit line '{limit.Name}': {limit.Source}.");
         list.AddRange(input.SourceNotes());
         var paths = new List<string>();
         if (input.SwitchNodeCapacitance > 0) paths.Add($"the switch node's {input.SwitchNodeCapacitance * 1e12:g3} pF to earth");
@@ -347,7 +353,7 @@ public static class ConductedEmission
             lines.Add(new EmissionLine(f, Db(both["L.rx"]), Db(both["N.rx"]),
                 Db(0.5 * (dm["L.rx"] - dm["N.rx"])), Db(0.5 * (cm["L.rx"] + cm["N.rx"])), limit?.At(f)));
         }
-        return new ConductedEmissionResult(lines, limit, AssumptionsFor(input));
+        return new ConductedEmissionResult(lines, limit, AssumptionsFor(input, limit));
     }
 
     /// <summary>The common-mode current on the cable: what both LISNs together pass to earth

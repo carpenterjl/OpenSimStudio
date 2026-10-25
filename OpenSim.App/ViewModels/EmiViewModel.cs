@@ -22,7 +22,8 @@ public sealed record EmiLimitChoice(string Label, EmiLimitLine Line);
 /// LISNs against a limit line, and the comparative radiated estimate of the hot loop and the input
 /// cable. With an imported board, the hot loop's inductance, resistance and area and the switch
 /// node's capacitance are read off the copper (<see cref="ConverterBoard"/>) and add to the values
-/// typed here. The limit lines are typed as commonly reproduced and labelled so.
+/// typed here. The FCC Part 15 limit lines are read from the regulation's text; the CISPR 32
+/// lines are typed as commonly reproduced and labelled so (<see cref="EmiLimitLine.Source"/>).
 /// </summary>
 public partial class EmiViewModel : ObservableObject
 {
