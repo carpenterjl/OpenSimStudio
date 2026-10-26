@@ -93,7 +93,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
             var seeds = BuildSeeds(geometry, refined, classifier, surfaceTree, h, creaseDivisions, droppedCells,
                 cancellationToken);
             var (mesh, pointOfNode) = Triangulate(seeds.Points, seeds.ExactFeaturePositions, classifier,
-                distanceField, h, settings, blocked, cancellationToken);
+                distanceField, h, settings, blocked, remarks, attempt + 1, cancellationToken);
             var report = audit.Evaluate(mesh);
             if (remarks.Count > 0)
                 report = report with { Warnings = report.Warnings.Concat(remarks).ToArray() };
@@ -268,7 +268,7 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
     private static (FeMesh Mesh, int[] PointOfNode) Triangulate(List<Vector3D> points,
         Dictionary<int, Vector3D> exactFeaturePositions, SolidClassifier classifier,
         SurfaceDistanceField distanceField, double h, MeshSettings settings,
-        IReadOnlyList<Vector3D> blocked, CancellationToken cancellationToken)
+        IReadOnlyList<Vector3D> blocked, List<string> remarks, int attempt, CancellationToken cancellationToken)
     {
         // 3. Delaunay triangulation, then quality-driven refinement: Steiner points at
         // the circumcenters of bad tets (longest-edge midpoints for boundary slivers,
@@ -284,6 +284,14 @@ public sealed class DelaunayMeshGenerator : IMeshGenerator
                 settings.TargetMinQuality, budget, cancellationToken, blocked);
         }
         var tets = triangulation.FiniteTets();
+        if (triangulation.SkippedPoints.Count > 0)
+        {
+            var reasons = triangulation.SkippedPoints.GroupBy(s => s.Reason).Select(g => $"{g.Count()}: {g.Key}");
+            var first = triangulation.SkippedPoints[0].Position;
+            remarks.Add($"Build {attempt}, Delaunay: {triangulation.SkippedPoints.Count} point(s) left out of the triangulation — " +
+                        string.Join("; ", reasons) + $". The mesh covers the solid without them. First: " +
+                        $"({first.X:g6}, {first.Y:g6}, {first.Z:g6}).");
+        }
 
         // 4. Keep interior, non-degenerate tetrahedra. Because surface points are
         // jittered off the exact geometry, centroids of thin boundary tets can land
