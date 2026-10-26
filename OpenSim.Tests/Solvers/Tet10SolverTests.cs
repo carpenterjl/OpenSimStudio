@@ -117,7 +117,7 @@ public class Tet10SolverTests
         double avgTip = tipNodes.Average(n => displacement.GetVector(n).X);
         Assert.Equal(tipExtension, avgTip, tipExtension * 2e-2);
 
-        var stress = (ElementTensorField)output.Fields.Single(f => f.Name == "Stress tensor");
+        var stress = (TensorField)output.Fields.Single(f => f.Name == "Stress tensor");
         double avgVm = Enumerable.Range(0, stress.Count).Average(i => stress.GetTensor(i).VonMises());
         Assert.Equal(sigma, avgVm, sigma * 2e-2);
     }
