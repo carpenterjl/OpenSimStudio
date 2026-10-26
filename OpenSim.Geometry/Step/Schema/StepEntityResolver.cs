@@ -17,12 +17,16 @@ public sealed class StepEntityResolver
 {
     private readonly StepFile _file;
     private readonly double _scale;
+    private readonly double _angleScale;
     private readonly Dictionary<int, object> _memo = new();
 
-    public StepEntityResolver(StepFile file, double metersPerUnit)
+    /// <param name="radiansPerUnit">The file's plane-angle unit in radians (a cone's semi-angle is
+    /// the one angle the schema subset carries); 1 when the file declares none.</param>
+    public StepEntityResolver(StepFile file, double metersPerUnit, double radiansPerUnit = 1.0)
     {
         _file = file;
         _scale = metersPerUnit;
+        _angleScale = radiansPerUnit;
     }
 
     /// <summary>
@@ -129,6 +133,7 @@ public sealed class StepEntityResolver
 
         int degree;
         IReadOnlyList<StepValue> ctrlRefs, multsRaw, knotsRaw;
+        StepValue closedFlag;
         if (inst.IsComplex && withKnots.Args.Count == 3)
         {
             var core = inst.Find("B_SPLINE_CURVE")
@@ -136,6 +141,7 @@ public sealed class StepEntityResolver
                            $"#{inst.Id}: complex B-spline curve lacks the B_SPLINE_CURVE record");
             degree = (int)core.Args[0].AsInt();
             ctrlRefs = core.Args[1].AsList();
+            closedFlag = core.Args[3];
             multsRaw = withKnots.Args[0].AsList();
             knotsRaw = withKnots.Args[1].AsList();
         }
@@ -143,9 +149,16 @@ public sealed class StepEntityResolver
         {
             degree = (int)withKnots.Args[1].AsInt();
             ctrlRefs = withKnots.Args[2].AsList();
+            closedFlag = withKnots.Args[4];
             multsRaw = withKnots.Args[6].AsList();
             knotsRaw = withKnots.Args[7].AsList();
         }
+        // closed_curve is a LOGICAL: .T., .F. or .U. (unknown). .T. closes the curve; .U. lets
+        // the geometry decide (the curve closes when its ends coincide).
+        bool? closed = closedFlag is StepValue.Enumeration flag
+            ? flag.Value.Equals("T", StringComparison.OrdinalIgnoreCase) ? true
+              : flag.Value.Equals("F", StringComparison.OrdinalIgnoreCase) ? false : null
+            : null;
 
         var ctrl = new Vector3D[ctrlRefs.Count];
         for (int i = 0; i < ctrlRefs.Count; i++) ctrl[i] = Point(ctrlRefs[i].AsRef());
@@ -165,7 +178,7 @@ public sealed class StepEntityResolver
         {
             weights = Ones(ctrl.Length);
         }
-        return new StepBSplineCurve(inst.Id, degree, ctrl, flat, weights);
+        return new StepBSplineCurve(inst.Id, degree, ctrl, flat, weights, closed);
     }
 
     // ---------------- surfaces ----------------
@@ -187,7 +200,7 @@ public sealed class StepEntityResolver
         var cone = inst.Find("CONICAL_SURFACE");
         if (cone is not null)
             return new StepCone(Placement(cone.Args[1].AsRef()),
-                cone.Args[2].AsReal() * _scale, cone.Args[3].AsReal()); // semi-angle is plane angle — unscaled
+                cone.Args[2].AsReal() * _scale, cone.Args[3].AsReal() * _angleScale); // semi-angle in the file's plane-angle unit
 
         var sphere = inst.Find("SPHERICAL_SURFACE");
         if (sphere is not null)

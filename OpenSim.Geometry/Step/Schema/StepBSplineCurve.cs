@@ -4,19 +4,58 @@ using OpenSim.Geometry.Step.Tessellate;
 namespace OpenSim.Geometry.Step.Schema;
 
 /// <summary>
-/// A (possibly rational) B-spline curve with an explicit clamped knot vector. Rational
-/// evaluation runs in homogeneous coordinates; derivatives use the quotient rule
-/// C' = (A' − C·w')/w with A the weighted numerator.
+/// A (possibly rational) B-spline curve with an explicit knot vector. Rational evaluation
+/// runs in homogeneous coordinates; derivatives use the quotient rule C' = (A' − C·w')/w
+/// with A the weighted numerator. A closed curve — the record's closed_curve flag set, or
+/// the curve's two ends meeting (ISO 10303-42 makes the flag informational: a curve whose
+/// ends meet is closed whatever it says) — is periodic in its parameter: <see cref="Period"/>
+/// is its domain length and a parameter outside the domain wraps into it, so a ring edge
+/// on it — a fillet's boundary, a rounded outline — tessellates like one on a circle (D21:
+/// such edges used to be refused as "not periodic"). The knot vector may be clamped or
+/// uniform (the wrapped-control-point form exporters write for closed curves).
 /// </summary>
 public sealed record StepBSplineCurve(
     int Id,
     int Degree,
     IReadOnlyList<Vector3D> ControlPoints,
     double[] Knots,
-    IReadOnlyList<double> Weights) : StepCurve
+    IReadOnlyList<double> Weights,
+    bool? ClosedFlag = null) : StepCurve
 {
     public double DomainStart => Knots[Degree];
     public double DomainEnd => Knots[ControlPoints.Count];
+
+    /// <summary>Closed by the file's flag, or by the curve's ends meeting (the points at the
+    /// domain's two ends within a millionth of the control polygon's size) — a flag of
+    /// "false" or "unknown" does not open a curve whose ends meet.</summary>
+    public bool IsClosed => ClosedFlag == true || EndsMeet();
+
+    public override double? Period => IsClosed ? DomainEnd - DomainStart : null;
+
+    private bool EndsMeet()
+    {
+        var first = ControlPoints[0];
+        double size = 0;
+        foreach (var c in ControlPoints) size = Math.Max(size, (c - first).Length);
+        if (size <= 0) return false;
+        var (a0, w0, _, _) = EvaluateClamped(DomainStart, withDerivative: false);
+        var (a1, w1, _, _) = EvaluateClamped(DomainEnd, withDerivative: false);
+        return (a1 / w1 - a0 / w0).Length <= 1e-6 * size;
+    }
+
+    /// <summary>A parameter brought into the domain: wrapped for a closed curve, clamped otherwise.</summary>
+    private double InDomain(double t)
+    {
+        double t0 = DomainStart, t1 = DomainEnd;
+        if (IsClosed && (t < t0 || t > t1))
+        {
+            double period = t1 - t0;
+            t = t0 + (t - t0) % period;
+            if (t < t0) t += period;
+            if (t >= t1) t -= period;
+        }
+        return Math.Clamp(t, t0, t1);
+    }
 
     public override Vector3D Point(double t)
     {
@@ -73,7 +112,12 @@ public sealed record StepBSplineCurve(
         return Vector3D.Dot(c, d2);
     }
 
-    private (Vector3D A, double W, Vector3D DA, double DW) Evaluate(double t, bool withDerivative)
+    private (Vector3D A, double W, Vector3D DA, double DW) Evaluate(double t, bool withDerivative) =>
+        EvaluateClamped(InDomain(t), withDerivative);
+
+    /// <summary>The evaluation at a parameter clamped into the domain, without the periodic
+    /// wrap (which depends on closure, which is decided here).</summary>
+    private (Vector3D A, double W, Vector3D DA, double DW) EvaluateClamped(double t, bool withDerivative)
     {
         t = Math.Clamp(t, DomainStart, DomainEnd);
         int span = Nurbs.FindSpan(Knots, Degree, ControlPoints.Count, t);

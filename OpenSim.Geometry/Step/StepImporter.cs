@@ -38,9 +38,12 @@ public sealed class StepImporter : IGeometryImporter
         string unitNote = FormattableString.Invariant($"length unit: {units.MetersPerUnit} m per model unit");
         if (units.UncertaintyMeters is double u)
             unitNote += FormattableString.Invariant($", stated accuracy {u} m");
+        unitNote += units.PlaneAngleDeclared
+            ? FormattableString.Invariant($"; plane angles: {units.RadiansPerUnit} rad per unit")
+            : "; no plane-angle unit declared — angles read as radians";
         notes.Add(unitNote);
 
-        var resolver = new StepEntityResolver(file, units.MetersPerUnit);
+        var resolver = new StepEntityResolver(file, units.MetersPerUnit, units.RadiansPerUnit);
         var solids = resolver.ResolveSolids();
         TriangleMesh? bestMesh = null;
         double bestVolume = double.MinValue;
@@ -86,9 +89,12 @@ public sealed class StepImporter : IGeometryImporter
         var notes = new List<string>();
         var file = Part21Parser.Parse(text);
         var units = StepUnits.Resolve(file);
-        notes.Add(FormattableString.Invariant($"length unit: {units.MetersPerUnit} m per model unit"));
+        notes.Add(FormattableString.Invariant($"length unit: {units.MetersPerUnit} m per model unit") +
+                  (units.PlaneAngleDeclared
+                      ? FormattableString.Invariant($"; plane angles: {units.RadiansPerUnit} rad per unit")
+                      : "; no plane-angle unit declared — angles read as radians"));
 
-        var resolver = new StepEntityResolver(file, units.MetersPerUnit);
+        var resolver = new StepEntityResolver(file, units.MetersPerUnit, units.RadiansPerUnit);
         var solids = resolver.ResolveSolids();
         var placed = new StepAssemblyResolver(file, resolver, notes)
             .Resolve(solids.Select(s => s.Id).ToList());

@@ -12,6 +12,10 @@ internal static class StepFixtures
 {
     public enum Unit { Millimetre, Metre, Inch }
 
+    /// <summary>The plane-angle unit a fixture declares beside its length unit: none (as every
+    /// fixture did before D21), radians, or degrees (a CONVERSION_BASED_UNIT of π/180 rad).</summary>
+    public enum AngleUnit { None, Radian, Degree }
+
     internal sealed class Builder
     {
         private readonly StringBuilder _data = new();
@@ -32,7 +36,7 @@ internal static class StepFixtures
             _data + "ENDSEC;\nEND-ISO-10303-21;\n";
 
         /// <summary>Emits the unit context and returns its #id (representations reference it).</summary>
-        public int AddUnits(Unit unit)
+        public int AddUnits(Unit unit, AngleUnit angle = AngleUnit.None)
         {
             int length;
             switch (unit)
@@ -50,7 +54,17 @@ internal static class StepFixtures
                     length = Add($"(CONVERSION_BASED_UNIT('INCH',#{measure})LENGTH_UNIT()NAMED_UNIT(#{dim}))");
                     break;
             }
-            return Add($"(GLOBAL_UNIT_ASSIGNED_CONTEXT((#{length}))REPRESENTATION_CONTEXT('',''))");
+            if (angle == AngleUnit.None)
+                return Add($"(GLOBAL_UNIT_ASSIGNED_CONTEXT((#{length}))REPRESENTATION_CONTEXT('',''))");
+            int radian = Add($"(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.))");
+            int angleUnit = radian;
+            if (angle == AngleUnit.Degree)
+            {
+                int measure = Add($"MEASURE_WITH_UNIT(PLANE_ANGLE_MEASURE({Math.PI / 180:R}),#{radian})");
+                int dim = Add($"DIMENSIONAL_EXPONENTS(0.,0.,0.,0.,0.,0.,0.)");
+                angleUnit = Add($"(CONVERSION_BASED_UNIT('DEGREE',#{measure})NAMED_UNIT(#{dim})PLANE_ANGLE_UNIT())");
+            }
+            return Add($"(GLOBAL_UNIT_ASSIGNED_CONTEXT((#{length},#{angleUnit}))REPRESENTATION_CONTEXT('',''))");
         }
 
         public int Point(double x, double y, double z) =>
@@ -201,12 +215,13 @@ internal static class StepFixtures
         return b.Render();
     }
 
-    /// <summary>A conical frustum: radius r1 at z = 0, r2 at z = h, seam topology as the cylinder.</summary>
-    public static string ConeFrustum(double r1, double r2, double h)
+    /// <summary>A conical frustum: radius r1 at z = 0, r2 at z = h, seam topology as the cylinder.
+    /// The semi-angle is written in <paramref name="angle"/>'s unit (radians when none is declared).</summary>
+    public static string ConeFrustum(double r1, double r2, double h, AngleUnit angle = AngleUnit.None)
     {
         var b = new Builder();
-        b.AddUnits(Unit.Millimetre);
-        double semiAngle = Math.Atan((r2 - r1) / h);
+        b.AddUnits(Unit.Millimetre, angle);
+        double semiAngle = Math.Atan((r2 - r1) / h) * (angle == AngleUnit.Degree ? 180 / Math.PI : 1);
 
         int pb = b.Point(r1, 0, 0);
         int pt = b.Point(r2, 0, h);
@@ -446,4 +461,80 @@ internal static class StepFixtures
         EmitBox(b, (10, 0, 0), 2, 2, 2);
         return b.Render();
     }
+
+    /// <summary>
+    /// A prism of height <paramref name="h"/> (axis +z, base at z = 0) whose outline is a CLOSED cubic
+    /// B-spline in the periodic form exporters write: eight control points on a circle of radius
+    /// a·√2 (every 45°, the first at 0°) with the first three repeated after the last, a uniform
+    /// knot vector 0…14, closed_curve .T. — a smooth (C²) rounded outline inside its control
+    /// octagon, the kind of curve a fillet's boundary is. Topology as the cylinder: two ring edges
+    /// on the outline (bottom and top), a seam, the lateral face a SURFACE_OF_LINEAR_EXTRUSION of
+    /// the bottom outline. Before D21 the ring edges were refused ("the curve is not periodic").
+    /// The control octagon's area is returned beside the text for a volume band.
+    /// </summary>
+    public static (string Text, double ProfileArea) ClosedBSplinePrism(double a, double h)
+    {
+        var b = new Builder();
+        b.AddUnits(Unit.Millimetre, AngleUnit.Radian);
+        double r = a * Math.Sqrt(2);
+        var ctrl = new (double x, double y)[11];
+        for (int i = 0; i < 11; i++)
+        {
+            double phi = (i % 8) * Math.PI / 4;
+            ctrl[i] = (r * Math.Cos(phi), r * Math.Sin(phi));
+        }
+        // Periodic cubic over 11 control points (8 + the first 3 again): uniform knots 0…14,
+        // 15 = 11 + 3 + 1; the domain [3, 11] runs once round, period 8.
+        string Curve(double z)
+        {
+            var ids = ctrl.Select(c => b.Point(c.x, c.y, z)).ToArray();
+            return $"B_SPLINE_CURVE_WITH_KNOTS('',3,({string.Join(",", ids.Select(i => $"#{i}"))}),.UNSPECIFIED.,.T.,.F.," +
+                   "(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1),(0.,1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,11.,12.,13.,14.),.UNSPECIFIED.)";
+        }
+        int curveB = b.Add($"{Curve(0)}");
+        int curveT = b.Add($"{Curve(h)}");
+
+        // The seam vertex is the curve's point at the domain start (t = 3), not a control point.
+        var seamPoint = PeriodicCubicAt3(ctrl);
+        int pb = b.Point(seamPoint.x, seamPoint.y, 0);
+        int pt = b.Point(seamPoint.x, seamPoint.y, h);
+        int vb = b.Add($"VERTEX_POINT('',#{pb})");
+        int vt = b.Add($"VERTEX_POINT('',#{pt})");
+        int ringB = b.Add($"EDGE_CURVE('',#{vb},#{vb},#{curveB},.T.)");
+        int ringT = b.Add($"EDGE_CURVE('',#{vt},#{vt},#{curveT},.T.)");
+
+        int seamDir = b.Direction(0, 0, 1);
+        int seamVec = b.Add($"VECTOR('',#{seamDir},{h:R})");
+        int seam = b.Add($"EDGE_CURVE('',#{vb},#{vt},#{b.Add($"LINE('',#{pb},#{seamVec})")},.T.)");
+
+        int oe1 = b.Add($"ORIENTED_EDGE('',*,*,#{ringB},.T.)");
+        int oe2 = b.Add($"ORIENTED_EDGE('',*,*,#{seam},.T.)");
+        int oe3 = b.Add($"ORIENTED_EDGE('',*,*,#{ringT},.F.)");
+        int oe4 = b.Add($"ORIENTED_EDGE('',*,*,#{seam},.F.)");
+        int lateralLoop = b.Add($"EDGE_LOOP('',(#{oe1},#{oe2},#{oe3},#{oe4}))");
+        int extrusion = b.Add($"SURFACE_OF_LINEAR_EXTRUSION('',#{curveB},#{b.Add($"VECTOR('',#{seamDir},{h:R})")})");
+        int lateral = b.Add($"ADVANCED_FACE('',(#{b.Add($"FACE_OUTER_BOUND('',#{lateralLoop},.T.)")}),#{extrusion},.T.)");
+
+        int bottomLoop = b.Add($"EDGE_LOOP('',(#{b.Add($"ORIENTED_EDGE('',*,*,#{ringB},.F.)")}))");
+        int bottomPlane = b.Add($"PLANE('',#{b.Placement(b.Point(0, 0, 0), (0, 0, -1), (1, 0, 0))})");
+        int bottom = b.Add($"ADVANCED_FACE('',(#{b.Add($"FACE_OUTER_BOUND('',#{bottomLoop},.T.)")}),#{bottomPlane},.T.)");
+
+        int topLoop = b.Add($"EDGE_LOOP('',(#{b.Add($"ORIENTED_EDGE('',*,*,#{ringT},.T.)")}))");
+        int topPlane = b.Add($"PLANE('',#{b.Placement(b.Point(0, 0, h), (0, 0, 1), (1, 0, 0))})");
+        int top = b.Add($"ADVANCED_FACE('',(#{b.Add($"FACE_OUTER_BOUND('',#{topLoop},.T.)")}),#{topPlane},.T.)");
+
+        int shell = b.Add($"CLOSED_SHELL('',(#{lateral},#{bottom},#{top}))");
+        b.Add($"MANIFOLD_SOLID_BREP('',#{shell})");
+
+        // The control polygon (a regular octagon of circumradius r) by the shoelace formula.
+        double area = 0;
+        for (int i = 0; i < 8; i++)
+            area += ctrl[i].x * ctrl[i + 1].y - ctrl[i + 1].x * ctrl[i].y;
+        return (b.Render(), Math.Abs(area) / 2);
+    }
+
+    /// <summary>A uniform cubic B-spline at a knot: (P₀ + 4P₁ + P₂)/6 over the first three
+    /// control points of the span — here the point at t = 3, the periodic curve's domain start.</summary>
+    private static (double x, double y) PeriodicCubicAt3((double x, double y)[] ctrl) =>
+        ((ctrl[0].x + 4 * ctrl[1].x + ctrl[2].x) / 6, (ctrl[0].y + 4 * ctrl[1].y + ctrl[2].y) / 6);
 }

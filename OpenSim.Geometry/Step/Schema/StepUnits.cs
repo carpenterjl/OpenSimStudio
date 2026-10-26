@@ -3,12 +3,17 @@ using OpenSim.Geometry.Step.Part21;
 namespace OpenSim.Geometry.Step.Schema;
 
 /// <summary>
-/// Length-unit context resolved from a STEP file: the factor converting the file's model
-/// coordinates to meters, and the exporter's stated coordinate uncertainty (already in
-/// meters) when present. The uncertainty later anchors the B-spline inversion acceptance
-/// tolerance — the file's own accuracy statement, not a magic epsilon.
+/// Unit context resolved from a STEP file: the factor converting the file's model
+/// coordinates to meters, the exporter's stated coordinate uncertainty (already in
+/// meters) when present — it later anchors the B-spline inversion acceptance tolerance,
+/// the file's own accuracy statement rather than a magic epsilon — and the factor
+/// converting the file's plane angles (a cone's semi-angle) to radians.
+/// <see cref="PlaneAngleDeclared"/> is false when the file names no plane-angle unit; the
+/// angles are then read as radians, the schema's SI unit (D21: a degree-unit file's cones
+/// used to be read as radians regardless).
 /// </summary>
-public sealed record StepUnitContext(double MetersPerUnit, double? UncertaintyMeters);
+public sealed record StepUnitContext(double MetersPerUnit, double? UncertaintyMeters,
+    double RadiansPerUnit = 1.0, bool PlaneAngleDeclared = false);
 
 /// <summary>
 /// Resolves the length unit from the GLOBAL_UNIT_ASSIGNED_CONTEXT chain. STL is unitless
@@ -28,6 +33,8 @@ public static class StepUnits
         double? scale = null;
         int scaleSource = 0;
         double? uncertainty = null;
+        double? angle = null;
+        int angleSource = 0;
 
         foreach (var (id, inst) in file.Instances)
         {
@@ -54,6 +61,18 @@ public static class StepUnits
                     scale = contextScale;
                     scaleSource = id;
                 }
+
+                foreach (var unitRef in unitContext.Args[0].AsList())
+                {
+                    double? a = TryPlaneAngleScale(file, file.Get(unitRef.AsRef()), depth: 0);
+                    if (a is null) continue;
+                    if (angle is not null && !Agrees(angle.Value, a.Value))
+                        throw new StepImportException(
+                            $"ambiguous plane-angle units: #{angleSource} declares {angle} rad/unit but " +
+                            $"#{id} declares {a} rad/unit; refusing to guess");
+                    angle = a;
+                    angleSource = id;
+                }
             }
 
             var uncContext = inst.Find("GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT");
@@ -72,7 +91,63 @@ public static class StepUnits
             throw new StepImportException(
                 "cannot determine the length unit: no GLOBAL_UNIT_ASSIGNED_CONTEXT with a " +
                 "length unit was found; refusing to guess");
-        return new StepUnitContext(scale.Value, uncertainty);
+        return new StepUnitContext(scale.Value, uncertainty, angle ?? 1.0, angle is not null);
+    }
+
+    /// <summary>
+    /// Radians per unit for a plane-angle-unit instance; null when the instance is not a
+    /// plane-angle unit (a length, a solid angle, …). SI_UNIT .RADIAN. with its prefix, or a
+    /// CONVERSION_BASED_UNIT (a degree: PLANE_ANGLE_MEASURE(0.0174532925…) of a radian base).
+    /// A unit that IS declared a plane-angle unit but cannot be interpreted fails loudly.
+    /// </summary>
+    private static double? TryPlaneAngleScale(StepFile file, StepInstance unit, int depth)
+    {
+        if (depth > 8)
+            throw new StepImportException($"#{unit.Id}: circular CONVERSION_BASED_UNIT chain");
+        bool declaredAngle = unit.Has("PLANE_ANGLE_UNIT");
+        var si = unit.Find("SI_UNIT");
+        if (si is not null)
+        {
+            string name = si.Args[1].AsEnum();
+            if (!name.Equals("RADIAN", StringComparison.OrdinalIgnoreCase))
+                return declaredAngle
+                    ? throw new StepImportException(
+                        $"#{unit.Id}: plane-angle unit is SI_UNIT .{name}. — only RADIAN-based angles are meaningful")
+                    : null;
+            // A radian in the context itself counts only when typed PLANE_ANGLE_UNIT (a bare
+            // SI_UNIT .RADIAN. record is not a unit assignment); as a conversion unit's base
+            // (depth > 0) the name suffices, as the length reader allows for METRE.
+            if (!declaredAngle && depth == 0) return null;
+            return si.Args[0] switch
+            {
+                StepValue.Null => 1.0,
+                StepValue.Enumeration e => SiPrefix(e.Value, unit.Id),
+                var other => throw new StepImportException($"#{unit.Id}: unexpected SI prefix {other}")
+            };
+        }
+        var conversion = unit.Find("CONVERSION_BASED_UNIT");
+        if (conversion is not null)
+        {
+            if (!declaredAngle) return null;
+            var measure = file.Get(conversion.Args[1].AsRef());
+            var mwu = measure.Find("MEASURE_WITH_UNIT")
+                      ?? measure.Find("PLANE_ANGLE_MEASURE_WITH_UNIT")
+                      ?? throw new StepImportException(
+                          $"#{measure.Id}: expected MEASURE_WITH_UNIT for conversion unit #{unit.Id}");
+            double value = mwu.Args[0] switch
+            {
+                StepValue.Typed t => t.Args[0].AsReal(), // PLANE_ANGLE_MEASURE(0.0174532925199433)
+                var plain => plain.AsReal()
+            };
+            var inner = TryPlaneAngleScale(file, file.Get(mwu.Args[1].AsRef()), depth + 1)
+                        ?? throw new StepImportException(
+                            $"#{unit.Id}: conversion unit's base #{mwu.Args[1].AsRef()} is not a plane-angle unit");
+            return value * inner;
+        }
+        return declaredAngle
+            ? throw new StepImportException(
+                $"#{unit.Id}: plane-angle unit is neither SI_UNIT nor CONVERSION_BASED_UNIT — unsupported")
+            : null;
     }
 
     private static bool Agrees(double a, double b) => Math.Abs(a - b) <= 1e-12 * Math.Max(a, b);
