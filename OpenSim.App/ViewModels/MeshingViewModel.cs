@@ -23,6 +23,45 @@ public partial class MeshingViewModel : ObservableObject
         session.MeshChanged += (_, _) => RefreshMeshInfo();
         session.GeometryReplaced += (_, _) => PrefillDivisions();
         session.ActiveBodyChanged += (_, _) => PrefillDivisions();
+        // The element order follows the analysis until the user picks one (D7).
+        FollowAnalysis();
+        session.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ProjectSession.SelectedAnalysis)) FollowAnalysis();
+        };
+    }
+
+    private bool _orderChosen;
+    private bool _followingAnalysis;
+
+    /// <summary>
+    /// Quadratic for a structural analysis, linear otherwise, unless the user has set the box
+    /// (D7, 2026-10-25). TET4 locks in bending — its cantilever deflection reads as little as 40 %
+    /// of Timoshenko on the suite's own meshes — so a structural solve defaults to TET10 as the
+    /// commercial codes do; the thermal and electrical solvers take linear meshes (the thermal
+    /// one TET10 for its plain cases only), so those analyses default to linear.
+    /// </summary>
+    private void FollowAnalysis()
+    {
+        if (_orderChosen) return;
+        _followingAnalysis = true;
+        try { QuadraticElements = _session.IsStructuralAnalysis; }
+        finally { _followingAnalysis = false; }
+    }
+
+    partial void OnQuadraticElementsChanged(bool value)
+    {
+        if (!_followingAnalysis) _orderChosen = true;      // the user's (or the hex shape's) choice sticks
+        OnPropertyChanged(nameof(QuadraticLabel));
+    }
+
+    /// <summary>A reopened project's saved element order: quadratic was a choice and is kept as
+    /// one; linear was the old default for every analysis and is not, so the box follows the
+    /// analysis again (a structural project saved with the old default re-meshes as TET10).</summary>
+    internal void AdoptLoadedOrder(ElementOrder order)
+    {
+        if (order == ElementOrder.Quadratic) QuadraticElements = true;
+        else { _orderChosen = false; FollowAnalysis(); }
     }
 
     /// <summary>The meshers offered by the picker, with the labels the user reads.</summary>
@@ -83,10 +122,13 @@ public partial class MeshingViewModel : ObservableObject
         OnPropertyChanged(nameof(QuadraticOrderIsAChoice));
     }
 
-    /// <summary>Names the element the current choices actually produce.</summary>
+    /// <summary>Names the element the current choices actually produce, and why the box is
+    /// ticked for a structural analysis.</summary>
     public string QuadraticLabel => IsStructured && ElementShape == ElementShape.Hexahedral
         ? "Quadratic elements (HEX20)"
-        : "Quadratic elements (TET10)";
+        : _session.IsStructuralAnalysis
+            ? "Quadratic elements (TET10) — the structural default; TET4 locks in bending"
+            : "Quadratic elements (TET10) — the thermal and electrical solvers take linear meshes";
 
     /// <summary>Hexahedra are HEX20 only, so the order checkbox is not the user's to clear
     /// there — it is shown ticked and disabled rather than silently overridden.</summary>

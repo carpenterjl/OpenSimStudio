@@ -422,6 +422,7 @@ public partial class MainViewModel : ObservableObject
             Materials.ForgetProjectCopies();
             Materials.AdoptProjectMaterial(loadedMaterial);
             Meshing.TargetEdgeLength = Session.Body.MeshSettings.TargetEdgeLength;
+            Meshing.AdoptLoadedOrder(Session.Body.MeshSettings.ElementOrder);
 
             // The events fan out: PCB teardown, condition/result resync, scene + mesh
             // info/edges rebuild, zoom-to-fit.
