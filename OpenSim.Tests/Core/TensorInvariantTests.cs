@@ -143,7 +143,7 @@ public class TensorInvariantTests
             new SymmetricTensor(1, 2, 3, 4, 5, 6),
             new SymmetricTensor(-2, 0, 1, 0, 0, 0)
         };
-        var source = new ElementTensorField("Stress tensor", "Pa", tensors);
+        var source = new TensorField("Stress tensor", "Pa", tensors);
 
         var vonMises = source.View(TensorComponent.VonMises);
         Assert.Equal("Stress tensor", vonMises.Name);

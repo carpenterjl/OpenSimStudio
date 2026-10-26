@@ -74,10 +74,11 @@ public class DerivedResultFieldTests
     }
 
     /// <summary>
-    /// The identity that pins both fields, carried all the way through the solver nodal
-    /// averaging: each is a volume-weighted average of per-element values that satisfy
-    /// E*eq = vm exactly, and averaging is linear, so the averaged values satisfy it too.
-    /// A mismatch here would mean one of them is averaged over a different weight set.
+    /// The identity that pins both fields, carried all the way through the solver's nodal
+    /// recovery (D6): the strain and stress TENSORS are averaged at each node over the same
+    /// elements with the same weights, Hooke's law is linear, so the averaged stress is Hooke of
+    /// the averaged strain and von Mises of the one is E/(1+ν) times the equivalent of the other.
+    /// A mismatch here would mean one of them is averaged over a different element set.
     /// </summary>
     [Fact]
     public void NodalEquivalentStrainTimesE_IsTheNodalVonMisesStress()
@@ -112,7 +113,10 @@ public class DerivedResultFieldTests
     [Fact]
     public void ShearComponentView_IsSymmetricAboutZero_AndSmallerThanVonMises()
     {
-        var tensor = (ElementTensorField)SolveBlock().Fields.First(f => f.Name == "Stress tensor");
+        // The element-mean field: on this structured TET4 box the nodal averages of the constant
+        // element strains are not mirror-symmetric (the tet diagonals are not), so the symmetry
+        // check reads the element values, as it did before the nodal recovery (D6).
+        var tensor = (TensorField)SolveBlock().Fields.First(f => f.Name == "Stress tensor (element mean)");
         var shear = tensor.View(TensorComponent.XY);
 
         var mesh = StructuredBoxMesh.Build(0, 0.2, 0, 0.06, 0, 0.02, 6, 3, 2);

@@ -160,6 +160,13 @@ public sealed class Tet4Assembler : IElasticityAssembler
         StressFromStrain(ElementStrain(element, displacements));
 
     /// <inheritdoc/>
+    public void NodalStrains(int element, ReadOnlySpan<double> displacements, Span<SymmetricTensor> result)
+    {
+        var constant = ElementStrain(element, displacements);     // a TET4's strain is one value
+        for (int i = 0; i < 4; i++) result[i] = constant;
+    }
+
+    /// <inheritdoc/>
     public SymmetricTensor StressFromStrain(SymmetricTensor eps)
     {
         double trace = eps.XX + eps.YY + eps.ZZ;

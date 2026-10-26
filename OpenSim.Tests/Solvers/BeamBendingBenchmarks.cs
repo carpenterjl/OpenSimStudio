@@ -205,7 +205,8 @@ public class BeamBendingBenchmarks
         }
 
         double spread = (means.Max() - means.Min()) / means.Average();
-        // Measured 0.82% (h = 10 mm) against the reference 0.46%.
+        // Measured 0.82% (h = 10 mm) against the reference 0.46% with the element-mean recovery
+        // before D6, 1.16% with the nodal recovery (2026-10-25); printed below.
         _output.WriteLine($"spread = {spread:P2} (Ansys reference: 0.46%)");
         Assert.InRange(spread, 0.0, 0.02);
     }

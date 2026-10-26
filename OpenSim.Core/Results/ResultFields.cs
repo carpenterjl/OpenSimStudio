@@ -251,21 +251,24 @@ public enum TensorComponent
     MaxShear
 }
 
-/// <summary>A tensor field, one symmetric tensor per element; the mapped scalar is von Mises.</summary>
-public sealed class ElementTensorField : IResultField
+/// <summary>A tensor field, one symmetric tensor per element or per node (D6: the solver's
+/// recovered stress and strain are nodal tensors; the element means are kept beside them);
+/// the mapped scalar is von Mises.</summary>
+public sealed class TensorField : IResultField
 {
     private readonly SymmetricTensor[] _values;
 
-    public ElementTensorField(string name, string unit, SymmetricTensor[] values)
+    public TensorField(string name, string unit, SymmetricTensor[] values, FieldLocation location = FieldLocation.Element)
     {
         Name = name;
         Unit = unit;
         _values = values;
+        Location = location;
     }
 
     public string Name { get; }
     public string Unit { get; }
-    public FieldLocation Location => FieldLocation.Element;
+    public FieldLocation Location { get; }
     public int Count => _values.Length;
     public double GetScalar(int index) => _values[index].VonMises();
     public SymmetricTensor GetTensor(int index) => _values[index];
@@ -280,17 +283,17 @@ public sealed class ElementTensorField : IResultField
 }
 
 /// <summary>
-/// One component or invariant of an <see cref="ElementTensorField"/>, presented as an
-/// ordinary result field so every consumer — colour mapping, statistics, export — works on
-/// it unchanged. It holds the source field by reference and computes on demand, so no
+/// One component or invariant of a <see cref="TensorField"/>, presented as an ordinary
+/// result field so every consumer — colour mapping, statistics, export — works on it
+/// unchanged. It holds the source field by reference and computes on demand, so no
 /// component costs memory until it is asked for.
 /// </summary>
 public sealed class TensorComponentField : IResultField
 {
-    private readonly ElementTensorField _source;
+    private readonly TensorField _source;
     private readonly TensorComponent _component;
 
-    public TensorComponentField(ElementTensorField source, TensorComponent component)
+    public TensorComponentField(TensorField source, TensorComponent component)
     {
         _source = source;
         _component = component;

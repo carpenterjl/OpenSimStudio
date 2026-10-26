@@ -264,6 +264,57 @@ public sealed class Tet10Assembler : IElasticityAssembler
     public SymmetricTensor ElementStress(int element, ReadOnlySpan<double> displacements) =>
         StressFromStrain(ElementStrain(element, displacements));
 
+    /// <summary>The ten nodes in barycentric coordinates, in <see cref="FeMesh.GetElementNodes"/>
+    /// order: the corners, then the mid-edges 01, 02, 03, 12, 13, 23.</summary>
+    private static readonly double[][] NodeBarycentric = BuildNodeBarycentric();
+
+    private static double[][] BuildNodeBarycentric()
+    {
+        var list = new List<double[]>(10);
+        for (int i = 0; i < 4; i++)
+        {
+            var l = new double[4];
+            l[i] = 1;
+            list.Add(l);
+        }
+        for (int i = 0; i < 4; i++)
+            for (int j = i + 1; j < 4; j++)
+            {
+                var l = new double[4];
+                l[i] = 0.5;
+                l[j] = 0.5;
+                list.Add(l);
+            }
+        return list.ToArray();
+    }
+
+    /// <inheritdoc/>
+    public void NodalStrains(int element, ReadOnlySpan<double> displacements, Span<SymmetricTensor> result)
+    {
+        var gl = _cornerGradients[element];
+        var nodes = _mesh.GetElementNodes(element);
+        var g = new Vector3D[10];
+        for (int k = 0; k < 10; k++)
+        {
+            ShapeGradients(gl, NodeBarycentric[k], g);
+            double dxx = 0, dyy = 0, dzz = 0, dxy = 0, dyz = 0, dzx = 0;
+            for (int i = 0; i < 10; i++)
+            {
+                double ux = displacements[nodes[i] * 3];
+                double uy = displacements[nodes[i] * 3 + 1];
+                double uz = displacements[nodes[i] * 3 + 2];
+                var gi = g[i];
+                dxx += ux * gi.X;
+                dyy += uy * gi.Y;
+                dzz += uz * gi.Z;
+                dxy += 0.5 * (ux * gi.Y + uy * gi.X);
+                dyz += 0.5 * (uy * gi.Z + uz * gi.Y);
+                dzx += 0.5 * (uz * gi.X + ux * gi.Z);
+            }
+            result[k] = new SymmetricTensor(dxx, dyy, dzz, dxy, dyz, dzx);
+        }
+    }
+
     /// <inheritdoc/>
     public SymmetricTensor StressFromStrain(SymmetricTensor eps)
     {

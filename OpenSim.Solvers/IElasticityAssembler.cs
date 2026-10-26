@@ -20,6 +20,16 @@ internal interface IElasticityAssembler
     SymmetricTensor ElementStress(int element, ReadOnlySpan<double> displacements);
 
     /// <summary>
+    /// The strain at each of the element's nodes, in <c>GetElementNodes</c> order: the element's
+    /// own displacement field evaluated there — the TET4's constant, the TET10's linear field at
+    /// its corners and mid-edges, the HEX20's quadratic field at its twenty nodes. Nodal stress
+    /// recovery (D6) takes these in place of the element mean, so a bending surface keeps its
+    /// surface stress instead of the mean that read it (1 − 1/n) low with n elements through the
+    /// thickness. <paramref name="result"/> has at least as many entries as the element has nodes.
+    /// </summary>
+    void NodalStrains(int element, ReadOnlySpan<double> displacements, Span<SymmetricTensor> result);
+
+    /// <summary>
     /// Hooke's law applied to an ALREADY COMPUTED element strain: σ = λ·tr(ε)·I + 2μ·ε.
     /// <para>
     /// Exists because recovery needs both tensors per element and <see cref="ElementStress"/>

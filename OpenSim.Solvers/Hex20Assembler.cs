@@ -395,8 +395,8 @@ public sealed class Hex20Assembler : IElasticityAssembler
     /// <para>
     /// Strain varies QUADRATICALLY over a HEX20, so unlike TET10 the average and the centroid
     /// value are different numbers. The volume-weighted average is the defensible element
-    /// tensor — it is the mean of the field over the element, which is what the nodal
-    /// averaging downstream then treats it as.
+    /// tensor — the mean of the field over the element, published as the "(element mean)"
+    /// field; the nodal recovery uses <see cref="NodalStrains"/> instead.
     /// </para>
     /// </summary>
     public SymmetricTensor ElementStrain(int element, ReadOnlySpan<double> displacements)
@@ -441,6 +441,82 @@ public sealed class Hex20Assembler : IElasticityAssembler
 
     public SymmetricTensor ElementStress(int element, ReadOnlySpan<double> displacements) =>
         StressFromStrain(ElementStrain(element, displacements));
+
+    /// <summary>The shape functions and reference gradients AT the twenty nodes (corners at ±1,
+    /// mid-edges at the mean of their corners), computed once for the process.</summary>
+    private static readonly QuadraturePoint[] AtNodes = BuildAtNodes();
+
+    private static QuadraturePoint[] BuildAtNodes()
+    {
+        var points = new QuadraturePoint[20];
+        for (int k = 0; k < 20; k++)
+        {
+            double xi, eta, zeta;
+            if (k < 8) { xi = Sx[k]; eta = Sy[k]; zeta = Sz[k]; }
+            else
+            {
+                var (a, b) = Edges[k - 8];
+                xi = 0.5 * (Sx[a] + Sx[b]); eta = 0.5 * (Sy[a] + Sy[b]); zeta = 0.5 * (Sz[a] + Sz[b]);
+            }
+            var n = new double[20];
+            var dn = new Vector3D[20];
+            ShapeFunctions(xi, eta, zeta, n, dn);
+            points[k] = new QuadraturePoint(0, n, dn);
+        }
+        return points;
+    }
+
+    /// <inheritdoc/>
+    public void NodalStrains(int element, ReadOnlySpan<double> displacements, Span<SymmetricTensor> result)
+    {
+        var nodes = _mesh.GetElementNodes(element);
+        var origin = _mesh.Nodes[nodes[0]];
+        var g = new Vector3D[20];
+        for (int k = 0; k < 20; k++)
+        {
+            var point = AtNodes[k];
+            Vector3D dXi = default, dEta = default, dZeta = default;
+            for (int i = 0; i < 20; i++)
+            {
+                var p = _mesh.Nodes[nodes[i]] - origin;
+                dXi += p * point.DN[i].X;
+                dEta += p * point.DN[i].Y;
+                dZeta += p * point.DN[i].Z;
+            }
+            double det = Vector3D.Dot(dXi, Vector3D.Cross(dEta, dZeta));
+            if (det <= 0)
+            {
+                // A distorted element whose map folds at a corner (its 27 Gauss points were all
+                // fine, or the solve would not have run): that node takes the element mean rather
+                // than losing the solve to a recovery step.
+                result[k] = ElementStrain(element, displacements);
+                continue;
+            }
+            double inv = 1.0 / det;
+            var invJ = new Matrix3(
+                Vector3D.Cross(dEta, dZeta) * inv,
+                Vector3D.Cross(dZeta, dXi) * inv,
+                Vector3D.Cross(dXi, dEta) * inv);
+            for (int i = 0; i < 20; i++)
+                g[i] = invJ.TransposeTimes(point.DN[i]);
+
+            double exx = 0, eyy = 0, ezz = 0, exy = 0, eyz = 0, ezx = 0;
+            for (int i = 0; i < 20; i++)
+            {
+                double ux = displacements[nodes[i] * 3];
+                double uy = displacements[nodes[i] * 3 + 1];
+                double uz = displacements[nodes[i] * 3 + 2];
+                var gi = g[i];
+                exx += ux * gi.X;
+                eyy += uy * gi.Y;
+                ezz += uz * gi.Z;
+                exy += 0.5 * (ux * gi.Y + uy * gi.X);
+                eyz += 0.5 * (uy * gi.Z + uz * gi.Y);
+                ezx += 0.5 * (uz * gi.X + ux * gi.Z);
+            }
+            result[k] = new SymmetricTensor(exx, eyy, ezz, exy, eyz, ezx);
+        }
+    }
 
     /// <inheritdoc/>
     public SymmetricTensor StressFromStrain(SymmetricTensor eps)

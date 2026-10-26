@@ -6,9 +6,10 @@ using OpenSim.Core.Results;
 namespace OpenSim.Solvers;
 
 /// <summary>
-/// Linear static structural solver over TET4 elements: small displacements, linear
-/// isotropic elasticity. Produces displacement, element stress, and nodal-averaged
-/// von Mises result fields.
+/// Linear static structural solver over TET4, TET10 or HEX20 elements: small displacements,
+/// linear isotropic elasticity. Produces displacement, the stress and strain tensors
+/// recovered at the nodes (and the element means beside them), and the nodal von Mises and
+/// equivalent-strain fields.
 /// </summary>
 public sealed class LinearStaticSolver : ISolver
 {
@@ -55,6 +56,8 @@ public sealed class LinearStaticSolver : ISolver
         var stiffness = assembler.AssembleStiffness(cancellationToken);
         log.Add($"Assembled {stiffness.RowCount} DOF system " +
                 $"({StructuralSurfaceLoads.ElementName(mesh)}), {stiffness.NonZeroCount} non-zeros.");
+        if (!mesh.IsQuadratic && !mesh.IsHex)
+            log.Add(Tet4Warning);
 
         // Boundary triangles carry only corner indices; on a quadratic mesh their
         // mid-edge nodes must be addressed too — for pinning AND for loads.
@@ -159,6 +162,13 @@ public sealed class LinearStaticSolver : ISolver
         return loads;
     }
 
+    /// <summary>What a TET4 mesh is told (D7, 2026-10-25): the linear tetrahedron locks in
+    /// bending, and the suite's own cantilever reads 40 % of the Timoshenko deflection on it.</summary>
+    public const string Tet4Warning =
+        "Warning: TET4 elements. The linear tetrahedron is too stiff in bending (shear locking): " +
+        "a bending deflection can read as little as 40 % of the exact value and surface stresses low " +
+        "with it. For a structural solve re-mesh with quadratic elements (TET10, or the HEX20 lattice).";
+
     private static (int, int) Edge(int a, int b) => a < b ? (a, b) : (b, a);
 
     private static IReadOnlyList<IResultField> BuildResultFields(FeMesh mesh,
@@ -179,31 +189,42 @@ public sealed class LinearStaticSolver : ISolver
             stress[e] = assembler.StressFromStrain(strain[e]);
         }
 
-        // Volume-weighted nodal averages for smooth contours. Equivalent elastic strain is
-        // averaged alongside von Mises rather than derived from the averaged stress: the
-        // two agree exactly per element (E·ε_eq = σ_vm), and averaging each invariant
-        // separately keeps that true of the nodal values as well.
-        var nodalVm = new double[mesh.NodeCount];
-        var nodalStrain = new double[mesh.NodeCount];
-        var nodalWeight = new double[mesh.NodeCount];
-        double nu = material.PoissonRatio;
+        // Nodal recovery (D6, 2026-10-25): the element's own displacement field evaluated AT each
+        // node (on TET10 that equals extrapolating the Gauss values, the strain being linear; on
+        // HEX20 it is the direct evaluation of the quadratic field), the TENSORS averaged over the
+        // elements sharing the node — unweighted, as Ansys's nodal averaging is, so a refined
+        // element beside a coarse one counts once each — and the invariants taken of the
+        // averaged tensors. The element mean, averaged as a scalar, read a bending surface
+        // (1 − 1/n) low with n elements through the thickness; the field at the node reads the
+        // surface. The identity E·ε_eq = σ_vm survives: Hooke's law is linear, so the averaged
+        // stress is Hooke of the averaged strain.
+        var nodalStressTensor = new SymmetricTensor[mesh.NodeCount];
+        var nodalStrainTensor = new SymmetricTensor[mesh.NodeCount];
+        var nodalCount = new int[mesh.NodeCount];
+        var atNodes = new SymmetricTensor[20];
         for (int e = 0; e < mesh.ElementCount; e++)
         {
-            double vm = stress[e].VonMises();
-            double eq = strain[e].EquivalentStrain(nu);
-            double w = mesh.ElementVolume(e);
-            foreach (int n in mesh.GetElementNodes(e))     // all 10 nodes when quadratic
+            var nodes = mesh.GetElementNodes(e);
+            assembler.NodalStrains(e, u, atNodes);
+            for (int k = 0; k < nodes.Length; k++)
             {
-                nodalVm[n] += vm * w;
-                nodalStrain[n] += eq * w;
-                nodalWeight[n] += w;
+                int n = nodes[k];
+                nodalStrainTensor[n] += atNodes[k];
+                nodalStressTensor[n] += assembler.StressFromStrain(atNodes[k]);
+                nodalCount[n]++;
             }
         }
+        var nodalVm = new double[mesh.NodeCount];
+        var nodalStrain = new double[mesh.NodeCount];
+        double nu = material.PoissonRatio;
         for (int i = 0; i < mesh.NodeCount; i++)
-            if (nodalWeight[i] > 0)
+            if (nodalCount[i] > 0)
             {
-                nodalVm[i] /= nodalWeight[i];
-                nodalStrain[i] /= nodalWeight[i];
+                double inv = 1.0 / nodalCount[i];
+                nodalStressTensor[i] *= inv;
+                nodalStrainTensor[i] *= inv;
+                nodalVm[i] = nodalStressTensor[i].VonMises();
+                nodalStrain[i] = nodalStrainTensor[i].EquivalentStrain(nu);
             }
 
         var fields = new List<IResultField>
@@ -211,8 +232,12 @@ public sealed class LinearStaticSolver : ISolver
             new NodalVectorField("Displacement", "m", displacement),
             new NodalScalarField("Stress (von Mises)", "Pa", nodalVm),
             new NodalScalarField("Equivalent elastic strain", "m/m", nodalStrain),
-            new ElementTensorField("Stress tensor", "Pa", stress),
-            new ElementTensorField("Strain tensor", "-", strain)
+            // The recovered nodal tensors carry the components and principals the results
+            // panel offers; the element means stay available under their own names.
+            new TensorField("Stress tensor", "Pa", nodalStressTensor, FieldLocation.Node),
+            new TensorField("Strain tensor", "-", nodalStrainTensor, FieldLocation.Node),
+            new TensorField("Stress tensor (element mean)", "Pa", stress),
+            new TensorField("Strain tensor (element mean)", "-", strain)
         };
 
         // Safety factor is offered ONLY when the material carries a strength. A default

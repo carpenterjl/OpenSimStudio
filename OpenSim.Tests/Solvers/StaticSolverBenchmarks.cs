@@ -125,7 +125,7 @@ public class StaticSolverBenchmarks
         Assert.Equal(tipExtension, avgTip, tipExtension * 2e-2);
 
         // Von Mises must equal σ_xx everywhere for uniaxial stress.
-        var stress = (ElementTensorField)output.Fields.Single(f => f.Name == "Stress tensor");
+        var stress = (TensorField)output.Fields.Single(f => f.Name == "Stress tensor");
         double avgVm = Enumerable.Range(0, stress.Count).Average(i => stress.GetTensor(i).VonMises());
         Assert.Equal(sigma, avgVm, sigma * 1e-2);
     }

@@ -50,7 +50,7 @@ public partial class ResultsViewModel : ObservableObject
     [ObservableProperty] private TensorComponentOption _selectedComponent = TensorComponentOption.All[0];
 
     /// <summary>The component picker only appears for a field that HAS components.</summary>
-    public bool HasTensorComponents => SelectedField is ElementTensorField;
+    public bool HasTensorComponents => SelectedField is TensorField;
 
     /// <summary>
     /// What the viewport actually renders: the selected field, or a component view of it
@@ -59,7 +59,7 @@ public partial class ResultsViewModel : ObservableObject
     /// working on the field the solver emitted.
     /// </summary>
     public IResultField? DisplayField =>
-        SelectedField is ElementTensorField tensor ? tensor.View(SelectedComponent.Component) : SelectedField;
+        SelectedField is TensorField tensor ? tensor.View(SelectedComponent.Component) : SelectedField;
 
     /// <summary>Min / max / average of the displayed field, both averages named.</summary>
     [ObservableProperty] private string _fieldStatistics = "";
@@ -511,7 +511,7 @@ public partial class ResultsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(DisplayField));
         RefreshStatistics();
-        if (_suppressDisplayEvents || SelectedField is not ElementTensorField) return;
+        if (_suppressDisplayEvents || SelectedField is not TensorField) return;
         _suppressDisplayEvents = true;
         ResultClampFraction = 1.0;
         _suppressDisplayEvents = false;
