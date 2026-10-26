@@ -135,6 +135,10 @@ public enum PortModel
 public sealed record LineCalibration(Complex Gamma, Complex CharacteristicOhms,
     Complex PortSeriesOhms, Complex PortShuntSiemens, PortModel Model = PortModel.SeriesAtTerminals)
 {
+    /// <summary>What <see cref="LineFromTwoLengths.Calibrate"/> found questionable about the two
+    /// lengths (see its rule); empty when nothing.</summary>
+    public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
+
     /// <summary>The ABCD of a two-port measured between the calibrated ports (in
     /// <paramref name="referenceOhms"/>) with both port networks removed, and the reference planes
     /// then moved <paramref name="shiftMeters"/> along the line at each end — positive moves them
@@ -233,6 +237,16 @@ public static class LineFromTwoLengths
     /// bias, since Z₀ comes out of a difference of terms in Z_s². A gap port near an open end is
     /// that case (the short stub beyond it is a large capacitive reactance): in a stripline, a
     /// gap 0.25 mm from the end read Z₀ 22 % high, 3 mm from it 1 % (see ShieldedKernelTests).
+    ///
+    /// <para>The rule for the two lengths (TC-1, 2026-10-25). The method takes the two lines for
+    /// the same line with the same ports; what the solves add on top of that is read as the line.
+    /// A difference between the two port neighbourhoods (the cells the mesher lays beside each
+    /// port) is amplified as 1/(βΔl) and the more the ports reflect; a difference between the two
+    /// lines' own discrete propagation constants (their interior cells) is amplified as L/Δl. So:
+    /// mesh both lines alike at the ports (<c>SheetMetalAssembly</c> does since TC-1), keep
+    /// longLength/shortLength ≤ 3 and βΔl ≥ 0.5 rad at the lowest frequency calibrated. The result's
+    /// <see cref="LineCalibration.Warnings"/> names a length ratio or a βΔl outside that rule; the
+    /// calibration itself is still returned (a corner extraction chooses βΔl = π/8 on purpose).</para>
     /// </summary>
     public static LineCalibration Calibrate(Complex[,] sShort, Complex[,] sLong, double shortLength,
         double longLength, double referenceOhms, double betaEstimate, PortModel model = PortModel.SeriesAtTerminals)
@@ -240,6 +254,13 @@ public static class LineFromTwoLengths
         if (!(longLength > shortLength && shortLength > 0))
             throw new ArgumentException("The second line must be the longer, and both of positive length.");
         Complex gamma = PropagationConstant(sShort, sLong, longLength - shortLength, betaEstimate);
+        var warnings = new List<string>();
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        if (longLength > 3 * shortLength * (1 + 1e-9))
+            warnings.Add(string.Create(invariant, $"the long line is {longLength / shortLength:g3}× the short one (keep it within 3×: a difference between the two lines' own meshes is magnified by long/Δl)."));
+        double betaDeltaL = Math.Abs(gamma.Imaginary) * (longLength - shortLength);      // the measured β, not the estimate
+        if (betaDeltaL < 0.5 * (1 - 1e-9))
+            warnings.Add(string.Create(invariant, $"βΔl = {betaDeltaL:g3} rad (keep it at or above 0.5: a difference between the two lines' ports is magnified by 1/(βΔl))."));
         var m1 = ScatteringToAbcd(sShort, referenceOhms);
         var m2 = ScatteringToAbcd(sLong, referenceOhms);
         Complex c1 = Complex.Cosh(gamma * shortLength), s1 = Complex.Sinh(gamma * shortLength);
@@ -253,12 +274,12 @@ public static class LineFromTwoLengths
         if (model == PortModel.SeriesAtTerminals)
         {
             Complex zs = p / (1 + u), ys = r / 2;
-            return new LineCalibration(gamma, (q - zs * zs * w) / u, zs, ys, model);
+            return new LineCalibration(gamma, (q - zs * zs * w) / u, zs, ys, model) { Warnings = warnings };
         }
         else
         {
             Complex zs = p / 2, ys = r / (1 + u), a = (1 + u) / 2;
-            return new LineCalibration(gamma, (a * a * q - zs * zs * w) / u, zs, ys, model);
+            return new LineCalibration(gamma, (a * a * q - zs * zs * w) / u, zs, ys, model) { Warnings = warnings };
         }
     }
 

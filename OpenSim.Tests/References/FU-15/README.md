@@ -334,3 +334,22 @@ Remedies (owner's decision pending, see the follow-up plan): make the interval g
 (hMin cells at both ends, the remainder absorbed in the middle) so every length carries the same
 port neighbourhood; and/or a usage rule with a guard in the calibration - the two lines' port cells
 equal, long/short <= 3, beta dl >= 0.5 rad at the lowest frequency, cells along the line <= lambda/40.
+
+### TC-1 remedy (2026-10-25, owner's choice: symmetric grading plus a calibration rule)
+
+`SheetMetalAssembly` now grades every interval the same at both ends: the first three cells at
+each end are exactly the ramp's (hMin, then hMin + (growth - 1) x distance), the middle is filled
+with cells of about the ramp's next size (never wider than the maximum), and only the cells between
+the exact ends are stretched to land on the far end - so two lines of different length carry the
+same cells beside their ports (`LineCalibrationMeshTests` checks nine lengths on three meshes).
+`LineFromTwoLengths.Calibrate` reports in `LineCalibration.Warnings` a length ratio over 3 or a
+beta x dl under 0.5 rad (measured beta); it never refuses (a corner extraction chooses pi/8).
+
+On the gate's cells at 5.55 GHz, pairs of 6 / 10 / 14 / 18 mm lines now read eps_eff +0.70 to
++0.99 % of the 2D solve (spread 0.3 %); before, pairs of 6 / 10 / 12 / 18 mm read -1 to +8.7 %.
+
+The gate re-run in Release with the new grading (all six pass): corner 5.5831 GHz (+0.58 %
+measured, -0.30 % FD-TD; was 5.5867), |S11| nulls 4.9971 / 10.9254 GHz (+0.40 / +1.14 %; were
+4.9999 / 10.9213), |S21| nulls 7.0463 / 8.2447 GHz (+1.55 / +3.69 %; were 7.0447 / 8.2434); patch
+f0 2.26534 GHz, R0 385.5 ohm, Q 73.7 (were 2.26568 / 385.4 / 73.6). The strip now has 7 / 7 / 12
+cells across on the 0.8/0.2/1.4, 0.8/0.2/1.5 and 0.4/0.1/1.3 meshes (were 7 / 6 / 11).

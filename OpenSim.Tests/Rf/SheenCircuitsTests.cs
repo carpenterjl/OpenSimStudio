@@ -37,14 +37,16 @@ public class SheenCircuitsTests
     private const double LineX0 = -PatchHalfX + 5.65e-3, LineX1 = LineX0 + Line;
     // The FD-TD's reference planes: 10 Δy = 4.232 mm from the patch's long sides (p. 112).
     private const double RefOffset = 4.232e-3;
-    // Cells up to 0.8 mm, graded from 0.2 mm at every part edge and port line by 1.4 (the mesher grades
-    // each interval from both ends and stretches the steps to fit), the ports 2.4 mm beyond the reference
-    // planes with 2.4 mm of stub past each gap, calibration lines of 6.4 and 12.8 mm. With these the
-    // calibration's ε_eff is within 0.9 % of the 2D solve's at 3 and 5.55 GHz. Other choices drifted,
-    // for a cause not isolated: 6 and 12 mm lines with a 2 mm shift and 2.5 mm stubs on 0.8/0.2/1.5 cells
-    // read ε_eff 4.3 % high at 5.55 GHz, and an 11 mm line on 0.4/0.1/1.3 cells 7.7 % low at 3 GHz. All
-    // five features below are within 0.06 % of 0.6/0.15/1.4 cells, which are in turn within 0.02 dB
-    // of 0.4/0.1/1.3 cells at the corner. About 3 min per feature in Debug.
+    // Cells up to 0.8 mm, graded from 0.2 mm at every part edge and port line by 1.4, the ports 2.4 mm
+    // beyond the reference planes with 2.4 mm of stub past each gap, calibration lines of 6.4 and
+    // 12.8 mm. With these the calibration's ε_eff is within 0.9 % of the 2D solve's at 3 and 5.55 GHz.
+    // Other length choices used to drift (6 and 12 mm lines on 0.8/0.2/1.5 cells 4.3 % high at
+    // 5.55 GHz, an 11 mm line on 0.4/0.1/1.3 cells 7.7 % low at 3 GHz): the mesher's grading left a
+    // length-dependent remainder cell beside the far port, so the two lines carried different port
+    // error boxes (TC-1, 2026-10-25; the grading is symmetric since, see LineCalibrationMeshTests and
+    // References/FU-15/README.md). All five features below were within 0.06 % of 0.6/0.15/1.4 cells,
+    // which were in turn within 0.02 dB of 0.4/0.1/1.3 cells at the corner. About 3 min per feature
+    // in Debug.
     public sealed record FilterMesh(double MaxEdge, double MinEdge, double Growth, double Shift, double Stub, double Short, double Long);
     private static readonly FilterMesh Gate = new(0.8e-3, 0.2e-3, 1.4, 2.4e-3, 2.4e-3, 6.4e-3, 12.8e-3);
 

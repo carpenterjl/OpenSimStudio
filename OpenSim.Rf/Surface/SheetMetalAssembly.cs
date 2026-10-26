@@ -21,7 +21,8 @@ public sealed record SheetAssemblyResult(SurfaceStructure Structure, IReadOnlyLi
 /// meet vertex for vertex wherever they touch — a strip standing on a plate shares the plate's
 /// nodes along its foot, and the edge it stands on becomes a junction edge
 /// (<see cref="SurfaceStructure.Assembly"/>). Intervals longer than the element size are
-/// divided evenly.
+/// divided evenly, or graded from the part edges and port lines when a minimum element size is
+/// given (see <see cref="Build"/>).
 ///
 /// <para>No dielectric: a patch over a finite ground, a PIFA with its shorting wall, or a
 /// monopole on a finite plate is solved in air. A part with a cut-out is several rectangles.</para>
@@ -39,7 +40,15 @@ public static class SheetMetalAssembly
     /// <param name="minEdgeLength">When given, grid lines are graded: spacing starts at this value
     /// on every part edge and port end and grows by <paramref name="growth"/> per element away from
     /// it, up to <paramref name="maxEdgeLength"/> — fine where a strip lands on a plate, coarse
-    /// across the open plate.</param>
+    /// across the open plate. The grading is the same at both ends of every interval and the same
+    /// for every interval long enough to hold it: the first three cells at each end are exactly the
+    /// ramp's (hMin, then hMin + (growth − 1) × distance), and only the cells between them are
+    /// stretched to land on the far end — so two lines of different length carry identical cells
+    /// next to their ports (TC-1, 2026-10-25: the far-end remainder cell used to depend on the
+    /// interval's length, and a two-length calibration read it as a difference between the lines'
+    /// ports). No cell is wider than <paramref name="maxEdgeLength"/> except where an interval's
+    /// remainder under half a cell is absorbed by its interior cells, which may then exceed it by
+    /// up to a quarter. <paramref name="growth"/> must be 1 or more and the minimum positive.</param>
     /// <param name="imageGround">An infinite ground plane instead of a meshed one (strips standing
     /// on it end in half-RWGs into their image) — the reference against which a finite ground
     /// plate's own effect is measured.</param>
@@ -60,6 +69,10 @@ public static class SheetMetalAssembly
             scale = Math.Max(scale, (p.Max - p.Min).Length);
         }
         double tol = 1e-9 * scale;
+        if (minEdgeLength is { } given && !(given > 0))
+            throw new ArgumentException("The minimum element size must be positive.", nameof(minEdgeLength));
+        if (!(growth >= 1))
+            throw new ArgumentException("The grading growth must be 1 or more.", nameof(growth));
 
         // Grid lines per axis: every part edge and port end, then each gap split evenly.
         double[] Lines(Func<Vector3D, double> axis)
@@ -77,24 +90,13 @@ public static class SheetMetalAssembly
                 double gap = unique[i] - unique[i - 1];
                 if (minEdgeLength is { } hMin && hMin < maxEdgeLength)
                 {
-                    // March with size min(hMax, hMin + (growth − 1)·distance to the nearer end),
-                    // then stretch the steps to land exactly on the far end.
-                    var steps = new List<double>();
-                    double u = 0;
-                    while (u < gap - 1e-9 * gap)
-                    {
-                        double distance = Math.Min(u, gap - u);
-                        double size = Math.Min(maxEdgeLength, hMin + (growth - 1) * distance);
-                        steps.Add(size);
-                        u += size;
-                    }
-                    double stretch = gap / steps.Sum();
                     double at = unique[i - 1];
-                    for (int k = 0; k + 1 < steps.Count; k++)
+                    foreach (double step in GradedSteps(gap, hMin, maxEdgeLength, growth))
                     {
-                        at += steps[k] * stretch;
+                        at += step;
                         lines.Add(at);
                     }
+                    lines.RemoveAt(lines.Count - 1);     // the far end is added below, exactly
                 }
                 else
                 {
@@ -212,5 +214,60 @@ public static class SheetMetalAssembly
         if (b > c) (b, c) = (c, b);
         if (a > b) (a, b) = (b, a);
         return (a, b, c);
+    }
+
+    /// <summary>
+    /// The cells of one graded interval of length <paramref name="gap"/>, summing to it exactly:
+    /// a ramp from each end — hMin, then min(hMax, hMin + (growth − 1) × distance from that end) —
+    /// mirrored, with the middle filled by cells of about the ramp's next size. The first three
+    /// cells at each end are exactly the ramp's; the stretch that lands the sum on the far end is
+    /// spread over the cells between them only, so every interval long enough for six ramp cells
+    /// and something between them carries the same cells next to its ends whatever its length.
+    /// An interval with nothing between its six ramp cells keeps two exact cells at each end and
+    /// stretches the third pair; a shorter one keeps as many exact end cells as fit and stretches
+    /// the rest; one no longer than the maximum (and than two minimum cells) is one cell.
+    /// </summary>
+    internal static IReadOnlyList<double> GradedSteps(double gap, double hMin, double hMax, double growth)
+    {
+        if (gap <= Math.Min(2 * hMin, hMax)) return new[] { gap };
+        var ramp = new List<double>();
+        double u = 0, sum = 0;
+        while (true)
+        {
+            double size = Math.Min(hMax, hMin + (growth - 1) * u);
+            if (2 * (sum + size) > gap) break;
+            ramp.Add(size);
+            sum += size;
+            u += size;
+        }
+        double middle = gap - 2 * sum;
+        double target = Math.Min(hMax, hMin + (growth - 1) * u);
+        // Fill the middle with cells of about the ramp's next size: as many as fit by rounding
+        // (one more when that would leave them wider than 1.25× the target), sized to the
+        // remainder exactly; a remainder under half a cell is absorbed by the interior cells
+        // instead of becoming a sliver.
+        int fillers = (int)Math.Round(middle / target);
+        if (fillers > 0) fillers = Math.Max(fillers, (int)Math.Ceiling(middle / hMax - 1e-9));   // never wider than the maximum
+        var steps = new List<double>(2 * ramp.Count + fillers);
+        steps.AddRange(ramp);
+        for (int k = 0; k < fillers; k++) steps.Add(middle / fillers);
+        for (int k = ramp.Count - 1; k >= 0; k--) steps.Add(ramp[k]);
+
+        // Stretch only the interior (beyond the exact end cells) onto what the ends leave; an
+        // interval too short to have an interior is stretched as a whole.
+        int exact = Math.Min(3, ramp.Count);
+        double interior = steps.Skip(exact).Take(steps.Count - 2 * exact).Sum();
+        if (interior <= 0 && exact > 0)
+        {
+            // Nothing between the exact cells: give up the innermost exact pair to the stretch.
+            exact--;
+            interior = steps.Skip(exact).Take(steps.Count - 2 * exact).Sum();
+        }
+        if (interior <= 0) { exact = 0; interior = steps.Sum(); }
+        double ends = 0;
+        for (int k = 0; k < exact; k++) ends += 2 * ramp[k];
+        double stretch = (gap - ends) / interior;
+        for (int k = exact; k < steps.Count - exact; k++) steps[k] *= stretch;
+        return steps;
     }
 }
