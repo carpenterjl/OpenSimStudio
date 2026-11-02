@@ -114,56 +114,62 @@
                 <TextBlock Text="Pins" FontWeight="Bold" Margin="0,0,0,2"/>
                 <TextBlock Text="Vertical pins from the ground up to the metal, solved together: a feed is a port at its base (left a port, shorted, open, or closed by a lumped part), a shorting pin is welded to the ground — an inverted-F, a PIFA, a patch with two feeds. On the wizard patch x, y are from its centre, over the slab set by the patch height and substrate εr above; on a board island they are board coordinates and the pins stand on the plane under it. Tube segments: the probe field above."
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="44"/>
-                        <ColumnDefinition Width="44"/>
-                        <ColumnDefinition Width="34"/>
-                        <ColumnDefinition Width="56"/>
-                        <ColumnDefinition Width="62"/>
-                        <ColumnDefinition Width="38"/>
-                        <ColumnDefinition Width="30"/>
-                        <ColumnDefinition Width="20"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Name" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                    <TextBlock Grid.Column="1" Text="x mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                    <TextBlock Grid.Column="2" Text="y mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                    <TextBlock Grid.Column="3" Text="r mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                    <TextBlock Grid.Column="4" Text="Role" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                    <TextBlock Grid.Column="5" Text="Port" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                    <TextBlock Grid.Column="6" Text="Value" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                    <TextBlock Grid.Column="7" Text="Q" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
-                </Grid>
+                <!-- Two lines a pin: nine columns do not fit the pane, and the name and the remove
+                     button were the ones to go. -->
                 <ItemsControl x:Name="AntennaPinList" ItemsSource="{Binding Antenna.Pins}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="44"/>
-                                    <ColumnDefinition Width="44"/>
-                                    <ColumnDefinition Width="34"/>
-                                    <ColumnDefinition Width="56"/>
-                                    <ColumnDefinition Width="62"/>
-                                    <ColumnDefinition Width="38"/>
-                                    <ColumnDefinition Width="30"/>
-                                    <ColumnDefinition Width="20"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Text="{Binding Name}"/>
-                                <TextBox Grid.Column="1" Text="{Binding XMm}"/>
-                                <TextBox Grid.Column="2" Text="{Binding YMm}"/>
-                                <TextBox Grid.Column="3" Text="{Binding RadiusMm}" ToolTip="Tube radius [mm]; each tube segment must be at least twice this long."/>
-                                <ComboBox Grid.Column="4" ItemsSource="{x:Static vm:AntennaPinRow.Roles}" SelectedItem="{Binding Role}"/>
-                                <ComboBox Grid.Column="5" ItemsSource="{x:Static vm:PortLoads.All}" SelectedItem="{Binding Load}"
-                                          IsEnabled="{Binding IsFeed}"
-                                          ToolTip="A feed's port: left a port, shorted, open (the pin floats), or closed by a resistor, an inductor or a capacitor."/>
-                                <TextBox Grid.Column="6" Text="{Binding Value}" IsEnabled="{Binding IsFeed}" ToolTip="The part's value: Ω, nH or pF."/>
-                                <TextBox Grid.Column="7" Text="{Binding Q}" IsEnabled="{Binding IsFeed}" ToolTip="The part's Q; 0 = ideal."/>
-                                <Button Grid.Column="8" Content="×" Padding="0" ToolTip="Remove this pin"
-                                        Command="{Binding DataContext.Antenna.RemovePinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding}"/>
-                            </Grid>
+                            <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" Margin="0,2,0,0" Padding="0,3,0,0">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="82"/>
+                                            <ColumnDefinition Width="96"/>
+                                            <ColumnDefinition Width="24"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="Name" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding Name}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Margin="2,0,0,0">
+                                            <TextBlock Text="Role" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <ComboBox ItemsSource="{x:Static vm:AntennaPinRow.Roles}" SelectedItem="{Binding Role}"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" Margin="2,0,0,0">
+                                            <TextBlock Text="Port" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <ComboBox ItemsSource="{x:Static vm:PortLoads.All}" SelectedItem="{Binding Load}"
+                                                      IsEnabled="{Binding IsFeed}"
+                                                      ToolTip="A feed's port: left a port, shorted, open (the pin floats), or closed by a resistor, an inductor or a capacitor."/>
+                                        </StackPanel>
+                                        <Button Grid.Column="3" Content="×" Padding="0" Margin="2,2,0,2" VerticalAlignment="Bottom" ToolTip="Remove this pin"
+                                                Command="{Binding DataContext.Antenna.RemovePinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"/>
+                                    </Grid>
+                                    <UniformGrid Columns="5" Margin="0,2,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="x mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding XMm}" Margin="0,1,2,1"/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="y mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding YMm}" Margin="0,1,2,1"/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="r mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding RadiusMm}" Margin="0,1,2,1" ToolTip="Tube radius [mm]; each tube segment must be at least twice this long."/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="Value" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding Value}" Margin="0,1,2,1" IsEnabled="{Binding IsFeed}" ToolTip="The part's value: Ω, nH or pF."/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="Q" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding Q}" IsEnabled="{Binding IsFeed}" ToolTip="The part's Q; 0 = ideal."/>
+                                        </StackPanel>
+                                    </UniformGrid>
+                                </StackPanel>
+                            </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -236,28 +242,22 @@
                 <ItemsControl x:Name="SheetPartList" ItemsSource="{Binding Antenna.SheetParts}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="40"/>
-                                    <ColumnDefinition Width="40"/>
-                                    <ColumnDefinition Width="40"/>
-                                    <ColumnDefinition Width="40"/>
-                                    <ColumnDefinition Width="40"/>
-                                    <ColumnDefinition Width="40"/>
-                                    <ColumnDefinition Width="20"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Text="{Binding Name}"/>
-                                <TextBox Grid.Column="1" Text="{Binding X0Mm}"/>
-                                <TextBox Grid.Column="2" Text="{Binding Y0Mm}"/>
-                                <TextBox Grid.Column="3" Text="{Binding Z0Mm}"/>
-                                <TextBox Grid.Column="4" Text="{Binding X1Mm}"/>
-                                <TextBox Grid.Column="5" Text="{Binding Y1Mm}"/>
-                                <TextBox Grid.Column="6" Text="{Binding Z1Mm}"/>
-                                <Button Grid.Column="7" Content="×" Padding="0" ToolTip="Remove this plate"
-                                        Command="{Binding DataContext.Antenna.RemoveSheetPartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                        CommandParameter="{Binding}"/>
-                            </Grid>
+                            <StackPanel Margin="0,1,0,3">
+                                <DockPanel>
+                                    <Button DockPanel.Dock="Right" Width="22" Content="×" Padding="0" Margin="2,2,0,2" ToolTip="Remove this plate"
+                                            Command="{Binding DataContext.Antenna.RemoveSheetPartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}"/>
+                                    <TextBox Text="{Binding Name}"/>
+                                </DockPanel>
+                                <UniformGrid Columns="6">
+                                    <TextBox Text="{Binding X0Mm}" ToolTip="x0 [mm]"/>
+                                    <TextBox Text="{Binding Y0Mm}" ToolTip="y0 [mm]"/>
+                                    <TextBox Text="{Binding Z0Mm}" ToolTip="z0 [mm]"/>
+                                    <TextBox Text="{Binding X1Mm}" ToolTip="x1 [mm]"/>
+                                    <TextBox Text="{Binding Y1Mm}" ToolTip="y1 [mm]"/>
+                                    <TextBox Text="{Binding Z1Mm}" ToolTip="z1 [mm]"/>
+                                </UniformGrid>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -269,22 +269,22 @@
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="46"/>
-                                        <ColumnDefinition Width="62"/>
-                                        <ColumnDefinition Width="44"/>
-                                        <ColumnDefinition Width="34"/>
-                                        <ColumnDefinition Width="20"/>
+                                        <ColumnDefinition Width="72"/>
+                                        <ColumnDefinition Width="96"/>
+                                        <ColumnDefinition Width="24"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox Text="{Binding Name}"/>
-                                    <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:SheetPortRow.Directions}" SelectedItem="{Binding Direction}"
+                                    <ComboBox Grid.Column="1" Margin="2,1,0,1" ItemsSource="{x:Static vm:SheetPortRow.Directions}" SelectedItem="{Binding Direction}"
                                               ToolTip="The direction the positive current crosses the cut."/>
-                                    <ComboBox Grid.Column="2" ItemsSource="{x:Static vm:PortLoads.All}" SelectedItem="{Binding Load}"/>
-                                    <TextBox Grid.Column="3" Text="{Binding Value}" ToolTip="The part's value: Ω, nH or pF."/>
-                                    <TextBox Grid.Column="4" Text="{Binding Q}" ToolTip="The part's Q; 0 = ideal."/>
-                                    <Button Grid.Column="5" Content="×" Padding="0" ToolTip="Remove this port"
+                                    <ComboBox Grid.Column="2" Margin="2,1,0,1" ItemsSource="{x:Static vm:PortLoads.All}" SelectedItem="{Binding Load}"/>
+                                    <Button Grid.Column="3" Content="×" Padding="0" Margin="2,2,0,2" ToolTip="Remove this port"
                                             Command="{Binding DataContext.Antenna.RemoveSheetPortCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                             CommandParameter="{Binding}"/>
                                 </Grid>
+                                <UniformGrid Columns="2" Margin="0,1,0,0">
+                                    <TextBox Text="{Binding Value}" Margin="0,1,2,1" ToolTip="The part's value: Ω, nH or pF."/>
+                                    <TextBox Text="{Binding Q}" ToolTip="The part's Q; 0 = ideal."/>
+                                </UniformGrid>
                                 <UniformGrid Columns="6" Margin="0,1,0,0">
                                     <TextBox Text="{Binding FromXMm}" ToolTip="From x [mm]"/>
                                     <TextBox Text="{Binding FromYMm}" ToolTip="From y [mm]"/>
