@@ -60,10 +60,10 @@
 
             <DockPanel Margin="0,4,0,0">
                 <Label Content="Hex" DockPanel.Dock="Left"/>
-                <Button x:Name="ColormapRemoveStopButton" Content="−" Width="24"
+                <Button x:Name="ColormapRemoveStopButton" Content="−" Width="24" Padding="0"
                         DockPanel.Dock="Right" Command="{Binding Colormap.RemoveStopCommand}"
                         ToolTip="Remove the selected interior stop"/>
-                <Button x:Name="ColormapAddStopButton" Content="+" Width="24"
+                <Button x:Name="ColormapAddStopButton" Content="+" Width="24" Padding="0" Margin="0,2,2,2"
                         DockPanel.Dock="Right" Command="{Binding Colormap.AddStopCommand}"
                         ToolTip="Add a stop in the widest gap, taking the color already there"/>
                 <TextBox x:Name="ColormapHexBox" Margin="4,0"
@@ -113,10 +113,10 @@
             </DockPanel>
 
             <DockPanel Margin="0,6,0,0">
-                <Button x:Name="ColormapDeleteButton" Content="Delete" Width="56"
+                <Button x:Name="ColormapDeleteButton" Content="Delete" Padding="8,4"
                         DockPanel.Dock="Right" Command="{Binding Colormap.DeleteCommand}"
                         ToolTip="Delete this user map (built-ins cannot be deleted)"/>
-                <Button x:Name="ColormapSaveButton" Content="Save" Width="48"
+                <Button x:Name="ColormapSaveButton" Content="Save" Padding="8,4"
                         DockPanel.Dock="Right" Margin="4,0" Command="{Binding Colormap.SaveCommand}"
                         ToolTip="Save under this name to %AppData%\OpenSimStudio\colormaps.json"/>
                 <TextBox x:Name="ColormapNameBox" Text="{Binding Colormap.SaveName,
