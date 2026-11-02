@@ -124,4 +124,25 @@ public sealed class ResultsPerAnalysisTests : IDisposable
         Assert.Equal(StepState.Done, Step(StepKind.Results).State);
         Assert.Equal(StepKind.Results, Rail.SelectedStep!.Kind);
     }
+
+    [Fact]
+    public void TheSignalIntegrityWorkspace_OffersEachToolAsItsOwnAnalysis_EachSolvedApart()
+    {
+        _ = Rail;
+        Session.ActiveWorkspace = WorkspaceKind.SignalIntegrity;
+        Assert.Equal(new[] { AnalysisType.SignalIntegrity, AnalysisType.ImpedanceCalculator,
+                             AnalysisType.PowerDistribution, AnalysisType.TouchstoneChannel },
+                     Session.AnalysisOptions.Select(o => o.Kind));
+        Assert.True(Session.IsCoupledLinesAnalysis);
+
+        Session.SelectedAnalysis = Option(AnalysisType.PowerDistribution);
+        Assert.True(Session.IsPowerDistributionAnalysis);
+        Assert.False(Session.IsCoupledLinesAnalysis);
+
+        Session.ReportStudySolved(AnalysisType.PowerDistribution);
+        Assert.True(Rail.IsSolved);
+
+        Session.SelectedAnalysis = Option(AnalysisType.ImpedanceCalculator);
+        Assert.False(Rail.IsSolved);
+    }
 }

@@ -61,6 +61,10 @@ public partial class MainViewModel : ObservableObject
         Inductance = inductance;
         Antenna = antenna;
         SignalIntegrity = signalIntegrity;
+        signalIntegrity.Solved += (_, _) => session.ReportStudySolved(AnalysisType.SignalIntegrity);
+        signalIntegrity.Calculator.Solved += (_, _) => session.ReportStudySolved(AnalysisType.ImpedanceCalculator);
+        signalIntegrity.Pdn.Solved += (_, _) => session.ReportStudySolved(AnalysisType.PowerDistribution);
+        signalIntegrity.Channel.Solved += (_, _) => session.ReportStudySolved(AnalysisType.TouchstoneChannel);
         Solve = solve;
         Results = results;
         Scene = scene;
@@ -283,6 +287,18 @@ public partial class MainViewModel : ObservableObject
                     SignalIntegrity.RunEyeDiagramCommand.Execute(null);
                 else
                     Log.Append("Eye run is not ready — extract a cross-section in the SI panel first.");
+                break;
+            case AnalysisType.ImpedanceCalculator:
+                SignalIntegrity.Calculator.CalculateCommand.Execute(null);
+                break;
+            case AnalysisType.PowerDistribution:
+                SignalIntegrity.Pdn.SolveCommand.Execute(null);
+                break;
+            case AnalysisType.TouchstoneChannel:
+                if (SignalIntegrity.Channel.HasChannel)
+                    SignalIntegrity.Channel.RunEyeCommand.Execute(null);
+                else
+                    Log.Append("Load a Touchstone file on the Setup step first.");
                 break;
             default:
                 Solve.SolveCommand.Execute(null);

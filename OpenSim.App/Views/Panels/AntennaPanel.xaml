@@ -364,6 +364,9 @@
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
 
             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Results}">
+            <TextBlock Text="The impedance plots and the matching network fill in after the Solve step. The field maps below solve on their own."
+                       Style="{StaticResource FaintText}" Margin="0,0,0,4"
+                       Visibility="{Binding StudyRail.IsSolved, Converter={StaticResource InverseBoolToVis}}"/>
             <TextBlock Text="{Binding Antenna.SParameterResult}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
             <Image Source="{Binding Antenna.ReturnLossImage}" MaxHeight="220" Margin="0,4,0,0" Stretch="Uniform"

@@ -224,6 +224,10 @@ public partial class ProjectSession : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsElectrostaticAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsFluxRecoveryAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsRadiationExchangeAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsCoupledLinesAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsImpedanceCalculatorAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsPowerDistributionAnalysis))]
+    [NotifyPropertyChangedFor(nameof(IsTouchstoneChannelAnalysis))]
     private AnalysisOption _selectedAnalysis = AnalysisOption.All[0];
 
     partial void OnSelectedAnalysisChanged(AnalysisOption value)
@@ -293,6 +297,10 @@ public partial class ProjectSession : ObservableObject
     public bool IsConjugateHeatFlowAnalysis => SelectedAnalysis
         is { Kind: AnalysisType.ConjugateHeatFlow };
     public bool IsElectrostaticAnalysis => SelectedAnalysis is { Kind: AnalysisType.Electrostatic };
+    public bool IsCoupledLinesAnalysis => SelectedAnalysis is { Kind: AnalysisType.SignalIntegrity };
+    public bool IsImpedanceCalculatorAnalysis => SelectedAnalysis is { Kind: AnalysisType.ImpedanceCalculator };
+    public bool IsPowerDistributionAnalysis => SelectedAnalysis is { Kind: AnalysisType.PowerDistribution };
+    public bool IsTouchstoneChannelAnalysis => SelectedAnalysis is { Kind: AnalysisType.TouchstoneChannel };
 
     /// <summary>The scalar steady solves flux recovery and flux probes run on: DC conduction
     /// and steady heat conduction (FU-45).</summary>

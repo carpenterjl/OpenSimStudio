@@ -63,6 +63,9 @@ public partial class PdnViewModel : ObservableObject
 
     public PdnViewModel(ILogService log) => _log = log;
 
+    /// <summary>Raised when a run has finished with a result to show.</summary>
+    public event EventHandler? Solved;
+
     public ObservableCollection<SiNetSelection> Nets { get; } = new();
     [ObservableProperty] private SiNetSelection? _powerNet;
     [ObservableProperty] private SiNetSelection? _groundNet;
@@ -392,6 +395,7 @@ public partial class PdnViewModel : ObservableObject
                     System.Windows.Media.Color.FromRgb(0xE5, 0x53, 0x4B)));
             Plot = Controls.CurvePlot.Render(curves, logX: true, logY: true, "frequency [Hz]", "|Z| [Ω]");
             Result = string.Join(Environment.NewLine, result.Describe());
+            Solved?.Invoke(this, EventArgs.Empty);
             Assumptions = "Assumptions: " + string.Join(" ", result.Assumptions.Concat(model.Notes))
                 + " An escape trace runs straight from each pad's centre to each of its vias, as wide as the pad "
                 + "or twice the via, whichever is less (the trace itself is not read from the layout).";

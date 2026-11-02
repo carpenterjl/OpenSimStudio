@@ -32,7 +32,16 @@ public enum AnalysisType
 
     /// <summary>Coupled-line signal integrity (RLGC, S-parameters, PRBS transient + eye).
     /// A UI-dispatch kind like <see cref="Antenna"/>.</summary>
-    SignalIntegrity
+    SignalIntegrity,
+
+    /// <summary>One trace or pair's Z0, delay and loss from its cross-section. UI-dispatch.</summary>
+    ImpedanceCalculator,
+
+    /// <summary>Power distribution impedance at a load's supply pins. UI-dispatch.</summary>
+    PowerDistribution,
+
+    /// <summary>An eye, TDR and mixed-mode view of a measured channel. UI-dispatch.</summary>
+    TouchstoneChannel
 }
 
 /// <summary>The task-focused workspaces the main window can show — one per physics,
@@ -75,7 +84,10 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
         new AnalysisOption("Heat flow in an environment", AnalysisType.EnvironmentThermal),
         new AnalysisOption("Heat flow with computed airflow (CFD)", AnalysisType.ConjugateHeatFlow),
         new AnalysisOption("Antenna (Zin sweep)", AnalysisType.Antenna),
-        new AnalysisOption("Transient + eye (PRBS)", AnalysisType.SignalIntegrity)
+        new AnalysisOption("Coupled lines (RLGC, S-parameters, eye)", AnalysisType.SignalIntegrity),
+        new AnalysisOption("Stackup and impedance calculator", AnalysisType.ImpedanceCalculator),
+        new AnalysisOption("Power distribution impedance (PDN)", AnalysisType.PowerDistribution),
+        new AnalysisOption("Channel from a Touchstone file", AnalysisType.TouchstoneChannel)
     };
 
     private static AnalysisOption Of(AnalysisType kind) => All.First(o => o.Kind == kind);
@@ -100,7 +112,11 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
                 Of(AnalysisType.JouleCoupled)
             },
             WorkspaceKind.Rf => new[] { Of(AnalysisType.Antenna) },
-            WorkspaceKind.SignalIntegrity => new[] { Of(AnalysisType.SignalIntegrity) },
+            WorkspaceKind.SignalIntegrity => new[]
+            {
+                Of(AnalysisType.SignalIntegrity), Of(AnalysisType.ImpedanceCalculator),
+                Of(AnalysisType.PowerDistribution), Of(AnalysisType.TouchstoneChannel)
+            },
             WorkspaceKind.Flow => new[]
             {
                 Of(AnalysisType.EnvironmentThermal), Of(AnalysisType.ConjugateHeatFlow)
@@ -116,7 +132,8 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
             or AnalysisType.Electrostatic => WorkspaceKind.Electrical,
         AnalysisType.Thermal or AnalysisType.TransientThermal => WorkspaceKind.Thermal,
         AnalysisType.Antenna => WorkspaceKind.Rf,
-        AnalysisType.SignalIntegrity => WorkspaceKind.SignalIntegrity,
+        AnalysisType.SignalIntegrity or AnalysisType.ImpedanceCalculator or AnalysisType.PowerDistribution
+            or AnalysisType.TouchstoneChannel => WorkspaceKind.SignalIntegrity,
         AnalysisType.EnvironmentThermal or AnalysisType.ConjugateHeatFlow => WorkspaceKind.Flow,
         _ => WorkspaceKind.Structural
     };

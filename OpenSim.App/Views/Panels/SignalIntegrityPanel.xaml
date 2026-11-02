@@ -2,10 +2,18 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:OpenSim.App.Controls">
-    <!-- Moved verbatim out of ElectricalSetupPanel when SI became its own workspace (design screens 13-14); bindings go through the shell DataContext unchanged. -->
+    <UserControl.Resources>
+        <controls:StringEqualsToVisibilityConverter x:Key="StepVis"/>
+    </UserControl.Resources>
+    <!-- Four tools, one analysis each: the picker shows one at a time. Each lays out as the rail
+         does: inputs on Setup, its extra runs on Solve (the Solve button runs its main one), plots
+         on Results. Result lines show on every step, since they also say why a run was refused.
+         Bindings go through the shell DataContext unchanged. -->
     <StackPanel>
-    <GroupBox Header="Stackup and impedance calculator" DataContext="{Binding SignalIntegrity.Calculator}">
+    <GroupBox Header="Stackup and impedance calculator" DataContext="{Binding SignalIntegrity.Calculator}"
+              Visibility="{Binding DataContext.Session.IsImpedanceCalculatorAnalysis, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
             <TextBlock Text="One trace or an edge-coupled pair, over one plane or between two, with optional coplanar grounds: Z0, Z_diff, delay and loss from the same 2D field solve the board extraction uses."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
             <controls:FormGrid>
@@ -59,15 +67,21 @@
             <CheckBox Content="Side walls (thick-trace solve)" IsChecked="{Binding SideWallSolve}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
                       ToolTip="Solve the trace as the trapezoid it is, side walls included, instead of a strip of effective width. Matters for close pairs of thick copper."/>
-            <Button x:Name="ZcCalculateButton" Content="Calculate impedance" Command="{Binding CalculateCommand}" Margin="0,4,0,0"/>
+            </StackPanel>
             <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
-                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
+                <TextBlock Text="Run the calculation on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"
+                           Visibility="{Binding DataContext.StudyRail.IsSolved, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}"/>
+                <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
         </StackPanel>
     </GroupBox>
-    <GroupBox Header="Signal integrity (coupled lines)">
+    <GroupBox Header="Signal integrity (coupled lines)"
+              Visibility="{Binding DataContext.Session.IsCoupledLinesAnalysis, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
             <!-- Step 7: signal integrity (SI track) — coupled microstrip wizard →
                  RLGC → MTL network → S-params/Touchstone → PRBS transient + eye. -->
             <TextBlock Text="N coupled microstrips on the substrate: per-unit-length RLGC (2D quasi-static BEM over the layered dielectric), the exact frequency-domain coupled-line network, S-parameter export, and PRBS eye diagrams with crosstalk. Thevenin driver + R∥C receiver."
@@ -249,29 +263,37 @@
                 </StackPanel>
             </Border>
 
-            <UniformGrid Columns="3" Margin="0,4,0,0">
-                <Button x:Name="SiExtractButton" Content="Extract RLGC"
-                        Command="{Binding SignalIntegrity.ExtractRlgcCommand}"/>
-                <Button x:Name="SiSparamButton" Content="S-params (Touchstone)"
-                        Command="{Binding SignalIntegrity.ComputeSParametersCommand}"/>
-                <Button x:Name="SiEyeButton" Content="Transient + eye"
-                        Command="{Binding SignalIntegrity.RunEyeDiagramCommand}"/>
-            </UniformGrid>
+            </StackPanel>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Solve}">
+                <TextBlock Text="Solve runs the transient and eye. These run on their own:" Style="{StaticResource FaintText}" Margin="0,0,0,2"/>
+                <UniformGrid Columns="2">
+                    <Button x:Name="SiExtractButton" Content="Extract RLGC"
+                            Command="{Binding SignalIntegrity.ExtractRlgcCommand}" Margin="0,2,2,2"/>
+                    <Button x:Name="SiSparamButton" Content="S-params (Touchstone)"
+                            Command="{Binding SignalIntegrity.ComputeSParametersCommand}"/>
+                </UniformGrid>
+            </StackPanel>
             <TextBlock Text="{Binding SignalIntegrity.RlgcResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <TextBlock Text="{Binding SignalIntegrity.SParamResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <TextBlock Text="{Binding SignalIntegrity.EyeResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
-            <Image Source="{Binding SignalIntegrity.EyeImage}" MaxHeight="180" Margin="0,4,0,0"
-                   Stretch="Uniform" RenderOptions.BitmapScalingMode="Linear"
-                   AutomationProperties.AutomationId="SiEyeImage"/>
-            <TextBlock Text="{Binding SignalIntegrity.SiAssumptions}" TextWrapping="Wrap"
-                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
+                <TextBlock Text="Run the study on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"
+                           Visibility="{Binding DataContext.StudyRail.IsSolved, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}"/>
+                <Image Source="{Binding SignalIntegrity.EyeImage}" MaxHeight="180" Margin="0,4,0,0"
+                       Stretch="Uniform" RenderOptions.BitmapScalingMode="Linear"
+                       AutomationProperties.AutomationId="SiEyeImage"/>
+                <TextBlock Text="{Binding SignalIntegrity.SiAssumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
         </StackPanel>
     </GroupBox>
-    <GroupBox Header="Power distribution impedance (PDN)" DataContext="{Binding SignalIntegrity.Pdn}">
+    <GroupBox Header="Power distribution impedance (PDN)" DataContext="{Binding SignalIntegrity.Pdn}"
+              Visibility="{Binding DataContext.Session.IsPowerDistributionAnalysis, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
             <TextBlock Text="Impedance against frequency at a load's supply pins: every plane between a power and a ground net (2D finite elements on the real outlines, other rails' planes and stitching vias included, the edges' fringe from the board's cross-section), the capacitors between the two nets on their pads and vias (all coupled), the load behind its package, a regulator with or without its control loop, and a target."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
             <controls:FormGrid>
@@ -378,22 +400,28 @@
                 <Label Content="Sweep to [MHz]"/>
                 <TextBox Text="{Binding ToMhz}"/>
             </controls:FormGrid>
-            <Button x:Name="PdnSolveButton" Content="Solve PDN impedance" Command="{Binding SolveCommand}" Margin="0,3,0,0"/>
+            </StackPanel>
             <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-            <Image Source="{Binding Plot}" MaxHeight="300" Margin="0,4,0,0" Stretch="Uniform"
-                   AutomationProperties.AutomationId="PdnPlotImage"/>
-            <UniformGrid Columns="2" Margin="0,3,0,0">
-                <Button Content="Save curve (CSV)" Command="{Binding SaveCsvCommand}" IsEnabled="{Binding HasResult}"/>
-                <Button Content="Save Touchstone (.s1p)" Command="{Binding SaveTouchstoneCommand}"
-                        IsEnabled="{Binding HasResult}" Margin="2,0,0,0"/>
-            </UniformGrid>
-            <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
-                       FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
+                <TextBlock Text="Read the planes on Setup, then solve on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"
+                           Visibility="{Binding DataContext.StudyRail.IsSolved, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}"/>
+                <Image Source="{Binding Plot}" MaxHeight="300" Margin="0,4,0,0" Stretch="Uniform"
+                       AutomationProperties.AutomationId="PdnPlotImage"/>
+                <UniformGrid Columns="2" Margin="0,3,0,0">
+                    <Button Content="Save curve (CSV)" Command="{Binding SaveCsvCommand}" IsEnabled="{Binding HasResult}"/>
+                    <Button Content="Save Touchstone (.s1p)" Command="{Binding SaveTouchstoneCommand}"
+                            IsEnabled="{Binding HasResult}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
         </StackPanel>
     </GroupBox>
-    <GroupBox Header="Channel from a Touchstone file" DataContext="{Binding SignalIntegrity.Channel}">
+    <GroupBox Header="Channel from a Touchstone file" DataContext="{Binding SignalIntegrity.Channel}"
+              Visibility="{Binding DataContext.Session.IsTouchstoneChannelAnalysis, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
             <TextBlock Text="A measured channel, or one from another tool (Touchstone 1 or 2): causality and passivity repair, mixed-mode S-parameters, a TDR impedance profile, and an eye between resistive or lumped terminations. IBIS-AMI, COM and statistical BER are not here; export Touchstone to the tools that do them."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
             <Button x:Name="ChannelLoadButton" Content="Load Touchstone file (.sNp, .ts)" Command="{Binding LoadCommand}"/>
@@ -424,26 +452,12 @@
                 <TextBlock Text="{Binding RepairResult}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
 
-                <UniformGrid Columns="2" Margin="0,4,0,0">
-                    <Button Content="Mixed-mode S" Command="{Binding ShowMixedModeCommand}" IsEnabled="{Binding IsFourPort}"/>
-                    <Button Content="Save mixed-mode (.s4p)" Command="{Binding SaveMixedModeCommand}"
-                            IsEnabled="{Binding IsFourPort}" Margin="2,0,0,0"/>
-                </UniformGrid>
-                <TextBlock Text="{Binding MixedModeResult}" TextWrapping="Wrap" FontSize="11"
-                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-                <Image Source="{Binding MixedModePlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
-
                 <controls:FormGrid Margin="0,4,0,0">
                     <Label Content="TDR edge [ps] (0 = fastest)"/>
                     <TextBox Text="{Binding TdrRisePs}" ToolTip="10–90 % rise time. 0 takes the fastest edge the file's last frequency supports."/>
                 </controls:FormGrid>
                 <CheckBox Content="Peel with the through path's loss taken out" IsChecked="{Binding TdrTakeOutLoss}"
                           ToolTip="The loss of the driven → receiver path (a leg's, for a pair), spread evenly along the line." Margin="0,2,0,2"/>
-                <Button Content="TDR impedance profile" Command="{Binding RunTdrCommand}"/>
-                <TextBlock Text="{Binding TdrResult}" TextWrapping="Wrap" FontSize="11"
-                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-                <Image Source="{Binding TdrPlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
-
                 <controls:FormGrid Margin="0,4,0,0">
                     <Label Content="Bit rate [Gb/s]"/>
                     <TextBox Text="{Binding BitRateGbps}"/>
@@ -466,9 +480,28 @@
                     <Label Content="AC coupling [nF] (0 = DC)"/>
                     <TextBox Text="{Binding CouplingNf}" ToolTip="A series capacitor at the receiver's port."/>
                 </controls:FormGrid>
-                <Button Content="Eye" Command="{Binding RunEyeCommand}"/>
-                <TextBlock Text="{Binding EyeResult}" TextWrapping="Wrap" FontSize="11"
-                           Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+            </StackPanel>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Solve}" IsEnabled="{Binding HasChannel}">
+                <TextBlock Text="Solve runs the eye. These run on their own:" Style="{StaticResource FaintText}" Margin="0,0,0,2"/>
+                <UniformGrid Columns="2">
+                    <Button Content="TDR impedance profile" Command="{Binding RunTdrCommand}" Margin="0,2,2,2"/>
+                    <Button Content="Mixed-mode S" Command="{Binding ShowMixedModeCommand}" IsEnabled="{Binding IsFourPort}"/>
+                </UniformGrid>
+            </StackPanel>
+            <TextBlock Text="{Binding MixedModeResult}" TextWrapping="Wrap" FontSize="11"
+                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding TdrResult}" TextWrapping="Wrap" FontSize="11"
+                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <TextBlock Text="{Binding EyeResult}" TextWrapping="Wrap" FontSize="11"
+                       Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+            <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
+                <TextBlock Text="Load a file on Setup, then run it on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"
+                           Visibility="{Binding DataContext.StudyRail.IsSolved, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}"/>
+                <Button Content="Save mixed-mode (.s4p)" Command="{Binding SaveMixedModeCommand}"
+                        IsEnabled="{Binding IsFourPort}"/>
+                <Image Source="{Binding MixedModePlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
+                <Image Source="{Binding TdrPlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
                 <Image Source="{Binding EyeImage}" MaxHeight="180" Margin="0,4,0,0" Stretch="Uniform"/>
             </StackPanel>
         </StackPanel>

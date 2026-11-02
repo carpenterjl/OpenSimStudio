@@ -383,6 +383,9 @@ public partial class SignalIntegrityViewModel : ObservableObject
         Pdn.LoadBoard(board, meshOptions, sourceFileName);
     }
 
+    /// <summary>Raised when a run has finished with a result to show.</summary>
+    public event EventHandler? Solved;
+
     [ObservableProperty] private string _rlgcResult = "";
     [ObservableProperty] private string _sParamResult = "";
     [ObservableProperty] private string _eyeResult = "";
@@ -685,6 +688,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
             RlgcResult = text;
             ShowAssumptions(rlgc);
             _log.Append($"SI: RLGC extracted — {text}");
+            Solved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) { RlgcResult = $"Not solvable: {ex.Message}"; }
     }
@@ -740,6 +744,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
             SParamResult = text;
             ShowAssumptions(rlgc);
             _log.Append($"SI: {text}");
+            Solved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) { SParamResult = $"Not solvable: {ex.Message}"; }
     }
@@ -829,6 +834,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
                 + (aggressors ? $"; aggressor crosstalk peak = {peakXtalk * 1e3:g3} mV" : "");
             ShowAssumptions(rlgc);
             _log.Append($"SI: {EyeResult}");
+            Solved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) { EyeResult = $"Not solvable: {ex.Message}"; EyeImage = null; }
     }
@@ -892,6 +898,7 @@ public partial class SignalIntegrityViewModel : ObservableObject
         EyeImage = RenderEye(eye);
         EyeResult = $"IBIS eye ({model.Name}, {IbisCorner}) at {BitRateGbps:g3} Gb/s: "
             + $"{EyeMetrics(eye)} ({note})";
+        Solved?.Invoke(this, EventArgs.Empty);
         SiAssumptions = "Assumptions: " + string.Join(" ", rlgc.Assumptions)
             + " Nonlinear IBIS driver (V-I tables; C_comp and the load capacitance carried in "
             + "the channel reduction; edges on the continuous timeline) into "

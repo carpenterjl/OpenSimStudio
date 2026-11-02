@@ -31,6 +31,9 @@ public partial class ChannelViewModel : ObservableObject
 
     public ChannelViewModel(ILogService log) => _log = log;
 
+    /// <summary>Raised when a run has finished with a result to show.</summary>
+    public event EventHandler? Solved;
+
     public ObservableCollection<string> SummaryLines { get; } = new();
     public IReadOnlyList<string> PortOrders { get; } = new[] { "1→2, 3→4 (near odd, far even)", "1→3, 2→4 (near first half)" };
 
@@ -156,6 +159,7 @@ public partial class ChannelViewModel : ObservableObject
                         (lumped ? "linear lumped terminations" : "resistive terminations") + ", no driver or receiver model.";
             EyeImage = SignalIntegrityViewModel.RenderEye(result.Eye);
             foreach (string line in result.Describe()) _log.Append("Channel eye: " + line);
+            Solved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) { EyeResult = $"Not solvable: {ex.Message}"; EyeImage = null; }
     }
@@ -185,6 +189,7 @@ public partial class ChannelViewModel : ObservableObject
                         (Differential && channel.Ports == 4 ? " differential" : $", port {DrivenPort}") + ". " +
                         string.Join(" ", profile.Notes);
             _log.Append("Channel TDR: " + TdrResult);
+            Solved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) { TdrResult = $"Not solvable: {ex.Message}"; TdrPlot = null; }
     }
@@ -250,6 +255,7 @@ public partial class ChannelViewModel : ObservableObject
             MixedModeResult = $"Worst mode conversion Scd21 {scd21.Max():f1} dB; differential loss at the last point {sdd21[^1]:f1} dB. " +
                               $"Differential ports are referred to {2 * channel.ReferenceOhms:g4} Ω, common-mode to {channel.ReferenceOhms / 2:g4} Ω.";
             _log.Append("Channel mixed mode: " + MixedModeResult);
+            Solved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) { MixedModeResult = $"Not available: {ex.Message}"; MixedModePlot = null; }
     }

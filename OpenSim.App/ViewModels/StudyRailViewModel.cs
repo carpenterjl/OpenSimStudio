@@ -81,6 +81,9 @@ public partial class StudyRailViewModel : ObservableObject
 
     [ObservableProperty] private StudyStep? _selectedStep;
 
+    /// <summary>Whether the selected analysis has results, for the panels' "not yet" hints.</summary>
+    [ObservableProperty] private bool _isSolved;
+
     /// <summary>The active step's kind as a string ("Setup", …) for XAML visibility
     /// triggers — panels compare against it with a plain DataTrigger.</summary>
     public string ActiveStepName => SelectedStep?.Kind.ToString() ?? "";
@@ -183,6 +186,7 @@ public partial class StudyRailViewModel : ObservableObject
         bool railFree = _session.ActiveWorkspace is WorkspaceKind.Rf or WorkspaceKind.SignalIntegrity;
         bool studySolved = _session.SelectedAnalysis is { } analysis && _session.IsStudySolved(analysis.Kind);
         bool solved = _hasResults || studySolved;
+        IsSolved = solved;
 
         foreach (var step in Steps)
         {

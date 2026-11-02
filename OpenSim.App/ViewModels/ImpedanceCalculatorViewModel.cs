@@ -91,6 +91,9 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
         Model = RoughnessChoice.Model(RoughnessModel, RoughnessUm, HuraySurfaceRatio, Foil, CopperThicknessUm) with { SideWalls = SideWallSolve }
     };
 
+    /// <summary>Raised when a run has finished with a result to show.</summary>
+    public event EventHandler? Solved;
+
     [RelayCommand]
     private async Task Calculate()
     {
@@ -102,6 +105,7 @@ public partial class ImpedanceCalculatorViewModel : ObservableObject
             var report = await Task.Run(() => ImpedanceCalculator.Solve(spec));
             Result = string.Join(Environment.NewLine, report.Describe());
             Assumptions = "Assumptions: " + string.Join(" ", report.Assumptions);
+            Solved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
