@@ -55,10 +55,11 @@ public partial class StudyRailViewModel : ObservableObject
         session.BodiesChanged += (_, _) => Refresh();
         session.ResultsProduced += (_, e) =>
         {
-            _hasResults = true;
+            _hasResults = e.Fields.Count > 0;
             _resultFieldCount = e.Fields.Count;
             Refresh();
-            SelectStep(StepKind.Results);
+            // Only a solve that just finished moves the user; switching analysis does not.
+            if (_hasResults && !e.Restored) SelectStep(StepKind.Results);
         };
         session.PropertyChanged += (_, e) =>
         {
@@ -157,6 +158,17 @@ public partial class StudyRailViewModel : ObservableObject
         OnPropertyChanged(nameof(ActiveStepName));
     }
 
+    /// <summary>A step that locked while it was open (new geometry took the mesh, an analysis
+    /// with no solve took the results) gives way to the nearest open step before it, so its
+    /// controls are never live under a rail that says they cannot be used.</summary>
+    private void LeaveLockedStep()
+    {
+        if (SelectedStep is not { State: StepState.Locked } locked) return;
+        SelectedStep = Steps.TakeWhile(s => s != locked).LastOrDefault(s => s.State != StepState.Locked)
+                       ?? Steps.FirstOrDefault(s => s.State != StepState.Locked)
+                       ?? locked;
+    }
+
     private void Refresh()
     {
         bool hasGeometry = _session.IsPcbMode
@@ -211,6 +223,7 @@ public partial class StudyRailViewModel : ObservableObject
             }
         }
 
+        LeaveLockedStep();
         OnPropertyChanged(nameof(StudyLines));
     }
 

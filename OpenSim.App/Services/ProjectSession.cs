@@ -33,6 +33,10 @@ public sealed class ResultsProducedEventArgs : EventArgs
 
     /// <summary>Frame axis caption ("Time", "Mode", "Frequency"); null without frames.</summary>
     public string? FrameAxis { get; init; }
+
+    /// <summary>True when these are earlier results brought back because their analysis was
+    /// selected again, not a solve that just finished.</summary>
+    public bool Restored { get; init; }
 }
 
 /// <summary>
@@ -230,6 +234,44 @@ public partial class ProjectSession : ObservableObject
         // OnActiveWorkspaceChanged re-asserts the selection itself).
         if (value is null && AnalysisOptions.Count > 0)
             SelectedAnalysis = AnalysisOptions[0];
+        if (value is not null) ShowResultsOf(value.Kind);
+    }
+
+    /// <summary>
+    /// Each analysis keeps the results of its own last solve. Only the selected analysis's are
+    /// on show: a modal study with a static stress plot beside it looks solved when it has not
+    /// been run. Selecting the analysis again brings them back, so a slip of the picker does not
+    /// lose a long solve. A new mesh or new geometry ends them all, since they describe the old
+    /// one.
+    /// </summary>
+    private readonly Dictionary<AnalysisType, KeptResults> _resultsByAnalysis = new();
+
+    /// <summary>The analysis whose results are on show; null when none are.</summary>
+    private AnalysisType? _shownResults;
+
+    private sealed record KeptResults(ResultsProducedEventArgs Args, FeMeshAssembler.AssembledMesh? Assembled);
+
+    private void ShowResultsOf(AnalysisType analysis)
+    {
+        if (_shownResults == analysis) return;
+        if (_resultsByAnalysis.TryGetValue(analysis, out var kept))
+        {
+            _shownResults = analysis;
+            AssembledMesh = kept.Assembled;
+            ResultsProduced?.Invoke(this, new ResultsProducedEventArgs
+            {
+                Fields = kept.Args.Fields, Analysis = kept.Args.Analysis, PreferFieldName = kept.Args.PreferFieldName,
+                Frames = kept.Args.Frames, FrameAxis = kept.Args.FrameAxis, Restored = true
+            });
+        }
+        else if (_shownResults is not null) ClearShownResults();
+    }
+
+    private void ClearShownResults()
+    {
+        _shownResults = null;
+        ResultsProduced?.Invoke(this, new ResultsProducedEventArgs { Fields = Array.Empty<IResultField>() });
+        StatusText = "Ready";
     }
 
     // Null-tolerant pattern matches: see OnSelectedAnalysisChanged for the transient.
@@ -306,6 +348,8 @@ public partial class ProjectSession : ObservableObject
     {
         AssembledMesh = null;   // the merge described geometry that no longer exists
         Assemblies.Clear();
+        _resultsByAnalysis.Clear();
+        _shownResults = null;   // every listener below clears its own display on this event
         GeometryReplaced?.Invoke(this, new GeometryReplacedEventArgs { LeavingPcbMode = leavingPcbMode });
     }
 
@@ -313,17 +357,27 @@ public partial class ProjectSession : ObservableObject
     {
         AssembledMesh = null;   // re-meshing one body invalidates the merge it took part in
         Assemblies.Clear();     // ...and everything cached from it, BEFORE anyone reacts
+        _resultsByAnalysis.Clear();
+        if (_shownResults is not null) ClearShownResults();
         MeshChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void RaiseResultsProduced(IReadOnlyList<IResultField> fields,
         AnalysisType? analysis = null, string? preferFieldName = null,
-        IReadOnlyList<ResultFrame>? frames = null, string? frameAxis = null) =>
-        ResultsProduced?.Invoke(this, new ResultsProducedEventArgs
+        IReadOnlyList<ResultFrame>? frames = null, string? frameAxis = null)
+    {
+        var args = new ResultsProducedEventArgs
         {
             Fields = fields, Analysis = analysis, PreferFieldName = preferFieldName,
             Frames = frames, FrameAxis = frameAxis
-        });
+        };
+        var produced = analysis ?? SelectedAnalysis.Kind;
+        _resultsByAnalysis[produced] = new KeptResults(args, AssembledMesh);
+        // A solve that ends after the picker has moved on is kept for its analysis, not shown.
+        if (produced != SelectedAnalysis.Kind) return;
+        _shownResults = produced;
+        ResultsProduced?.Invoke(this, args);
+    }
 
     public void RaiseHighlightsInvalidated() => HighlightsInvalidated?.Invoke(this, EventArgs.Empty);
 
