@@ -303,7 +303,7 @@ public partial class ResultsViewModel : ObservableObject
         FrameTicks = new DoubleCollection(_frameValues);
         FrameTicks.Freeze();
         TimelineTickLabels = FrameTimeline.TickLabels(_frameValues, FrameUnit)
-            .Select(t => TimelineTickMark.At(t.Fraction, t.Label))
+            .Select(t => new TimelineTickMark(t.Fraction, t.Label))
             .ToArray();
 
         _syncingTime = true;
