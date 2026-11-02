@@ -1,6 +1,7 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.ColormapEditorPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <!-- Colors and thresholds of the result heat map. The two halves are separate on
          purpose: editing COLORS only swaps the gradient brush (live, even mid-drag),
          while editing the RANGE re-normalizes every vertex. -->
@@ -93,14 +94,14 @@
             <CheckBox x:Name="ColormapAutoRangeCheck" Content="Auto range"
                       IsChecked="{Binding Colormap.AutoRange}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,2,4"
                       ToolTip="Span the result's own min/max. Turn off to hold the colors fixed across frames and solves."/>
-            <UniformGrid Columns="2" IsEnabled="{Binding Colormap.ManualRange}">
+            <controls:FormGrid IsEnabled="{Binding Colormap.ManualRange}">
                 <Label Content="Min"/>
                 <TextBox x:Name="ColormapMinBox" Text="{Binding Colormap.UserMin}"
                          ToolTip="Lower bound in field units (K, Pa, V…)"/>
                 <Label Content="Max"/>
                 <TextBox x:Name="ColormapMaxBox" Text="{Binding Colormap.UserMax}"
                          ToolTip="Upper bound in field units; values above saturate at the top color"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <DockPanel Margin="0,4,0,0">
                 <CheckBox x:Name="ColormapLogCheck" Content="Log" DockPanel.Dock="Left"
                           IsChecked="{Binding Colormap.UseLog}" Foreground="{DynamicResource TextMutedBrush}"

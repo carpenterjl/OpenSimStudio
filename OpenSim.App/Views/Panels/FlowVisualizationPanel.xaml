@@ -1,6 +1,7 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.FlowVisualizationPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <!-- Only the conjugate (CFD) analysis has an airflow to show — the Stage 1
          correlation analysis never grows a flow control (a locked scope rule). -->
     <GroupBox Header="Airflow (CFD)"
@@ -16,7 +17,7 @@
                           IsChecked="{Binding Flow.ShowStreamlines}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
                 <CheckBox x:Name="FlowSliceCheck" Content="Contour slice"
                           IsChecked="{Binding Flow.ShowSlice}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"/>
-                <UniformGrid Columns="2"
+                <controls:FormGrid
                              Visibility="{Binding Flow.ShowSlice, Converter={StaticResource BoolToVis}}">
                     <Label Content="Quantity"/>
                     <ComboBox x:Name="SliceQuantityCombo" SelectedIndex="{Binding Flow.SliceQuantity}"
@@ -35,19 +36,19 @@
                     <Slider x:Name="SliceFractionSlider" Minimum="0" Maximum="1"
                             Value="{Binding Flow.SliceFraction}"
                             IsMoveToPointEnabled="True"/>
-                </UniformGrid>
+                </controls:FormGrid>
                 <StackPanel Visibility="{Binding Flow.ShowSlice, Converter={StaticResource BoolToVis}}">
                     <CheckBox x:Name="SliceFixedRangeCheck" Content="Fixed colour range"
                               IsChecked="{Binding Flow.SliceFixedRange}"
                               Foreground="{DynamicResource TextMutedBrush}" Margin="2,2"
                               ToolTip="Pins the colour scale so two runs (or a run and a published figure) compare directly"/>
-                    <UniformGrid Columns="2"
+                    <controls:FormGrid
                                  Visibility="{Binding Flow.SliceFixedRange, Converter={StaticResource BoolToVis}}">
                         <Label Content="Min"/>
                         <TextBox x:Name="SliceMinBox" Text="{Binding Flow.SliceMin}"/>
                         <Label Content="Max"/>
                         <TextBox x:Name="SliceMaxBox" Text="{Binding Flow.SliceMax}"/>
-                    </UniformGrid>
+                    </controls:FormGrid>
                     <TextBlock x:Name="SliceLegendText" Text="{Binding Flow.SliceLegend}"
                                Foreground="{DynamicResource TextFaintBrush}" TextWrapping="Wrap"
                                Margin="2,2"/>

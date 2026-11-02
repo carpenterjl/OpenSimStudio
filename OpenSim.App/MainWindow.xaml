@@ -435,8 +435,8 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="56"/>
                             <ColumnDefinition Width="208"/>
-                            <ColumnDefinition Width="352"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="352" MinWidth="352" MaxWidth="760"/>
+                            <ColumnDefinition Width="*" MinWidth="320"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- Nav rail -->
@@ -685,6 +685,11 @@
                                 </ScrollViewer>
                             </DockPanel>
                         </Border>
+
+                        <!-- Drag the pane's right edge to widen it. -->
+                        <GridSplitter Grid.Column="2" Width="5" HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                                      Background="Transparent" ResizeBehavior="CurrentAndNext" ResizeDirection="Columns"
+                                      AutomationProperties.AutomationId="PropertiesPaneSplitter"/>
 
                         <!-- Viewport + log -->
                         <Grid Grid.Column="3">

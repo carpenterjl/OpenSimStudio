@@ -1,6 +1,7 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.EmiPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <!-- FU-47: EMI pre-compliance (Feature 14, FU-41) — the study the command line's 'emi' job runs. -->
     <GroupBox Header="EMI pre-compliance (conducted and radiated estimate)" DataContext="{Binding Emi}">
         <StackPanel>
@@ -8,7 +9,7 @@
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
 
             <TextBlock Text="Converter" FontWeight="Bold" Margin="0,4,0,2"/>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Input [V] / output current [A]"/>
                 <UniformGrid Columns="2">
                     <TextBox x:Name="EmiVinBox" Text="{Binding InputVolts}" Margin="0,0,2,0"/>
@@ -35,10 +36,10 @@
                     <TextBox Text="{Binding InputEslNanohenries}" Margin="2,0,0,0"
                              ToolTip="Add the capacitor's mounting-loop inductance here (the Electrical workspace's inductance step, or the board read below)."/>
                 </UniformGrid>
-            </UniformGrid>
+            </controls:FormGrid>
 
             <TextBlock Text="Input filter (0 µH = none)" FontWeight="Bold" Margin="0,6,0,2"/>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="L [µH] / DCR [mΩ]"/>
                 <UniformGrid Columns="2">
                     <TextBox Text="{Binding FilterMicrohenries}" Margin="0,0,2,0"/>
@@ -52,10 +53,10 @@
                 </UniformGrid>
                 <Label Content="Y capacitors, each line to earth [nF]"/>
                 <TextBox Text="{Binding YNanofarads}"/>
-            </UniformGrid>
+            </controls:FormGrid>
 
             <TextBlock Text="Hot loop, ringing and recovery" FontWeight="Bold" Margin="0,6,0,2"/>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Loop L [nH] / R [mΩ]"/>
                 <UniformGrid Columns="2">
                     <TextBox Text="{Binding HotLoopNanohenries}" Margin="0,0,2,0"
@@ -80,12 +81,12 @@
                     <TextBox Text="{Binding SecondaryToEarthPf}" Margin="0,0,2,0"/>
                     <TextBox Text="{Binding SecondaryYPf}" Margin="2,0,0,0"/>
                 </UniformGrid>
-            </UniformGrid>
+            </controls:FormGrid>
 
             <TextBlock Text="Read the hot loop from the board" FontWeight="Bold" Margin="0,6,0,2"/>
             <TextBlock Text="Needs component names on the pads (IPC-2581, or Gerber with X2 attributes): the input capacitor's pads on the input and return nets, the switches' on the switch node. The loop is solved by PEEC over the return plane, or along the return traces when there is no plane."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
-            <UniformGrid Columns="2" IsEnabled="{Binding HasBoard}">
+            <controls:FormGrid IsEnabled="{Binding HasBoard}">
                 <Label Content="Input net"/>
                 <ComboBox x:Name="EmiInputNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding InputNet}" DisplayMemberPath="Label"/>
                 <Label Content="Return net"/>
@@ -103,7 +104,7 @@
                 <Label Content="Plane mesh pitch [mm] (0 = graded)"/>
                 <TextBox Text="{Binding PlanePitchMm}"
                          ToolTip="The return plane's PEEC mesh. Graded (0) is the accurate default and can take minutes; a uniform pitch such as 0.6 mm is quicker and coarser."/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button x:Name="EmiReadBoardButton" Content="Read the hot loop from the board" Command="{Binding ReadBoardCommand}"
                     IsEnabled="{Binding HasBoard}" Margin="0,3,0,0"/>
             <CheckBox Content="Include the board's copper in the estimate" IsChecked="{Binding IncludeBoard}"
@@ -113,7 +114,7 @@
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
 
             <TextBlock Text="Limits and the radiated estimate" FontWeight="Bold" Margin="0,6,0,2"/>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Conducted limit"/>
                 <ComboBox x:Name="EmiConductedLimitCombo" ItemsSource="{Binding ConductedLimits}" SelectedItem="{Binding ConductedLimit}"
                           DisplayMemberPath="Label"/>
@@ -126,7 +127,7 @@
                     <TextBox Text="{Binding CableLengthM}" Margin="0,0,2,0" ToolTip="Carries the common-mode current; capped at a quarter wavelength."/>
                     <TextBox Text="{Binding DistanceM}" Margin="2,0,0,0"/>
                 </UniformGrid>
-            </UniformGrid>
+            </controls:FormGrid>
             <UniformGrid Columns="2" Margin="0,3,0,0">
                 <Button Content="Load a limit line (CSV)…" Command="{Binding LoadLimitFileCommand}"
                         ToolTip="Rows of f0 [MHz], f1 [MHz], limit at f0, limit at f1 [dBµV] — linear in log f, as the standards draw them."/>

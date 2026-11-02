@@ -46,6 +46,7 @@
         <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Padding" Value="0,2"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <!-- A long caption wraps instead of running under the next control, and an underscore
              stays an underscore ("c_p", "Z_th"): no label here has an access key. -->
         <Setter Property="Template">
@@ -107,7 +108,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="GroupBox">
                     <StackPanel>
-                        <TextBlock Style="{StaticResource MicroHeader}"
+                        <TextBlock Style="{StaticResource MicroHeader}" TextWrapping="Wrap"
                                    Text="{TemplateBinding Header, Converter={StaticResource Uppercase}}"/>
                         <ContentPresenter Margin="{TemplateBinding Padding}"/>
                     </StackPanel>

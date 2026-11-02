@@ -1,24 +1,25 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.PrimitivesPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <GroupBox Header="Create primitive"
               Visibility="{Binding Session.IsPcbMode, Converter={StaticResource InverseBoolToVis}}">
         <StackPanel>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Box X [m]"/>
                 <TextBox x:Name="BoxSizeXBox" Text="{Binding Geometry.BoxSizeX}"/>
                 <Label Content="Box Y [m]"/>
                 <TextBox x:Name="BoxSizeYBox" Text="{Binding Geometry.BoxSizeY}"/>
                 <Label Content="Box Z [m]"/>
                 <TextBox x:Name="BoxSizeZBox" Text="{Binding Geometry.BoxSizeZ}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button x:Name="CreateBoxButton" Content="Create box" Command="{Binding Geometry.CreateBoxCommand}"/>
-            <UniformGrid Columns="2" Margin="0,8,0,0">
+            <controls:FormGrid Margin="0,8,0,0">
                 <Label Content="Radius [m]"/>
                 <TextBox Text="{Binding Geometry.CylinderRadius}"/>
                 <Label Content="Height [m]"/>
                 <TextBox Text="{Binding Geometry.CylinderHeight}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button Content="Create cylinder" Command="{Binding Geometry.CreateCylinderCommand}"/>
         </StackPanel>
     </GroupBox>

@@ -1,6 +1,7 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.MagneticsPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <!-- FU-47: planar magnetics (Feature 13, FU-39, FU-40) — the solve the command line's 'magnetics' command runs. -->
     <GroupBox Header="Planar magnetics (2-D axisymmetric section)" DataContext="{Binding Magnetics}">
         <StackPanel>
@@ -18,7 +19,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <UniformGrid Columns="2" IsEnabled="{Binding HasBoard}" Margin="0,2,0,0">
+            <controls:FormGrid IsEnabled="{Binding HasBoard}" Margin="0,2,0,0">
                 <Label Content="Axis x / y [mm]"/>
                 <UniformGrid Columns="2">
                     <TextBox x:Name="MagneticsCenterXBox" Text="{Binding CenterXMm}" Margin="0,0,2,0"/>
@@ -33,7 +34,7 @@
                 </UniformGrid>
                 <Label Content="Cut out to radius [mm]"/>
                 <TextBox Text="{Binding MaxRadiusMm}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <UniformGrid Columns="2" Margin="0,3,0,0">
                 <Button Content="Axis at the selected copper" Command="{Binding CenterOnWindingsCommand}" IsEnabled="{Binding HasBoard}"
                         ToolTip="The middle of the ticked nets' copper, and a radius past its farthest corner."/>
@@ -43,7 +44,7 @@
             </UniformGrid>
             <TextBlock Text="{Binding CutResult}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
 
-            <TextBlock Text="Turns (r from the axis; z = 0 at the top copper surface, negative down)" FontWeight="Bold" Margin="0,6,0,2"/>
+            <TextBlock Text="Turns (r from the axis; z = 0 at the top copper surface, negative down)" FontWeight="Bold" TextWrapping="Wrap" Margin="0,6,0,2"/>
             <Grid Margin="0,0,0,1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -96,12 +97,12 @@
             </UniformGrid>
 
             <TextBlock Text="Core" FontWeight="Bold" Margin="0,6,0,2"/>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Core"/>
                 <ComboBox x:Name="MagneticsCoreCombo" ItemsSource="{Binding CoreKinds}" SelectedItem="{Binding CoreKind}"
                           ToolTip="A pot core is axisymmetric and exact here. An ER core's square legs become the ring of the same area (ErCore.ToAxisymmetric)."/>
-            </UniformGrid>
-            <UniformGrid Columns="2" Visibility="{Binding HasCore, Converter={StaticResource BoolToVis}}">
+            </controls:FormGrid>
+            <controls:FormGrid Visibility="{Binding HasCore, Converter={StaticResource BoolToVis}}">
                 <Label Content="Post radius [mm]"/>
                 <TextBox Text="{Binding PostRadiusMm}"/>
                 <Label Content="Window height [mm] / plates [mm]"/>
@@ -114,15 +115,15 @@
                     <TextBox Text="{Binding GapMm}" Margin="0,0,2,0"/>
                     <TextBox Text="{Binding CoreMu}" Margin="2,0,0,0" ToolTip="Linear relative permeability of the ferrite."/>
                 </UniformGrid>
-            </UniformGrid>
-            <UniformGrid Columns="2" Visibility="{Binding IsPotCore, Converter={StaticResource BoolToVis}}">
+            </controls:FormGrid>
+            <controls:FormGrid Visibility="{Binding IsPotCore, Converter={StaticResource BoolToVis}}">
                 <Label Content="Window radius / outer radius [mm]"/>
                 <UniformGrid Columns="2">
                     <TextBox Text="{Binding WindowRadiusMm}" Margin="0,0,2,0"/>
                     <TextBox Text="{Binding OuterRadiusMm}" Margin="2,0,0,0"/>
                 </UniformGrid>
-            </UniformGrid>
-            <UniformGrid Columns="2" Visibility="{Binding IsErCore, Converter={StaticResource BoolToVis}}">
+            </controls:FormGrid>
+            <controls:FormGrid Visibility="{Binding IsErCore, Converter={StaticResource BoolToVis}}">
                 <Label Content="Window width / leg width [mm]"/>
                 <UniformGrid Columns="2">
                     <TextBox Text="{Binding WindowWidthMm}" Margin="0,0,2,0"/>
@@ -130,10 +131,10 @@
                 </UniformGrid>
                 <Label Content="Leg depth [mm]"/>
                 <TextBox Text="{Binding DepthMm}" ToolTip="The outer legs' depth: their area sets the equivalent wall's radius."/>
-            </UniformGrid>
+            </controls:FormGrid>
 
             <TextBlock Text="Solve" FontWeight="Bold" Margin="0,6,0,2"/>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Frequency [kHz] (0 = static)"/>
                 <TextBox x:Name="MagneticsFrequencyBox" Text="{Binding FrequencyKhz}"
                          ToolTip="0: magnetostatic, the inductance only. Above 0: time-harmonic; solid turns show skin and proximity effect."/>
@@ -147,7 +148,7 @@
                 </UniformGrid>
                 <Label Content="Copper σ [S/m]"/>
                 <TextBox Text="{Binding CopperConductivity}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button x:Name="MagneticsSolveButton" Content="Solve the section" Command="{Binding SolveCommand}" Margin="0,3,0,0"/>
             <TextBlock x:Name="MagneticsResultText" Text="{Binding Result}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,3,0,0"/>

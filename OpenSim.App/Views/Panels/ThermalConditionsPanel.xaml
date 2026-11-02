@@ -1,30 +1,31 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.ThermalConditionsPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <GroupBox Header="Thermal conditions (select faces first)"
               Visibility="{Binding Session.IsThermalAnalysis, Converter={StaticResource BoolToVis}}">
         <StackPanel>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Temperature [K]"/>
                 <TextBox Text="{Binding Conditions.TemperatureValue}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button Content="Add fixed temperature" Command="{Binding Conditions.AddTemperatureCommand}"/>
-            <UniformGrid Columns="2" Margin="0,6,0,0">
+            <controls:FormGrid Margin="0,6,0,0">
                 <Label Content="Heat flow [W]"/>
                 <TextBox Text="{Binding Conditions.HeatPowerValue}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button Content="Add heat flow" Command="{Binding Conditions.AddHeatFluxCommand}"/>
-            <UniformGrid Columns="2" Margin="0,6,0,0">
+            <controls:FormGrid Margin="0,6,0,0">
                 <Label Content="h [W/(m²·K)]"/>
                 <TextBox Text="{Binding Conditions.ConvectionCoefficient}"/>
                 <Label Content="Ambient [K]"/>
                 <TextBox Text="{Binding Conditions.AmbientTemperature}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <!-- FU-44 / FU-47: h varying along a flow (ConvectionProfile) -->
             <CheckBox x:Name="ConvectionVariesCheck" Content="h varies along a flow (boundary layer, table, wakes)"
                       IsChecked="{Binding Conditions.ConvectionVaries}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,2,0"
                       ToolTip="h(x) = h · g(x) · table(x) · wakes, x downstream of the leading edge along the flow; g holds the faces' mean at h. Each triangle takes the mean of h over its area."/>
-            <UniformGrid Columns="2" Visibility="{Binding Conditions.ConvectionVaries, Converter={StaticResource BoolToVis}}">
+            <controls:FormGrid Visibility="{Binding Conditions.ConvectionVaries, Converter={StaticResource BoolToVis}}">
                 <Label Content="Leading edge x/y/z [mm]"/>
                 <UniformGrid Columns="3">
                     <TextBox Text="{Binding Conditions.LeadingEdgeXMm}" Margin="0,0,2,0"/>
@@ -46,7 +47,7 @@
                 <Label Content="Wakes (x,y,z,half-width,length,factor; …)"/>
                 <TextBox Text="{Binding Conditions.ConvectionWakes}"
                          ToolTip="Behind a part at (x, y, z) mm: within the half-width of its axis along the flow, h is multiplied by the factor just behind it, recovering to 1 at the length downstream. Distances in mm; separate wakes with ';'."/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button Content="Add convection" Command="{Binding Conditions.AddConvectionCommand}"/>
 
             <!-- FU-44 / FU-47: radiation exchanged among faces that see each other -->
@@ -70,12 +71,12 @@
                                             CommandParameter="{Binding}"/>
                                 </Grid>
                                 <TextBlock Text="{Binding FaceSummary}" FontSize="11" Foreground="{DynamicResource TextMutedBrush}"/>
-                                <UniformGrid Columns="2">
+                                <controls:FormGrid>
                                     <Label Content="Ambient beyond [K]"/>
                                     <TextBox Text="{Binding AmbientKelvin}"/>
                                     <Label Content="Emissivity (0 = material)"/>
                                     <TextBox Text="{Binding Emissivity}"/>
-                                </UniformGrid>
+                                </controls:FormGrid>
                                 <CheckBox Content="Other surfaces may block the view" IsChecked="{Binding Obstruction}"
                                           Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
                                           ToolTip="Off: every pair of triangles facing each other sees each other whole — right for convex arrangements, and cheaper."/>

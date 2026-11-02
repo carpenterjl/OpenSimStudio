@@ -1,13 +1,14 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.SignalIntegrityPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <!-- Moved verbatim out of ElectricalSetupPanel when SI became its own workspace (design screens 13-14); bindings go through the shell DataContext unchanged. -->
     <StackPanel>
     <GroupBox Header="Stackup and impedance calculator" DataContext="{Binding SignalIntegrity.Calculator}">
         <StackPanel>
             <TextBlock Text="One trace or an edge-coupled pair, over one plane or between two, with optional coplanar grounds: Z0, Z_diff, delay and loss from the same 2D field solve the board extraction uses."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
-            <UniformGrid Columns="4">
+            <controls:FormGrid>
                 <Label Content="Structure"/>
                 <ComboBox x:Name="ZcStructureCombo" ItemsSource="{Binding Structures}" SelectedItem="{Binding Structure}"/>
                 <Label Content="Frequency [GHz]"/>
@@ -32,8 +33,6 @@
                 <Label Content="Foil (data sheet)"/>
                 <ComboBox ItemsSource="{Binding Foils}" SelectedItem="{Binding Foil}"
                           ToolTip="Named foil only: the vendor's published Rz for the copper thickness above, turned into Huray parameters by the Cannonball stack. Load your own foils file in the SI section."/>
-                <Label/>
-                <Label/>
                 <Label Content="Below: h [mm] / εr / tanδ"/>
                 <UniformGrid Columns="3">
                     <TextBox x:Name="ZcHeightBox" Text="{Binding HeightMm}" Margin="0,0,2,0"/>
@@ -50,17 +49,16 @@
                 <CheckBox x:Name="ZcPairCheck" Content="Differential pair, gap [mm]" IsChecked="{Binding IsPair}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
                 <TextBox Text="{Binding PairGapMm}"/>
-                <CheckBox Content="Side walls (thick-trace solve)" IsChecked="{Binding SideWallSolve}"
-                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Solve the trace as the trapezoid it is, side walls included, instead of a strip of effective width. Matters for close pairs of thick copper."/>
-                <Label/>
                 <Label Content="Pair: second width [mm]"
                        ToolTip="Base width of the pair's second trace; 0 = the same as the first (a symmetric pair)"/>
                 <TextBox Text="{Binding SecondWidthMm}"/>
                 <CheckBox x:Name="ZcCoplanarCheck" Content="Coplanar ground, gap [mm]" IsChecked="{Binding HasCoplanarGround}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
                 <TextBox Text="{Binding CoplanarGapMm}"/>
-            </UniformGrid>
+            </controls:FormGrid>
+            <CheckBox Content="Side walls (thick-trace solve)" IsChecked="{Binding SideWallSolve}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                      ToolTip="Solve the trace as the trapezoid it is, side walls included, instead of a strip of effective width. Matters for close pairs of thick copper."/>
             <Button x:Name="ZcCalculateButton" Content="Calculate impedance" Command="{Binding CalculateCommand}" Margin="0,4,0,0"/>
             <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
@@ -74,7 +72,7 @@
                  RLGC → MTL network → S-params/Touchstone → PRBS transient + eye. -->
             <TextBlock Text="N coupled microstrips on the substrate: per-unit-length RLGC (2D quasi-static BEM over the layered dielectric), the exact frequency-domain coupled-line network, S-parameter export, and PRBS eye diagrams with crosstalk. Thevenin driver + R∥C receiver."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
-            <UniformGrid Columns="4">
+            <controls:FormGrid>
                 <Label Content="Lines / driven"/>
                 <UniformGrid Columns="2">
                     <TextBox x:Name="SiLineCountBox" Text="{Binding SignalIntegrity.LineCount}" Margin="0,0,2,0"/>
@@ -134,19 +132,19 @@
                     <TextBox Text="{Binding SignalIntegrity.LoadOhms}" Margin="0,0,2,0"/>
                     <TextBox Text="{Binding SignalIntegrity.LoadPicofarads}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <CheckBox x:Name="SiAggressorsCheck" Content="Aggressors on"
-                          IsChecked="{Binding SignalIntegrity.AggressorsEnabled}"
-                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
-                <CheckBox x:Name="SiSideWallsCheck" Content="Side walls"
-                          IsChecked="{Binding SignalIntegrity.SideWallSolve}"
-                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Solve the traces as the trapezoids they are, side walls included, instead of strips of effective width"/>
-                <CheckBox x:Name="SiProximityCheck" Content="Proximity R(f)"
-                          IsChecked="{Binding SignalIntegrity.ProximityEffect}"
-                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
-                          ToolTip="Frequency-dependent R(f) and internal L(f) from the 2D filament solve (current crowding + skin effect) — replaces max(R_dc, R_s√f)"/>
-            </UniformGrid>
+            </controls:FormGrid>
+            <CheckBox x:Name="SiAggressorsCheck" Content="Aggressors on"
+                      IsChecked="{Binding SignalIntegrity.AggressorsEnabled}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                      ToolTip="Drive every other line with a decorrelated PRBS — the crosstalk-closed eye"/>
+            <CheckBox x:Name="SiSideWallsCheck" Content="Side walls"
+                      IsChecked="{Binding SignalIntegrity.SideWallSolve}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                      ToolTip="Solve the traces as the trapezoids they are, side walls included, instead of strips of effective width"/>
+            <CheckBox x:Name="SiProximityCheck" Content="Proximity R(f)"
+                      IsChecked="{Binding SignalIntegrity.ProximityEffect}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                      ToolTip="Frequency-dependent R(f) and internal L(f) from the 2D filament solve (current crowding + skin effect) — replaces max(R_dc, R_s√f)"/>
 
             <!-- Board extraction (Stage S6): pick 2+ parallel signal nets from the imported
                  board; the coupled cross-section replaces the wizard geometry above. -->
@@ -276,7 +274,7 @@
         <StackPanel>
             <TextBlock Text="Impedance against frequency at a load's supply pins: every plane between a power and a ground net (2D finite elements on the real outlines, other rails' planes and stitching vias included, the edges' fringe from the board's cross-section), the capacitors between the two nets on their pads and vias (all coupled), the load behind its package, a regulator with or without its control loop, and a target."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
-            <UniformGrid Columns="2">
+            <controls:FormGrid>
                 <Label Content="Power net"/>
                 <ComboBox x:Name="PdnPowerNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding PowerNet}"
                           DisplayMemberPath="Label"/>
@@ -289,7 +287,7 @@
                 <TextBox Text="{Binding DefaultEsrMilliohms}"/>
                 <Label Content="Default ESL [nH]"/>
                 <TextBox Text="{Binding DefaultEslNanohenries}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <CheckBox Content="Fringe at the planes' open edges" IsChecked="{Binding EdgeFringe}" Margin="0,3,0,0"
                       Foreground="{DynamicResource TextMutedBrush}"
                       ToolTip="Each open edge gets the fringe of the board's cross-section through it (2D field solve: the stackup's dielectrics, other plane layers as AC ground, air past the board's edge). Off: the field stops at the copper's edge."/>
@@ -340,7 +338,7 @@
             </UniformGrid>
             <TextBlock Text="{Binding BomStatus}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,1,0,0"/>
-            <UniformGrid Columns="2" Margin="0,3,0,0">
+            <controls:FormGrid Margin="0,3,0,0">
                 <Label Content="Load (refdes)"/>
                 <TextBox x:Name="PdnLoadBox" Text="{Binding LoadRefDes}"
                          ToolTip="The part whose supply pins see the impedance, e.g. U1."/>
@@ -379,7 +377,7 @@
                 <TextBox Text="{Binding FromKhz}"/>
                 <Label Content="Sweep to [MHz]"/>
                 <TextBox Text="{Binding ToMhz}"/>
-            </UniformGrid>
+            </controls:FormGrid>
             <Button x:Name="PdnSolveButton" Content="Solve PDN impedance" Command="{Binding SolveCommand}" Margin="0,3,0,0"/>
             <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
@@ -407,14 +405,14 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
             <StackPanel IsEnabled="{Binding HasChannel}">
-                <UniformGrid Columns="2" Margin="0,3,0,0">
+                <controls:FormGrid Margin="0,3,0,0">
                     <Label Content="Port order"/>
                     <ComboBox ItemsSource="{Binding PortOrders}" SelectedItem="{Binding SelectedPortOrder}"/>
                     <Label Content="Driven port"/>
                     <TextBox Text="{Binding DrivenPort}" ToolTip="Single-ended runs and TDR: the file's port number."/>
                     <Label Content="Receiver port"/>
                     <TextBox Text="{Binding ReceiverPort}"/>
-                </UniformGrid>
+                </controls:FormGrid>
                 <CheckBox Content="Differential (the two pairs of a four-port)" IsChecked="{Binding Differential}"
                           IsEnabled="{Binding IsFourPort}" Margin="0,2,0,0"/>
 
@@ -435,10 +433,10 @@
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                 <Image Source="{Binding MixedModePlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
 
-                <UniformGrid Columns="2" Margin="0,4,0,0">
+                <controls:FormGrid Margin="0,4,0,0">
                     <Label Content="TDR edge [ps] (0 = fastest)"/>
                     <TextBox Text="{Binding TdrRisePs}" ToolTip="10–90 % rise time. 0 takes the fastest edge the file's last frequency supports."/>
-                </UniformGrid>
+                </controls:FormGrid>
                 <CheckBox Content="Peel with the through path's loss taken out" IsChecked="{Binding TdrTakeOutLoss}"
                           ToolTip="The loss of the driven → receiver path (a leg's, for a pair), spread evenly along the line." Margin="0,2,0,2"/>
                 <Button Content="TDR impedance profile" Command="{Binding RunTdrCommand}"/>
@@ -446,7 +444,7 @@
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                 <Image Source="{Binding TdrPlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
 
-                <UniformGrid Columns="2" Margin="0,4,0,0">
+                <controls:FormGrid Margin="0,4,0,0">
                     <Label Content="Bit rate [Gb/s]"/>
                     <TextBox Text="{Binding BitRateGbps}"/>
                     <Label Content="Edge [% of bit]"/>
@@ -467,7 +465,7 @@
                     <TextBox Text="{Binding PackageNh}"/>
                     <Label Content="AC coupling [nF] (0 = DC)"/>
                     <TextBox Text="{Binding CouplingNf}" ToolTip="A series capacitor at the receiver's port."/>
-                </UniformGrid>
+                </controls:FormGrid>
                 <Button Content="Eye" Command="{Binding RunEyeCommand}"/>
                 <TextBlock Text="{Binding EyeResult}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
