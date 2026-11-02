@@ -2,7 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <GroupBox Header="Boundary conditions">
-        <ListBox ItemsSource="{Binding Conditions.BoundaryConditions}" MinHeight="60" MaxHeight="180">
+        <Grid>
+            <ListBox ItemsSource="{Binding Conditions.BoundaryConditions}" MinHeight="60" MaxHeight="180">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <DockPanel>
@@ -17,5 +18,18 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
+                <TextBlock Text="No conditions yet. Select faces in the view, then add one above." IsHitTestVisible="False" Margin="8,6">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource FaintText}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Conditions.BoundaryConditions.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+        </Grid>
     </GroupBox>
 </UserControl>

@@ -610,15 +610,18 @@
                                                 <panels:StackupPanel/>
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
+                                                <!-- What the selected analysis needs first, then the tools
+                                                     that are not part of it, each shut until opened. -->
                                                 <panels:ElectricalSetupPanel/>
-                                                <panels:MagneticsPanel/>
-                                                <panels:EmiPanel/>
                                                 <panels:MaterialPanel/>
                                                 <panels:ScopeSelectionPanel/>
                                                 <panels:ElectricalConditionsPanel/>
                                                 <panels:ThermalConditionsPanel/>
                                                 <panels:BoundaryConditionsListPanel/>
                                                 <panels:AnalysisSettingsPanel/>
+                                                <panels:BoardToolsPanel/>
+                                                <panels:MagneticsPanel/>
+                                                <panels:EmiPanel/>
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Solve}">
                                                 <panels:SolvePanel/>

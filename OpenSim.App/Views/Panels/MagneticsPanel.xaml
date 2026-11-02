@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <!-- FU-47: planar magnetics (Feature 13, FU-39, FU-40) — the solve the command line's 'magnetics' command runs. -->
-    <GroupBox Header="Planar magnetics (2-D axisymmetric section)" DataContext="{Binding Magnetics}">
+    <Expander Header="Planar magnetics (2-D axisymmetric section)" DataContext="{Binding Magnetics}">
         <StackPanel>
             <TextBlock Text="An inductor or transformer from the layout: the windings' copper is cut along a ray from the winding axis, each crossing one ring of an axisymmetric model, with an optional pot or ER core. Static or time-harmonic finite elements give the driven winding's inductance, AC resistance (skin and proximity effect) and mutuals, and the winding impedance matrix. The turns table can be filled by hand too."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
@@ -191,5 +191,5 @@
             <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
         </StackPanel>
-    </GroupBox>
+    </Expander>
 </UserControl>

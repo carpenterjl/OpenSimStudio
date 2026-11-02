@@ -117,6 +117,55 @@
         </Setter>
     </Style>
 
+    <!-- An optional section: the GroupBox's micro-header behind a chevron, shut until asked
+         for, so a long step lists what it offers before it asks anyone to scroll past it. -->
+    <Style TargetType="Expander">
+        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+        <Setter Property="Margin" Value="0,0,0,8"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel>
+                        <ToggleButton IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                      Cursor="Hand">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Chrome" Background="{DynamicResource PanelBgRaisedBrush}"
+                                            CornerRadius="4" Padding="6,5">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Chrome" Property="Background"
+                                                    Value="{DynamicResource PanelBgHoverBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <controls:IconGlyph x:Name="Chevron" Width="12" Height="12" Margin="0,0,6,0"
+                                                    Geometry="{DynamicResource IconChevronRight}"/>
+                                <TextBlock Grid.Column="1" Style="{StaticResource MicroHeader}" Margin="0" TextWrapping="Wrap"
+                                           Text="{TemplateBinding Header, Converter={StaticResource Uppercase}}"/>
+                            </Grid>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="Body" Margin="0,6,0,6" Visibility="Collapsed"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="Body" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="Chevron" Property="Geometry" Value="{DynamicResource IconChevronDown}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============ Buttons ============ -->
     <Style TargetType="Button">
         <Setter Property="Background" Value="{DynamicResource PanelBgRaisedBrush}"/>

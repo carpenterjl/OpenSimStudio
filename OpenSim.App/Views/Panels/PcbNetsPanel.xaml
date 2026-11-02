@@ -1,7 +1,8 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.PcbNetsPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <GroupBox Header="PCB nets (click a net in the view, or pick below)">
+    <GroupBox Header="PCB nets (click a net in the view, or pick below)"
+              Visibility="{Binding Session.IsPcbMode, Converter={StaticResource BoolToVis}}">
         <StackPanel>
             <TextBlock Text="{Binding Pcb.BoardInfo}" TextWrapping="Wrap" Margin="0,0,0,4"/>
 

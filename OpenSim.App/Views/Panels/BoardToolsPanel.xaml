@@ -1,0 +1,322 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.BoardToolsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
+    <!-- The studies of an imported board that run on their own buttons, apart from the analysis
+         the Solve step runs. Shut by default: each is a long form, and a step that opens with all
+         of them hides the conditions and settings of the analysis actually selected. -->
+    <StackPanel Visibility="{Binding Session.IsPcbMode, Converter={StaticResource BoolToVis}}">
+        <TextBlock Text="BOARD TOOLS" Style="{StaticResource MicroHeader}"/>
+        <!-- lumped AC impedance estimate -->
+        <Expander Header="AC impedance (R + jωL estimate)">
+            <StackPanel>
+                <controls:FormGrid>
+                    <Label Content="f min [Hz]"/>
+                    <TextBox Text="{Binding Electrodes.AcFMin}"/>
+                    <Label Content="f max [Hz]"/>
+                    <TextBox Text="{Binding Electrodes.AcFMax}"/>
+                    <Label Content="Points"/>
+                    <TextBox Text="{Binding Electrodes.AcPoints}"/>
+                </controls:FormGrid>
+                <Button x:Name="EstimateAcButton" Content="Estimate AC impedance"
+                        Command="{Binding Electrodes.EstimateAcImpedanceCommand}"/>
+                <TextBlock Text="{Binding Electrodes.AcResult}" TextWrapping="Wrap"
+                           FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
+                <ItemsControl ItemsSource="{Binding Electrodes.AcSweep}" Margin="0,2,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <UniformGrid Columns="3">
+                                <TextBlock Text="{Binding Frequency, StringFormat='f = {0:g3} Hz'}" FontSize="11"/>
+                                <TextBlock Text="{Binding Magnitude, StringFormat='|Z| = {0:g4} Ω'}" FontSize="11"/>
+                                <TextBlock Text="{Binding PhaseDegrees, StringFormat='∠ {0:g3}°'}" FontSize="11"/>
+                            </UniformGrid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Electrodes.AcAssumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Expander>
+        <!-- PEEC inductance from centerlines (no meshing needed) -->
+        <Expander Header="Inductance (PEEC, from centerlines)">
+            <StackPanel>
+                <TextBlock Text="Works from the imported board — no meshing needed. Failures name the exact reason."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <controls:FormGrid>
+                    <Label Content="Net"/>
+                    <ComboBox x:Name="InductanceNetCombo"
+                              ItemsSource="{Binding Inductance.Nets}"
+                              SelectedItem="{Binding Inductance.OutboundNet}"
+                              DisplayMemberPath="Label"/>
+                </controls:FormGrid>
+                <Button Content="Compute self inductance" Command="{Binding Inductance.ComputeSelfCommand}"/>
+                <TextBlock Text="{Binding Inductance.SelfResult}" TextWrapping="Wrap"
+                           FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                <controls:FormGrid Margin="0,4,0,0">
+                    <Label Content="Second net"/>
+                    <ComboBox x:Name="SecondNetCombo"
+                              ItemsSource="{Binding Inductance.Nets}"
+                              SelectedItem="{Binding Inductance.SecondNet}"
+                              DisplayMemberPath="Label"/>
+                </controls:FormGrid>
+                <Button x:Name="ComputeMutualButton" Content="Compute mutual (M, k)"
+                        Command="{Binding Inductance.ComputeMutualCommand}"/>
+                <TextBlock Text="{Binding Inductance.MutualResult}" TextWrapping="Wrap"
+                           FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                <controls:FormGrid Margin="0,4,0,0">
+                    <RadioButton x:Name="ReturnNetRadio" Content="Return: second net" GroupName="LoopReturn"
+                                 IsChecked="True" Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
+                    <RadioButton x:Name="ReturnPlaneRadio" Content="Return: plane layer" GroupName="LoopReturn"
+                                 IsChecked="{Binding Inductance.ReturnIsPlane, Mode=TwoWay}"
+                                 Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
+                    <Label Content="Plane layer"/>
+                    <ComboBox x:Name="PlaneLayerCombo"
+                              ItemsSource="{Binding Inductance.PlaneLayers}"
+                              SelectedItem="{Binding Inductance.PlaneLayer}"
+                              ItemStringFormat="L{0}"
+                              IsEnabled="{Binding IsChecked, ElementName=ReturnPlaneRadio}"/>
+                </controls:FormGrid>
+                <Button x:Name="ComputeLoopButton" Content="Compute loop inductance"
+                        Command="{Binding Inductance.ComputeLoopCommand}"/>
+                <TextBlock Text="{Binding Inductance.LoopResult}" TextWrapping="Wrap"
+                           FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                <TextBlock Text="{Binding Inductance.InductanceAssumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Expander>
+        <Expander Header="R and L against frequency (skin and proximity effect)">
+            <StackPanel>
+                <TextBlock Text="Filament solve of the same path. A loop returns through the second net, or — with 'Return: plane layer' — through the copper of that layer, meshed around the path."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <controls:FormGrid>
+                    <Label Content="Path"/>
+                    <ComboBox x:Name="AcPathCombo" ItemsSource="{Binding Inductance.AcPaths}"
+                              SelectedItem="{Binding Inductance.AcPath}"/>
+                    <Label Content="Frequencies [MHz]"/>
+                    <TextBox x:Name="AcFrequenciesBox" Text="{Binding Inductance.AcFrequenciesMhz}"/>
+                </controls:FormGrid>
+                <Button x:Name="ComputeAcButton" Content="Solve R(f) and L(f)"
+                        Command="{Binding Inductance.ComputeFrequencyDependentCommand}"/>
+                <TextBlock Text="{Binding Inductance.AcResult}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                <UniformGrid Columns="3" Margin="0,3,0,0">
+                    <Button Content="Save SPICE" Command="{Binding Inductance.ExportSpiceCommand}"
+                            IsEnabled="{Binding Inductance.HasAcResult}"
+                            ToolTip="R, L and their coupling as solved at the highest frequency in the list."/>
+                    <Button Content="Save wideband SPICE" Command="{Binding Inductance.ExportWidebandSpiceCommand}"
+                            IsEnabled="{Binding Inductance.HasAcResult}" Margin="2,0,0,0"
+                            ToolTip="Every entry of the sweep fitted as a rational function and realized as R/L/C branches — valid over the whole sweep. Needs at least six solved frequencies."/>
+                    <Button Content="Save Touchstone" Command="{Binding Inductance.ExportTouchstoneCommand}"
+                            IsEnabled="{Binding Inductance.HasAcResult}" Margin="2,0,0,0"/>
+                </UniformGrid>
+                <TextBlock Text="{Binding Inductance.AcAssumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Expander>
+        <!-- rail-level DC (several sources and loads on the meshed net) -->
+        <Expander Header="Power rail (IR drop)">
+            <StackPanel>
+                <TextBlock Text="Give pads of the meshed net a role. Source: volts and output resistance [mΩ]. Load: amperes. Pads of one component with the same role are one terminal."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="RailPadList" ItemsSource="{Binding Rail.Pads}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="78"/>
+                                        <ColumnDefinition Width="56"/>
+                                        <ColumnDefinition Width="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Roles}" SelectedItem="{Binding Role}"/>
+                                    <TextBox Grid.Column="2" Text="{Binding Value}"
+                                             ToolTip="Source: volts. Load: amperes."/>
+                                    <TextBox Grid.Column="3" Text="{Binding OutputMilliohms}"
+                                             ToolTip="Source output resistance [mΩ]; not used on a load."/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <controls:FormGrid Margin="0,4,0,0">
+                    <Label Content="Nominal [V] (0 = source)"/>
+                    <TextBox Text="{Binding Rail.NominalVolts}"/>
+                    <Label Content="Drop limit [%]"/>
+                    <TextBox Text="{Binding Rail.DropLimitPercent}"/>
+                    <Label Content="Density limit [A/mm²]"/>
+                    <TextBox Text="{Binding Rail.CurrentDensityLimit}"
+                             ToolTip="Copper above this is listed as a neck-down. 0 = list the densest spot only."/>
+                    <Label Content="Via limit [A]"/>
+                    <TextBox Text="{Binding Rail.ViaCurrentLimit}" ToolTip="0 = not checked."/>
+                    <Label Content="Copper σ [S/m]"/>
+                    <TextBox Text="{Binding Rail.CopperConductivity}"/>
+                </controls:FormGrid>
+                <Button x:Name="SolveRailButton" Content="Solve rail" Command="{Binding Rail.SolveRailCommand}"/>
+                <StackPanel Margin="0,4,0,0">
+                    <CheckBox x:Name="RailWholeBoardCheck" Content="Whole board (planes, other nets)" IsChecked="{Binding Rail.WholeBoardThermal}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                              ToolTip="The heat spreads in the whole board — every layer's copper, planes and other nets — instead of this net's own mesh. Mesh the net with the laminate first."/>
+                    <CheckBox Content="Along the traces" IsChecked="{Binding Rail.TraceDirections}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                              ToolTip="On the whole board, trace copper conducts along its traces, and across them only in series with the laminate."/>
+                    <CheckBox Content="With the parts (component table)" IsChecked="{Binding Rail.IncludeParts}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                              ToolTip="On the whole board, the parts that dissipate in the component table, on their two-resistor models."/>
+                    <CheckBox Content="Cool with CFD" IsChecked="{Binding Rail.CoolWithCfd}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
+                              ToolTip="A conjugate CFD solve of the air (the CFD setup of the Thermal workspace) instead of the environment's film. Steady only; each pass is a full CFD solve."/>
+                </StackPanel>
+                <controls:FormGrid>
+                    <Label Content="CFD cell [mm] (0 = auto)"/>
+                    <TextBox Text="{Binding Rail.CfdCellSizeMm}"/>
+                    <Label Content="Transient: duration / step [s]"/>
+                    <UniformGrid Columns="2">
+                        <TextBox Text="{Binding Rail.TransientDurationSeconds}" Margin="0,0,2,0"/>
+                        <TextBox Text="{Binding Rail.TransientStepSeconds}" Margin="2,0,0,0"/>
+                    </UniformGrid>
+                </controls:FormGrid>
+                <Button x:Name="SolveRailThermalButton" Content="Solve rail with self-heating"
+                        Command="{Binding Rail.SolveRailThermalCommand}"
+                        ToolTip="Copper loss heats the board, the environment (Thermal workspace) cools it, copper resistivity follows temperature. Mesh the net with the laminate first."/>
+                <Button x:Name="SolveRailTransientButton" Content="Self-heating transient"
+                        Command="{Binding Rail.SolveRailTransientCommand}"
+                        ToolTip="The same, marched in time from the ambient: how fast the copper heats. Cooled by the environment."/>
+                <TextBlock Text="{Binding Rail.RailResult}" TextWrapping="Wrap"
+                           FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
+                <ItemsControl ItemsSource="{Binding Rail.ResultLines}" Margin="0,2,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Rail.RailAssumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Expander>
+        <!-- junction temperatures of the board's parts (two-resistor models on the whole board) -->
+        <Expander Header="Component temperatures">
+            <StackPanel>
+                <TextBlock Text="Per part: power [W], θJC and θJB [K/W] from the datasheet, contact size [mm], heatsink [K/W] (0 = bare case), junction and case heat capacities [J/K] for the rail transient (0 = none). Parts at 0 W are left out. The whole board is meshed with its copper and the parts are solved with it as lumped networks; the Thermal workspace's environment cools it."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <UniformGrid Columns="2">
+                    <Button Content="Parts from the board" Command="{Binding Pcb.ListThermalPartsCommand}"
+                            ToolTip="Component names on the pads: IPC-2581, or Gerber with X2 attributes."/>
+                    <Button Content="Load placement file" Command="{Binding Pcb.LoadPlacementFileCommand}" Margin="2,0,0,0"
+                            ToolTip="Pick-and-place table with designator, X, Y, rotation and side columns."/>
+                </UniformGrid>
+                <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Pcb.ThermalParts}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition Width="36"/>
+                                        <ColumnDefinition Width="36"/>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition Width="40"/>
+                                        <ColumnDefinition Width="36"/>
+                                        <ColumnDefinition Width="36"/>
+                                        <ColumnDefinition Width="36"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                                    <TextBox Grid.Column="1" Text="{Binding PowerWatts}" ToolTip="Power [W]"/>
+                                    <TextBox Grid.Column="2" Text="{Binding ThetaJc}" ToolTip="θJC, junction to case top [K/W]"/>
+                                    <TextBox Grid.Column="3" Text="{Binding ThetaJb}" ToolTip="θJB, junction to board [K/W]"/>
+                                    <TextBox Grid.Column="4" Text="{Binding WidthMm}" ToolTip="Contact width along x [mm]"/>
+                                    <TextBox Grid.Column="5" Text="{Binding HeightMm}" ToolTip="Contact height along y [mm]"/>
+                                    <TextBox Grid.Column="6" Text="{Binding HeatsinkKelvinPerWatt}"
+                                             ToolTip="Case top to ambient through a heatsink [K/W]; 0 = bare case top in air."/>
+                                    <TextBox Grid.Column="7" Text="{Binding JunctionCapacity}"
+                                             ToolTip="Heat capacity of the junction [J/K], for the rail transient; 0 = none."/>
+                                    <TextBox Grid.Column="8" Text="{Binding CaseCapacity}"
+                                             ToolTip="Heat capacity of the case [J/K], for the rail transient; 0 = none."/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <controls:FormGrid Margin="0,4,0,0">
+                    <Label Content="Case-top film [W/(m²·K)]"/>
+                    <TextBox Text="{Binding Pcb.CaseFilmCoefficient}"
+                             ToolTip="Convection and radiation together on a bare case top. A setting, not computed."/>
+                    <Label Content="Board element [mm] (0 = auto)"/>
+                    <TextBox Text="{Binding Pcb.ThermalEdgeMm}"/>
+                    <Label Content="Enclosure air → outside [W/K] (0 = open air)"/>
+                    <TextBox Text="{Binding Pcb.EnclosureConductance}"
+                             ToolTip="The enclosure's air as one node the parts' tops and the board breathe: its conductance to the outside — a through-flow's ṁ·c_p, or the walls'. 0: the parts and the board see the ambient directly."/>
+                </controls:FormGrid>
+                <Button Content="Solve component temperatures" Command="{Binding Pcb.SolveComponentTemperaturesCommand}"/>
+                <TextBlock Text="{Binding Pcb.ComponentResult}" TextWrapping="Wrap"
+                           FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
+                <ItemsControl ItemsSource="{Binding Pcb.ComponentResultLines}" Margin="0,2,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Pcb.ComponentAssumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Expander>
+        <!-- clearance and creepage against a spacing table -->
+        <Expander Header="Spacing check (clearance, creepage)">
+            <StackPanel>
+                <TextBlock Text="Working voltage per net (as the table defines it; IPC-2221: peak). Copper of every pair of nets is measured on each layer, around board cutouts on the outer layers, and across each dielectric gap, against the table."
+                           TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+                <UniformGrid Columns="3">
+                    <Button Content="Nets from the board" Command="{Binding Pcb.ListSpacingNetsCommand}"/>
+                    <Button Content="Load table (CSV)" Command="{Binding Pcb.LoadSpacingTableCommand}" Margin="2,0,0,0"
+                            ToolTip="A spacing table: 'Max volts' then one column per case, spacing in mm; an optional 'per volt above' row."/>
+                    <Button Content="Save table" Command="{Binding Pcb.SaveSpacingTableCommand}" Margin="2,0,0,0"
+                            ToolTip="Writes the table in use as CSV, to check against your copy of the standard and edit."/>
+                </UniformGrid>
+                <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Pcb.SpacingNets}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="56"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                                    <TextBox Grid.Column="1" Text="{Binding Volts}" ToolTip="Working voltage [V]; blank leaves the net out"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <controls:FormGrid Margin="0,4,0,0">
+                    <Label Content="Table"/>
+                    <TextBlock Text="{Binding Pcb.SpacingTableName}" VerticalAlignment="Center" FontSize="11"/>
+                    <Label Content="Outer layers coated"/>
+                    <CheckBox IsChecked="{Binding Pcb.SpacingOuterCoated}" VerticalAlignment="Center"
+                              ToolTip="A permanent polymer coating on the outer layers: IPC-2221 column B4 instead of B2."/>
+                    <Label Content="List pairs within × required"/>
+                    <TextBox Text="{Binding Pcb.SpacingReportWithin}"/>
+                </controls:FormGrid>
+                <Button Content="Check spacing" Command="{Binding Pcb.CheckSpacingCommand}"/>
+                <TextBlock Text="{Binding Pcb.SpacingResult}" TextWrapping="Wrap"
+                           FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
+                <ItemsControl ItemsSource="{Binding Pcb.SpacingLines}" Margin="0,2,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11" FontFamily="Consolas"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{Binding Pcb.SpacingAssumptions}" TextWrapping="Wrap"
+                           FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+</UserControl>
