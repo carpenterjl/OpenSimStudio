@@ -10,111 +10,102 @@
                  PEC ground, or a dielectric substrate via the layered Green's function) -->
             <TextBlock Text="Thin wires and RWG surfaces in free space or over an infinite PEC ground (image theory). Surface metal can sit on a dielectric substrate (εr, tanδ): a rigorous layered-media Green's function with surface waves — set εr = 1 for air. Works from the imported board's centerlines, a copper island, or a wizard shape; no meshing needed."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <Label Content="Geometry"/>
+            <ComboBox x:Name="AntennaSourceCombo"
+                      ItemsSource="{Binding Antenna.SourceModes}"
+                      SelectedItem="{Binding Antenna.SourceMode}"
+                      ToolTip="{Binding Antenna.SourceMode}"/>
+            <!-- Only the fields the chosen geometry reads. -->
             <controls:FormGrid>
-                <Label Content="Geometry"/>
-                <ComboBox x:Name="AntennaSourceCombo"
-                          ItemsSource="{Binding Antenna.SourceModes}"
-                          SelectedItem="{Binding Antenna.SourceMode}"/>
-                <Label Content="Net"/>
-                <ComboBox x:Name="AntennaNetCombo"
+                <Label Content="Net" Visibility="{Binding Antenna.ShowsNet, Converter={StaticResource BoolToVis}}"/>
+                <ComboBox x:Name="AntennaNetCombo" Visibility="{Binding Antenna.ShowsNet, Converter={StaticResource BoolToVis}}"
                           ItemsSource="{Binding Antenna.Nets}"
                           SelectedItem="{Binding Antenna.AntennaNet}"
                           DisplayMemberPath="Label"/>
-                <Label Content="Dipole length [mm]"/>
-                <TextBox Text="{Binding Antenna.DipoleLengthMm}"/>
-                <Label Content="Loop radius [mm]"/>
-                <TextBox Text="{Binding Antenna.LoopRadiusMm}"/>
-                <Label Content="Monopole height [mm]"/>
-                <TextBox Text="{Binding Antenna.MonopoleHeightMm}"/>
-                <Label Content="Wire radius [mm]"/>
-                <TextBox Text="{Binding Antenna.WireRadiusMm}"/>
-                <Label Content="Plate/patch W×L [mm]"/>
-                <UniformGrid Columns="2">
+                <Label Content="Dipole length [mm]" Visibility="{Binding Antenna.ShowsDipoleLength, Converter={StaticResource BoolToVis}}"/>
+                <TextBox Text="{Binding Antenna.DipoleLengthMm}" Visibility="{Binding Antenna.ShowsDipoleLength, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Loop radius [mm]" Visibility="{Binding Antenna.ShowsLoopRadius, Converter={StaticResource BoolToVis}}"/>
+                <TextBox Text="{Binding Antenna.LoopRadiusMm}" Visibility="{Binding Antenna.ShowsLoopRadius, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Monopole height [mm]" Visibility="{Binding Antenna.ShowsMonopoleHeight, Converter={StaticResource BoolToVis}}"/>
+                <TextBox Text="{Binding Antenna.MonopoleHeightMm}" Visibility="{Binding Antenna.ShowsMonopoleHeight, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Wire radius [mm]" Visibility="{Binding Antenna.ShowsWireRadius, Converter={StaticResource BoolToVis}}"/>
+                <TextBox Text="{Binding Antenna.WireRadiusMm}" Visibility="{Binding Antenna.ShowsWireRadius, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Plate/patch W×L [mm]" Visibility="{Binding Antenna.ShowsPlateSize, Converter={StaticResource BoolToVis}}"/>
+                <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsPlateSize, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="PlateWidthBox" Text="{Binding Antenna.PlateWidthMm}" Margin="0,0,2,0"/>
                     <TextBox x:Name="PlateLengthBox" Text="{Binding Antenna.PlateLengthMm}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <Label Content="Patch height [mm]"/>
-                <TextBox x:Name="PatchHeightBox" Text="{Binding Antenna.PatchHeightMm}"
+                <Label Content="Patch height [mm]" Visibility="{Binding Antenna.ShowsPatchHeight, Converter={StaticResource BoolToVis}}"/>
+                <TextBox x:Name="PatchHeightBox" Visibility="{Binding Antenna.ShowsPatchHeight, Converter={StaticResource BoolToVis}}" Text="{Binding Antenna.PatchHeightMm}"
                          ToolTip="Gap between the patch metal and the ground plane (RWG patch mode). With a substrate εr &gt; 1 this is the dielectric slab thickness."/>
-                <Label Content="Substrate εr / tanδ"/>
-                <UniformGrid Columns="2">
+                <Label Content="Substrate εr / tanδ" Visibility="{Binding Antenna.ShowsSubstrate, Converter={StaticResource BoolToVis}}"/>
+                <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsSubstrate, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="SubstrateEpsRBox" Text="{Binding Antenna.SubstrateEpsR}" Margin="0,0,2,0"
                              ToolTip="Dielectric constant of the slab filling the gap under surface (RWG) metal. εr = 1 = air (PEC image theory); εr &gt; 1 engages the rigorous layered-media Green's function, surface waves included."/>
                     <TextBox Text="{Binding Antenna.SubstrateTanD}" Margin="2,0,0,0"
                              ToolTip="Substrate loss tangent (0 = lossless)"/>
                 </UniformGrid>
-                <Label Content="Probe x/y [mm] (probe-fed patch)"/>
-                <UniformGrid Columns="2">
+                <Label Content="Probe x/y [mm]" Visibility="{Binding Antenna.ShowsProbePosition, Converter={StaticResource BoolToVis}}"/>
+                <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsProbePosition, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="ProbeXBox" Text="{Binding Antenna.ProbeXMm}" Margin="0,0,2,0"
                              ToolTip="Coaxial probe feed position from the patch centre (Stage E). The probe snaps to the nearest mesh vertex; a good inset off the radiating edge sets the input resistance ∝ cos²(πx/L)."/>
                     <TextBox x:Name="ProbeYBox" Text="{Binding Antenna.ProbeYMm}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <Label Content="Probe bore [mm] / segments"/>
-                <UniformGrid Columns="2">
+                <Label Content="Probe bore [mm] / segments" Visibility="{Binding Antenna.ShowsProbeBore, Converter={StaticResource BoolToVis}}"/>
+                <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsProbeBore, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="ProbeRadiusBox" Text="{Binding Antenna.ProbeRadiusMm}" Margin="0,0,2,0"
                              ToolTip="Coax inner-conductor radius. The slab must be thick enough that each tube segment ≥ 2·radius (the reduced thin-wire kernel's validity floor)."/>
                     <TextBox x:Name="ProbeSegmentsBox" Text="{Binding Antenna.ProbeSegments}" Margin="2,0,0,0"
                              ToolTip="Number of vertical tube segments across the slab (≥ 2)."/>
                 </UniformGrid>
-                <Label Content="Cover thickness [mm] (covered patch)"/>
-                <TextBox x:Name="CoverThicknessBox" Text="{Binding Antenna.CoverThicknessMm}"
+                <Label Content="Cover thickness [mm]" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}"/>
+                <TextBox x:Name="CoverThicknessBox" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}" Text="{Binding Antenna.CoverThicknessMm}"
                          ToolTip="Dielectric cover thickness above the buried patch (covered-patch mode, Stage F multi-layer). The cover loads the patch, so the resonance drops below the bare patch's — further with a thicker or denser cover."/>
-                <Label Content="Cover εr / tanδ (blank = substrate)"/>
-                <UniformGrid Columns="2">
+                <Label Content="Cover εr / tanδ (blank = substrate)" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}"/>
+                <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="CoverEpsRBox" Text="{Binding Antenna.CoverEpsR}" Margin="0,0,2,0"
                              ToolTip="Superstrate relative permittivity. Leave at 0 to track the substrate (the matched-cover default). Any εr ≥ 1 is supported — the buried-source read-out is single-valued across the ε jump."/>
                     <TextBox x:Name="CoverTanDBox" Text="{Binding Antenna.CoverTanD}" Margin="2,0,0,0"
                              ToolTip="Superstrate loss tangent. Negative tracks the substrate's."/>
                 </UniformGrid>
-                <Label Content="Attached wire L [mm] / angle [°]"/>
-                <UniformGrid Columns="2">
+                <Label Content="Attached wire L [mm] / angle [°]" Visibility="{Binding Antenna.ShowsAttachedWire, Converter={StaticResource BoolToVis}}"/>
+                <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsAttachedWire, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="AttachedWireLengthBox" Text="{Binding Antenna.AttachedWireLengthMm}" Margin="0,0,2,0"
                              ToolTip="Length of the thin wire that ENDS on the plate (wire-fed plate mode, Stage D1). It uses the wire radius above."/>
                     <TextBox x:Name="AttachedWireAngleBox" Text="{Binding Antenna.AttachedWireDegrees}" Margin="2,0,0,0"
                              ToolTip="Angle the wire makes with the sheet: 90° is the classical normal monopole. Below 10° the reduced-kernel tube overlaps the metal and the solve refuses by name."/>
                 </UniformGrid>
-                <Label Content="Attach x/y [mm] (wire-fed plate)"/>
-                <UniformGrid Columns="2">
+                <Label Content="Attach x/y [mm]" Visibility="{Binding Antenna.ShowsAttachedWire, Converter={StaticResource BoolToVis}}"/>
+                <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsAttachedWire, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="AttachXBox" Text="{Binding Antenna.AttachXMm}" Margin="0,0,2,0"
                              ToolTip="Where the wire lands, measured from the plate centre. The plate is meshed with this point snapped in as a vertex, so the attachment fan has its anchor."/>
                     <TextBox x:Name="AttachYBox" Text="{Binding Antenna.AttachYMm}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <Label Content="Island (RWG)"/>
-                <ComboBox x:Name="AntennaIslandCombo"
+                <Label Content="Island (RWG)" Visibility="{Binding Antenna.ShowsIsland, Converter={StaticResource BoolToVis}}"/>
+                <ComboBox x:Name="AntennaIslandCombo" Visibility="{Binding Antenna.ShowsIsland, Converter={StaticResource BoolToVis}}"
                           ItemsSource="{Binding Antenna.AntennaIslands}"
                           SelectedItem="{Binding Antenna.AntennaIsland}"
                           DisplayMemberPath="Label"/>
-                <CheckBox x:Name="GroundPlaneCheck" Content="Ground plane (PEC)"
+                <CheckBox x:Name="GroundPlaneCheck" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}" Content="Ground plane (PEC)"
                           IsChecked="{Binding Antenna.UseGroundPlane}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
                           ToolTip="Infinite perfect-conductor ground via image theory. The monopole always uses it."/>
-                <TextBox Text="{Binding Antenna.GroundZMm}"
+                <TextBox Text="{Binding Antenna.GroundZMm}" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}"
                          ToolTip="Ground plane z [mm]"/>
-                <Label Content="Height above ground [mm]"/>
-                <TextBox Text="{Binding Antenna.HeightAboveGroundMm}"
+                <Label Content="Height above ground [mm]" Visibility="{Binding Antenna.ShowsHeightAboveGround, Converter={StaticResource BoolToVis}}"/>
+                <TextBox Text="{Binding Antenna.HeightAboveGroundMm}" Visibility="{Binding Antenna.ShowsHeightAboveGround, Converter={StaticResource BoolToVis}}"
                          ToolTip="Wizard dipole/loop shapes are lifted this far above the plane; net geometry keeps its board coordinates."/>
-                <Label Content="Feed at junction"/>
-                <ComboBox x:Name="JunctionFeedCombo"
+                <Label Content="Feed at junction" Visibility="{Binding Antenna.ShowsJunctionFeed, Converter={StaticResource BoolToVis}}"/>
+                <ComboBox x:Name="JunctionFeedCombo" Visibility="{Binding Antenna.ShowsJunctionFeed, Converter={StaticResource BoolToVis}}"
                           ItemsSource="{Binding Antenna.JunctionFeedOptions}"
                           SelectedIndex="{Binding Antenna.JunctionFeedIndex}"
                           IsEnabled="{Binding Antenna.HasJunctionFeedOptions}"
                           ToolTip="Wire models only, when the feed lands where three or more wires meet: the delta gap sits between two of them, and this picks which two. Filled after a solve."/>
-                <Label Content="f [MHz]"/>
-                <TextBox x:Name="FrequencyBox" Text="{Binding Antenna.FrequencyMHz}"/>
-                <Label Content="Sweep f min [MHz]"/>
-                <TextBox x:Name="SweepFMinBox" Text="{Binding Antenna.SweepFMinMHz}"/>
-                <Label Content="Sweep f max [MHz]"/>
-                <TextBox x:Name="SweepFMaxBox" Text="{Binding Antenna.SweepFMaxMHz}"/>
-                <Label Content="Sweep points"/>
-                <TextBox x:Name="SweepPointsBox" Text="{Binding Antenna.SweepPoints}"/>
-                <Label Content="Mesh: elements per λ"/>
-                <TextBox x:Name="MeshCellsBox" Text="{Binding Antenna.MeshCellsPerWavelength}"
-                         ToolTip="Surface mesh density: elements per (dielectric) wavelength at the highest frequency in play. A plate also gets at least 10 elements along its longer side."/>
-                <Label Content="Patch gap from edge [mm]"/>
-                <TextBox x:Name="PatchGapOffsetBox" Text="{Binding Antenna.PatchGapOffsetMm}"
+                <Label Content="Patch gap from edge [mm]" Visibility="{Binding Antenna.ShowsPatchGap, Converter={StaticResource BoolToVis}}"/>
+                <TextBox x:Name="PatchGapOffsetBox" Visibility="{Binding Antenna.ShowsPatchGap, Converter={StaticResource BoolToVis}}" Text="{Binding Antenna.PatchGapOffsetMm}"
                          ToolTip="Edge-fed patch only: where the series-gap port cuts the patch, measured from the edge. 0 = one eighth of the patch length."/>
-                <Label Content="Patch gap width [mm]"/>
-                <TextBox x:Name="PatchGapWidthBox" Text="{Binding Antenna.PatchGapWidthMm}"
+                <Label Content="Patch gap width [mm]" Visibility="{Binding Antenna.ShowsPatchGap, Converter={StaticResource BoolToVis}}"/>
+                <TextBox x:Name="PatchGapWidthBox" Visibility="{Binding Antenna.ShowsPatchGap, Converter={StaticResource BoolToVis}}" Text="{Binding Antenna.PatchGapWidthMm}"
                          ToolTip="Edge-fed patch only: the physical width of the series gap, centred on the position above. The port's impedance depends on it (a gap is a capacitor), and converges under mesh refinement for a fixed width. 0 = one eighteenth of the patch length."/>
             </controls:FormGrid>
 
@@ -311,6 +302,21 @@
                     <Button Content="Add a port line" Command="{Binding Antenna.AddSheetPortCommand}" Margin="2,0,0,0"/>
                 </UniformGrid>
             </StackPanel>
+
+            <TextBlock Text="Frequency and mesh" FontWeight="Bold" Margin="0,6,0,2"/>
+            <controls:FormGrid>
+                <Label Content="f [MHz]"/>
+                <TextBox x:Name="FrequencyBox" Text="{Binding Antenna.FrequencyMHz}"/>
+                <Label Content="Sweep f min [MHz]"/>
+                <TextBox x:Name="SweepFMinBox" Text="{Binding Antenna.SweepFMinMHz}"/>
+                <Label Content="Sweep f max [MHz]"/>
+                <TextBox x:Name="SweepFMaxBox" Text="{Binding Antenna.SweepFMaxMHz}"/>
+                <Label Content="Sweep points"/>
+                <TextBox x:Name="SweepPointsBox" Text="{Binding Antenna.SweepPoints}"/>
+                <Label Content="Mesh: elements per λ" Visibility="{Binding Antenna.ShowsMeshDensity, Converter={StaticResource BoolToVis}}"/>
+                <TextBox x:Name="MeshCellsBox" Visibility="{Binding Antenna.ShowsMeshDensity, Converter={StaticResource BoolToVis}}" Text="{Binding Antenna.MeshCellsPerWavelength}"
+                         ToolTip="Surface mesh density: elements per (dielectric) wavelength at the highest frequency in play. A plate also gets at least 10 elements along its longer side."/>
+            </controls:FormGrid>
 
             <controls:FormGrid Visibility="{Binding Antenna.IsPortedPanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
                 <Label Content="Driven port (fields)"/>

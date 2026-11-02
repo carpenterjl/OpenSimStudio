@@ -492,6 +492,7 @@ public partial class AntennaViewModel
         OnPropertyChanged(nameof(IsPrintedPanelVisible));
         OnPropertyChanged(nameof(IsSheetMetalPanelVisible));
         OnPropertyChanged(nameof(IsPortedPanelVisible));
+        foreach (string flag in FieldFlags) OnPropertyChanged(flag);
         ClearMultiPortResults();
     }
 
@@ -500,6 +501,42 @@ public partial class AntennaViewModel
     public bool IsPrintedPanelVisible => SourceMode == PrintedMode;
     public bool IsSheetMetalPanelVisible => SourceMode == SheetMetalMode;
     public bool IsPortedPanelVisible => IsPortedMode;
+
+    // Which of the form's fields the selected geometry reads. Each is what its solve path
+    // actually uses, so a hidden field is one that cannot change the answer. The ground row stays
+    // on the wire-fed plate because that solve refuses a ticked box by name: it must be untickable.
+    private static readonly string[] FieldFlags =
+    {
+        nameof(ShowsNet), nameof(ShowsDipoleLength), nameof(ShowsLoopRadius), nameof(ShowsMonopoleHeight),
+        nameof(ShowsWireRadius), nameof(ShowsPlateSize), nameof(ShowsPatchHeight), nameof(ShowsSubstrate),
+        nameof(ShowsProbePosition), nameof(ShowsProbeBore), nameof(ShowsCover), nameof(ShowsAttachedWire),
+        nameof(ShowsIsland), nameof(ShowsGroundPlane), nameof(ShowsHeightAboveGround), nameof(ShowsJunctionFeed),
+        nameof(ShowsMeshDensity), nameof(ShowsPatchGap)
+    };
+
+    private bool IsWireModelMode => SourceMode is DipoleMode or LoopMode or MonopoleMode or NetMode;
+
+    public bool ShowsNet => SourceMode is NetMode or IslandMode or IslandPinsMode or PrintedMode;
+    public bool ShowsDipoleLength => SourceMode == DipoleMode;
+    public bool ShowsLoopRadius => SourceMode == LoopMode;
+    public bool ShowsMonopoleHeight => SourceMode == MonopoleMode;
+    public bool ShowsWireRadius => SourceMode is DipoleMode or LoopMode or MonopoleMode or WireFedPlateMode;
+    public bool ShowsPlateSize => SourceMode is PlateMode or PatchMode or ProbeFedPatchMode or CoveredPatchMode
+        or ProbeFedCoveredPatchMode or WireFedPlateMode or PinnedPatchMode;
+    public bool ShowsPatchHeight => SourceMode is PatchMode or ProbeFedPatchMode or CoveredPatchMode
+        or ProbeFedCoveredPatchMode or PinnedPatchMode;
+    public bool ShowsSubstrate => SourceMode is PlateMode or PatchMode or ProbeFedPatchMode or CoveredPatchMode
+        or ProbeFedCoveredPatchMode or IslandMode or PinnedPatchMode;
+    public bool ShowsProbePosition => IsProbeMode;
+    public bool ShowsProbeBore => IsProbeMode || SourceMode is PinnedPatchMode or IslandPinsMode;
+    public bool ShowsCover => IsCoveredPatchMode;
+    public bool ShowsAttachedWire => IsWireFedPlateMode;
+    public bool ShowsIsland => SourceMode is IslandMode or IslandPinsMode;
+    public bool ShowsGroundPlane => SourceMode is not (IslandPinsMode or PrintedMode or SheetMetalMode);
+    public bool ShowsHeightAboveGround => SourceMode is DipoleMode or LoopMode or PlateMode or IslandMode;
+    public bool ShowsJunctionFeed => IsWireModelMode;
+    public bool ShowsMeshDensity => !IsWireModelMode;
+    public bool ShowsPatchGap => SourceMode is PatchMode or CoveredPatchMode;
 
     /// <summary>Keeps the far-field port choices current as rows change.</summary>
     private void OnPortRowChanged(object? sender, PropertyChangedEventArgs e)
