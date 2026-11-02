@@ -34,8 +34,12 @@ public sealed class ResultsPerAnalysisTests : IDisposable
         Assert.Equal(StepState.Done, Step(StepKind.Results).State);
         Assert.Equal(StepKind.Results, Rail.SelectedStep!.Kind);
 
+        int redraws = 0;
+        Results.DisplayOptionsChanged += (_, _) => redraws++;
+
         Session.SelectedAnalysis = Option(AnalysisType.Modal);
 
+        Assert.True(redraws > 0);   // the plot leaves the viewport
         Assert.Empty(Results.ResultFields);
         Assert.Null(Results.SelectedField);
         Assert.Equal(StepState.Locked, Step(StepKind.Results).State);

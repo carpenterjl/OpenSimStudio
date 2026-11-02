@@ -407,6 +407,10 @@ public partial class ResultsViewModel : ObservableObject
         finally { _suppressDisplayEvents = false; }
         NotifyFrameShapeChanged();
         SelectedField = PickDefault(e);
+        // Clearing the list above already nulled the bound selection, under the suppression, so
+        // an empty result raises no change of its own and the old plot would stay in the view.
+        if (e.Fields.Count == 0)
+            DisplayOptionsChanged?.Invoke(this, new DisplayOptionsChangedEventArgs { Burst = false });
     }
 
     private void NotifyFrameShapeChanged()
