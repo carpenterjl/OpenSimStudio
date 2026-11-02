@@ -253,6 +253,7 @@ public partial class AntennaViewModel
             }
             GroundPlaneModel = model.GroundZ is { } gz ? GroundOverlayAt(model.Surface, gz) : null;
             _log.Append($"Antenna: {AntennaResult}");
+            _session.ReportStudySolved(AnalysisType.Antenna);
         }
         catch (Exception ex) { AntennaResult = $"Not solvable: {ex.Message}"; }
     }

@@ -4,8 +4,13 @@
              xmlns:controls="clr-namespace:OpenSim.App.Controls"
              xmlns:vm="clr-namespace:OpenSim.App.ViewModels">
     <!-- Moved verbatim out of ElectricalSetupPanel when RF became its own workspace (design screens 11-12); bindings go through the shell DataContext unchanged. -->
+    <UserControl.Resources>
+        <controls:StringEqualsToVisibilityConverter x:Key="StepVis"/>
+    </UserControl.Resources>
     <GroupBox Header="Antenna (method of moments)">
         <StackPanel>
+            <!-- Setup: what is solved. The Solve step runs it; Results holds what comes back. -->
+            <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
             <!-- Step 6: antenna simulator (thin-wire + RWG surface MoM; free space,
                  PEC ground, or a dielectric substrate via the layered Green's function) -->
             <TextBlock Text="Thin wires and RWG surfaces in free space or over an infinite PEC ground (image theory). Surface metal can sit on a dielectric substrate (εr, tanδ): a rigorous layered-media Green's function with surface waves — set εr = 1 for air. Works from the imported board's centerlines, a copper island, or a wizard shape; no meshing needed."
@@ -318,11 +323,6 @@
                          ToolTip="Surface mesh density: elements per (dielectric) wavelength at the highest frequency in play. A plate also gets at least 10 elements along its longer side."/>
             </controls:FormGrid>
 
-            <controls:FormGrid Visibility="{Binding Antenna.IsPortedPanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
-                <Label Content="Driven port (fields)"/>
-                <ComboBox x:Name="FarFieldPortCombo" ItemsSource="{Binding Antenna.PortChoices}" SelectedItem="{Binding Antenna.FarFieldPort}"
-                          ToolTip="The far field, near field and overlay drive this port with 1 V; the other ports stay closed as set, a port left a port in the reference impedance (the embedded pattern)."/>
-            </controls:FormGrid>
             <CheckBox Content="Mesh convergence check (re-solve 1.5× finer)"
                       IsChecked="{Binding Antenna.CheckMeshConvergence}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
@@ -357,10 +357,13 @@
                 <Label Content="Reference impedance [Ω]"/>
                 <TextBox x:Name="ReferenceOhmsBox" Text="{Binding Antenna.ReferenceOhms}"/>
             </controls:FormGrid>
-            <Button x:Name="SolveAntennaButton" Content="Solve antenna (Zin sweep)"
-                    Command="{Binding Antenna.SolveAntennaCommand}"/>
+            </StackPanel>
+
+            <!-- On every step: it also says why a solve was refused and what a Setup button did. -->
             <TextBlock Text="{Binding Antenna.AntennaResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+
+            <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Results}">
             <TextBlock Text="{Binding Antenna.SParameterResult}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
             <Image Source="{Binding Antenna.ReturnLossImage}" MaxHeight="220" Margin="0,4,0,0" Stretch="Uniform"
@@ -403,6 +406,11 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <controls:FormGrid Visibility="{Binding Antenna.IsPortedPanelVisible, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
+                <Label Content="Driven port (fields)"/>
+                <ComboBox x:Name="FarFieldPortCombo" ItemsSource="{Binding Antenna.PortChoices}" SelectedItem="{Binding Antenna.FarFieldPort}"
+                          ToolTip="The far field, near field and overlay drive this port with 1 V; the other ports stay closed as set, a port left a port in the reference impedance (the embedded pattern)."/>
+            </controls:FormGrid>
             <controls:FormGrid Margin="0,4,0,0">
                 <Label Content="Field grid (n³)"/>
                 <TextBox Text="{Binding Antenna.GridResolution}"/>
@@ -463,7 +471,7 @@
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <TextBlock Text="{Binding Antenna.AntennaAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
-
+            </StackPanel>
         </StackPanel>
     </GroupBox>
 </UserControl>

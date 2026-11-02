@@ -341,6 +341,21 @@ public partial class ProjectSession : ObservableObject
     /// <summary>Raised when a solve produces (or clears) result fields.</summary>
     public event EventHandler<ResultsProducedEventArgs>? ResultsProduced;
 
+    /// <summary>Raised when an analysis whose results are text and plots (RF, SI), not fields
+    /// on the mesh, has just finished.</summary>
+    public event EventHandler? StudySolved;
+
+    private readonly HashSet<AnalysisType> _solvedStudies = new();
+
+    /// <summary>Marks an RF or SI study as solved, for the rail.</summary>
+    public void ReportStudySolved(AnalysisType study)
+    {
+        _solvedStudies.Add(study);
+        StudySolved?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool IsStudySolved(AnalysisType study) => _solvedStudies.Contains(study);
+
     /// <summary>Raised when face paint state (selection, electrodes) changed.</summary>
     public event EventHandler? HighlightsInvalidated;
 
@@ -349,6 +364,7 @@ public partial class ProjectSession : ObservableObject
         AssembledMesh = null;   // the merge described geometry that no longer exists
         Assemblies.Clear();
         _resultsByAnalysis.Clear();
+        _solvedStudies.Clear();
         _shownResults = null;   // every listener below clears its own display on this event
         GeometryReplaced?.Invoke(this, new GeometryReplacedEventArgs { LeavingPcbMode = leavingPcbMode });
     }

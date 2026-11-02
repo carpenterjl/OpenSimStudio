@@ -119,7 +119,7 @@ try {
     "SET: $(Set-ValueById $win 'AttachYBox' '0')"
     Nudge $win 'SweepPointsBox'          # commits the last LostFocus-bound box
 
-    "SOLVE: $(Invoke-ById $win 'SolveAntennaButton')"
+    "SOLVE: $(Invoke-ById $win 'SolveButton')"
     # Wait for the FINISHED line: the transient "Solving (N RWG + M wire unknowns)..." status
     # also contains "wire unknowns", so a loose pattern reads the placeholder as the answer.
     $zin = Wait-Text $win "Zin = |Not solvable" 90
@@ -143,8 +143,9 @@ try {
     if ($null -eq $nf) { "FAIL: the near field did not refuse by name"; $fail++ }
 
     # A ground plane is outside the mode's scope, and the refusal must name free space.
+    Invoke-ById $win 'StudyStepSetup' | Out-Null   # the solve moved the rail to Results
     "GROUND: $(Set-Check $win 'GroundPlaneCheck' $true)"
-    "SOLVE2: $(Invoke-ById $win 'SolveAntennaButton')"
+    "SOLVE2: $(Invoke-ById $win 'SolveButton')"
     # PowerShell -match is CASE-INSENSITIVE, and the panel blurb says "in free space or over
     # an infinite PEC ground" - so match the refusal phrase, not the two words.
     $refusal = Wait-Text $win "solved in FREE SPACE" 30

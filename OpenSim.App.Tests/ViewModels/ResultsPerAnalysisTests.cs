@@ -108,4 +108,20 @@ public sealed class ResultsPerAnalysisTests : IDisposable
         Session.SelectedAnalysis = Option(AnalysisType.Static);
         Assert.Empty(Results.ResultFields);
     }
+
+    [Fact]
+    public void AnRfStudy_LeavesResultsOpenForItsFieldTools_AndMovesThereWhenSolved()
+    {
+        _ = Rail;
+        Session.ActiveWorkspace = WorkspaceKind.Rf;
+        Assert.Equal(StepKind.Setup, Rail.SelectedStep!.Kind);
+        Assert.Equal(StepState.Available, Step(StepKind.Results).State);
+        Assert.Equal("No solution yet", Step(StepKind.Results).Detail);
+
+        Session.ReportStudySolved(AnalysisType.Antenna);
+
+        Assert.Equal(StepState.Done, Step(StepKind.Solve).State);
+        Assert.Equal(StepState.Done, Step(StepKind.Results).State);
+        Assert.Equal(StepKind.Results, Rail.SelectedStep!.Kind);
+    }
 }

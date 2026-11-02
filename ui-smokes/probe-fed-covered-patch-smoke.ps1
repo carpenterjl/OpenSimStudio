@@ -121,7 +121,7 @@ try {
     "SET: $(Set-ValueById $win 'SweepPointsBox' '1')"
     Nudge $win 'SweepPointsBox'          # commits the last LostFocus-bound box
 
-    "SOLVE: $(Invoke-ById $win 'SolveAntennaButton')"
+    "SOLVE: $(Invoke-ById $win 'SolveButton')"
     $zin = Wait-Text $win "Zin = |Not solvable" 240
     "RESULT: $zin"
     if ($null -eq $zin -or $zin -notmatch "Zin = ") { "FAIL: the probe-fed covered patch produced no Zin"; $fail++ }
@@ -146,9 +146,10 @@ try {
     # A bore too fat for the layer is a typed refusal that names the LAYER, not just the stack:
     # 3 elements of 0.529 mm cannot carry a 0.3 mm bore (the reduced-kernel element >= 2*radius
     # floor). Matched by the phrase, since -match is case-insensitive.
+    Invoke-ById $win 'StudyStepSetup' | Out-Null   # the solve moved the rail to Results
     "SET: $(Set-ValueById $win 'ProbeRadiusBox' '0.35')"
     Nudge $win 'SweepPointsBox'
-    "SOLVE2: $(Invoke-ById $win 'SolveAntennaButton')"
+    "SOLVE2: $(Invoke-ById $win 'SolveButton')"
     $refusal = Wait-Text $win "too thin for the probe bore" 120
     "REFUSAL: $refusal"
     if ($null -eq $refusal) { "FAIL: a bore too fat for the layer was not refused by name"; $fail++ }

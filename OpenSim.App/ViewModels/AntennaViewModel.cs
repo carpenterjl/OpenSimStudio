@@ -58,8 +58,11 @@ public partial class AntennaViewModel : ObservableObject
     private IReadOnlyList<string>? _boardStackupNotes;
     private Func<NetMeshOptions>? _options;
 
+    private readonly ProjectSession _session;
+
     public AntennaViewModel(ProjectSession session, ILogService log, ElectrodesViewModel electrodes)
     {
+        _session = session;
         _log = log;
         _electrodes = electrodes;
         // Stale field overlays floating over a replaced body/scene would misread as
@@ -439,6 +442,7 @@ public partial class AntennaViewModel : ObservableObject
             AntennaAssumptions = "Assumptions: " + string.Join(" ", BuildAssumptions(wire))
                 + (warnings.Count > 0 ? " " + string.Join(" ", warnings) : "");
             _log.Append($"Antenna: {AntennaResult}");
+            _session.ReportStudySolved(AnalysisType.Antenna);
         }
         catch (Exception ex) { AntennaResult = $"Not solvable: {ex.Message}"; }
     }
@@ -1659,6 +1663,7 @@ public partial class AntennaViewModel : ObservableObject
             // kernel table per frequency point (a table IS one (f, stackup) pair).
             foreach (string line in timing) _log.Append(line);
             _log.Append($"Antenna: {AntennaResult}");
+            _session.ReportStudySolved(AnalysisType.Antenna);
         }
         catch (Exception ex) { AntennaResult = $"Not solvable: {ex.Message}"; }
     }
@@ -1912,6 +1917,7 @@ public partial class AntennaViewModel : ObservableObject
             AntennaAssumptions = "Assumptions: " + string.Join(" ",
                 OpenSim.Rf.Surface.SurfaceMomSolver.WireAttachedAssumptions);
             _log.Append($"Antenna: {AntennaResult}");
+            _session.ReportStudySolved(AnalysisType.Antenna);
         }
         catch (Exception ex) { AntennaResult = $"Not solvable: {ex.Message}"; }
     }

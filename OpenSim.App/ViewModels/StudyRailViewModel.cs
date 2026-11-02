@@ -61,6 +61,11 @@ public partial class StudyRailViewModel : ObservableObject
             // Only a solve that just finished moves the user; switching analysis does not.
             if (_hasResults && !e.Restored) SelectStep(StepKind.Results);
         };
+        session.StudySolved += (_, _) =>
+        {
+            Refresh();
+            SelectStep(StepKind.Results);
+        };
         session.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ProjectSession.ActiveWorkspace))
@@ -176,6 +181,8 @@ public partial class StudyRailViewModel : ObservableObject
         bool hasMesh = _session.Bodies.Any(b => b.Mesh is not null);
         bool hasConditions = _session.Bodies.Any(b => b.BoundaryConditions.Count > 0);
         bool railFree = _session.ActiveWorkspace is WorkspaceKind.Rf or WorkspaceKind.SignalIntegrity;
+        bool studySolved = _session.SelectedAnalysis is { } analysis && _session.IsStudySolved(analysis.Kind);
+        bool solved = _hasResults || studySolved;
 
         foreach (var step in Steps)
         {
@@ -206,18 +213,18 @@ public partial class StudyRailViewModel : ObservableObject
                         : hasConditions ? ConditionsDetail() : "Material and conditions";
                     break;
                 case StepKind.Solve:
-                    step.State = railFree ? StepState.Available
-                        : !hasMesh ? StepState.Locked
-                        : _hasResults ? StepState.Done : StepState.Available;
+                    step.State = !railFree && !hasMesh ? StepState.Locked
+                        : solved ? StepState.Done : StepState.Available;
                     step.Detail = !railFree && !hasMesh ? "Needs a mesh"
-                        : _hasResults && _solveSummary.Length > 0 ? _solveSummary
-                        : _hasResults ? "Solved"
+                        : solved && _solveSummary.Length > 0 ? _solveSummary
+                        : solved ? "Solved"
                         : "Run the study";
                     break;
                 case StepKind.Results:
-                    step.State = _hasResults ? StepState.Done : StepState.Locked;
-                    step.Detail = _hasResults
-                        ? $"{_resultFieldCount} field(s) · solved"
+                    // RF and SI stay open: their field maps and tools solve on their own.
+                    step.State = solved ? StepState.Done : railFree ? StepState.Available : StepState.Locked;
+                    step.Detail = _hasResults ? $"{_resultFieldCount} field(s) · solved"
+                        : studySolved ? "Plots and exports"
                         : "No solution yet";
                     break;
             }

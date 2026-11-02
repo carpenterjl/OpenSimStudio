@@ -173,9 +173,11 @@ try {
     $commsNets = @('_SCL', '_SDA', '_SERIAL_TX', '_SERIAL_RX', '_TX1_P', '_RX1_P', '_TX2_P')
     $result = $null; $picked = $null
     foreach ($needle in $commsNets) {
+        Invoke-ById $win 'StudyStepSetup' | Out-Null
         $name = Select-ComboItemLike $win 'AntennaNetCombo' $needle
         if ($null -eq $name) { "NET '$needle': not in list"; continue }
         Start-Sleep -Milliseconds 500
+        Invoke-ById $win 'StudyStepResults' | Out-Null
         "OVER BOARD: $(Check-ById $win 'OverlayOverBoardCheck')"
         "OVERLAY ($name): $(Invoke-ById $win 'FieldOverlayButton')"
         $r = Wait-Text $win "Board overlay at |Not computable|outside the board" 40
