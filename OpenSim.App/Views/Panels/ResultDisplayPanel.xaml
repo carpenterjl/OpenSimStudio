@@ -9,13 +9,13 @@
                 <Label Content="Deform scale"/>
                 <TextBox Text="{Binding Results.DeformScale}"/>
             </controls:FormGrid>
-            <!-- The fixed two-map toggle. Hidden in Thermal & Flow, where the colormap
-                 editor owns the colors and this checkbox would be a dead control. -->
+            <!-- The fixed two-map toggle. Hidden in Flow, where the colormap editor owns the
+                 colors (SceneViewModel.UsesEditableColormap) and this would be a dead control. -->
             <CheckBox x:Name="ViridisCheck" Content="Viridis colormap"
                       IsChecked="{Binding Results.UseViridis}">
                 <CheckBox.Style>
-                    <Style TargetType="CheckBox">
-                        <Setter Property="Foreground" Value="#C9C9D2"/>
+                    <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                        <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
                         <Setter Property="Margin" Value="2,4"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Flow">
