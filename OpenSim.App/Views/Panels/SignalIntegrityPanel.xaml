@@ -165,21 +165,30 @@
             <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" Margin="0,6,0,0" Padding="0,4,0,0"
                     Visibility="{Binding SignalIntegrity.HasBoard, Converter={StaticResource BoolToVis}}">
                 <StackPanel>
+                    <CheckBox Content="Use board geometry (uncheck for the wizard above)"
+                              IsChecked="{Binding SignalIntegrity.UseBoardNets}"
+                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,0,3"/>
                     <TextBlock Text="From board nets (2+ parallel for coupling; 1+ for C to ground):"
                                FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,2"/>
-                    <ListBox x:Name="SiBoardNetsList" MaxHeight="110"
+                    <ListBox x:Name="SiBoardNetsList" MaxHeight="200"
                              ItemsSource="{Binding SignalIntegrity.BoardNets}"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              Background="{DynamicResource SurfaceContainerLowestBrush}" BorderBrush="{DynamicResource PanelBorderBrush}">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
+                                <!-- Fixed columns: the driver combos line up whatever the net name's length. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="120"/>
+                                    </Grid.ColumnDefinitions>
                                     <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSelected}"
                                               Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
-                                    <ComboBox ItemsSource="{Binding DriverChoices}" SelectedItem="{Binding DriverPin}"
-                                              MinWidth="120" Margin="6,0,0,0" FontSize="11"
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding DriverChoices}" SelectedItem="{Binding DriverPin}"
+                                              Margin="6,0,0,0" FontSize="11"
                                               ToolTip="The net's driver pin: its route end nearest this pin is the driven end"/>
-                                </StackPanel>
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
@@ -194,9 +203,6 @@
                     <Button x:Name="SiBoardExtractButton" Content="Extract coupled section from nets"
                             Command="{Binding SignalIntegrity.ExtractFromBoardNetsCommand}"
                             Margin="0,3,0,0"/>
-                    <CheckBox Content="Use board geometry (uncheck for wizard)"
-                              IsChecked="{Binding SignalIntegrity.UseBoardNets}"
-                              Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"/>
                     <TextBlock Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
                                FontSize="11" Foreground="{DynamicResource SuccessBrush}" Margin="0,2,0,0"/>
                     <Button x:Name="SiTraceCapButton" Content="Per-trace C to ground"
@@ -211,27 +217,33 @@
                             ToolTip="For the selected nets: each net's capacitance to its planes, and between every two that run side by side on a layer (2D field solve per cross-section × length)."/>
                     <TextBlock Text="{Binding SignalIntegrity.CapacitanceMatrixResult}" TextWrapping="Wrap"
                                FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-                    <Button x:Name="SiDcNetsButton" Content="Evaluate DC nets (R, C, τ → CSV)"
-                            Command="{Binding SignalIntegrity.EvaluateDcNetsCommand}"
-                            Margin="0,3,0,0"
-                            ToolTip="Board-wide DC screen over EVERY net with 2+ pads: resistance between each pad pair (nodal network on the trace graph — branches and parallel paths solve exactly), the net's total C to the reference plane, and the lumped time constant τ = R·C, saved as a CSV report. Nets that can't be priced appear as typed note rows."/>
-                    <TextBlock Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
-                               FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
-                    <Button x:Name="SiLayoutCheckButton" Content="Check layout rules (whole board)"
-                            Command="{Binding SignalIntegrity.CheckLayoutRulesCommand}"
-                            Margin="0,3,0,0"
-                            ToolTip="Geometric checks, no field solve: traces over a split, slot or edge of their reference plane; layer changes with no stitching via or capacitor near the via; via stubs; traces close to the board edge. Uses the stackup panel's thicknesses."/>
-                    <TextBlock Text="{Binding SignalIntegrity.LayoutCheckResult}" TextWrapping="Wrap"
-                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-                    <UniformGrid Columns="2" Margin="0,3,0,0">
+                    <Expander x:Name="SiBoardChecksExpander" Header="Board checks (every net, not just the selection)"
+                              AutomationProperties.AutomationId="SiBoardChecksExpander" Margin="0,6,0,0">
+                        <StackPanel>
+                        <Button x:Name="SiDcNetsButton" Content="Evaluate DC nets (R, C, τ → CSV)"
+                                Command="{Binding SignalIntegrity.EvaluateDcNetsCommand}"
+                                Margin="0,3,0,0"
+                                ToolTip="Board-wide DC screen over EVERY net with 2+ pads: resistance between each pad pair (nodal network on the trace graph — branches and parallel paths solve exactly), the net's total C to the reference plane, and the lumped time constant τ = R·C, saved as a CSV report. Nets that can't be priced appear as typed note rows."/>
+                        <TextBlock Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
+                                   FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
+                        <Button x:Name="SiLayoutCheckButton" Content="Check layout rules (whole board)"
+                                Command="{Binding SignalIntegrity.CheckLayoutRulesCommand}"
+                                Margin="0,3,0,0"
+                                ToolTip="Geometric checks, no field solve: traces over a split, slot or edge of their reference plane; layer changes with no stitching via or capacitor near the via; via stubs; traces close to the board edge. Uses the stackup panel's thicknesses."/>
+                        <TextBlock Text="{Binding SignalIntegrity.LayoutCheckResult}" TextWrapping="Wrap"
+                                   FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                        <controls:FormGrid Margin="0,3,0,0">
+                            <Label Content="Aggressor edge [ns]"/>
+                            <TextBox x:Name="SiScanRiseBox" Text="{Binding SignalIntegrity.ScanRiseTimeNs}"
+                                     ToolTip="The rise time of the aggressor the crosstalk scan assumes"/>
+                        </controls:FormGrid>
                         <Button x:Name="SiCrosstalkScanButton" Content="Scan board crosstalk"
                                 Command="{Binding SignalIntegrity.ScanBoardCrosstalkCommand}"
                                 ToolTip="Every two nets with traces running side by side on a layer, ranked by near-end and far-end crosstalk for the given edge (2D field solve per distinct cross-section)."/>
-                        <TextBox x:Name="SiScanRiseBox" Text="{Binding SignalIntegrity.ScanRiseTimeNs}" Margin="2,0,0,0"
-                                 ToolTip="Aggressor rise time [ns]"/>
-                    </UniformGrid>
-                    <TextBlock Text="{Binding SignalIntegrity.CrosstalkScanResult}" TextWrapping="Wrap"
-                               FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                        <TextBlock Text="{Binding SignalIntegrity.CrosstalkScanResult}" TextWrapping="Wrap"
+                                   FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Expander>
                 </StackPanel>
             </Border>
 

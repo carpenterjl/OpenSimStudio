@@ -394,8 +394,8 @@ public partial class PcbViewModel : ObservableObject
         _session.RaiseGeometryReplaced(leavingPcbMode: false);
         _session.RaiseMeshChanged();
 
-        _log.Append($"Board imported. {board.Nets.Count} nets found — select a net and click " +
-                    "\"Mesh selected net\" to simulate it.");
+        _log.Append($"Board imported. {board.Nets.Count} nets found. For a field solve, select a net and mesh it " +
+                    "on the Electrical workspace's Mesh step; the RF and signal-integrity tools read the board as it is.");
     }
 
     /// <summary>One frozen ribbon model per (net, layer): the pieces every later

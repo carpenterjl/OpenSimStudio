@@ -136,6 +136,12 @@ try {
     $ready = $false
     foreach ($t in 1..30) {
         Start-Sleep -Seconds 1
+        $checks = Find-ById $win 'SiBoardChecksExpander'
+        if ($null -ne $checks) {
+            # The board checks sit in a section that opens on request.
+            $checks.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+            Start-Sleep -Milliseconds 400
+        }
         if ($null -ne (Find-ById $win 'SiDcNetsButton')) { $ready = $true; break }
     }
     if (-not $ready) { "FAIL: board import did not reveal SiDcNetsButton"; exit 1 }
