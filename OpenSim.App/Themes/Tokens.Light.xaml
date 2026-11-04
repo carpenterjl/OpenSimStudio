@@ -56,7 +56,11 @@
     <SolidColorBrush x:Key="TextHeadingBrush" Color="#111826"/>
     <SolidColorBrush x:Key="TextBodyBrush" Color="#1C1F23"/>
     <SolidColorBrush x:Key="TextMutedBrush" Color="#5C6470"/>
-    <SolidColorBrush x:Key="TextFaintBrush" Color="#8A929E"/>
+    <!-- 4.5:1 or better on every light panel ground for the 11 px help text that uses it;
+         #8A929E was 2.8-3.1:1. -->
+    <SolidColorBrush x:Key="TextFaintBrush" Color="#646C78"/>
+    <!-- A box's edge: 3:1 against the white panel, so an empty box can be found. -->
+    <SolidColorBrush x:Key="InputBorderBrush" Color="#8A929E"/>
     <SolidColorBrush x:Key="AccentBrush" Color="#0E7490"/>
     <SolidColorBrush x:Key="AccentSolidBrush" Color="#0891B2"/>
     <SolidColorBrush x:Key="AccentOnBrush" Color="#FFFFFF"/>

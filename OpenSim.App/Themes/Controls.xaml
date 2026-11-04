@@ -274,7 +274,7 @@
     <Style TargetType="TextBox">
         <Setter Property="Background" Value="{DynamicResource SurfaceContainerLowestBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextBodyBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CaretBrush" Value="{DynamicResource TextBodyBrush}"/>
         <Setter Property="SelectionBrush" Value="{DynamicResource SelectionBgBrush}"/>
@@ -299,7 +299,7 @@
                                     Value="{DynamicResource AccentBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.45"/>
+                            <Setter Property="Opacity" Value="0.6"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -433,7 +433,7 @@
     <Style TargetType="ComboBox">
         <Setter Property="Background" Value="{DynamicResource SurfaceContainerLowestBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextBodyBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource InputBorderBrush}"/>
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Padding" Value="9,5"/>
@@ -490,7 +490,7 @@
                                     Value="{DynamicResource AccentBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.45"/>
+                            <Setter Property="Opacity" Value="0.6"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

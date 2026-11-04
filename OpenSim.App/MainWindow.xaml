@@ -465,6 +465,7 @@
                                                               RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding Kind}"
                                                     AutomationProperties.AutomationId="{Binding AutomationId}"
+                                                    ToolTip="{Binding FullName}"
                                                     HorizontalAlignment="Center">
                                                 <Button.Template>
                                                     <ControlTemplate TargetType="Button">

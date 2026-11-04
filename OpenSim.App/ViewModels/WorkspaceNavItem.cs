@@ -19,6 +19,18 @@ public sealed partial class WorkspaceNavItem : ObservableObject
     /// <summary>The rail's 9px label ("Struct", "Elec", …).</summary>
     public string ShortLabel { get; }
 
+    /// <summary>The workspace's whole name, for the rail button's tooltip.</summary>
+    public string FullName => Kind switch
+    {
+        WorkspaceKind.Structural => "Structural",
+        WorkspaceKind.Thermal => "Thermal",
+        WorkspaceKind.Electrical => "Electrical",
+        WorkspaceKind.Rf => "RF (antennas)",
+        WorkspaceKind.SignalIntegrity => "Signal integrity",
+        WorkspaceKind.Flow => "Flow (heat flow and CFD)",
+        _ => ShortLabel
+    };
+
     /// <summary>Resource key into Themes/Icons.xaml.</summary>
     public string IconKey { get; }
 
