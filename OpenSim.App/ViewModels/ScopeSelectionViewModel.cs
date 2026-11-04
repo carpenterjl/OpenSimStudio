@@ -84,7 +84,10 @@ public partial class ScopeSelectionViewModel : ObservableObject
         if (set is null)
         {
             HasScopeItems = false;
-            ScopeSummary = "Create or import geometry to select edges or vertices.";
+            // An imported board has no solid until its net is meshed.
+            ScopeSummary = _session.IsPcbMode
+                ? "Mesh the board's net to pick its edges and vertices."
+                : "Create or import geometry to select edges or vertices.";
             _suppressSync = false;
             return;
         }

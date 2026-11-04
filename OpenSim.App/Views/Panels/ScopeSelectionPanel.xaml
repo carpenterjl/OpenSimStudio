@@ -18,6 +18,8 @@
                         Command="{Binding ScopeSelection.ClearScopeSelectionCommand}"/>
             </StackPanel>
 
+            <!-- The lists only once there is something to list. -->
+            <StackPanel Visibility="{Binding ScopeSelection.HasScopeItems, Converter={StaticResource BoolToVis}}">
             <TextBlock Text="Edges" FontWeight="Bold" Margin="0,4,0,2"/>
             <ListBox ItemsSource="{Binding ScopeSelection.Edges}" MinHeight="60" MaxHeight="140"
                      AutomationProperties.AutomationId="ScopeEdgeList">
@@ -37,6 +39,7 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+            </StackPanel>
 
             <TextBlock TextWrapping="Wrap" Margin="0,6,0,0" Opacity="0.7"
                        AutomationProperties.AutomationId="ScopeFooterText"
