@@ -54,14 +54,21 @@
                     <TextBox Text="{Binding UpperEpsR}" Margin="1,0"/>
                     <TextBox Text="{Binding UpperTanD}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <CheckBox x:Name="ZcPairCheck" Content="Differential pair, gap [mm]" IsChecked="{Binding IsPair}"
-                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
+            </controls:FormGrid>
+            <!-- A check box switches a part of the structure on; its sizes are labelled fields. -->
+            <CheckBox x:Name="ZcPairCheck" Content="Differential pair" IsChecked="{Binding IsPair}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,4,2,1"/>
+            <controls:FormGrid IsEnabled="{Binding IsPair}">
+                <Label Content="Pair gap [mm]"/>
                 <TextBox Text="{Binding PairGapMm}"/>
-                <Label Content="Pair: second width [mm]"
+                <Label Content="Second width [mm]"
                        ToolTip="Base width of the pair's second trace; 0 = the same as the first (a symmetric pair)"/>
                 <TextBox Text="{Binding SecondWidthMm}"/>
-                <CheckBox x:Name="ZcCoplanarCheck" Content="Coplanar ground, gap [mm]" IsChecked="{Binding HasCoplanarGround}"
-                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"/>
+            </controls:FormGrid>
+            <CheckBox x:Name="ZcCoplanarCheck" Content="Coplanar ground" IsChecked="{Binding HasCoplanarGround}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,4,2,1"/>
+            <controls:FormGrid IsEnabled="{Binding HasCoplanarGround}">
+                <Label Content="Ground gap [mm]"/>
                 <TextBox Text="{Binding CoplanarGapMm}"/>
             </controls:FormGrid>
             <CheckBox Content="Side walls (thick-trace solve)" IsChecked="{Binding SideWallSolve}"
