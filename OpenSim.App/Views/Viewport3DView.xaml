@@ -61,8 +61,9 @@
             <helix:LinesVisual3D x:Name="AntennaWireLines" Color="#FF7BE0" Thickness="1.6"/>
         </helix:HelixViewport3D>
 
-        <!-- Legend overlay -->
-        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,12,12"
+        <!-- Legend overlay: bottom-right, above Helix's view cube (80 px, the corner's own),
+             so the cube stays visible and clickable under it. -->
+        <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,12,100"
                 Background="{DynamicResource ScrimBrush}" CornerRadius="4" Padding="8"
                 x:Name="LegendPanel" Visibility="Collapsed">
             <StackPanel Width="160">
@@ -104,7 +105,7 @@
         </Border>
 
         <!-- Result playback timeline. Bottom-CENTRE on purpose: Helix draws its coordinate
-             system bottom-left and the FE legend sits bottom-right. Shown only where a
+             system bottom-left and its view cube bottom-right. Shown only where a
              timeline is meaningful — a Thermal & Flow solve with a non-degenerate axis. -->
         <panels:TimelinePanel HorizontalAlignment="Center" VerticalAlignment="Bottom"
                               Margin="0,0,0,12">
