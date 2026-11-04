@@ -38,7 +38,7 @@
                 <TextBox Text="{Binding Antenna.MonopoleHeightMm}" Visibility="{Binding Antenna.ShowsMonopoleHeight, Converter={StaticResource BoolToVis}}"/>
                 <Label Content="Wire radius [mm]" Visibility="{Binding Antenna.ShowsWireRadius, Converter={StaticResource BoolToVis}}"/>
                 <TextBox Text="{Binding Antenna.WireRadiusMm}" Visibility="{Binding Antenna.ShowsWireRadius, Converter={StaticResource BoolToVis}}"/>
-                <Label Content="Plate/patch W×L [mm]" Visibility="{Binding Antenna.ShowsPlateSize, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Plate W / L [mm]" Visibility="{Binding Antenna.ShowsPlateSize, Converter={StaticResource BoolToVis}}"/>
                 <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsPlateSize, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="PlateWidthBox" Text="{Binding Antenna.PlateWidthMm}" Margin="0,0,2,0"/>
                     <TextBox x:Name="PlateLengthBox" Text="{Binding Antenna.PlateLengthMm}" Margin="2,0,0,0"/>
@@ -53,7 +53,7 @@
                     <TextBox Text="{Binding Antenna.SubstrateTanD}" Margin="2,0,0,0"
                              ToolTip="Substrate loss tangent (0 = lossless)"/>
                 </UniformGrid>
-                <Label Content="Probe x/y [mm]" Visibility="{Binding Antenna.ShowsProbePosition, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Probe x / y [mm]" Visibility="{Binding Antenna.ShowsProbePosition, Converter={StaticResource BoolToVis}}"/>
                 <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsProbePosition, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="ProbeXBox" Text="{Binding Antenna.ProbeXMm}" Margin="0,0,2,0"
                              ToolTip="Coaxial probe feed position from the patch centre (Stage E). The probe snaps to the nearest mesh vertex; a good inset off the radiating edge sets the input resistance ∝ cos²(πx/L)."/>
@@ -69,7 +69,7 @@
                 <Label Content="Cover thickness [mm]" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}"/>
                 <TextBox x:Name="CoverThicknessBox" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}" Text="{Binding Antenna.CoverThicknessMm}"
                          ToolTip="Dielectric cover thickness above the buried patch (covered-patch mode, Stage F multi-layer). The cover loads the patch, so the resonance drops below the bare patch's — further with a thicker or denser cover."/>
-                <Label Content="Cover εr / tanδ (blank = substrate)" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Cover εr / tanδ" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}"/>
                 <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsCover, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="CoverEpsRBox" Text="{Binding Antenna.CoverEpsR}" Margin="0,0,2,0"
                              ToolTip="Superstrate relative permittivity. Leave at 0 to track the substrate (the matched-cover default). Any εr ≥ 1 is supported — the buried-source read-out is single-valued across the ε jump."/>
@@ -83,7 +83,7 @@
                     <TextBox x:Name="AttachedWireAngleBox" Text="{Binding Antenna.AttachedWireDegrees}" Margin="2,0,0,0"
                              ToolTip="Angle the wire makes with the sheet: 90° is the classical normal monopole. Below 10° the reduced-kernel tube overlaps the metal and the solve refuses by name."/>
                 </UniformGrid>
-                <Label Content="Attach x/y [mm]" Visibility="{Binding Antenna.ShowsAttachedWire, Converter={StaticResource BoolToVis}}"/>
+                <Label Content="Attach x / y [mm]" Visibility="{Binding Antenna.ShowsAttachedWire, Converter={StaticResource BoolToVis}}"/>
                 <UniformGrid Columns="2" Visibility="{Binding Antenna.ShowsAttachedWire, Converter={StaticResource BoolToVis}}">
                     <TextBox x:Name="AttachXBox" Text="{Binding Antenna.AttachXMm}" Margin="0,0,2,0"
                              ToolTip="Where the wire lands, measured from the plate centre. The plate is meshed with this point snapped in as a vertex, so the attachment fan has its anchor."/>
@@ -158,15 +158,15 @@
                                     </Grid>
                                     <UniformGrid Columns="5" Margin="0,2,0,0">
                                         <StackPanel>
-                                            <TextBlock Text="x mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBlock Text="x [mm]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
                                             <TextBox Text="{Binding XMm}" Margin="0,1,2,1"/>
                                         </StackPanel>
                                         <StackPanel>
-                                            <TextBlock Text="y mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBlock Text="y [mm]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
                                             <TextBox Text="{Binding YMm}" Margin="0,1,2,1"/>
                                         </StackPanel>
                                         <StackPanel>
-                                            <TextBlock Text="r mm" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBlock Text="r [mm]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
                                             <TextBox Text="{Binding RadiusMm}" Margin="0,1,2,1" ToolTip="Tube radius [mm]; each tube segment must be at least twice this long."/>
                                         </StackPanel>
                                         <StackPanel>
@@ -204,8 +204,9 @@
                     <ComboBox ItemsSource="{Binding Antenna.PrintedLayers}" SelectedItem="{Binding Antenna.PrintedLayer}" ItemStringFormat="L{0}"/>
                     <Label Content="Feed bridge width [mm]"/>
                     <TextBox Text="{Binding Antenna.BridgeWidthMm}"/>
-                    <Label Content="Feed point x / y [mm] (no source pad)"/>
-                    <UniformGrid Columns="2">
+                    <Label Content="Feed point x / y [mm]"/>
+                    <UniformGrid Columns="2"
+                                 ToolTip="Board coordinates, used when no source pad is picked: the bridge leaves the antenna copper at its point nearest this one.">
                         <TextBox Text="{Binding Antenna.FeedXMm}" Margin="0,0,2,0"/>
                         <TextBox Text="{Binding Antenna.FeedYMm}" Margin="2,0,0,0"/>
                     </UniformGrid>
@@ -224,12 +225,12 @@
                 <TextBlock Text="Axis-aligned plates on one shared graded grid — a PIFA's top plate and tabs over a finite ground plate of its real size, or over an infinite image ground at z = 0 — with ports as straight cuts along mesh lines (their ends become grid lines). No dielectric."
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
                 <controls:FormGrid>
-                    <Label Content="PIFA ground W × L [mm]"/>
+                    <Label Content="PIFA ground W / L [mm]"/>
                     <UniformGrid Columns="2">
                         <TextBox Text="{Binding Antenna.PifaGroundWidthMm}" Margin="0,0,2,0"/>
                         <TextBox Text="{Binding Antenna.PifaGroundLengthMm}" Margin="2,0,0,0"/>
                     </UniformGrid>
-                    <Label Content="Top plate W × L [mm] / height [mm]"/>
+                    <Label Content="Top plate W / L / height [mm]"/>
                     <UniformGrid Columns="3">
                         <TextBox Text="{Binding Antenna.PifaTopWidthMm}" Margin="0,0,2,0"/>
                         <TextBox Text="{Binding Antenna.PifaTopLengthMm}" Margin="2,0,2,0"/>
@@ -317,11 +318,11 @@
                  frequencies, how finely, then the port and the losses. -->
             <TextBlock Text="Frequency sweep" FontWeight="Bold" Margin="0,8,0,2"/>
             <controls:FormGrid>
-                <Label Content="f [MHz]"/>
+                <Label Content="Frequency [MHz]"/>
                 <TextBox x:Name="FrequencyBox" Text="{Binding Antenna.FrequencyMHz}"/>
-                <Label Content="Sweep f min [MHz]"/>
+                <Label Content="Min frequency [MHz]"/>
                 <TextBox x:Name="SweepFMinBox" Text="{Binding Antenna.SweepFMinMHz}"/>
-                <Label Content="Sweep f max [MHz]"/>
+                <Label Content="Max frequency [MHz]"/>
                 <TextBox x:Name="SweepFMaxBox" Text="{Binding Antenna.SweepFMaxMHz}"/>
                 <Label Content="Sweep points"/>
                 <TextBox x:Name="SweepPointsBox" Text="{Binding Antenna.SweepPoints}"/>
@@ -468,7 +469,7 @@
                 <Label Content="Log span [decades]"/>
                 <TextBox x:Name="OverlayDecadesBox" Text="{Binding Antenna.OverlayDecades}"
                          ToolTip="Log scale with auto range: the range spans this many decades below the peak"/>
-                <Label Content="Range min/max [V/m]"/>
+                <Label Content="Range min / max [V/m]"/>
                 <UniformGrid Columns="2">
                     <TextBox x:Name="OverlayMinBox" Text="{Binding Antenna.OverlayMinVPerM}" Margin="0,0,2,0"
                              ToolTip="Range minimum (V/m), used when auto range is off. In log mode a non-positive min falls back to max/10^decades."/>
