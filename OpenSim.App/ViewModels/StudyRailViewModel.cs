@@ -215,9 +215,11 @@ public partial class StudyRailViewModel : ObservableObject
                         : "Medium and ambient";
                     break;
                 case StepKind.Setup:
+                    // A solve proves the setup was complete, whether or not its terminals are
+                    // face conditions (a board's electrodes, a free-free modal study are not).
                     step.State = railFree ? StepState.Available
                         : !hasMesh ? StepState.Locked
-                        : hasConditions ? StepState.Done : StepState.Available;
+                        : hasConditions || solved ? StepState.Done : StepState.Available;
                     step.Detail = railFree ? "Study parameters"
                         : !hasMesh ? "Needs a mesh"
                         : hasConditions ? ConditionsDetail() : "Material and conditions";

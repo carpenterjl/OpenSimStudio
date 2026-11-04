@@ -1,6 +1,8 @@
 using OpenSim.App.Services;
 using OpenSim.App.Tests.Support;
 using OpenSim.App.ViewModels;
+using OpenSim.Core.Model;
+using OpenSim.Core.Numerics;
 using OpenSim.Core.Results;
 
 namespace OpenSim.App.Tests.ViewModels;
@@ -111,6 +113,22 @@ public sealed class ResultsPerAnalysisTests : IDisposable
 
         Session.SelectedAnalysis = Option(AnalysisType.Static);
         Assert.Empty(Results.ResultFields);
+    }
+
+    [Fact]
+    public void ASolvedStudy_TicksSetup_EvenWithNoFaceConditions()
+    {
+        _ = Rail;
+        Session.Body.Mesh = new FeMesh(
+            new[] { new Vector3D(0, 0, 0), new Vector3D(1, 0, 0), new Vector3D(0, 1, 0), new Vector3D(0, 0, 1) },
+            new[] { new Tet4(0, 1, 2, 3) }, Array.Empty<BoundaryTriangle>());
+        Session.RaiseMeshChanged();
+        Assert.Equal(StepState.Available, Step(StepKind.Setup).State);
+
+        // A board's electrodes or a free-free modal study solve without a face condition.
+        Session.RaiseResultsProduced(OneField("Stress"), AnalysisType.Static);
+
+        Assert.Equal(StepState.Done, Step(StepKind.Setup).State);
     }
 
     [Fact]
