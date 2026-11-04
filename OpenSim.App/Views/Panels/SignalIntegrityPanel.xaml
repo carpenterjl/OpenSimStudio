@@ -296,6 +296,10 @@
             <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
             <TextBlock Text="Impedance against frequency at a load's supply pins: every plane between a power and a ground net (2D finite elements on the real outlines, other rails' planes and stitching vias included, the edges' fringe from the board's cross-section), the capacitors between the two nets on their pads and vias (all coupled), the load behind its package, a regulator with or without its control loop, and a target."
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
+            <TextBlock x:Name="PdnNeedsBoardNote" Visibility="{Binding HasBoard, Converter={StaticResource InverseBoolToVis}}"
+                       Text="The planes, capacitors and nets are read from a circuit board. Import one with PCB on the toolbar."
+                       TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}" Margin="2,4,2,2"/>
+            <StackPanel Visibility="{Binding HasBoard, Converter={StaticResource BoolToVis}}">
             <controls:FormGrid>
                 <Label Content="Power net"/>
                 <ComboBox x:Name="PdnPowerNetCombo" ItemsSource="{Binding Nets}" SelectedItem="{Binding PowerNet}"
@@ -400,6 +404,7 @@
                 <Label Content="Sweep to [MHz]"/>
                 <TextBox Text="{Binding ToMhz}"/>
             </controls:FormGrid>
+            </StackPanel>
             </StackPanel>
             <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>

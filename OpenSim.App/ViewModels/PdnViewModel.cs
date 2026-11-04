@@ -113,11 +113,16 @@ public partial class PdnViewModel : ObservableObject
     [ObservableProperty] private string _assumptions = "";
     [ObservableProperty] private string _vendorModelStatus = "";
     [ObservableProperty] private bool _hasResult;
+
+    /// <summary>A board is loaded: the whole form reads it, so without one the panel says to
+    /// import one instead of offering empty net lists.</summary>
+    [ObservableProperty] private bool _hasBoard;
     [ObservableProperty] private System.Windows.Media.ImageSource? _plot;
 
     public void LoadBoard(PcbBoard board, Func<NetMeshOptions> meshOptions, string? sourceFileName)
     {
         _board = board;
+        HasBoard = true;
         _boardFileName = sourceFileName;
         _meshOptions = meshOptions;
         _model = null;
