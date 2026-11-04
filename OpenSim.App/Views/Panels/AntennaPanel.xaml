@@ -313,7 +313,9 @@
                 </UniformGrid>
             </StackPanel>
 
-            <TextBlock Text="Frequency and mesh" FontWeight="Bold" Margin="0,6,0,2"/>
+            <!-- Sections in the order a study is set up: what is solved (above), at which
+                 frequencies, how finely, then the port and the losses. -->
+            <TextBlock Text="Frequency sweep" FontWeight="Bold" Margin="0,8,0,2"/>
             <controls:FormGrid>
                 <Label Content="f [MHz]"/>
                 <TextBox x:Name="FrequencyBox" Text="{Binding Antenna.FrequencyMHz}"/>
@@ -323,20 +325,7 @@
                 <TextBox x:Name="SweepFMaxBox" Text="{Binding Antenna.SweepFMaxMHz}"/>
                 <Label Content="Sweep points"/>
                 <TextBox x:Name="SweepPointsBox" Text="{Binding Antenna.SweepPoints}"/>
-                <Label Content="Mesh: elements per λ" Visibility="{Binding Antenna.ShowsMeshDensity, Converter={StaticResource BoolToVis}}"/>
-                <TextBox x:Name="MeshCellsBox" Visibility="{Binding Antenna.ShowsMeshDensity, Converter={StaticResource BoolToVis}}" Text="{Binding Antenna.MeshCellsPerWavelength}"
-                         ToolTip="Surface mesh density: elements per (dielectric) wavelength at the highest frequency in play. A plate also gets at least 10 elements along its longer side."/>
             </controls:FormGrid>
-
-            <CheckBox Content="Mesh convergence check (re-solve 1.5× finer)"
-                      IsChecked="{Binding Antenna.CheckMeshConvergence}"
-                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
-                      ToolTip="After a surface solve, solve once more at f on a mesh 1.5× finer and report the change in Zin."/>
-            <CheckBox Content="Three passes (also 2.25× finer: order and limit)"
-                      IsChecked="{Binding Antenna.ThreePassMeshCheck}"
-                      IsEnabled="{Binding Antenna.CheckMeshConvergence}"
-                      Foreground="{DynamicResource TextMutedBrush}" Margin="18,2,0,2"
-                      ToolTip="Solve on a third mesh 2.25× finer: from the three, the order at which Zin converges and Richardson's estimate of Zin on an infinitely fine mesh. That mesh has about 5× the unknowns, so its solve alone costs 25–130× the first."/>
             <CheckBox x:Name="AdaptiveSweepCheck" Content="Adaptive sweep (the solver places the points)"
                       IsChecked="{Binding Antenna.AdaptiveSweep}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
@@ -346,6 +335,30 @@
                       IsEnabled="{Binding Antenna.AdaptiveSweep}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="18,2,0,2"
                       ToolTip="The adaptive sweep samples and interpolates in ln f — for a band of a decade or more. Off: linear in frequency between f min and f max."/>
+
+            <StackPanel Visibility="{Binding Antenna.ShowsMeshDensity, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="Mesh and accuracy" FontWeight="Bold" Margin="0,8,0,2"/>
+            <controls:FormGrid>
+                <Label Content="Elements per λ"/>
+                <TextBox x:Name="MeshCellsBox" Text="{Binding Antenna.MeshCellsPerWavelength}"
+                         ToolTip="Surface mesh density: elements per (dielectric) wavelength at the highest frequency in play. A plate also gets at least 10 elements along its longer side."/>
+            </controls:FormGrid>
+            <CheckBox Content="Mesh convergence check (re-solve 1.5× finer)"
+                      IsChecked="{Binding Antenna.CheckMeshConvergence}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
+                      ToolTip="After a surface solve, solve once more at f on a mesh 1.5× finer and report the change in Zin."/>
+            <CheckBox Content="Three passes (also 2.25× finer: order and limit)"
+                      IsChecked="{Binding Antenna.ThreePassMeshCheck}"
+                      IsEnabled="{Binding Antenna.CheckMeshConvergence}"
+                      Foreground="{DynamicResource TextMutedBrush}" Margin="18,2,0,2"
+                      ToolTip="Solve on a third mesh 2.25× finer: from the three, the order at which Zin converges and Richardson's estimate of Zin on an infinitely fine mesh. That mesh has about 5× the unknowns, so its solve alone costs 25–130× the first."/>
+            </StackPanel>
+
+            <TextBlock Text="Port and losses" FontWeight="Bold" Margin="0,8,0,2"/>
+            <controls:FormGrid>
+                <Label Content="Reference impedance [Ω]"/>
+                <TextBox x:Name="ReferenceOhmsBox" Text="{Binding Antenna.ReferenceOhms}"/>
+            </controls:FormGrid>
             <CheckBox x:Name="ConductorLossCheck" Content="Metal loss (sheet, probe and wires)"
                       IsChecked="{Binding Antenna.ConductorLoss}"
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,0,2"
@@ -359,8 +372,6 @@
                 <TextBox Text="{Binding Antenna.MetalConductivity}" IsEnabled="{Binding Antenna.MetalPropertiesEnabled}"/>
                 <Label Content="Metal thickness [µm]"/>
                 <TextBox Text="{Binding Antenna.MetalThicknessUm}" IsEnabled="{Binding Antenna.MetalPropertiesEnabled}"/>
-                <Label Content="Reference impedance [Ω]"/>
-                <TextBox x:Name="ReferenceOhmsBox" Text="{Binding Antenna.ReferenceOhms}"/>
             </controls:FormGrid>
             </StackPanel>
 
