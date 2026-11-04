@@ -376,14 +376,14 @@
             </StackPanel>
 
             <!-- On every step: it also says why a solve was refused and what a Setup button did. -->
-            <TextBlock Text="{Binding Antenna.AntennaResult}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Antenna.AntennaResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
 
             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Results}">
             <TextBlock Text="The impedance plots and the matching network fill in after the Solve step. The field maps below solve on their own."
                        Style="{StaticResource FaintText}" Margin="0,0,0,4"
                        Visibility="{Binding StudyRail.IsSolved, Converter={StaticResource InverseBoolToVis}}"/>
-            <TextBlock Text="{Binding Antenna.SParameterResult}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Antenna.SParameterResult}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
             <Image Source="{Binding Antenna.ReturnLossImage}" MaxHeight="220" Margin="0,4,0,0" Stretch="Uniform"
                    AutomationProperties.AutomationId="AntennaS11Image"/>
@@ -394,7 +394,7 @@
             <!-- FU-47: the N-port result (Feature 8) of pins and sheet-port lines -->
             <StackPanel Visibility="{Binding Antenna.HasMultiPort, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
                 <TextBlock Text="Multi-port S-parameters" FontWeight="Bold"/>
-                <TextBlock x:Name="MultiPortResultText" Text="{Binding Antenna.MultiPortResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" x:Name="MultiPortResultText" Text="{Binding Antenna.MultiPortResult}" TextWrapping="Wrap"
                            FontSize="11" FontFamily="Consolas" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                 <Image Source="{Binding Antenna.MultiPortImage}" MaxHeight="240" Margin="0,4,0,0" Stretch="Uniform"
                        AutomationProperties.AutomationId="AntennaMultiPortImage"/>
@@ -411,7 +411,7 @@
             </controls:FormGrid>
             <Button Content="Design matching network" Command="{Binding Antenna.DesignMatchCommand}"
                     IsEnabled="{Binding Antenna.HasSParameters}"/>
-            <TextBlock Text="{Binding Antenna.MatchResult}" TextWrapping="Wrap" FontSize="11"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Antenna.MatchResult}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
             <Image Source="{Binding Antenna.MatchImage}" MaxHeight="220" Margin="0,4,0,0" Stretch="Uniform"/>
             <ItemsControl ItemsSource="{Binding Antenna.ZinSweep}" Margin="0,2,0,0">
@@ -488,9 +488,9 @@
                       ToolTip="Paint the field masked to the board outline at each copper-layer height (the SIwave board view), instead of one plane above the net"/>
             <Button x:Name="FieldOverlayButton" Content="Field overlay on board"
                     Command="{Binding Antenna.ShowFieldOverlayCommand}"/>
-            <TextBlock Text="{Binding Antenna.FieldResult}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Antenna.FieldResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding Antenna.AntennaAssumptions}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Antenna.AntennaAssumptions}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </StackPanel>

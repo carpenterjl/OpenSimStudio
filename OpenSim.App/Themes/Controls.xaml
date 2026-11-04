@@ -92,9 +92,30 @@
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
+    <!-- A result or status line that takes no room until there is something to say. -->
+    <Style x:Key="HideWhenEmpty" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Style.Triggers>
+            <Trigger Property="Text" Value="">
+                <Setter Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+            <Trigger Property="Text" Value="{x:Null}">
+                <Setter Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
     <Style x:Key="MonoText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
         <Setter Property="FontSize" Value="11"/>
+    </Style>
+
+    <!-- ============ Image ============
+         A plot that has not been drawn yet keeps no margins open. -->
+    <Style TargetType="Image">
+        <Style.Triggers>
+            <Trigger Property="Source" Value="{x:Null}">
+                <Setter Property="Visibility" Value="Collapsed"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ============ GroupBox as design section ============

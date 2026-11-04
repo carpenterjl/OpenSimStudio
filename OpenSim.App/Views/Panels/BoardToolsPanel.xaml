@@ -20,7 +20,7 @@
                 </controls:FormGrid>
                 <Button x:Name="EstimateAcButton" Content="Estimate AC impedance"
                         Command="{Binding Electrodes.EstimateAcImpedanceCommand}"/>
-                <TextBlock Text="{Binding Electrodes.AcResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Electrodes.AcResult}" TextWrapping="Wrap"
                            FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
                 <ItemsControl ItemsSource="{Binding Electrodes.AcSweep}" Margin="0,2,0,0">
                     <ItemsControl.ItemTemplate>
@@ -33,7 +33,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="{Binding Electrodes.AcAssumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Electrodes.AcAssumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </Expander>
@@ -50,7 +50,7 @@
                               DisplayMemberPath="Label"/>
                 </controls:FormGrid>
                 <Button Content="Compute self inductance" Command="{Binding Inductance.ComputeSelfCommand}"/>
-                <TextBlock Text="{Binding Inductance.SelfResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Inductance.SelfResult}" TextWrapping="Wrap"
                            FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
                 <controls:FormGrid Margin="0,4,0,0">
                     <Label Content="Second net"/>
@@ -61,7 +61,7 @@
                 </controls:FormGrid>
                 <Button x:Name="ComputeMutualButton" Content="Compute mutual (M, k)"
                         Command="{Binding Inductance.ComputeMutualCommand}"/>
-                <TextBlock Text="{Binding Inductance.MutualResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Inductance.MutualResult}" TextWrapping="Wrap"
                            FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
                 <controls:FormGrid Margin="0,4,0,0">
                     <RadioButton x:Name="ReturnNetRadio" Content="Return: second net" GroupName="LoopReturn"
@@ -78,9 +78,9 @@
                 </controls:FormGrid>
                 <Button x:Name="ComputeLoopButton" Content="Compute loop inductance"
                         Command="{Binding Inductance.ComputeLoopCommand}"/>
-                <TextBlock Text="{Binding Inductance.LoopResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Inductance.LoopResult}" TextWrapping="Wrap"
                            FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
-                <TextBlock Text="{Binding Inductance.InductanceAssumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Inductance.InductanceAssumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </Expander>
@@ -97,7 +97,7 @@
                 </controls:FormGrid>
                 <Button x:Name="ComputeAcButton" Content="Solve R(f) and L(f)"
                         Command="{Binding Inductance.ComputeFrequencyDependentCommand}"/>
-                <TextBlock Text="{Binding Inductance.AcResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Inductance.AcResult}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                 <UniformGrid Columns="3" Margin="0,3,0,0">
                     <Button Content="Save SPICE" Command="{Binding Inductance.ExportSpiceCommand}"
@@ -109,7 +109,7 @@
                     <Button Content="Save Touchstone" Command="{Binding Inductance.ExportTouchstoneCommand}"
                             IsEnabled="{Binding Inductance.HasAcResult}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <TextBlock Text="{Binding Inductance.AcAssumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Inductance.AcAssumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </Expander>
@@ -184,7 +184,7 @@
                 <Button x:Name="SolveRailTransientButton" Content="Self-heating transient"
                         Command="{Binding Rail.SolveRailTransientCommand}"
                         ToolTip="The same, marched in time from the ambient: how fast the copper heats. Cooled by the environment."/>
-                <TextBlock Text="{Binding Rail.RailResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Rail.RailResult}" TextWrapping="Wrap"
                            FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
                 <ItemsControl ItemsSource="{Binding Rail.ResultLines}" Margin="0,2,0,0">
                     <ItemsControl.ItemTemplate>
@@ -193,7 +193,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="{Binding Rail.RailAssumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Rail.RailAssumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </Expander>
@@ -253,7 +253,7 @@
                              ToolTip="The enclosure's air as one node the parts' tops and the board breathe: its conductance to the outside — a through-flow's ṁ·c_p, or the walls'. 0: the parts and the board see the ambient directly."/>
                 </controls:FormGrid>
                 <Button Content="Solve component temperatures" Command="{Binding Pcb.SolveComponentTemperaturesCommand}"/>
-                <TextBlock Text="{Binding Pcb.ComponentResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Pcb.ComponentResult}" TextWrapping="Wrap"
                            FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
                 <ItemsControl ItemsSource="{Binding Pcb.ComponentResultLines}" Margin="0,2,0,0">
                     <ItemsControl.ItemTemplate>
@@ -262,7 +262,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="{Binding Pcb.ComponentAssumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Pcb.ComponentAssumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </Expander>
@@ -305,7 +305,7 @@
                     <TextBox Text="{Binding Pcb.SpacingReportWithin}"/>
                 </controls:FormGrid>
                 <Button Content="Check spacing" Command="{Binding Pcb.CheckSpacingCommand}"/>
-                <TextBlock Text="{Binding Pcb.SpacingResult}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Pcb.SpacingResult}" TextWrapping="Wrap"
                            FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,4,0,0"/>
                 <ItemsControl ItemsSource="{Binding Pcb.SpacingLines}" Margin="0,2,0,0">
                     <ItemsControl.ItemTemplate>
@@ -314,7 +314,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="{Binding Pcb.SpacingAssumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Pcb.SpacingAssumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </Expander>

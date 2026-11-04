@@ -47,7 +47,7 @@
                         Command="{Binding CfdSetup.DetectOpeningsCommand}" Margin="0,6,0,2"
                         ToolTip="Finds every place the fluid body reaches a face of the domain box — the bore mouths"/>
 
-                <TextBlock x:Name="CfdOpeningsStatus" Text="{Binding CfdSetup.Status}"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" x:Name="CfdOpeningsStatus" Text="{Binding CfdSetup.Status}"
                            Foreground="{DynamicResource TextFaintBrush}" TextWrapping="Wrap"
                            Margin="2,2,2,4"/>
 

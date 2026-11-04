@@ -68,12 +68,12 @@
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,1"
                       ToolTip="Solve the trace as the trapezoid it is, side walls included, instead of a strip of effective width. Matters for close pairs of thick copper."/>
             </StackPanel>
-            <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Result}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
                 <TextBlock Text="Run the calculation on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"
                            Visibility="{Binding DataContext.StudyRail.IsSolved, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource InverseBoolToVis}}"/>
-                <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Assumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </StackPanel>
@@ -124,7 +124,7 @@
                           ToolTip="Named foil only: the vendor's published Rz for the copper thickness above, turned into Huray parameters by the Cannonball stack"/>
                 <Button Content="Load foils file…" Command="{Binding SignalIntegrity.LoadFoilsCommand}" Margin="0,1"
                         ToolTip="A JSON array of foils (vendor, name, gauges with Rz, the data sheet) added to the list; one with a built-in foil's vendor and name replaces it"/>
-                <TextBlock Text="{Binding SignalIntegrity.FoilStatus}" TextWrapping="Wrap" FontSize="11"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.FoilStatus}" TextWrapping="Wrap" FontSize="11"
                            VerticalAlignment="Center" Foreground="{DynamicResource TextFaintBrush}"/>
                 <Label Content="Length [mm]"/>
                 <TextBox x:Name="SiLengthBox" Text="{Binding SignalIntegrity.LineLengthMm}"/>
@@ -203,19 +203,19 @@
                     <Button x:Name="SiBoardExtractButton" Content="Extract coupled section from nets"
                             Command="{Binding SignalIntegrity.ExtractFromBoardNetsCommand}"
                             Margin="0,3,0,0"/>
-                    <TextBlock Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.BoardExtractionResult}" TextWrapping="Wrap"
                                FontSize="11" Foreground="{DynamicResource SuccessBrush}" Margin="0,2,0,0"/>
                     <Button x:Name="SiTraceCapButton" Content="Per-trace C to ground"
                             Command="{Binding SignalIntegrity.ComputeTraceCapacitanceCommand}"
                             Margin="0,3,0,0"
                             ToolTip="Capacitance of each selected net to its reference plane: Σ C′(width, gap) × routed centerline length + parallel-plate pad terms, over the stackup dielectric (2D BEM). Bends and branches count; one net is enough."/>
-                    <TextBlock Text="{Binding SignalIntegrity.TraceCapResult}" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.TraceCapResult}" TextWrapping="Wrap"
                                FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
                     <Button x:Name="SiCapacitanceMatrixButton" Content="Net-to-net capacitance matrix"
                             Command="{Binding SignalIntegrity.ComputeCapacitanceMatrixCommand}"
                             Margin="0,3,0,0"
                             ToolTip="For the selected nets: each net's capacitance to its planes, and between every two that run side by side on a layer (2D field solve per cross-section × length)."/>
-                    <TextBlock Text="{Binding SignalIntegrity.CapacitanceMatrixResult}" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.CapacitanceMatrixResult}" TextWrapping="Wrap"
                                FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                     <Expander x:Name="SiBoardChecksExpander" Header="Board checks (every net, not just the selection)"
                               AutomationProperties.AutomationId="SiBoardChecksExpander" Margin="0,6,0,0">
@@ -224,13 +224,13 @@
                                 Command="{Binding SignalIntegrity.EvaluateDcNetsCommand}"
                                 Margin="0,3,0,0"
                                 ToolTip="Board-wide DC screen over EVERY net with 2+ pads: resistance between each pad pair (nodal network on the trace graph — branches and parallel paths solve exactly), the net's total C to the reference plane, and the lumped time constant τ = R·C, saved as a CSV report. Nets that can't be priced appear as typed note rows."/>
-                        <TextBlock Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
+                        <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.DcNetsResult}" TextWrapping="Wrap"
                                    FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
                         <Button x:Name="SiLayoutCheckButton" Content="Check layout rules (whole board)"
                                 Command="{Binding SignalIntegrity.CheckLayoutRulesCommand}"
                                 Margin="0,3,0,0"
                                 ToolTip="Geometric checks, no field solve: traces over a split, slot or edge of their reference plane; layer changes with no stitching via or capacitor near the via; via stubs; traces close to the board edge. Uses the stackup panel's thicknesses."/>
-                        <TextBlock Text="{Binding SignalIntegrity.LayoutCheckResult}" TextWrapping="Wrap"
+                        <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.LayoutCheckResult}" TextWrapping="Wrap"
                                    FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                         <controls:FormGrid Margin="0,3,0,0">
                             <Label Content="Aggressor edge [ns]"/>
@@ -240,7 +240,7 @@
                         <Button x:Name="SiCrosstalkScanButton" Content="Scan board crosstalk"
                                 Command="{Binding SignalIntegrity.ScanBoardCrosstalkCommand}"
                                 ToolTip="Every two nets with traces running side by side on a layer, ranked by near-end and far-end crosstalk for the given edge (2D field solve per distinct cross-section)."/>
-                        <TextBlock Text="{Binding SignalIntegrity.CrosstalkScanResult}" TextWrapping="Wrap"
+                        <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.CrosstalkScanResult}" TextWrapping="Wrap"
                                    FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                         </StackPanel>
                     </Expander>
@@ -270,7 +270,7 @@
                               IsChecked="{Binding SignalIntegrity.UseReceiverClamps}"
                               Foreground="{DynamicResource TextMutedBrush}" Margin="2,3,0,0"
                               ToolTip="Model the receiver with the buffer's own GND/POWER protection diodes instead of a plain R∥C load. They only act where the waveform leaves the rails, so a well-terminated link is unaffected."/>
-                    <TextBlock Text="{Binding SignalIntegrity.IbisStatus}" TextWrapping="Wrap"
+                    <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.IbisStatus}" TextWrapping="Wrap"
                                FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,1,0,0"/>
                 </StackPanel>
             </Border>
@@ -285,11 +285,11 @@
                             Command="{Binding SignalIntegrity.ComputeSParametersCommand}"/>
                 </UniformGrid>
             </StackPanel>
-            <TextBlock Text="{Binding SignalIntegrity.RlgcResult}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.RlgcResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding SignalIntegrity.SParamResult}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.SParamResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding SignalIntegrity.EyeResult}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.EyeResult}" TextWrapping="Wrap"
                        FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" Margin="0,2,0,0"/>
             <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
                 <TextBlock Text="Run the study on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"
@@ -297,7 +297,7 @@
                 <Image Source="{Binding SignalIntegrity.EyeImage}" MaxHeight="180" Margin="0,4,0,0"
                        Stretch="Uniform" RenderOptions.BitmapScalingMode="Linear"
                        AutomationProperties.AutomationId="SiEyeImage"/>
-                <TextBlock Text="{Binding SignalIntegrity.SiAssumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding SignalIntegrity.SiAssumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </StackPanel>
@@ -332,7 +332,7 @@
             <Button x:Name="PdnFindPlanesButton" Content="Read planes and capacitors from the board"
                     Command="{Binding FindPlanesCommand}" Margin="0,3,0,0"
                     ToolTip="Finds every plane-sized island on the layers from the outermost power or ground plane to the other (other nets' planes included), the stitching vias between a net's planes, and every component C… with a pad on each net: all its vias and the inductance of its mounting above the planes. Uses the stackup panel's thicknesses."/>
-            <TextBlock Text="{Binding PlanesResult}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding PlanesResult}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
             <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" Margin="0,2,0,0">
                 <ItemsControl x:Name="PdnCapacitorList" ItemsSource="{Binding Capacitors}">
@@ -366,7 +366,7 @@
                         ToolTip="A vendor .s1p, or a .s2p measured in shunt, used for every included capacitor instead of C, ESR and ESL."/>
                 <Button Content="Back to C / ESR / ESL" Command="{Binding ClearVendorModelCommand}" Margin="2,0,0,0"/>
             </UniformGrid>
-            <TextBlock Text="{Binding VendorModelStatus}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding VendorModelStatus}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,1,0,0"/>
             <UniformGrid Columns="2" Margin="0,3,0,0">
                 <Button x:Name="PdnBomButton" Content="Values from BOM / placement file…" Command="{Binding ReadBomCommand}"
@@ -374,7 +374,7 @@
                 <Button x:Name="PdnVendorFolderButton" Content="Vendor model folder…" Command="{Binding ChooseVendorFolderCommand}" Margin="2,0,0,0"
                         ToolTip="A folder of vendor .s1p / .s2p files: a capacitor whose part number names one of them uses its measured impedance."/>
             </UniformGrid>
-            <TextBlock Text="{Binding BomStatus}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding BomStatus}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,1,0,0"/>
             <controls:FormGrid Margin="0,3,0,0">
                 <Label Content="Load (refdes)"/>
@@ -418,7 +418,7 @@
             </controls:FormGrid>
             </StackPanel>
             </StackPanel>
-            <TextBlock Text="{Binding Result}" TextWrapping="Wrap"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Result}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
             <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
                 <TextBlock Text="Read the planes on Setup, then solve on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"
@@ -430,7 +430,7 @@
                     <Button Content="Save Touchstone (.s1p)" Command="{Binding SaveTouchstoneCommand}"
                             IsEnabled="{Binding HasResult}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <TextBlock Text="{Binding Assumptions}" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Assumptions}" TextWrapping="Wrap"
                            FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
         </StackPanel>
@@ -466,7 +466,7 @@
                             ToolTip="Fit every entry with a causal rational model, make the result passive, and use it for the eye, TDR and mixed-mode."/>
                     <Button Content="Save repaired" Command="{Binding SaveRepairedCommand}" IsEnabled="{Binding HasRepair}" Margin="2,0,0,0"/>
                 </UniformGrid>
-                <TextBlock Text="{Binding RepairResult}" TextWrapping="Wrap" FontSize="11"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding RepairResult}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
 
                 <controls:FormGrid Margin="0,4,0,0">
@@ -506,11 +506,11 @@
                     <Button Content="Mixed-mode S" Command="{Binding ShowMixedModeCommand}" IsEnabled="{Binding IsFourPort}"/>
                 </UniformGrid>
             </StackPanel>
-            <TextBlock Text="{Binding MixedModeResult}" TextWrapping="Wrap" FontSize="11"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding MixedModeResult}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding TdrResult}" TextWrapping="Wrap" FontSize="11"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding TdrResult}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-            <TextBlock Text="{Binding EyeResult}" TextWrapping="Wrap" FontSize="11"
+            <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding EyeResult}" TextWrapping="Wrap" FontSize="11"
                        Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
             <StackPanel Visibility="{Binding DataContext.StudyRail.ActiveStepName, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource StepVis}, ConverterParameter=Results}">
                 <TextBlock Text="Load a file on Setup, then run it on the Solve step." Style="{StaticResource FaintText}" Margin="0,0,0,4"

@@ -51,7 +51,7 @@
                 <CheckBox x:Name="StartFromSteadyCheck" Content="Start from the last steady thermal result"
                           IsChecked="{Binding Solve.StartFromLastSteady}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,4,2,0"
                           ToolTip="Solve the steady state first (the steady heat-conduction analysis, with the conditions of the starting point), then switch to the transient: it starts from that field, node by node, instead of the uniform initial temperature. Nodes under a fixed temperature start at their value. Needs the same mesh."/>
-                <TextBlock Text="{Binding Solve.LastSteadyStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="20,0,0,0"/>
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Solve.LastSteadyStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="20,0,0,0"/>
                 </StackPanel>
             </StackPanel>
         </GroupBox>
@@ -84,7 +84,7 @@
                           ToolTip="Each heat-flow condition is a source: one linear run per source with the others off, each read at every source's faces — the self and mutual Z_th, fitted as a Foster matrix with shared time constants (saved as SPICE). Linear model only."/>
                 <Button Content="Thermal impedance curve (Z_th)" Command="{Binding Solve.SolveThermalImpedanceCommand}"
                         ToolTip="Temperature rise per watt at the heated faces against time after switch-on, on a logarithmic time grid, with a fitted Foster network and its Cauer ladder. Uses the thermal conditions placed on the model."/>
-                <TextBlock Text="{Binding Solve.ZthResult}" TextWrapping="Wrap" FontSize="11"
+                <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding Solve.ZthResult}" TextWrapping="Wrap" FontSize="11"
                            Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
                 <Image Source="{Binding Solve.ZthPlot}" MaxHeight="260" Margin="0,4,0,0" Stretch="Uniform"/>
                 <UniformGrid Columns="3" Margin="0,3,0,0" IsEnabled="{Binding Solve.HasZth}">
