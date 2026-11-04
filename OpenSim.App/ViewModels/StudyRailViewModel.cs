@@ -84,6 +84,12 @@ public partial class StudyRailViewModel : ObservableObject
     /// <summary>Whether the selected analysis has results, for the panels' "not yet" hints.</summary>
     [ObservableProperty] private bool _isSolved;
 
+    /// <summary>The Solve step is open, so the Solve buttons may run; when it is locked the
+    /// buttons are disabled and say why (<see cref="SolveHint"/>).</summary>
+    [ObservableProperty] private bool _canSolve = true;
+
+    [ObservableProperty] private string _solveHint = "Run the selected analysis";
+
     /// <summary>The active step's kind as a string ("Setup", …) for XAML visibility
     /// triggers — panels compare against it with a plain DataTrigger.</summary>
     public string ActiveStepName => SelectedStep?.Kind.ToString() ?? "";
@@ -233,6 +239,10 @@ public partial class StudyRailViewModel : ObservableObject
                     break;
             }
         }
+        var solveStep = Steps.FirstOrDefault(s => s.Kind == StepKind.Solve);
+        CanSolve = solveStep is not { State: StepState.Locked };
+        SolveHint = CanSolve ? "Run the selected analysis"
+            : $"{solveStep!.Detail}: generate one on the Mesh step first";
 
         LeaveLockedStep();
         OnPropertyChanged(nameof(StudyLines));

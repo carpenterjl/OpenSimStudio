@@ -10,7 +10,7 @@
             <TextBlock Text="1. Net" FontWeight="Bold" Margin="0,0,0,2"/>
             <TextBlock Text="{Binding Pcb.SelectedNet.Label, FallbackValue='No net selected — pick one in the PCB nets list or click copper in the view.'}"
                        TextWrapping="Wrap" Margin="0,0,0,2"/>
-            <TextBlock Text="Mesh the net from the Meshing panel." FontSize="11"
+            <TextBlock Text="Then mesh the net on the Mesh step." FontSize="11"
                        Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
 
             <!-- Step 2: electrodes -->

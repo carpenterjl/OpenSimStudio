@@ -403,6 +403,7 @@
                             <Button DockPanel.Dock="Left" x:Name="SolveButton" Margin="10,0,0,0"
                                     VerticalAlignment="Center" Style="{StaticResource AccentButton}"
                                     Command="{Binding SolveActiveCommand}" Padding="14,7"
+                                    ToolTip="{Binding StudyRail.SolveHint}" ToolTipService.ShowOnDisabled="True"
                                     AutomationProperties.AutomationId="SolveButton">
                                 <StackPanel Orientation="Horizontal">
                                     <controls:IconGlyph Geometry="{StaticResource IconPlay}"

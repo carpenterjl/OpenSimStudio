@@ -74,6 +74,11 @@ public partial class MainViewModel : ObservableObject
         Flow = flow;
         CfdSetup = cfdSetup;
         StudyRail = studyRail;
+        StudyRail.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(StudyRailViewModel.CanSolve))
+                SolveActiveCommand.NotifyCanExecuteChanged();
+        };
         Theme = theme;
         _serializer = serializer;
         _recentProjects = recentProjects;
@@ -271,7 +276,7 @@ public partial class MainViewModel : ObservableObject
     /// ISolver path. Routing lives HERE because MainViewModel is the documented place
     /// where cross-view-model edges are allowed.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSolveActive))]
     private void SolveActive()
     {
         switch (Session.SelectedAnalysis.Kind)
@@ -305,6 +310,9 @@ public partial class MainViewModel : ObservableObject
                 break;
         }
     }
+
+    /// <summary>Not while the rail locks the Solve step: the button looked live with no mesh.</summary>
+    private bool CanSolveActive() => StudyRail.CanSolve;
 
     [RelayCommand]
     private void NewProject()
