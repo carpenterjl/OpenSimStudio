@@ -44,47 +44,6 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <ListBox x:Name="ColormapStopList" MaxHeight="86" Margin="0,4,0,0"
-                     ItemsSource="{Binding Colormap.Stops}"
-                     SelectedItem="{Binding Colormap.SelectedStop}"
-                     DisplayMemberPath="Label">
-                <!-- A data-bound ListBoxItem's automation name falls back to the item's
-                     ToString(), which would report the view-model type; name it explicitly
-                     so the row is addressable by what it displays. -->
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="AutomationProperties.Name" Value="{Binding Label}"/>
-                    </Style>
-                </ListBox.ItemContainerStyle>
-            </ListBox>
-
-            <DockPanel Margin="0,4,0,0">
-                <Label Content="Hex" DockPanel.Dock="Left"/>
-                <Button x:Name="ColormapRemoveStopButton" Content="−" Width="24" Padding="0"
-                        DockPanel.Dock="Right" Command="{Binding Colormap.RemoveStopCommand}"
-                        ToolTip="Remove the selected interior stop"/>
-                <Button x:Name="ColormapAddStopButton" Content="+" Width="24" Padding="0" Margin="0,2,2,2"
-                        DockPanel.Dock="Right" Command="{Binding Colormap.AddStopCommand}"
-                        ToolTip="Add a stop in the widest gap, taking the color already there"/>
-                <TextBox x:Name="ColormapHexBox" Margin="4,0"
-                         Text="{Binding Colormap.SelectedStopHex, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="#RRGGBB of the selected stop"/>
-            </DockPanel>
-
-            <ItemsControl ItemsSource="{Binding Colormap.Palette}" Margin="0,4,0,0">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Width="18" Height="18" Margin="1" Background="{Binding}"
-                                Command="{Binding DataContext.Colormap.PickSwatchCommand,
-                                                  RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                CommandParameter="{Binding}"/>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
             <CheckBox x:Name="ColormapDiscreteCheck" Content="Banded (discrete)"
                       IsChecked="{Binding Colormap.Discrete}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,6,2,2"
                       ToolTip="One flat color per stop interval instead of a smooth gradient"/>
@@ -102,26 +61,73 @@
                 <TextBox x:Name="ColormapMaxBox" Text="{Binding Colormap.UserMax}"
                          ToolTip="Upper bound in field units; values above saturate at the top color"/>
             </controls:FormGrid>
-            <DockPanel Margin="0,4,0,0">
-                <CheckBox x:Name="ColormapLogCheck" Content="Log" DockPanel.Dock="Left"
+            <!-- Reads as one phrase: Log over [3] decades. -->
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <CheckBox x:Name="ColormapLogCheck" Content="Log over"
                           IsChecked="{Binding Colormap.UseLog}" Foreground="{DynamicResource TextMutedBrush}"
                           VerticalAlignment="Center" Margin="2,0,6,0"
                           ToolTip="Spread the colors over decades — for fields whose structure is orders of magnitude below the peak"/>
-                <Label Content="decades" DockPanel.Dock="Right"/>
-                <TextBox x:Name="ColormapDecadesBox" Width="40" HorizontalAlignment="Left"
-                         Text="{Binding Colormap.Decades}"/>
-            </DockPanel>
+                <TextBox x:Name="ColormapDecadesBox" Width="40" Text="{Binding Colormap.Decades}"/>
+                <Label Content="decades" Margin="6,0,0,0"/>
+            </StackPanel>
 
-            <DockPanel Margin="0,6,0,0">
-                <Button x:Name="ColormapDeleteButton" Content="Delete" Padding="8,4"
-                        DockPanel.Dock="Right" Command="{Binding Colormap.DeleteCommand}"
-                        ToolTip="Delete this user map (built-ins cannot be deleted)"/>
-                <Button x:Name="ColormapSaveButton" Content="Save" Padding="8,4"
-                        DockPanel.Dock="Right" Margin="4,0" Command="{Binding Colormap.SaveCommand}"
-                        ToolTip="Save under this name to %AppData%\OpenSimStudio\colormaps.json"/>
-                <TextBox x:Name="ColormapNameBox" Text="{Binding Colormap.SaveName,
-                                                                 UpdateSourceTrigger=PropertyChanged}"/>
-            </DockPanel>
+            <!-- The stop editor is for making a map, not reading one: shut until asked for. -->
+            <Expander x:Name="ColormapEditExpander" Header="Edit the colors" Margin="0,8,0,0"
+                      AutomationProperties.AutomationId="ColormapEditExpander">
+                <StackPanel>
+                    <ListBox x:Name="ColormapStopList" MaxHeight="86" Margin="0,4,0,0"
+                             ItemsSource="{Binding Colormap.Stops}"
+                             SelectedItem="{Binding Colormap.SelectedStop}"
+                             DisplayMemberPath="Label">
+                        <!-- A data-bound ListBoxItem's automation name falls back to the item's
+                             ToString(), which would report the view-model type; name it explicitly
+                             so the row is addressable by what it displays. -->
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding Label}"/>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+
+                    <DockPanel Margin="0,4,0,0">
+                        <Label Content="Hex" DockPanel.Dock="Left"/>
+                        <Button x:Name="ColormapRemoveStopButton" Content="−" Width="24" Padding="0"
+                                DockPanel.Dock="Right" Command="{Binding Colormap.RemoveStopCommand}"
+                                ToolTip="Remove the selected interior stop"/>
+                        <Button x:Name="ColormapAddStopButton" Content="+" Width="24" Padding="0" Margin="0,2,2,2"
+                                DockPanel.Dock="Right" Command="{Binding Colormap.AddStopCommand}"
+                                ToolTip="Add a stop in the widest gap, taking the color already there"/>
+                        <TextBox x:Name="ColormapHexBox" Margin="4,0"
+                                 Text="{Binding Colormap.SelectedStopHex, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="#RRGGBB of the selected stop"/>
+                    </DockPanel>
+
+                    <ItemsControl ItemsSource="{Binding Colormap.Palette}" Margin="0,4,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Width="18" Height="18" Margin="1" Background="{Binding}"
+                                        Command="{Binding DataContext.Colormap.PickSwatchCommand,
+                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <DockPanel Margin="0,6,0,0">
+                        <Button x:Name="ColormapDeleteButton" Content="Delete" Padding="8,4"
+                                DockPanel.Dock="Right" Command="{Binding Colormap.DeleteCommand}"
+                                ToolTip="Delete this user map (built-ins cannot be deleted)"/>
+                        <Button x:Name="ColormapSaveButton" Content="Save" Padding="8,4"
+                                DockPanel.Dock="Right" Margin="4,0" Command="{Binding Colormap.SaveCommand}"
+                                ToolTip="Save under this name to %AppData%\OpenSimStudio\colormaps.json"/>
+                        <TextBox x:Name="ColormapNameBox" Text="{Binding Colormap.SaveName,
+                                                                         UpdateSourceTrigger=PropertyChanged}"/>
+                    </DockPanel>
+                </StackPanel>
+            </Expander>
         </StackPanel>
     </GroupBox>
 </UserControl>

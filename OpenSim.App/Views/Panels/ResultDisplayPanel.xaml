@@ -27,6 +27,9 @@
             </CheckBox>
             <DockPanel Margin="2,0">
                 <Label Content="Max clamp" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Style="{StaticResource MonoText}"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           Text="{Binding Results.ResultClampFraction, StringFormat='{}{0:P0} of max'}"/>
                 <Slider Minimum="0.05" Maximum="1" SmallChange="0.02" LargeChange="0.1"
                         Value="{Binding Results.ResultClampFraction, Delay=150}" Margin="4,0"
                         ToolTip="Drag left to clamp the colormap maximum: values above saturate at the top color so fine low-value gradients become visible"/>
