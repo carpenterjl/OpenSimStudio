@@ -552,6 +552,7 @@
                                         <!-- Structural -->
                                         <StackPanel Style="{StaticResource StructuralOnly}">
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Geometry}">
+                                                <panels:ImportGeometryPanel/>
                                                 <panels:PrimitivesPanel/>
                                                 <panels:GeometryInfoPanel/>
                                             </StackPanel>
@@ -578,6 +579,7 @@
                                         <!-- Thermal -->
                                         <StackPanel Style="{StaticResource ThermalOnly}">
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Geometry}">
+                                                <panels:ImportGeometryPanel/>
                                                 <panels:PrimitivesPanel/>
                                                 <panels:GeometryInfoPanel/>
                                             </StackPanel>
@@ -605,6 +607,7 @@
                                         <!-- Electrical -->
                                         <StackPanel Style="{StaticResource ElectricalOnly}">
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Geometry}">
+                                                <panels:ImportGeometryPanel/>
                                                 <panels:PcbNetsPanel/>
                                                 <panels:PrimitivesPanel/>
                                                 <panels:GeometryInfoPanel/>
@@ -661,6 +664,7 @@
                                              the meshing panel, whose Generate mesh is the step's action. -->
                                         <StackPanel Style="{StaticResource FlowOnly}">
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Geometry}">
+                                                <panels:ImportGeometryPanel/>
                                                 <panels:BodiesPanel/>
                                                 <panels:GeometryInfoPanel/>
                                             </StackPanel>

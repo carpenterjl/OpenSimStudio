@@ -35,7 +35,7 @@ public partial class GeometryViewModel : ObservableObject
     [ObservableProperty] private double _cylinderRadius = 0.01;
     [ObservableProperty] private double _cylinderHeight = 0.05;
 
-    [ObservableProperty] private string _geometryInfo = "No geometry";
+    [ObservableProperty] private string _geometryInfo = "No geometry yet: import a part above";
 
     [RelayCommand]
     private void CreateBox()
@@ -182,7 +182,7 @@ public partial class GeometryViewModel : ObservableObject
         GeometryInfo = geometry is null
             ? _session.IsPcbMode
                 ? _session.Body.Mesh is null ? "PCB board preview" : "PCB (mesh only)"
-                : "No geometry"
+                : "No geometry yet: import a part above"
             : $"{_session.Body.GeometrySource} — {geometry.Vertices.Count} vertices, " +
               $"{geometry.Triangles.Count} triangles, {geometry.FaceCount} faces";
     }

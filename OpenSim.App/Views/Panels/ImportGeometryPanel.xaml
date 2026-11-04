@@ -1,0 +1,29 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.ImportGeometryPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- The Geometry step's first task, "import or create a part": the ribbon's imports,
+         here where the step asks for them. -->
+    <GroupBox Header="Import">
+        <UniformGrid Columns="2">
+            <Button Content="Import STL…" Command="{Binding Geometry.ImportStlCommand}" Margin="0,2,2,2"
+                    AutomationProperties.AutomationId="StepImportStlButton"/>
+            <Button Content="Import STEP…" Command="{Binding Geometry.ImportStepCommand}" Margin="2,2,0,2"
+                    AutomationProperties.AutomationId="StepImportStepButton"/>
+            <Button Content="Import STEP assembly…" Command="{Binding Geometry.ImportStepAssemblyCommand}" Margin="0,2,2,2"
+                    AutomationProperties.AutomationId="StepImportAssemblyButton"/>
+            <Button Content="Import PCB…" Command="{Binding Pcb.ImportPcbCommand}" Margin="2,2,0,2"
+                    AutomationProperties.AutomationId="StepImportPcbButton">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Electrical">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+            </Button>
+        </UniformGrid>
+    </GroupBox>
+</UserControl>
