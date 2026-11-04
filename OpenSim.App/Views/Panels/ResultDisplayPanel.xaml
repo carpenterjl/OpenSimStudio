@@ -4,7 +4,8 @@
              xmlns:controls="clr-namespace:OpenSim.App.Controls">
     <GroupBox Header="Result display">
         <StackPanel>
-            <controls:FormGrid>
+            <!-- Only a structural result has a displacement to exaggerate. -->
+            <controls:FormGrid Visibility="{Binding Session.IsStructuralAnalysis, Converter={StaticResource BoolToVis}}">
                 <Label Content="Deform scale"/>
                 <TextBox Text="{Binding Results.DeformScale}"/>
             </controls:FormGrid>

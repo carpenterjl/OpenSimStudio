@@ -8,7 +8,9 @@
             <ComboBox x:Name="MaterialCombo"
                       ItemsSource="{Binding Materials.Materials}" SelectedItem="{Binding Session.SelectedMaterial}"
                       DisplayMemberPath="Name"/>
-            <controls:FormGrid Margin="0,4,0,0">
+            <!-- Only the properties the selected analysis reads. -->
+            <controls:FormGrid Margin="0,4,0,0"
+                         Visibility="{Binding Session.IsStructuralAnalysis, Converter={StaticResource BoolToVis}}">
                 <Label Content="E [Pa]"/>
                 <TextBlock Text="{Binding Session.SelectedMaterial.YoungsModulus, StringFormat=g4}" VerticalAlignment="Center"/>
                 <Label Content="ν"/>
@@ -16,15 +18,24 @@
                 <Label Content="ρ [kg/m³]"/>
                 <TextBlock Text="{Binding Session.SelectedMaterial.Density}" VerticalAlignment="Center"/>
             </controls:FormGrid>
-            <controls:FormGrid
+            <controls:FormGrid Margin="0,4,0,0"
                          Visibility="{Binding Session.IsThermalAnalysis, Converter={StaticResource BoolToVis}}">
                 <Label Content="k [W/(m·K)]"/>
                 <TextBlock Text="{Binding Session.SelectedMaterial.ThermalConductivity, StringFormat=g4}" VerticalAlignment="Center"/>
+                <Label Content="ρ [kg/m³]"/>
+                <TextBlock Text="{Binding Session.SelectedMaterial.Density}" VerticalAlignment="Center"/>
+                <Label Content="cₚ [J/(kg·K)]"/>
+                <TextBlock Text="{Binding Session.SelectedMaterial.SpecificHeat, StringFormat=g4}" VerticalAlignment="Center"/>
             </controls:FormGrid>
-            <controls:FormGrid
-                         Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}">
+            <controls:FormGrid Margin="0,4,0,0"
+                         Visibility="{Binding Session.ShowsConductivity, Converter={StaticResource BoolToVis}}">
                 <Label Content="σ [S/m]"/>
                 <TextBlock Text="{Binding Session.SelectedMaterial.ElectricalConductivity, StringFormat=g4}" VerticalAlignment="Center"/>
+            </controls:FormGrid>
+            <controls:FormGrid Margin="0,4,0,0"
+                         Visibility="{Binding Session.ShowsPermittivity, Converter={StaticResource BoolToVis}}">
+                <Label Content="εᵣ"/>
+                <TextBlock Text="{Binding Session.SelectedMaterial.RelativePermittivity, StringFormat=g4}" VerticalAlignment="Center"/>
             </controls:FormGrid>
             <Button Content="Edit materials…" Command="{Binding Materials.EditMaterialsCommand}" Margin="0,4,0,0"/>
         </StackPanel>

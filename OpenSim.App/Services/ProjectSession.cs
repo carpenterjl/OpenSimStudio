@@ -228,6 +228,8 @@ public partial class ProjectSession : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsImpedanceCalculatorAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsPowerDistributionAnalysis))]
     [NotifyPropertyChangedFor(nameof(IsTouchstoneChannelAnalysis))]
+    [NotifyPropertyChangedFor(nameof(ShowsConductivity))]
+    [NotifyPropertyChangedFor(nameof(ShowsPermittivity))]
     private AnalysisOption _selectedAnalysis = AnalysisOption.All[0];
 
     partial void OnSelectedAnalysisChanged(AnalysisOption value)
@@ -318,6 +320,14 @@ public partial class ProjectSession : ObservableObject
     public bool ShowsTransientSettings =>
         IsTransientThermalAnalysis || IsJouleAnalysis || IsEnvironmentThermalAnalysis
         || IsConjugateHeatFlowAnalysis;
+
+    /// <summary>The solves that read the electrical conductivity: every electrical one but
+    /// electrostatics, which reads the permittivity alone.</summary>
+    public bool ShowsConductivity => IsElectricalAnalysis && !IsElectrostaticAnalysis;
+
+    /// <summary>The solves that read the relative permittivity: electrostatics and the AC sweep
+    /// (σ + jωε).</summary>
+    public bool ShowsPermittivity => IsElectrostaticAnalysis || IsAcElectricalAnalysis;
 
     [ObservableProperty] private Material? _selectedMaterial;
 

@@ -54,14 +54,16 @@
                  interfacial conductance the detected joints are given. -->
             <controls:FormGrid Margin="0,6,0,0"
                          Visibility="{Binding Bodies.HasAssembly, Converter={StaticResource BoolToVis}}">
-                <Label Content="Contact h [W/m²K]"/>
+                <Label Content="Contact h [W/m²K]" Visibility="{Binding Session.IsThermalAnalysis, Converter={StaticResource BoolToVis}}"/>
                 <TextBox x:Name="ContactConductanceBox" Text="{Binding Bodies.ContactConductance}"
+                         Visibility="{Binding Session.IsThermalAnalysis, Converter={StaticResource BoolToVis}}"
                          ToolTip="Interfacial conductance of every detected joint. 5e3 = dry machined metal at moderate pressure; greased or bolted joints run an order higher."/>
                 <Label Content="Gap tolerance [m]"/>
                 <TextBox x:Name="ContactGapToleranceBox" Text="{Binding Bodies.ContactGapTolerance}"
                          ToolTip="How far apart two surfaces may be and still count as touching. 0 = auto from the mesh size."/>
-                <Label Content="Contact G [S/m²]"/>
+                <Label Content="Contact G [S/m²]" Visibility="{Binding Session.ShowsConductivity, Converter={StaticResource BoolToVis}}"/>
                 <TextBox x:Name="ElectricalContactConductanceBox" Text="{Binding Bodies.ElectricalContactConductance}"
+                         Visibility="{Binding Session.ShowsConductivity, Converter={StaticResource BoolToVis}}"
                          ToolTip="Electrical conductance per area of every detected joint (1 / (contact resistance × area)) for a DC or AC electrical solve of the whole assembly. 0 = not set: the electrical analyses then solve the active body alone. No default is assumed — a joint is far from ideal against copper at any value one could guess."/>
             </controls:FormGrid>
         </StackPanel>
