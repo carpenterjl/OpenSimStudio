@@ -655,15 +655,16 @@
                                         <!-- Flow. BodiesPanel rides on BOTH Geometry and Mesh:
                                              the assembly workflow's per-body material + mesh-all
                                              buttons live there, and the rail auto-advances to
-                                             Mesh the moment the import lands. -->
+                                             Mesh the moment the import lands. On Mesh it follows
+                                             the meshing panel, whose Generate mesh is the step's action. -->
                                         <StackPanel Style="{StaticResource FlowOnly}">
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Geometry}">
                                                 <panels:BodiesPanel/>
                                                 <panels:GeometryInfoPanel/>
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Mesh}">
-                                                <panels:BodiesPanel/>
                                                 <panels:MeshingPanel/>
+                                                <panels:BodiesPanel/>
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Environment}">
                                                 <panels:EnvironmentPanel/>
