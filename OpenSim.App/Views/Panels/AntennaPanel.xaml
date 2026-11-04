@@ -91,12 +91,14 @@
                           ItemsSource="{Binding Antenna.AntennaIslands}"
                           SelectedItem="{Binding Antenna.AntennaIsland}"
                           DisplayMemberPath="Label"/>
-                <CheckBox x:Name="GroundPlaneCheck" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}" Content="Ground plane (PEC)"
+                <Label Content="Ground plane" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}"/>
+                <CheckBox x:Name="GroundPlaneCheck" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}" Content="Infinite PEC"
                           IsChecked="{Binding Antenna.UseGroundPlane}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
                           ToolTip="Infinite perfect-conductor ground via image theory. The monopole always uses it."/>
-                <TextBox Text="{Binding Antenna.GroundZMm}" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}"
-                         ToolTip="Ground plane z [mm]"/>
+                <Label Content="Ground plane z [mm]" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}"/>
+                <TextBox x:Name="GroundZBox" Text="{Binding Antenna.GroundZMm}" Visibility="{Binding Antenna.ShowsGroundPlane, Converter={StaticResource BoolToVis}}"
+                         IsEnabled="{Binding IsChecked, ElementName=GroundPlaneCheck}"/>
                 <Label Content="Height above ground [mm]" Visibility="{Binding Antenna.ShowsHeightAboveGround, Converter={StaticResource BoolToVis}}"/>
                 <TextBox Text="{Binding Antenna.HeightAboveGroundMm}" Visibility="{Binding Antenna.ShowsHeightAboveGround, Converter={StaticResource BoolToVis}}"
                          ToolTip="Wizard dipole/loop shapes are lifted this far above the plane; net geometry keeps its board coordinates."/>
@@ -444,12 +446,14 @@
                          ToolTip="The overlay plane hovers this far above the structure's top metal. Values within ~an element of metal are surface-scale approximations."/>
                 <Label Content="Grid (n²)"/>
                 <TextBox x:Name="OverlayGridBox" Text="{Binding Antenna.OverlayGridN}"/>
-                <CheckBox x:Name="OverlayAutoRangeCheck" Content="Auto range"
+                <Label Content="Range"/>
+                <CheckBox x:Name="OverlayAutoRangeCheck" Content="Auto, from the samples"
                           IsChecked="{Binding Antenna.OverlayAutoRange}"
                           Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,1"
                           ToolTip="Color range from the sampled data; log mode spans the top N decades below the peak."/>
+                <Label Content="Log span [decades]"/>
                 <TextBox x:Name="OverlayDecadesBox" Text="{Binding Antenna.OverlayDecades}"
-                         ToolTip="Log mode: decades below the peak an auto range spans"/>
+                         ToolTip="Log scale with auto range: the range spans this many decades below the peak"/>
                 <Label Content="Range min/max [V/m]"/>
                 <UniformGrid Columns="2">
                     <TextBox x:Name="OverlayMinBox" Text="{Binding Antenna.OverlayMinVPerM}" Margin="0,0,2,0"
