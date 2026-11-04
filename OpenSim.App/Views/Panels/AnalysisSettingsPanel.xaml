@@ -18,6 +18,10 @@
                 <controls:FormGrid>
                     <Label Content="Initial temperature [K]"/>
                     <TextBox x:Name="InitialTemperatureBox" Text="{Binding Solve.InitialTemperature}"/>
+                </controls:FormGrid>
+                <!-- Disabled while the boxes above leave the study steady. -->
+                <StackPanel IsEnabled="{Binding Solve.TransientFieldsApply}">
+                <controls:FormGrid>
                     <Label Content="Duration [s]"/>
                     <TextBox x:Name="TransientDurationBox" Text="{Binding Solve.TransientDuration}"/>
                     <Label Content="Time step [s]"/>
@@ -48,20 +52,23 @@
                           IsChecked="{Binding Solve.StartFromLastSteady}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,4,2,0"
                           ToolTip="Solve the steady state first (the steady heat-conduction analysis, with the conditions of the starting point), then switch to the transient: it starts from that field, node by node, instead of the uniform initial temperature. Nodes under a fixed temperature start at their value. Needs the same mesh."/>
                 <TextBlock Text="{Binding Solve.LastSteadyStatus}" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="20,0,0,0"/>
+                </StackPanel>
             </StackPanel>
         </GroupBox>
         <!-- Pulsed power and thermal impedance -->
         <GroupBox Header="Pulsed power and thermal impedance"
                   Visibility="{Binding Session.ShowsTransientSettings, Converter={StaticResource BoolToVis}}">
             <StackPanel>
-                <CheckBox Content="Pulse the heat sources during the transient"
+                <CheckBox x:Name="PulsedPowerCheck" Content="Pulse the heat sources during the transient"
                           IsChecked="{Binding Solve.PulsedPower}" Foreground="{DynamicResource TextMutedBrush}" Margin="2,1,2,3"
                           ToolTip="Heat flows and volumetric sources switch between their value and zero. Each time step takes the mean power over the step, so the energy is right even with an edge inside a step."/>
-                <controls:FormGrid>
+                <controls:FormGrid IsEnabled="{Binding IsChecked, ElementName=PulsedPowerCheck}">
                     <Label Content="Pulse period [s]"/>
                     <TextBox Text="{Binding Solve.PulsePeriod}"/>
                     <Label Content="On time [% of period]"/>
                     <TextBox Text="{Binding Solve.PulseDutyPercent}"/>
+                </controls:FormGrid>
+                <controls:FormGrid>
                     <Label Content="Z_th from [s]"/>
                     <TextBox Text="{Binding Solve.ZthStartTime}"/>
                     <Label Content="Z_th to [s]"/>

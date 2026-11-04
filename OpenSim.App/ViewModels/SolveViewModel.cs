@@ -31,6 +31,11 @@ public partial class SolveViewModel : ObservableObject
         _materials = materials;
         _electrodes = electrodes;
         _environment = environment;
+        session.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ProjectSession.SelectedAnalysis))
+                OnPropertyChanged(nameof(TransientFieldsApply));
+        };
     }
 
     // Transient thermal settings (surfaced in the Analysis settings panel).
@@ -48,12 +53,22 @@ public partial class SolveViewModel : ObservableObject
 
     /// <summary>Joule coupling: run the thermal leg as a transient (backward Euler,
     /// constant DC power) instead of steady-state, using the transient settings above.</summary>
-    [ObservableProperty] private bool _jouleTransient;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TransientFieldsApply))]
+    private bool _jouleTransient;
 
     /// <summary>Environment heat flow: solve the final equilibrium directly instead of the
     /// time history. The same nonlinear film/radiation coupling is iterated to convergence,
     /// so it answers "how hot does it end up" without integrating the way there.</summary>
-    [ObservableProperty] private bool _environmentSteadyState;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TransientFieldsApply))]
+    private bool _environmentSteadyState;
+
+    /// <summary>The time-stepping settings are read: not by a Joule study without its transient
+    /// leg, nor by an environment heat flow solved straight to its steady state.</summary>
+    public bool TransientFieldsApply =>
+        !(_session.IsJouleAnalysis && !JouleTransient)
+        && !(_session.IsEnvironmentThermalAnalysis && EnvironmentSteadyState);
 
     /// <summary>CFD cell size [m] for the conjugate analysis; 0 = automatic (smallest
     /// body extent / 24, coarsened to the cell budget — the choice is logged).</summary>
