@@ -9,6 +9,8 @@
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
 
             <TextBlock Text="Cut the windings from the board" FontWeight="Bold" Margin="0,4,0,2"/>
+            <TextBlock Text="Import a board to cut its windings; the turns table below can be filled by hand without one." Style="{StaticResource FaintText}" Margin="0,0,0,2"
+                       Visibility="{Binding HasBoard, Converter={StaticResource InverseBoolToVis}}"/>
             <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto" IsEnabled="{Binding HasBoard}">
                 <ItemsControl x:Name="MagneticsNetList" ItemsSource="{Binding Nets}">
                     <ItemsControl.ItemTemplate>

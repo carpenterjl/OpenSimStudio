@@ -8,6 +8,8 @@
                        TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,0,0,2"/>
             <Button Content="Save report (Markdown / HTML)" Command="{Binding Solve.SaveReportCommand}"
                     IsEnabled="{Binding Solve.HasReport}"/>
+            <TextBlock Text="No report yet. It covers a solve run with the Solve step's button; the CFD solve and the board tools do not write one." Style="{StaticResource FaintText}" Margin="0,2,0,0"
+                       Visibility="{Binding Solve.HasReport, Converter={StaticResource InverseBoolToVis}}"/>
         </StackPanel>
     </GroupBox>
 </UserControl>

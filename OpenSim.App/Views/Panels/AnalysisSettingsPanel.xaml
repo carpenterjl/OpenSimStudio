@@ -93,6 +93,8 @@
                     <Button Content="Save table" Command="{Binding Solve.SaveZthTableCommand}" Margin="2,0,0,0"
                             ToolTip="R, τ and C of the Foster and Cauer stages as CSV, for tools that take the values typed in."/>
                 </UniformGrid>
+                <TextBlock Text="Run the thermal impedance curve to save it." Style="{StaticResource FaintText}" Margin="0,2,0,0"
+                           Visibility="{Binding Solve.HasZth, Converter={StaticResource InverseBoolToVis}}"/>
                 <TextBlock Text="Z_th belongs to a linear model: with an environment the surface coefficients are held at their steady values unless the nonlinear exchange is followed. A Foster network reproduces the curve at its terminals only; continue a model from the Cauer ladder."
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
@@ -187,6 +189,8 @@
                     <Button Content="Probe on the selected faces" Command="{Binding Solve.AddFaceProbeCommand}" Margin="2,0,0,0"
                             ToolTip="The flux leaving the body through the selected boundary faces."/>
                 </UniformGrid>
+                <TextBlock Text="Tick 'Recover the flux and estimate its error' above to add probes." Style="{StaticResource FaintText}" Margin="0,2,0,0"
+                           Visibility="{Binding Solve.RecoverFlux, Converter={StaticResource InverseBoolToVis}}"/>
                 <TextBlock Text="Probes are kept for this session (not saved with the project); a plane limited to a box is library and command line only."
                            TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextFaintBrush}" Margin="0,2,0,0"/>
             </StackPanel>
