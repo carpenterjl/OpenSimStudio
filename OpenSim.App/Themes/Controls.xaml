@@ -178,6 +178,9 @@
         <Setter Property="Padding" Value="11,6"/>
         <Setter Property="Margin" Value="0,2"/>
         <Setter Property="Cursor" Value="Hand"/>
+        <!-- Centred unless a button asks otherwise (a list row stretches its content). -->
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -186,7 +189,8 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="4" SnapsToDevicePixels="True">
                         <ContentPresenter Margin="{TemplateBinding Padding}"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           RecognizesAccessKey="True">
                             <ContentPresenter.Resources>
                                 <Style TargetType="TextBlock">
@@ -232,7 +236,8 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="4" SnapsToDevicePixels="True">
                         <ContentPresenter Margin="{TemplateBinding Padding}"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
                                           RecognizesAccessKey="True">
                             <ContentPresenter.Resources>
                                 <Style TargetType="TextBlock">
