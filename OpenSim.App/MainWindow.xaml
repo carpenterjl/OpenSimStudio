@@ -558,10 +558,10 @@
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Setup}">
                                                 <panels:MaterialPanel/>
+                                                <panels:AnalysisSettingsPanel/>
                                                 <panels:ScopeSelectionPanel/>
                                                 <panels:StructuralConditionsPanel/>
                                                 <panels:BoundaryConditionsListPanel/>
-                                                <panels:AnalysisSettingsPanel/>
                                             </StackPanel>
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Solve}">
                                                 <panels:SolvePanel/>
@@ -569,6 +569,7 @@
                                             <StackPanel Visibility="{Binding StudyRail.ActiveStepName, Converter={StaticResource StepVis}, ConverterParameter=Results}">
                                                 <panels:ResultsFieldsPanel/>
                                                 <panels:ResultDisplayPanel/>
+                                                <panels:ReportPanel/>
                                             </StackPanel>
                                         </StackPanel>
 
@@ -595,6 +596,7 @@
                                                 <panels:ResultsFieldsPanel/>
                                                 <panels:ResultDisplayPanel/>
                                                 <panels:TimelinePanel/>
+                                                <panels:ReportPanel/>
                                             </StackPanel>
                                         </StackPanel>
 
@@ -630,6 +632,7 @@
                                                 <panels:ResultsFieldsPanel/>
                                                 <panels:ResultDisplayPanel/>
                                                 <panels:TimelinePanel/>
+                                                <panels:ReportPanel/>
                                             </StackPanel>
                                         </StackPanel>
 
@@ -682,6 +685,7 @@
                                                 <panels:FlowVisualizationPanel/>
                                                 <panels:ColormapEditorPanel/>
                                                 <panels:TimelinePanel/>
+                                                <panels:ReportPanel/>
                                             </StackPanel>
                                         </StackPanel>
                                     </Grid>
