@@ -16,17 +16,21 @@
                     <ComboBoxItem Content="Internal — fitted to the fluid volume"/>
                 </ComboBox>
 
-                <Label Content="CFD cell size [m]"/>
+                <Label Content="CFD cell size [m] (0 = auto)"/>
                 <TextBox x:Name="CfdCellSizeBox" Text="{Binding Solve.CfdCellSize}"
                          ToolTip="0 = automatic: smallest body extent / 24, coarsened to the cell budget (the choice is logged)"/>
 
-                <Label Content="Steady march: most steps"/>
+                <Label Content="Max iterations (steady)"/>
                 <TextBox x:Name="CfdMaxStepsBox" Text="{Binding CfdSetup.MaxSteps}"
                          ToolTip="A steady flow march that has not converged by this many pseudo-time steps stops with its residual. Raise it for a slow case."/>
             </controls:FormGrid>
             <CheckBox x:Name="CfdTransientMomentumCheck" Content="Transient: the flow follows the heating"
                       IsChecked="{Binding CfdSetup.TransientMomentum}" Margin="0,4,0,0"
                       ToolTip="March the momentum with the energy in real time, so a flow the heating drives (a plume in a sealed box) develops as the solids warm. Off holds the initial state's flow, right when the flow is driven from outside."/>
+
+            <TextBlock Text="An external box is open to the surroundings on every face, so it has no openings to set; they belong to an internal domain."
+                       Style="{StaticResource FaintText}" Margin="0,4,0,0"
+                       Visibility="{Binding CfdSetup.IsInternal, Converter={StaticResource InverseBoolToVis}}"/>
 
             <StackPanel Visibility="{Binding CfdSetup.IsInternal, Converter={StaticResource BoolToVis}}">
                 <controls:FormGrid>

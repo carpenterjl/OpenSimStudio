@@ -7,6 +7,10 @@
          convection at the free-stream velocity. -->
     <GroupBox Header="Environment">
         <StackPanel>
+            <!-- The medium reads differently when the flow is solved rather than correlated. -->
+            <TextBlock Text="The CFD solve computes this flow: a still fluid rises as a buoyant plume, a moving fluid enters at the speed and direction below. A vacuum has no flow to solve."
+                       Style="{StaticResource FaintText}" Margin="0,0,0,4"
+                       Visibility="{Binding Session.IsConjugateHeatFlowAnalysis, Converter={StaticResource BoolToVis}}"/>
             <controls:FormGrid>
                 <Label Content="Medium"/>
                 <ComboBox x:Name="MediumCombo" ItemsSource="{Binding Environment.Mediums}"
