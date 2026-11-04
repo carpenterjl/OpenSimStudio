@@ -81,7 +81,7 @@ public sealed record EnvironmentSettings
             MediumKind.Vacuum =>
                 $"vacuum at {AmbientTemperature:F2} K, {radiation}",
             MediumKind.StillFluid =>
-                $"still {ResolveFluid()!.Name} at {AmbientTemperature:F2} K (natural convection), {radiation}",
+                $"{ResolveFluid()!.Name}, still, at {AmbientTemperature:F2} K (natural convection), {radiation}",
             _ =>
                 $"{ResolveFluid()!.Name} at {AmbientTemperature:F2} K flowing at {FlowSpeed:G4} m/s " +
                 $"(forced convection), {radiation}"

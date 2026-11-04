@@ -27,7 +27,7 @@
                 <ComboBox x:Name="FluidCombo" ItemsSource="{Binding Environment.Fluids}"
                           SelectedItem="{Binding Environment.SelectedFluid}"
                           DisplayMemberPath="Name"/>
-                <Label Content="Gravity dir."/>
+                <Label Content="Gravity direction (x, y, z)"/>
                 <TextBox x:Name="GravityBox" Text="{Binding Environment.GravityDirection}"
                          ToolTip="Direction of gravity — classifies surfaces as vertical, facing up, or facing down"/>
             </controls:FormGrid>
@@ -36,7 +36,7 @@
                          Visibility="{Binding Environment.NeedsFlow, Converter={StaticResource BoolToVis}}">
                 <Label Content="Speed [m/s]"/>
                 <TextBox x:Name="FlowSpeedBox" Text="{Binding Environment.FlowSpeed}"/>
-                <Label Content="Flow dir."/>
+                <Label Content="Flow direction (x, y, z)"/>
                 <TextBox x:Name="FlowDirectionBox" Text="{Binding Environment.FlowDirection}"/>
             </controls:FormGrid>
 
