@@ -76,10 +76,12 @@ public partial class ResultsViewModel : ObservableObject
         try
         {
             var s = OpenSim.Core.PostProcessing.FieldStatistics.Compute(field, mesh);
+            // One value a line: run together, the pane wrapped them inside a number ("4.067e" / "+06").
             FieldStatistics =
-                $"min {Format(s.Min, field.Unit)}   max {Format(s.Max, field.Unit)}\n" +
-                $"average {Format(s.Mean, field.Unit)} over {s.Count} {(field.Location == FieldLocation.Node ? "nodes" : "elements")}, " +
-                $"volume-weighted {Format(s.VolumeWeightedMean, field.Unit)}";
+                $"min {Format(s.Min, field.Unit)}\n" +
+                $"max {Format(s.Max, field.Unit)}\n" +
+                $"average {Format(s.Mean, field.Unit)} over {s.Count} {(field.Location == FieldLocation.Node ? "nodes" : "elements")}\n" +
+                $"volume-weighted average {Format(s.VolumeWeightedMean, field.Unit)}";
         }
         catch (Exception)
         {
@@ -89,7 +91,10 @@ public partial class ResultsViewModel : ObservableObject
         }
     }
 
-    private static string Format(double value, string unit) => $"{value:g4} {unit}".TrimEnd();
+    /// <summary>A value and its unit that never break apart: a no-break space before the unit and
+    /// word joiners around the exponent sign.</summary>
+    private static string Format(double value, string unit) =>
+        $"{value:g4} {unit}".TrimEnd(' ').Replace("e+", "e⁠+⁠").Replace("e-", "e⁠-⁠");
 
     /// <summary>
     /// The context every export carries in its preamble, so a CSV read later still says what

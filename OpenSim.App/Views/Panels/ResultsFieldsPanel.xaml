@@ -3,9 +3,24 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <GroupBox Header="Results">
         <StackPanel>
+            <!-- Tall enough for a structural solve's seven fields without an inner scrollbar. -->
+            <Grid>
             <ListBox ItemsSource="{Binding Results.ResultFields}" SelectedItem="{Binding Results.SelectedField}"
-                     MinHeight="60" MaxHeight="150" DisplayMemberPath="Name"
+                     MinHeight="60" MaxHeight="240" DisplayMemberPath="Name"
                      AutomationProperties.AutomationId="ResultFieldList"/>
+                <TextBlock Text="No results yet. Run the study on the Solve step." IsHitTestVisible="False" Margin="8,6" TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource FaintText}">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Results.ResultFields.Count}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
 
             <!-- Component picker: only for a tensor field, which is the only kind that has
                  components. Von Mises is first, so a tensor field opens unchanged. -->
