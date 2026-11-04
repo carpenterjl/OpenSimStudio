@@ -1,7 +1,10 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.ScopeSelectionPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <GroupBox Header="Scope (edges and vertices)">
+    <!-- Most studies scope their conditions by faces; edges and vertices are the exception, so
+         their lists stay shut until wanted and do not push the conditions down the step. -->
+    <Expander x:Name="ScopeExpander" Header="Edges and vertices (advanced scope)"
+              AutomationProperties.AutomationId="ScopeExpander">
         <StackPanel>
             <TextBlock Text="{Binding ScopeSelection.ScopeSummary}" AutomationProperties.AutomationId="ScopeSummaryText"
                        Margin="0,0,0,4" TextWrapping="Wrap" Opacity="0.8"/>
@@ -39,5 +42,5 @@
                        AutomationProperties.AutomationId="ScopeFooterText"
                        Text="{Binding ScopeSelection.ScopeFooter}"/>
         </StackPanel>
-    </GroupBox>
+    </Expander>
 </UserControl>

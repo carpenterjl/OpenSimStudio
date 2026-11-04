@@ -5,6 +5,8 @@
     <GroupBox Header="Thermal conditions (select faces first)"
               Visibility="{Binding Session.IsThermalAnalysis, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <TextBlock Text="{Binding Session.SelectedFaces.Count, StringFormat='{}{0} face(s) selected. Click a face in the 3D view to select it, and again to drop it.'}"
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,2,4"/>
             <controls:FormGrid>
                 <Label Content="Temperature [K]"/>
                 <TextBox Text="{Binding Conditions.TemperatureValue}"/>

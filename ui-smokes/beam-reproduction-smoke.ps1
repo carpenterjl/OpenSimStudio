@@ -208,6 +208,9 @@ try {
     # ---------- 4. The reference scope: two opposite BOTTOM EDGES ----------
     # This is the whole point of the batch — the reference fixes two mathematical lines,
     # which no face selection can express.
+    # The edge and vertex lists sit in a section that opens on request.
+    (Wait-ById $win 'ScopeExpander').GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    Start-Sleep -Milliseconds 500
     $summary = Get-Name (Wait-ById $win 'ScopeSummaryText')
     Check ($summary -match '12 edge') "scope panel lists the box's 12 geometric edges: $summary"
 

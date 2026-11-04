@@ -5,6 +5,8 @@
     <GroupBox Header="Structural conditions (select faces first)"
               Visibility="{Binding Session.IsStructuralAnalysis, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <TextBlock Text="{Binding Session.SelectedFaces.Count, StringFormat='{}{0} face(s) selected. Click a face in the 3D view to select it, and again to drop it.'}"
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,2,4"/>
             <Button x:Name="AddFixedSupportButton" Content="Add fixed support" Command="{Binding Conditions.AddFixedSupportCommand}"/>
             <!-- A modal solve ignores loads: only the supports shape its modes. -->
             <StackPanel Visibility="{Binding Session.IsModalAnalysis, Converter={StaticResource InverseBoolToVis}}">

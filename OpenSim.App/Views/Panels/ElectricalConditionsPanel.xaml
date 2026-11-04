@@ -5,6 +5,8 @@
     <GroupBox Header="Electrical conditions (select faces first)"
               Visibility="{Binding Session.IsElectricalAnalysis, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <TextBlock Text="{Binding Session.SelectedFaces.Count, StringFormat='{}{0} face(s) selected. Click a face in the 3D view to select it, and again to drop it.'}"
+                       TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="2,0,2,4"/>
             <controls:FormGrid>
                 <Label Content="Voltage [V]"/>
                 <TextBox Text="{Binding Conditions.VoltageValue}"/>
