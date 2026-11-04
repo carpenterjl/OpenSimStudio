@@ -295,6 +295,7 @@ public partial class AntennaViewModel : ObservableObject
         GroundPourNet = Nets.FirstOrDefault(n => n.Name is { } name
             && (name.StartsWith("GND", StringComparison.OrdinalIgnoreCase) || name.Equals("0V", StringComparison.OrdinalIgnoreCase)));
         SourceMode = NetMode;
+        OnPropertyChanged(nameof(NeedsBoard));
 
         // Seed the island-antenna substrate from the board stackup (editable; only
         // when the user hasn't already set one — a re-import must not clobber edits).
@@ -332,6 +333,7 @@ public partial class AntennaViewModel : ObservableObject
         AntennaAssumptions = "";
         ClearMultiPortResults();
         ClearOverlays();
+        OnPropertyChanged(nameof(NeedsBoard));
     }
 
     [RelayCommand]

@@ -20,6 +20,9 @@
                       ItemsSource="{Binding Antenna.SourceModes}"
                       SelectedItem="{Binding Antenna.SourceMode}"
                       ToolTip="{Binding Antenna.SourceMode}"/>
+            <TextBlock x:Name="AntennaNeedsBoardNote" Visibility="{Binding Antenna.NeedsBoard, Converter={StaticResource BoolToVis}}"
+                       Text="This geometry is read from a circuit board. Import one with PCB on the toolbar, then pick its net here."
+                       TextWrapping="Wrap" Foreground="{DynamicResource WarningBrush}" Margin="2,4,2,2"/>
             <!-- Only the fields the chosen geometry reads. -->
             <controls:FormGrid>
                 <Label Content="Net" Visibility="{Binding Antenna.ShowsNet, Converter={StaticResource BoolToVis}}"/>

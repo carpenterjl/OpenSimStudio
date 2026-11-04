@@ -494,8 +494,13 @@ public partial class AntennaViewModel
         OnPropertyChanged(nameof(IsSheetMetalPanelVisible));
         OnPropertyChanged(nameof(IsPortedPanelVisible));
         foreach (string flag in FieldFlags) OnPropertyChanged(flag);
+        OnPropertyChanged(nameof(NeedsBoard));
         ClearMultiPortResults();
     }
+
+    /// <summary>The chosen geometry reads the imported board and there is none: its net, island
+    /// and layer lists are empty until a board is imported.</summary>
+    public bool NeedsBoard => ShowsNet && _board is null;
 
     public bool IsPinPanelVisible => SourceMode is PinnedPatchMode or IslandPinsMode;
     public bool IsIslandPinsPanelVisible => SourceMode == IslandPinsMode;

@@ -67,4 +67,16 @@ public sealed class AntennaFieldsByModeTests : IDisposable
         Assert.Contains(nameof(AntennaViewModel.ShowsPatchGap), raised);
         Assert.Contains(nameof(AntennaViewModel.ShowsDipoleLength), raised);
     }
+
+    [Fact]
+    public void ABoardMode_WithNoBoard_SaysToImportOne_AndStopsSayingSoOnceThereIsOne()
+    {
+        Assert.False(At(AntennaViewModel.DipoleMode).NeedsBoard);
+        Assert.True(At(AntennaViewModel.IslandMode).NeedsBoard);
+
+        _app.Resolve<PcbViewModel>().InstallBoard(Boards.PrintedMonopole(), "monopole");
+        var a = _app.Resolve<AntennaViewModel>();
+        a.SourceMode = AntennaViewModel.PrintedMode;
+        Assert.False(a.NeedsBoard);
+    }
 }
