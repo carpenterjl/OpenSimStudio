@@ -59,11 +59,25 @@ public partial class MainWindow : Window
     private void Fit_Click(object sender, RoutedEventArgs e) => ViewportView.ZoomToFit();
 
     private bool _logCollapsed;
+    private GridLength _logHeight;
 
     private void ToggleLog_Click(object sender, RoutedEventArgs e)
     {
         _logCollapsed = !_logCollapsed;
         LogList.Visibility = _logCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        LogSplitter.Visibility = LogList.Visibility;
+        // The row keeps the height it was dragged to; folded, it shrinks to the header.
+        if (_logCollapsed)
+        {
+            _logHeight = LogRow.Height;
+            LogRow.MinHeight = 0;
+            LogRow.Height = GridLength.Auto;
+        }
+        else
+        {
+            LogRow.Height = _logHeight;
+            LogRow.MinHeight = 64;
+        }
         LogChevron.LayoutTransform = _logCollapsed
             ? new System.Windows.Media.RotateTransform(180)
             : null;

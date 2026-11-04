@@ -704,8 +704,8 @@
                         <!-- Viewport + log -->
                         <Grid Grid.Column="3">
                             <Grid.RowDefinitions>
-                                <RowDefinition Height="*"/>
-                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*" MinHeight="200"/>
+                                <RowDefinition x:Name="LogRow" Height="128" MinHeight="64"/>
                             </Grid.RowDefinitions>
                             <views:Viewport3DView x:Name="ViewportView" Grid.Row="0"/>
 
@@ -731,11 +731,22 @@
                                             </Button>
                                         </DockPanel>
                                     </Border>
+                                    <!-- A long line wraps instead of running past the edge. -->
                                     <ListBox x:Name="LogList" ItemsSource="{Binding Log.Entries}"
-                                             Height="96" BorderThickness="0"
-                                             Background="{DynamicResource PanelBgBrush}"/>
+                                             BorderThickness="0" Background="{DynamicResource PanelBgBrush}"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
                                 </DockPanel>
                             </Border>
+                            <!-- Drag the log's top edge to give it more lines. -->
+                            <GridSplitter x:Name="LogSplitter" Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Top"
+                                          Background="Transparent" ResizeBehavior="PreviousAndCurrent" ResizeDirection="Rows"
+                                          AutomationProperties.AutomationId="LogSplitter"/>
                         </Grid>
                     </Grid>
 
