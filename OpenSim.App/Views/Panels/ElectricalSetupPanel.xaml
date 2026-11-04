@@ -34,7 +34,7 @@
             <TextBlock Text="3. Excitation &amp; solve" FontWeight="Bold" Margin="0,8,0,2"/>
             <controls:FormGrid>
                 <RadioButton x:Name="VoltageDrive" Content="Voltage [V]" GroupName="Excitation"
-                             IsChecked="True" Foreground="{DynamicResource TextMutedBrush}"
+                             IsChecked="{Binding Electrodes.DriveWithVoltage, Mode=TwoWay}" Foreground="{DynamicResource TextMutedBrush}"
                              VerticalAlignment="Center" Margin="2,1"/>
                 <TextBox Text="{Binding Electrodes.TestVoltage}"
                          IsEnabled="{Binding IsChecked, ElementName=VoltageDrive}"/>

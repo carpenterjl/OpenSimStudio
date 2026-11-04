@@ -43,7 +43,18 @@ public partial class ElectrodesViewModel : ObservableObject
 
     /// <summary>Excitation choice for the pad-to-pad test: a prescribed source voltage
     /// (default) or an injected source current against the 0 V sink.</summary>
-    [ObservableProperty] private bool _driveWithCurrent;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DriveWithVoltage))]
+    private bool _driveWithCurrent;
+
+    /// <summary>The other radio of the pair. Both radios bind to this one choice, so exactly
+    /// one of them is ever selected; a literal IsChecked on one of them was cleared by the
+    /// group and left neither selected (TC-4).</summary>
+    public bool DriveWithVoltage
+    {
+        get => !DriveWithCurrent;
+        set => DriveWithCurrent = !value;
+    }
     [ObservableProperty] private double _testCurrent = 1.0;
 
     /// <summary>With current drive: the source pad is one equipotential terminal carrying the
