@@ -120,7 +120,7 @@
                     <TextBox x:Name="AcMinFrequencyBox" Text="{Binding Solve.AcMinFrequency}"/>
                     <Label Content="Max frequency [Hz]"/>
                     <TextBox x:Name="AcMaxFrequencyBox" Text="{Binding Solve.AcMaxFrequency}"/>
-                    <Label Content="Points (geometric)"/>
+                    <Label Content="Points (log-spaced)"/>
                     <TextBox x:Name="AcPointCountBox" Text="{Binding Solve.AcPointCount}"/>
                 </controls:FormGrid>
                 <TextBlock Text="Electro-quasistatic (σ + jωε) — for dielectric/capacitive studies. Conductor+dielectric composites are rejected (same conditioning ban as DC); use the trace R + jωL estimate for copper. Scrub frequencies in the Results panel."

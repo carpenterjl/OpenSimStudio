@@ -6,6 +6,8 @@
     <GroupBox Header="Net, electrodes and DC test"
               Visibility="{Binding Session.IsPcbMode, Converter={StaticResource BoolToVis}}">
         <StackPanel>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,0,0,4"
+                       Text="A quick pad-to-pad resistance of one net, run by its own button. The analysis picked at the top runs on the Solve step, from the conditions further down."/>
             <!-- Step 1: net + mesh -->
             <TextBlock Text="1. Net" FontWeight="Bold" Margin="0,0,0,2"/>
             <TextBlock Text="{Binding Pcb.SelectedNet.Label, FallbackValue='No net selected — pick one in the PCB nets list or click copper in the view.'}"

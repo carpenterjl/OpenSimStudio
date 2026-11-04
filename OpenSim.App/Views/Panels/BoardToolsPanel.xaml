@@ -11,11 +11,11 @@
         <Expander Header="AC impedance (R + jωL estimate)">
             <StackPanel>
                 <controls:FormGrid>
-                    <Label Content="f min [Hz]"/>
+                    <Label Content="Min frequency [Hz]"/>
                     <TextBox Text="{Binding Electrodes.AcFMin}"/>
-                    <Label Content="f max [Hz]"/>
+                    <Label Content="Max frequency [Hz]"/>
                     <TextBox Text="{Binding Electrodes.AcFMax}"/>
-                    <Label Content="Points"/>
+                    <Label Content="Points (log-spaced)"/>
                     <TextBox Text="{Binding Electrodes.AcPoints}"/>
                 </controls:FormGrid>
                 <Button x:Name="EstimateAcButton" Content="Estimate AC impedance"
