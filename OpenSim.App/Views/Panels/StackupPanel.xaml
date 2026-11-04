@@ -6,10 +6,10 @@
               Visibility="{Binding Session.IsPcbMode, Converter={StaticResource BoolToVis}}">
         <StackPanel>
             <controls:FormGrid>
-                <Label Content="Copper [m]"/>
-                <TextBox Text="{Binding Pcb.PcbCopperThickness}" ToolTip="Sets every layer's copper thickness (1 oz = 35 µm); edit a layer row below to override one layer"/>
-                <Label Content="Board [m]"/>
-                <TextBox Text="{Binding Pcb.PcbBoardThickness}" ToolTip="Default 1.6 mm; split evenly across the dielectric gaps when a board without a stackup is imported. After import the gap rows below are the stackup."/>
+                <Label Content="Copper, all layers [µm]"/>
+                <TextBox Text="{Binding Pcb.PcbCopperThicknessMicrons}" ToolTip="Sets every layer's copper thickness (1 oz = 35 µm); edit a layer row below to override one layer"/>
+                <Label Content="Board [mm]"/>
+                <TextBox Text="{Binding Pcb.PcbBoardThicknessMm}" ToolTip="Default 1.6 mm; split evenly across the dielectric gaps when a board without a stackup is imported. After import the gap rows below are the stackup."/>
                 <Label Content="Via wall [µm]"/>
                 <TextBox Text="{Binding Pcb.ViaPlatingMicrons}"
                          ToolTip="Plated via barrel wall thickness; the drilled bore stays open (IPC Class 2 ≈ 25 µm)"/>

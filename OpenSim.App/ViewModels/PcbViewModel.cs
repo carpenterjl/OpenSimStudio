@@ -73,8 +73,27 @@ public partial class PcbViewModel : ObservableObject
     [ObservableProperty] private double _laminateMarginMm = 10;
 
     // PCB stackup (meters)
-    [ObservableProperty] private double _pcbCopperThickness = 35e-6;
-    [ObservableProperty] private double _pcbBoardThickness = 1.6e-3;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PcbCopperThicknessMicrons))]
+    private double _pcbCopperThickness = 35e-6;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PcbBoardThicknessMm))]
+    private double _pcbBoardThickness = 1.6e-3;
+
+    /// <summary>The panel's units, those of the layer rows under them: copper in µm, the board
+    /// in mm. Rounded so 35e-6 m reads 35, not 35.00000000000001.</summary>
+    public double PcbCopperThicknessMicrons
+    {
+        get => Math.Round(PcbCopperThickness * 1e6, 9);
+        set => PcbCopperThickness = value * 1e-6;
+    }
+
+    public double PcbBoardThicknessMm
+    {
+        get => Math.Round(PcbBoardThickness * 1e3, 9);
+        set => PcbBoardThickness = value * 1e-3;
+    }
 
     /// <summary>Via barrel wall (plating) thickness [µm]; IPC Class 2 nominal ≈ 25 µm.</summary>
     [ObservableProperty] private double _viaPlatingMicrons = 25.0;

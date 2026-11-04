@@ -407,6 +407,19 @@ public sealed class PcbViewModelStackupTests : IDisposable
         Assert.Contains(_app.Log.Entries, e => e.Contains("this board has 2. The rows follow layer order (L1 first); the saved rows past L2 are dropped."));
     }
 
+    [Fact]
+    public void TheBoardWideThicknesses_ReadInTheRowsUnits()
+    {
+        var pcb = _app.Resolve<PcbViewModel>();
+        Assert.Equal(35, pcb.PcbCopperThicknessMicrons);    // not 35.00000000000001
+        Assert.Equal(1.6, pcb.PcbBoardThicknessMm);
+
+        pcb.PcbCopperThicknessMicrons = 70;
+        pcb.PcbBoardThicknessMm = 0.8;
+        Assert.Equal(70e-6, pcb.PcbCopperThickness, 15);
+        Assert.Equal(0.8e-3, pcb.PcbBoardThickness, 15);
+    }
+
     /// <summary>Element-wise equality to 12 places: the rows hold microns, so a value that
     /// went metres → microns → metres lands within 1e-19 m of the literal.</summary>
     private static void AssertClose(IEnumerable<double> expected, IEnumerable<double> actual)
