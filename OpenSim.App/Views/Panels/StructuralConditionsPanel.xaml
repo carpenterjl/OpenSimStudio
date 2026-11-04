@@ -6,6 +6,8 @@
               Visibility="{Binding Session.IsStructuralAnalysis, Converter={StaticResource BoolToVis}}">
         <StackPanel>
             <Button x:Name="AddFixedSupportButton" Content="Add fixed support" Command="{Binding Conditions.AddFixedSupportCommand}"/>
+            <!-- A modal solve ignores loads: only the supports shape its modes. -->
+            <StackPanel Visibility="{Binding Session.IsModalAnalysis, Converter={StaticResource InverseBoolToVis}}">
             <controls:FormGrid Margin="0,6,0,0">
                 <Label Content="Fx [N]"/>
                 <TextBox Text="{Binding Conditions.ForceX}"/>
@@ -20,6 +22,7 @@
                 <TextBox Text="{Binding Conditions.PressureMagnitude}"/>
             </controls:FormGrid>
             <Button Content="Add pressure" Command="{Binding Conditions.AddPressureCommand}"/>
+            </StackPanel>
         </StackPanel>
     </GroupBox>
 </UserControl>

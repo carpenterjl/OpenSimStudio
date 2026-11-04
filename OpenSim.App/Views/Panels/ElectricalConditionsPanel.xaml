@@ -10,6 +10,8 @@
                 <TextBox Text="{Binding Conditions.VoltageValue}"/>
             </controls:FormGrid>
             <Button Content="Add voltage" Command="{Binding Conditions.AddVoltageCommand}"/>
+            <!-- Electrostatics carries no current: its conductors are held at a voltage or a charge. -->
+            <StackPanel Visibility="{Binding Session.IsElectrostaticAnalysis, Converter={StaticResource InverseBoolToVis}}">
             <controls:FormGrid Margin="0,6,0,0">
                 <Label Content="Current [A]"/>
                 <TextBox Text="{Binding Conditions.CurrentValue}"/>
@@ -18,6 +20,7 @@
                       Foreground="{DynamicResource TextMutedBrush}" Margin="2,2,2,0"
                       ToolTip="One potential over the whole face, found by the solve, carrying the total current — a metal pad or a bus bar end. Unchecked: the current enters at uniform density and the face is not an equipotential."/>
             <Button Content="Add current flow" Command="{Binding Conditions.AddCurrentCommand}"/>
+            </StackPanel>
             <!-- FU-42 / FU-47: a prescribed charge (electrostatics) -->
             <StackPanel Visibility="{Binding Session.IsElectrostaticAnalysis, Converter={StaticResource BoolToVis}}" Margin="0,6,0,0">
                 <controls:FormGrid>
