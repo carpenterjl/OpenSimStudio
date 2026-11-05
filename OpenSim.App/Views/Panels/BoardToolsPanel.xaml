@@ -208,36 +208,61 @@
                     <Button Content="Load placement file" Command="{Binding Pcb.LoadPlacementFileCommand}" Margin="2,0,0,0"
                             ToolTip="Pick-and-place table with designator, X, Y, rotation and side columns."/>
                 </UniformGrid>
-                <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding Pcb.ThermalParts}">
+                <!-- A part's name over two captioned lines of four boxes, like the antenna pins: nine
+                     columns in one row left 36-40 px boxes that cut the digits off. -->
+                <ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="ThermalPartList" ItemsSource="{Binding Pcb.ThermalParts}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="0,1">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="40"/>
-                                        <ColumnDefinition Width="36"/>
-                                        <ColumnDefinition Width="36"/>
-                                        <ColumnDefinition Width="40"/>
-                                        <ColumnDefinition Width="40"/>
-                                        <ColumnDefinition Width="36"/>
-                                        <ColumnDefinition Width="36"/>
-                                        <ColumnDefinition Width="36"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding Label}" FontSize="11" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
-                                    <TextBox Grid.Column="1" Text="{Binding PowerWatts}" ToolTip="Power [W]"/>
-                                    <TextBox Grid.Column="2" Text="{Binding ThetaJc}" ToolTip="θJC, junction to case top [K/W]"/>
-                                    <TextBox Grid.Column="3" Text="{Binding ThetaJb}" ToolTip="θJB, junction to board [K/W]"/>
-                                    <TextBox Grid.Column="4" Text="{Binding WidthMm}" ToolTip="Contact width along x [mm]"/>
-                                    <TextBox Grid.Column="5" Text="{Binding HeightMm}" ToolTip="Contact height along y [mm]"/>
-                                    <TextBox Grid.Column="6" Text="{Binding HeatsinkKelvinPerWatt}"
-                                             ToolTip="Case top to ambient through a heatsink [K/W]; 0 = bare case top in air."/>
-                                    <TextBox Grid.Column="7" Text="{Binding JunctionCapacity}"
-                                             ToolTip="Heat capacity of the junction [J/K], for the rail transient; 0 = none."/>
-                                    <TextBox Grid.Column="8" Text="{Binding CaseCapacity}"
-                                             ToolTip="Heat capacity of the case [J/K], for the rail transient; 0 = none."/>
-                                </Grid>
+                                <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" Margin="0,2,0,0" Padding="0,3,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Label}"/>
+                                        <UniformGrid Columns="4" Margin="0,1,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="Power [W]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding PowerWatts}" Margin="0,1,2,1"
+                                                         ToolTip="Power [W]"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Text="θJC [K/W]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding ThetaJc}" Margin="0,1,2,1"
+                                                         ToolTip="θJC, junction to case top [K/W]"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Text="θJB [K/W]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding ThetaJb}" Margin="0,1,2,1"
+                                                         ToolTip="θJB, junction to board [K/W]"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Text="Sink [K/W]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding HeatsinkKelvinPerWatt}"
+                                                         ToolTip="Case top to ambient through a heatsink [K/W]; 0 = bare case top in air."/>
+                                            </StackPanel>
+                                        </UniformGrid>
+                                        <UniformGrid Columns="4">
+                                            <StackPanel>
+                                                <TextBlock Text="W [mm]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding WidthMm}" Margin="0,1,2,1"
+                                                         ToolTip="Contact width along x [mm]"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Text="H [mm]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding HeightMm}" Margin="0,1,2,1"
+                                                         ToolTip="Contact height along y [mm]"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Text="Cj [J/K]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding JunctionCapacity}" Margin="0,1,2,1"
+                                                         ToolTip="Heat capacity of the junction [J/K], for the rail transient; 0 = none."/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Text="Cc [J/K]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                                <TextBox Text="{Binding CaseCapacity}"
+                                                         ToolTip="Heat capacity of the case [J/K], for the rail transient; 0 = none."/>
+                                            </StackPanel>
+                                        </UniformGrid>
+                                    </StackPanel>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

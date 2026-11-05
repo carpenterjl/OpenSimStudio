@@ -341,29 +341,61 @@
                     ToolTip="Finds every plane-sized island on the layers from the outermost power or ground plane to the other (other nets' planes included), the stitching vias between a net's planes, and every component C… with a pad on each net: all its vias and the inductance of its mounting above the planes. Uses the stackup panel's thicknesses."/>
             <TextBlock Style="{StaticResource HideWhenEmpty}" Text="{Binding PlanesResult}" TextWrapping="Wrap"
                        FontSize="11" Foreground="{DynamicResource TextMutedBrush}" Margin="0,2,0,0"/>
-            <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" Margin="0,2,0,0">
+            <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" Margin="0,2,0,0">
                 <ItemsControl x:Name="PdnCapacitorList" ItemsSource="{Binding Capacitors}">
+                    <!-- Two lines a capacitor, captioned like the antenna pins: one row left 46-50 px
+                         boxes that cut the digits off. -->
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,1">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="70"/>
-                                    <ColumnDefinition Width="50"/>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="46"/>
-                                    <ColumnDefinition Width="70"/>
-                                </Grid.ColumnDefinitions>
-                                <CheckBox Content="{Binding Label}" IsChecked="{Binding Include}" IsEnabled="{Binding CanInclude}"
-                                          Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="1" Text="{Binding Mounting}" FontSize="11" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Mounting}"/>
-                                <TextBox Grid.Column="2" Text="{Binding Nanofarads}" ToolTip="C [nF]"/>
-                                <TextBox Grid.Column="3" Text="{Binding EsrMilliohms}" ToolTip="ESR [mΩ]"/>
-                                <TextBox Grid.Column="4" Text="{Binding EslNanohenries}" ToolTip="ESL [nH]"/>
-                                <TextBlock Grid.Column="5" Text="{Binding Source}" FontSize="11" VerticalAlignment="Center" Margin="3,0,0,0"
-                                           TextTrimming="CharacterEllipsis" ToolTip="Part number from the bill of materials; 'measured' when a vendor file replaces C, ESR and ESL."/>
-                            </Grid>
+                            <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" Margin="0,2,0,0" Padding="0,3,0,0">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding Include}" IsEnabled="{Binding CanInclude}"
+                                                  Foreground="{DynamicResource TextMutedBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Mounting}" FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextMutedBrush}" MaxWidth="170" TextWrapping="Wrap" Margin="6,0,0,0"
+                                                   ToolTip="Mounting inductance: every via of both pads up to the planes, or why the part is not on them."/>
+                                    </Grid>
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="66"/>
+                                            <ColumnDefinition Width="66"/>
+                                            <ColumnDefinition Width="66"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="C [nF]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding Nanofarads}" Margin="0,1,2,1"
+                                                     ToolTip="C [nF]"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1">
+                                            <TextBlock Text="ESR [mΩ]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding EsrMilliohms}" Margin="0,1,2,1"
+                                                     ToolTip="ESR [mΩ]"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2">
+                                            <TextBlock Text="ESL [nH]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBox Text="{Binding EslNanohenries}" Margin="0,1,2,1"
+                                                     ToolTip="ESL [nH]"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="3" Margin="4,0,0,0">
+                                            <TextBlock Text="Part number" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                            <TextBlock Text="{Binding Source}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap">
+                                                <TextBlock.ToolTip>
+                                                    <StackPanel MaxWidth="320">
+                                                        <TextBlock Text="{Binding Source}" FontWeight="SemiBold"/>
+                                                        <TextBlock Text="The part number from the bill of materials; 'measured' when a vendor file replaces C, ESR and ESL." TextWrapping="Wrap"/>
+                                                    </StackPanel>
+                                                </TextBlock.ToolTip>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
