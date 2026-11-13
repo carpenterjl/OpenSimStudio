@@ -1,4 +1,4 @@
-namespace OpenSim.Rf;
+namespace OpenSim.Core.Numerics;
 
 /// <summary>
 /// Gauss–Legendre quadrature rules on [−1, 1], computed by Newton iteration on the

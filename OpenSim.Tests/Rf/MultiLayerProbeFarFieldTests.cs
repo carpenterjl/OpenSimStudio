@@ -1,3 +1,4 @@
+using OpenSim.Core.Numerics;
 using System.Numerics;
 using OpenSim.Rf;
 using OpenSim.Rf.Layered;

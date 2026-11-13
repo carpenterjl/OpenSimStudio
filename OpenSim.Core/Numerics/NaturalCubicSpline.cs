@@ -1,11 +1,11 @@
-namespace OpenSim.Rf.Layered;
+namespace OpenSim.Core.Numerics;
 
 /// <summary>First-party natural cubic spline (zero second derivative at the ends) on a
 /// strictly increasing abscissa — the interpolant behind the layered kernel table.
 /// Construction is the classical symmetric tridiagonal solve for the knot second
 /// derivatives; evaluation is a binary search plus the two-sided Hermite form. Both
 /// are deterministic to the bit for identical inputs.</summary>
-internal sealed class NaturalCubicSpline
+public sealed class NaturalCubicSpline
 {
     private readonly double[] _x;
     private readonly double[] _y;
@@ -54,4 +54,27 @@ internal sealed class NaturalCubicSpline
         return a * _y[lo] + b * _y[hi]
                + ((a * a * a - a) * _y2[lo] + (b * b * b - b) * _y2[hi]) * (h * h) / 6;
     }
+
+    /// <summary>The first derivative of the spline at <paramref name="x"/>. It is continuous
+    /// across the knots.</summary>
+    public double Derivative(double x)
+    {
+        if (x < _x[0] || x > _x[^1])
+            throw new ArgumentOutOfRangeException(nameof(x),
+                $"Spline evaluated outside its knots [{_x[0]:g6}, {_x[^1]:g6}] at {x:g6}.");
+        int lo = 0, hi = _x.Length - 1;
+        while (hi - lo > 1)
+        {
+            int mid = (lo + hi) / 2;
+            if (_x[mid] > x) hi = mid;
+            else lo = mid;
+        }
+        double h = _x[hi] - _x[lo];
+        double a = (_x[hi] - x) / h, b = (x - _x[lo]) / h;
+        return (_y[hi] - _y[lo]) / h
+               + ((3 * b * b - 1) * _y2[hi] - (3 * a * a - 1) * _y2[lo]) * h / 6;
+    }
+
+    /// <summary>The first and last knot.</summary>
+    public (double Min, double Max) Range => (_x[0], _x[^1]);
 }

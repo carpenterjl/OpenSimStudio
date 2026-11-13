@@ -1,9 +1,9 @@
 using System.Numerics;
 
-namespace OpenSim.Rf.Layered;
+namespace OpenSim.Core.Numerics;
 
 /// <summary>
-/// First-party Bessel evaluations for the Sommerfeld machinery: J₀/Y₀ on the real
+/// First-party Bessel evaluations, first written for the Sommerfeld machinery: J₀/Y₀ on the real
 /// axis (the transform kernel) and H₀⁽²⁾ for complex argument (the surface-wave pole
 /// term, whose k_p moves off the real axis for lossy substrates). Strategy is series
 /// below |x| = 14 and the DLMF 10.17 Hankel asymptotics above — the crossover keeps
@@ -14,7 +14,7 @@ namespace OpenSim.Rf.Layered;
 /// is all-positive (no cancellation) and its |z| ≥ 12 asymptotic is a plain e^{−z}
 /// envelope, so the same crossover reasoning applies.
 /// </summary>
-internal static class Bessel
+public static class Bessel
 {
     private const double EulerGamma = 0.57721566490153286060651209008240243;
     private const double SeriesLimit = 14.0;
@@ -102,6 +102,80 @@ internal static class Bessel
             else q += ((k - 1) % 4 == 0 ? term : -term);
         }
         return (p, q);
+    }
+
+    // ------------------------------------------------------------------ real J₁
+    private const double J1SeriesLimit = 2.0;
+    private const double J1AsymptoticLimit = 25.0;
+
+    /// <summary>J₁(x) on the real axis, accurate to about 1e-15 absolute everywhere. Three
+    /// ranges, each used only where it loses no digits: the ascending series below |x| = 2 (no
+    /// cancellation there), backward recurrence between (Miller's algorithm, normalised by
+    /// J₀ + 2·ΣJ₂ₖ = 1, DLMF 10.12.4; stable because Jₙ is the minimal solution going down), and
+    /// the DLMF 10.17 Hankel asymptotics from |x| = 25, where the smallest term is below
+    /// e⁻⁵⁰. J₁ is odd.</summary>
+    public static double J1(double x)
+    {
+        double ax = Math.Abs(x);
+        double value = ax < J1SeriesLimit ? J1Series(ax)
+            : ax < J1AsymptoticLimit ? J1Recurrence(ax)
+            : J1Asymptotic(ax);
+        return x < 0 ? -value : value;
+    }
+
+    internal static double J1Series(double x)
+    {
+        // (x/2) Σ (−x²/4)^k / (k!(k+1)!)
+        double q = -0.25 * x * x;
+        double term = 1, sum = 1;
+        for (int k = 1; k < 80; k++)
+        {
+            term *= q / (k * (k + 1.0));
+            sum += term;
+            if (Math.Abs(term) < 1e-18 * Math.Abs(sum) + 1e-300) break;
+        }
+        return 0.5 * x * sum;
+    }
+
+    internal static double J1Recurrence(double x)
+    {
+        // Start well above the turning point n ≈ x, where J_n is negligible, and recur down:
+        // J_{k−1} = (2k/x) J_k − J_{k+1}.
+        int n = 2 * (int)Math.Ceiling(0.5 * x) + 40;            // even
+        double above = 0, current = 1;                          // J_{n+1}, J_n, unnormalised
+        double sum = 2 * current;
+        for (int k = n; k >= 1; k--)
+        {
+            double below = 2 * k / x * current - above;         // J_{k−1}
+            above = current;
+            current = below;
+            if (k - 1 >= 2 && (k - 1) % 2 == 0) sum += 2 * current;
+        }
+        sum += current;                                         // J_0
+        return above / sum;                                     // J_1
+    }
+
+    internal static double J1Asymptotic(double x)
+    {
+        // DLMF 10.17.3 with ν = 1: a_k = a_{k−1}(4 − (2k−1)²)/(8k), ω = x − 3π/4.
+        double p = 1, q = 0;
+        double a = 1, invX = 1 / x, power = 1;
+        double previousMagnitude = double.MaxValue;
+        for (int k = 1; k <= 60; k++)
+        {
+            a *= (4.0 - (2 * k - 1.0) * (2 * k - 1.0)) / (8.0 * k);
+            power *= invX;
+            double term = a * power;
+            double magnitude = Math.Abs(term);
+            if (magnitude >= previousMagnitude) break;
+            previousMagnitude = magnitude;
+            if (k % 2 == 0) p += k % 4 == 0 ? term : -term;
+            else q += (k - 1) % 4 == 0 ? term : -term;
+            if (magnitude < 1e-18) break;
+        }
+        double omega = x - 3 * Math.PI / 4;
+        var (sin, cos) = Math.SinCos(omega);
+        return Math.Sqrt(2 / (Math.PI * x)) * (p * cos - q * sin);
     }
 
     /// <summary>J₀(z) and J₁(z) for complex z with Re(z) ≥ 0 — the transform kernels on a

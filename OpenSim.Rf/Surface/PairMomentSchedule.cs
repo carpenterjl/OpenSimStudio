@@ -32,18 +32,6 @@ internal static class PairMomentSchedule
     /// (the import pipeline's convention), never a swallowed AggregateException.</summary>
     public static TMoments[] Compute<TMoments>((int P, int Q)[] pairs,
         int? maxDegreeOfParallelism, Func<int, int, TMoments> moments)
-    {
-        var slots = new TMoments[pairs.Length];
-        try
-        {
-            Parallel.For(0, pairs.Length,
-                new ParallelOptions { MaxDegreeOfParallelism = maxDegreeOfParallelism ?? -1 },
-                i => slots[i] = moments(pairs[i].P, pairs[i].Q));
-        }
-        catch (AggregateException e)
-        {
-            throw e.InnerExceptions[0];
-        }
-        return slots;
-    }
+        => OpenSim.Core.Numerics.ParallelSlots.Compute(pairs.Length, maxDegreeOfParallelism,
+            i => moments(pairs[i].P, pairs[i].Q));
 }

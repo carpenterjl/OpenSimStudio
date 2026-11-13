@@ -1,3 +1,4 @@
+using OpenSim.Core.Numerics;
 using System.Globalization;
 using System.Text;
 
@@ -365,39 +366,6 @@ public sealed record SweepResult(SweepPlan Plan, IReadOnlyList<SweepRow> Rows)
 
     private static string Escape(string s) =>
         s.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0 ? s : "\"" + s.Replace("\"", "\"\"") + "\"";
-}
-
-/// <summary>
-/// SplitMix64 (Steele, Lea and Flood 2014): a 64-bit generator whose every output is a fixed
-/// function of the seed and the draw count, so a Monte Carlo plan reproduces its points on
-/// any runtime — <see cref="Random"/> makes no such promise across .NET versions.
-/// </summary>
-internal sealed class SplitMix64
-{
-    private ulong _state;
-
-    public SplitMix64(long seed) => _state = (ulong)seed;
-
-    public ulong Next()
-    {
-        _state += 0x9E3779B97F4A7C15UL;
-        ulong z = _state;
-        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
-        z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
-        return z ^ (z >> 31);
-    }
-
-    /// <summary>Uniform on [0, 1): the top 53 bits as a double.</summary>
-    public double NextDouble() => (Next() >> 11) * (1.0 / (1UL << 53));
-
-    /// <summary>Standard normal by Box–Muller (one deviate per two uniforms, the other discarded,
-    /// so each draw depends on a fixed pair of outputs).</summary>
-    public double NextNormal()
-    {
-        double u1 = 1.0 - NextDouble();                       // (0, 1]: the log is finite
-        double u2 = NextDouble();
-        return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-    }
 }
 
 /// <summary>

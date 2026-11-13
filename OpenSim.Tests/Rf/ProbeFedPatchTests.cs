@@ -395,7 +395,7 @@ public class ProbeFedPatchTests
             var nodes = ProbeAssembly.TubeNodes(air, probe);
             var currents = new Complex[seg + 1];
             for (int i = 0; i < seg; i++) currents[i] = cur[i]; // open top: node seg carries 0
-            var (u, uw) = OpenSim.Rf.GaussLegendre.Rule(64, 0, 1);
+            var (u, uw) = OpenSim.Core.Numerics.GaussLegendre.Rule(64, 0, 1);
             double pRad = 0;
             for (int ti = 0; ti < u.Length; ti++)
             {
@@ -461,7 +461,7 @@ public class ProbeFedPatchTests
             var nodes = ProbeAssembly.TubeNodes(sub, probe);
             var jc = new Complex[seg + 1];
             for (int i = 0; i < seg; i++) jc[i] = cur[i];
-            var (uu, uw) = OpenSim.Rf.GaussLegendre.Rule(64, 0, 1);
+            var (uu, uw) = OpenSim.Core.Numerics.GaussLegendre.Rule(64, 0, 1);
             double pRad = 0;
             for (int ti = 0; ti < uu.Length; ti++)
             {

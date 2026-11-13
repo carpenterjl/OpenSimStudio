@@ -11,4 +11,10 @@
     <InternalsVisibleTo Include="OpenSim.App.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Sobol direction numbers of Joe and Kuo (BSD-style licence, kept beside the table). -->
+    <EmbeddedResource Include="Numerics\Data\new-joe-kuo-6.21201" LogicalName="OpenSim.Core.Numerics.Data.new-joe-kuo-6.21201" />
+    <EmbeddedResource Include="Numerics\Data\new-joe-kuo-LICENCE.txt" LogicalName="OpenSim.Core.Numerics.Data.new-joe-kuo-LICENCE.txt" />
+  </ItemGroup>
+
 </Project>
