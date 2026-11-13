@@ -214,6 +214,10 @@ public sealed class SimProject
     /// Null — every older project — leaves the panels as they are.</summary>
     public SignalIntegritySettings? SignalIntegrity { get; set; }
 
+    /// <summary>The Optics workspace's inputs as the application last saved them (OP-1). Null —
+    /// every older project — leaves the workspace as it is.</summary>
+    public OpticsSettings? Optics { get; set; }
+
     [JsonObjectCreationHandling(JsonObjectCreationHandling.Populate)]
     public List<Body> Bodies { get; } = new();
 }

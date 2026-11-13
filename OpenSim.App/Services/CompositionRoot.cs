@@ -61,6 +61,7 @@ public static class CompositionRoot
         services.AddSingleton<SignalIntegrityViewModel>();
         services.AddSingleton<MagneticsViewModel>();
         services.AddSingleton<EmiViewModel>();
+        services.AddSingleton<OpticsViewModel>();
         services.AddSingleton<BodiesViewModel>();
         services.AddSingleton<EnvironmentViewModel>();
         services.AddSingleton<FlowVisualizationViewModel>();

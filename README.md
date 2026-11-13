@@ -43,8 +43,9 @@ fully testable.
 Geometry → tet mesh → materials (20 built-in + user library) → boundary conditions →
 solve → color-mapped results in a Helix 3D viewport, with contour lines, section planes,
 multi-frame scrubbing (time steps / mode shapes / frequency points), and `.ossproj`
-project save/load. The app opens on a KiCad-style home screen with two workspaces:
-**Mechanical** (static, modal, thermal) and **Electrical** (DC, AC, Joule, PCB, antenna).
+project save/load. The app opens on a home screen with seven workspaces:
+**Structural**, **Thermal**, **Electrical**, **RF & antenna**, **Signal integrity**, **Flow** and
+**Optics** (a shell so far: it opens and saves its mode, with no system editor yet).
 
 ## Getting started
 

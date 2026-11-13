@@ -44,8 +44,9 @@ public partial class MainViewModel : ObservableObject
         FlowVisualizationViewModel flow, CfdSetupViewModel cfdSetup,
         StudyRailViewModel studyRail,
         ProjectSerializer serializer, RecentProjectsService recentProjects,
-        ThemeService theme, MagneticsViewModel magnetics, EmiViewModel emi)
+        ThemeService theme, MagneticsViewModel magnetics, EmiViewModel emi, OpticsViewModel optics)
     {
+        Optics = optics;
         Magnetics = magnetics;
         Emi = emi;
         Session = session;
@@ -130,6 +131,9 @@ public partial class MainViewModel : ObservableObject
     /// <summary>EMI pre-compliance of a converter, with its hot loop read off the board.</summary>
     public EmiViewModel Emi { get; }
 
+    /// <summary>The Optics workspace: its mode, and later its system and analyses.</summary>
+    public OpticsViewModel Optics { get; }
+
     /// <summary>The gated study-steps rail; its selected step drives the properties pane.</summary>
     public StudyRailViewModel StudyRail { get; }
 
@@ -148,7 +152,8 @@ public partial class MainViewModel : ObservableObject
         new WorkspaceNavItem(WorkspaceKind.Electrical, "Elec", "IconZap", "WorkspaceElectricalButton"),
         new WorkspaceNavItem(WorkspaceKind.Rf, "RF", "IconRadioTower", "WorkspaceRfButton"),
         new WorkspaceNavItem(WorkspaceKind.SignalIntegrity, "SI", "IconActivity", "WorkspaceSignalIntegrityButton"),
-        new WorkspaceNavItem(WorkspaceKind.Flow, "Flow", "IconWind", "WorkspaceFlowButton")
+        new WorkspaceNavItem(WorkspaceKind.Flow, "Flow", "IconWind", "WorkspaceFlowButton"),
+        new WorkspaceNavItem(WorkspaceKind.Optics, "Optics", "IconLens", "WorkspaceOpticsButton")
     };
 
     private void RefreshWorkspaceNav()
@@ -305,6 +310,11 @@ public partial class MainViewModel : ObservableObject
                 else
                     Log.Append("Load a Touchstone file on the Setup step first.");
                 break;
+            case AnalysisType.Optics:
+                // The rail keeps Solve locked until there is a system to trace; this is for a
+                // caller that runs the command anyway.
+                Log.Append("There is no optical system to trace yet.");
+                break;
             default:
                 Solve.SolveCommand.Execute(null);
                 break;
@@ -324,6 +334,7 @@ public partial class MainViewModel : ObservableObject
         Session.ActiveWorkspace = WorkspaceKind.Structural;
         Session.IsHomeActive = false;
         Session.RaiseGeometryReplaced(leavingPcbMode: true);
+        Optics.Reset();
         Pcb.LoadStackupSettings(new Core.Model.PcbStackupSettings());   // a new project starts from the default boxes, no saved rows
         Session.RaiseMeshChanged();
         Log.Append("New project. Create a primitive or import an STL file to begin.");
@@ -406,7 +417,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Writes the panels' state into the project before it is serialized: the
-    /// analysis, the solver, antenna and SI settings, and the stackup panel's boxes and rows
+    /// analysis, the solver, antenna, SI and optics settings, and the stackup panel's boxes and rows
     /// (<see cref="PcbViewModel.BuildStackupSettings"/>), which <see cref="LoadProjectFromPath"/>
     /// hands back to the panel.</summary>
     internal void CaptureProjectSettings()
@@ -415,6 +426,7 @@ public partial class MainViewModel : ObservableObject
         Session.Project.Solver = Solve.ToSolverSettings();
         Session.Project.Antenna = Antenna.ToSettings();
         Session.Project.SignalIntegrity = SignalIntegrity.ToSettings();
+        Session.Project.Optics = Optics.ToSettings();
         Session.Project.Stackup = Pcb.BuildStackupSettings();
     }
 
@@ -436,7 +448,8 @@ public partial class MainViewModel : ObservableObject
                 Session.SelectedAnalysis = AnalysisOption.All.First(o => o.Kind == analysisKind);
             }
             Solve.LoadSolverSettings(project.Solver);
-            foreach (var note in Antenna.LoadSettings(project.Antenna).Concat(SignalIntegrity.LoadSettings(project.SignalIntegrity)))
+            foreach (var note in Antenna.LoadSettings(project.Antenna).Concat(SignalIntegrity.LoadSettings(project.SignalIntegrity))
+                         .Concat(Optics.LoadSettings(project.Optics)))
                 Log.Append("Project: " + note);
 
             // The previous project's material copies leave the list first. The loaded body's

@@ -153,7 +153,8 @@ public partial class StudyRailViewModel : ObservableObject
         var kinds = _session.ActiveWorkspace switch
         {
             WorkspaceKind.Flow => FlowSteps,
-            WorkspaceKind.Rf or WorkspaceKind.SignalIntegrity => RailFreeSteps,
+            // Optics traces rays through surfaces it describes itself: no part, no mesh.
+            WorkspaceKind.Rf or WorkspaceKind.SignalIntegrity or WorkspaceKind.Optics => RailFreeSteps,
             _ => SolverSteps
         };
 
@@ -190,6 +191,9 @@ public partial class StudyRailViewModel : ObservableObject
         bool hasMesh = _session.Bodies.Any(b => b.Mesh is not null);
         bool hasConditions = _session.Bodies.Any(b => b.BoundaryConditions.Count > 0);
         bool railFree = _session.ActiveWorkspace is WorkspaceKind.Rf or WorkspaceKind.SignalIntegrity;
+        // Nothing can be traced until a system exists, and none can be entered yet (the
+        // editors are later plan items), so the Optics rail stops at Setup.
+        bool optics = _session.ActiveWorkspace is WorkspaceKind.Optics;
         bool studySolved = _session.SelectedAnalysis is { } analysis && _session.IsStudySolved(analysis.Kind);
         bool solved = _hasResults || studySolved;
         IsSolved = solved;
@@ -217,17 +221,19 @@ public partial class StudyRailViewModel : ObservableObject
                 case StepKind.Setup:
                     // A solve proves the setup was complete, whether or not its terminals are
                     // face conditions (a board's electrodes, a free-free modal study are not).
-                    step.State = railFree ? StepState.Available
+                    step.State = railFree || optics ? StepState.Available
                         : !hasMesh ? StepState.Locked
                         : hasConditions || solved ? StepState.Done : StepState.Available;
-                    step.Detail = railFree ? "Study parameters"
+                    step.Detail = optics ? "Mode and system"
+                        : railFree ? "Study parameters"
                         : !hasMesh ? "Needs a mesh"
                         : hasConditions ? ConditionsDetail() : "Material and conditions";
                     break;
                 case StepKind.Solve:
-                    step.State = !railFree && !hasMesh ? StepState.Locked
+                    step.State = optics || (!railFree && !hasMesh) ? StepState.Locked
                         : solved ? StepState.Done : StepState.Available;
-                    step.Detail = !railFree && !hasMesh ? "Needs a mesh"
+                    step.Detail = optics ? "Needs an optical system"
+                        : !railFree && !hasMesh ? "Needs a mesh"
                         : solved && _solveSummary.Length > 0 ? _solveSummary
                         : solved ? "Solved"
                         : "Run the study";
@@ -244,6 +250,7 @@ public partial class StudyRailViewModel : ObservableObject
         var solveStep = Steps.FirstOrDefault(s => s.Kind == StepKind.Solve);
         CanSolve = solveStep is not { State: StepState.Locked };
         SolveHint = CanSolve ? "Run the selected analysis"
+            : optics ? "There is no optical system to trace yet"
             : $"{solveStep!.Detail}: generate one on the Mesh step first";
 
         LeaveLockedStep();
@@ -283,6 +290,9 @@ public partial class StudyRailViewModel : ObservableObject
     {
         get
         {
+            // An optical system is not a part and has no single material.
+            if (_session.ActiveWorkspace is WorkspaceKind.Optics)
+                return new List<StudyLine> { new("System", _session.Project.Name), new("Units", "SI (m)") };
             var lines = new List<StudyLine>
             {
                 new(_session.IsPcbMode ? "Board" : _session.Bodies.Count > 1 ? "Assembly" : "Part",
@@ -296,7 +306,9 @@ public partial class StudyRailViewModel : ObservableObject
             {
                 WorkspaceKind.Structural => "SI (m, N, Pa)",
                 WorkspaceKind.Thermal or WorkspaceKind.Flow => "SI (m, W, K)",
-                _ => "SI (m, K, V)"
+                WorkspaceKind.Electrical or WorkspaceKind.Rf or WorkspaceKind.SignalIntegrity => "SI (m, K, V)",
+                var other => throw new ArgumentOutOfRangeException(nameof(ProjectSession.ActiveWorkspace), other,
+                    "No units line registered for this workspace.")
             }));
             return lines;
         }

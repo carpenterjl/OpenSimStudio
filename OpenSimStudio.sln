@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.Cli", "OpenSim.Cli\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.App.Tests", "OpenSim.App.Tests\OpenSim.App.Tests.csproj", "{D586705B-A172-400A-9719-F88545398AA7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.Optics", "OpenSim.Optics\OpenSim.Optics.csproj", "{9C5E5D83-7D15-4397-AC75-87EF38A0B641}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -167,6 +169,18 @@ Global
 		{D586705B-A172-400A-9719-F88545398AA7}.Release|x64.Build.0 = Release|Any CPU
 		{D586705B-A172-400A-9719-F88545398AA7}.Release|x86.ActiveCfg = Release|Any CPU
 		{D586705B-A172-400A-9719-F88545398AA7}.Release|x86.Build.0 = Release|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Debug|x64.Build.0 = Debug|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Debug|x86.Build.0 = Debug|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Release|x64.ActiveCfg = Release|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Release|x64.Build.0 = Release|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Release|x86.ActiveCfg = Release|Any CPU
+		{9C5E5D83-7D15-4397-AC75-87EF38A0B641}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

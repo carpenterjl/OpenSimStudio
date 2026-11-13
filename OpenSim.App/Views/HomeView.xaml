@@ -4,7 +4,7 @@
              xmlns:controls="clr-namespace:OpenSim.App.Controls"
              Background="{DynamicResource AppBgBrush}">
     <!-- Home / launcher (design screens 01 + 18): start actions, geometry imports and
-         recent projects on the left; the six workspace cards on the right. Empty recent
+         recent projects on the left; the workspace cards on the right. Empty recent
          list shows the action that fills it. -->
     <UserControl.Resources>
         <controls:RelativeTimeConverter x:Key="RelativeTime"/>
@@ -238,7 +238,8 @@
                     <TextBlock Text="Each workspace opens the same gated study rail with only the panels its physics needs."
                                Style="{StaticResource MutedText}" FontSize="13"/>
                 </StackPanel>
-                <UniformGrid Columns="2">
+                <!-- Three across: seven cards in two columns would run four rows deep. -->
+                <UniformGrid Columns="3">
                     <Button Style="{StaticResource WorkspaceCard}"
                             Command="{Binding EnterWorkspaceCommand}"
                             CommandParameter="{x:Static vm:WorkspaceKind.Structural}"
@@ -353,6 +354,25 @@
                                 <Border Style="{StaticResource CapChip}"><TextBlock Text="Conjugate CFD" Style="{StaticResource CapChipText}"/></Border>
                             </WrapPanel>
                             <TextBlock Text="Assemblies in vacuum, still air or a moving fluid: transient heat flow and computed airflow."
+                                       Style="{StaticResource CardBody}" VerticalAlignment="Top"/>
+                        </DockPanel>
+                    </Button>
+                    <Button Style="{StaticResource WorkspaceCard}"
+                            Command="{Binding EnterWorkspaceCommand}"
+                            CommandParameter="{x:Static vm:WorkspaceKind.Optics}"
+                            xmlns:vm="clr-namespace:OpenSim.App.ViewModels"
+                            AutomationProperties.AutomationId="HomeWorkspaceOptics">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <controls:IconGlyph Width="19" Height="19" Geometry="{StaticResource IconLens}"
+                                                    Foreground="{DynamicResource KindModuleBrush}"/>
+                                <TextBlock Text="Optics" Style="{StaticResource CardTitle}" Margin="10,0,0,0"/>
+                            </StackPanel>
+                            <WrapPanel DockPanel.Dock="Bottom" VerticalAlignment="Bottom">
+                                <Border Style="{StaticResource CapChip}"><TextBlock Text="Sequential" Style="{StaticResource CapChipText}"/></Border>
+                                <Border Style="{StaticResource CapChip}"><TextBlock Text="Non-sequential" Style="{StaticResource CapChipText}"/></Border>
+                            </WrapPanel>
+                            <TextBlock Text="Ray optics for lenses, illumination and lasers. New: it opens and saves its mode, and has no system editor yet."
                                        Style="{StaticResource CardBody}" VerticalAlignment="Top"/>
                         </DockPanel>
                     </Button>

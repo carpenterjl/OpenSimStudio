@@ -66,6 +66,14 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="OpticsOnly" TargetType="StackPanel">
+            <Setter Property="Visibility" Value="Collapsed"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Optics">
+                    <Setter Property="Visibility" Value="Visible"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="FlowOnly" TargetType="StackPanel">
             <Setter Property="Visibility" Value="Collapsed"/>
             <Style.Triggers>
@@ -357,6 +365,10 @@
                                                         <Setter Property="Geometry" Value="{StaticResource IconWind}"/>
                                                         <Setter Property="Foreground" Value="{DynamicResource KindInterfaceBrush}"/>
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Optics">
+                                                        <Setter Property="Geometry" Value="{StaticResource IconLens}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource KindModuleBrush}"/>
+                                                    </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </controls:IconGlyph.Style>
@@ -384,6 +396,9 @@
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Flow">
                                                         <Setter Property="Text" Value="Flow"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Session.ActiveWorkspace}" Value="Optics">
+                                                        <Setter Property="Text" Value="Optics"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -694,6 +709,11 @@
                                                 <panels:TimelinePanel/>
                                                 <panels:ReportPanel/>
                                             </StackPanel>
+                                        </StackPanel>
+
+                                        <!-- Optics: one panel on every step, as RF and SI have. -->
+                                        <StackPanel Style="{StaticResource OpticsOnly}">
+                                            <panels:OpticsPanel/>
                                         </StackPanel>
                                     </Grid>
                                 </ScrollViewer>

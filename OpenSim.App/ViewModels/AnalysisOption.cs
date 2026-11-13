@@ -41,11 +41,15 @@ public enum AnalysisType
     PowerDistribution,
 
     /// <summary>An eye, TDR and mixed-mode view of a measured channel. UI-dispatch.</summary>
-    TouchstoneChannel
+    TouchstoneChannel,
+
+    /// <summary>An optical system traced with rays (sequential or non-sequential, the Optics
+    /// panel's mode). UI-dispatch: optics keeps its own result records, like the antenna study.</summary>
+    Optics
 }
 
 /// <summary>The task-focused workspaces the main window can show — one per physics,
-/// matching the design's six-workspace nav rail.</summary>
+/// the nav rail lists them in this order.</summary>
 public enum WorkspaceKind
 {
     /// <summary>Generic geometry (primitives, STL, STEP): static + modal analysis.</summary>
@@ -65,7 +69,11 @@ public enum WorkspaceKind
 
     /// <summary>Multi-body assemblies in an environment: transient heat flow and the
     /// computed airflow that drives it.</summary>
-    Flow
+    Flow,
+
+    /// <summary>Ray optics: lens design, illumination, lasers and coatings, in a sequential
+    /// or a non-sequential mode.</summary>
+    Optics
 }
 
 /// <summary>A display entry for the analysis-type selector.</summary>
@@ -87,7 +95,8 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
         new AnalysisOption("Coupled lines (RLGC, S-parameters, eye)", AnalysisType.SignalIntegrity),
         new AnalysisOption("Stackup and impedance calculator", AnalysisType.ImpedanceCalculator),
         new AnalysisOption("Power distribution impedance (PDN)", AnalysisType.PowerDistribution),
-        new AnalysisOption("Channel from a Touchstone file", AnalysisType.TouchstoneChannel)
+        new AnalysisOption("Channel from a Touchstone file", AnalysisType.TouchstoneChannel),
+        new AnalysisOption("Optical system (ray optics)", AnalysisType.Optics)
     };
 
     private static AnalysisOption Of(AnalysisType kind) => All.First(o => o.Kind == kind);
@@ -121,13 +130,17 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
             {
                 Of(AnalysisType.EnvironmentThermal), Of(AnalysisType.ConjugateHeatFlow)
             },
+            WorkspaceKind.Optics => new[] { Of(AnalysisType.Optics) },
             _ => throw new ArgumentOutOfRangeException(nameof(workspace), workspace,
                 "No analysis list registered for this workspace.")
         };
 
-    /// <summary>The workspace an analysis type naturally belongs to.</summary>
+    /// <summary>The workspace an analysis type naturally belongs to. Every analysis is listed
+    /// EXPLICITLY, for the reason <see cref="ForWorkspace"/> gives: a default arm would open a
+    /// new analysis's saved project in the Structural workspace without a word.</summary>
     public static WorkspaceKind WorkspaceOf(AnalysisType kind) => kind switch
     {
+        AnalysisType.Static or AnalysisType.Modal => WorkspaceKind.Structural,
         AnalysisType.Electrical or AnalysisType.JouleCoupled or AnalysisType.AcElectrical
             or AnalysisType.Electrostatic => WorkspaceKind.Electrical,
         AnalysisType.Thermal or AnalysisType.TransientThermal => WorkspaceKind.Thermal,
@@ -135,6 +148,8 @@ public sealed record AnalysisOption(string Label, AnalysisType Kind)
         AnalysisType.SignalIntegrity or AnalysisType.ImpedanceCalculator or AnalysisType.PowerDistribution
             or AnalysisType.TouchstoneChannel => WorkspaceKind.SignalIntegrity,
         AnalysisType.EnvironmentThermal or AnalysisType.ConjugateHeatFlow => WorkspaceKind.Flow,
-        _ => WorkspaceKind.Structural
+        AnalysisType.Optics => WorkspaceKind.Optics,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind,
+            "No workspace registered for this analysis.")
     };
 }

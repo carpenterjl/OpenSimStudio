@@ -13,8 +13,8 @@ public sealed class ProjectSerializer
 
     /// <summary>The format this build writes: 1 = the original schema (unversioned files
     /// read as 0), 2 = the solver settings and this number (FU-46), 3 = the antenna and
-    /// signal-integrity panels' settings (D23).</summary>
-    public const int CurrentFormatVersion = 3;
+    /// signal-integrity panels' settings (D23), 4 = the Optics workspace's settings (OP-1).</summary>
+    public const int CurrentFormatVersion = 4;
 
     private static readonly JsonSerializerOptions Options = new()
     {

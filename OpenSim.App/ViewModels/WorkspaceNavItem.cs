@@ -28,7 +28,8 @@ public sealed partial class WorkspaceNavItem : ObservableObject
         WorkspaceKind.Rf => "RF (antennas)",
         WorkspaceKind.SignalIntegrity => "Signal integrity",
         WorkspaceKind.Flow => "Flow (heat flow and CFD)",
-        _ => ShortLabel
+        WorkspaceKind.Optics => "Optics (ray optics)",
+        _ => throw new ArgumentOutOfRangeException(nameof(Kind), Kind, "No name registered for this workspace.")
     };
 
     /// <summary>Resource key into Themes/Icons.xaml.</summary>
