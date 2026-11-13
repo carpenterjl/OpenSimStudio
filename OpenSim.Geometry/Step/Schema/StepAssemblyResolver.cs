@@ -1,3 +1,4 @@
+using OpenSim.Core.Numerics;
 using OpenSim.Geometry.Step.Part21;
 
 namespace OpenSim.Geometry.Step.Schema;
@@ -67,13 +68,13 @@ internal sealed class StepAssemblyResolver
             // the file's global frame, which IS their placement.
             foreach (int solidId in allSolidIds)
                 placed.Add(new StepPlacedSolid(solidId, UniqueName(names, SolidName(solidId)),
-                    StepRigidTransform.Identity, PlacedByAssembly: false));
+                    RigidTransform.Identity, PlacedByAssembly: false));
             _notes.Add("no assembly structure found; solids import in the file's global frame");
             return placed;
         }
 
         foreach (int root in roots)
-            Walk(root, StepRigidTransform.Identity, ProductName(root), 0);
+            Walk(root, RigidTransform.Identity, ProductName(root), 0);
 
         foreach (int solidId in allSolidIds)
         {
@@ -81,13 +82,13 @@ internal sealed class StepAssemblyResolver
             // A solid the product structure never references. Its own coordinates are the
             // global frame, unlike a NAUO with a broken placement chain.
             placed.Add(new StepPlacedSolid(solidId, UniqueName(names, SolidName(solidId)),
-                StepRigidTransform.Identity, PlacedByAssembly: false));
+                RigidTransform.Identity, PlacedByAssembly: false));
             _notes.Add($"solid #{solidId} is not referenced by the product structure; " +
                        "imported in the file's global frame");
         }
         return placed;
 
-        void Walk(int productDefinition, StepRigidTransform toRoot, string occurrenceName, int depth)
+        void Walk(int productDefinition, RigidTransform toRoot, string occurrenceName, int depth)
         {
             if (depth > MaxDepth)
                 throw new StepImportException(
@@ -105,7 +106,7 @@ internal sealed class StepAssemblyResolver
                 // Instancing inside one representation (MAPPED_ITEM / REPRESENTATION_MAP).
                 foreach (var (mappedRep, mapTransform, mapId) in MappedItems(repId))
                 {
-                    var composed = StepRigidTransform.Compose(toRoot, mapTransform);
+                    var composed = RigidTransform.Compose(toRoot, mapTransform);
                     foreach (int solidId in SolidsOfRepresentation(mappedRep, repSolids, repLinks))
                     {
                         used.Add(solidId);
@@ -121,7 +122,7 @@ internal sealed class StepAssemblyResolver
             foreach (var edge in edges.OrderBy(e => e.NauoId))
             {
                 var placement = PlacementOf(edge, definitionShape, occurrencePlacements);
-                Walk(edge.Child, StepRigidTransform.Compose(toRoot, placement),
+                Walk(edge.Child, RigidTransform.Compose(toRoot, placement),
                     edge.Name ?? ProductName(edge.Child), depth + 1);
             }
         }
@@ -252,7 +253,7 @@ internal sealed class StepAssemblyResolver
 
     /// <summary>MAPPED_ITEMs among a representation's items: an instanced sub-representation
     /// placed by its (origin, target) frame pair.</summary>
-    private IEnumerable<(int MappedRep, StepRigidTransform Transform, int MapId)> MappedItems(int repId)
+    private IEnumerable<(int MappedRep, RigidTransform Transform, int MapId)> MappedItems(int repId)
     {
         var rep = FindRepresentation(_file.Get(repId));
         if (rep is null || rep.Args.Count < 2 || rep.Args[1] is not StepValue.ValueList items) yield break;
@@ -292,7 +293,7 @@ internal sealed class StepAssemblyResolver
         return map;
     }
 
-    private StepRigidTransform PlacementOf(AssemblyEdge edge, Dictionary<int, int> definitionShape,
+    private RigidTransform PlacementOf(AssemblyEdge edge, Dictionary<int, int> definitionShape,
         Dictionary<int, (int RelationId, int CdsrId)> placements)
     {
         if (!placements.TryGetValue(edge.NauoId, out var placement))
@@ -302,7 +303,7 @@ internal sealed class StepAssemblyResolver
         return TransformOfRelation(_file.Get(placement.RelationId), edge, definitionShape, placement.CdsrId);
     }
 
-    private StepRigidTransform TransformOfRelation(StepInstance relation, AssemblyEdge edge,
+    private RigidTransform TransformOfRelation(StepInstance relation, AssemblyEdge edge,
         Dictionary<int, int> definitionShape, int cdsrId)
     {
         var withTransform = relation.Find("REPRESENTATION_RELATIONSHIP_WITH_TRANSFORMATION")

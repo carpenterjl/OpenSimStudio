@@ -1,3 +1,5 @@
+using OpenSim.Core.Numerics;
+
 namespace OpenSim.Geometry.Step.Schema;
 
 /// <summary>
@@ -13,4 +15,4 @@ namespace OpenSim.Geometry.Step.Schema;
 /// this solid and it was taken at identity — the note says so, because "no transform" and
 /// "identity transform" are different claims.</param>
 public sealed record StepPlacedSolid(int SolidId, string Name,
-    StepRigidTransform Transform, bool PlacedByAssembly);
+    RigidTransform Transform, bool PlacedByAssembly);

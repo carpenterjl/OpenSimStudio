@@ -20,7 +20,7 @@ namespace OpenSim.Geometry.Step.Tessellate;
 /// </summary>
 internal static class MeshTransformer
 {
-    public static TriangleMesh Apply(TriangleMesh mesh, StepRigidTransform transform)
+    public static TriangleMesh Apply(TriangleMesh mesh, RigidTransform transform)
     {
         if (transform.IsIdentity) return mesh;
         var vertices = new Vector3D[mesh.Vertices.Count];

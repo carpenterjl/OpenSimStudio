@@ -278,7 +278,7 @@ public class StepRigidTransformTests
         var inner = StepRigidTransform.FromFrames(Frame(0, 0, 0), Frame(0, 3, 0), 1);
         var outer = StepRigidTransform.FromFrames(
             Frame(0, 0, 0), Frame(5, 0, 0, Vector3D.UnitZ, Vector3D.UnitY), 1);
-        var composed = StepRigidTransform.Compose(outer, inner);
+        var composed = RigidTransform.Compose(outer, inner);
 
         var p = new Vector3D(1, 0, 0);
         Assert.True(outer.Apply(inner.Apply(p)).Equals(composed.Apply(p)));
@@ -291,8 +291,8 @@ public class StepRigidTransformTests
     {
         var t = StepRigidTransform.FromFrames(
             Frame(1, 1, 1), Frame(2, 0, 0, Vector3D.UnitX, Vector3D.UnitZ), 1);
-        Assert.Same(t, StepRigidTransform.Compose(StepRigidTransform.Identity, t));
-        Assert.Same(t, StepRigidTransform.Compose(t, StepRigidTransform.Identity));
+        Assert.Same(t, RigidTransform.Compose(RigidTransform.Identity, t));
+        Assert.Same(t, RigidTransform.Compose(t, RigidTransform.Identity));
     }
 
     [Fact]
