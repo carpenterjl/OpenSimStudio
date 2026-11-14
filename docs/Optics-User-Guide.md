@@ -511,8 +511,8 @@ and an image surface. The analyses read these surfaces with their solves evaluat
   Ctrl+Shift+V (variable) or Ctrl+Shift+F (the flag editor). Solves and pickups are evaluated
   after every edit: the cell shows the solved value. A solve that cannot be met keeps the
   cell's value, adds "!" to its badge and puts the reason in its tooltip, and the lens check
-  lists it; the analyses then refuse the lens with the same message. Variables are stored for
-  the optimizer, which is not built. Chip-zone and mechanical semi-diameter pickups are stored
+  lists it; the analyses then refuse the lens with the same message. Variables are what the
+  Optimize tool varies. Chip-zone and mechanical semi-diameter pickups are stored
   but not evaluated (OpticStudio has no solve for those columns), and System Check says so.
   Parameter columns 13 and above take variables only.
 - **Surface properties…** (or the row's context menu) opens the surface's properties: type,
@@ -932,8 +932,41 @@ row, a math row reading a later one) is refused with every problem named.
 Built: the control operands (BLNK, DMFS, ENDX, GOTO, OOFF, SKIN, SKIS, USYM), CONF, effective
 focal length, total track, a few lens-data constraints and bounds, real ray coordinates and the
 general math operands. Rules and readings are in docs/Optics-Conventions.md §31. Not built: the
-rest of the operand catalogue, the default merit function wizard, optimization, the merit
-function listing, and .MF files.
+rest of the operand catalogue, the default merit function wizard, the merit function listing,
+and .MF files. Optimization is the next section.
+
+## Optimization
+
+**Optimize…**, beside the Merit Function Editor in the Optics panel, opens the local optimizer.
+It lowers the merit function by changing the cells flagged Variable: radii (varied as
+curvatures, so a surface may go flat), thicknesses, conics, entered semi-diameters, TCE,
+surface parameters and extra data in the Lens Data Editor, and real-number cells of the
+Multi-Configuration Editor. Solves and pickups are re-evaluated for every trial design, so a
+solved radius or thickness follows the variables. A variable cell that cannot be varied (a
+material, an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text
+cell) is refused by name before anything runs.
+
+- **Algorithm.** Damped Least Squares (derivatives by finite differences; recommended) or
+  Orthogonal Descent (no derivatives; trial steps along orthonormal directions, for noisy merit
+  functions).
+- **Cycles.** Automatic runs until no progress is made; 1, 5, 10 or 50 run that many cycles (a
+  cycle is one derivative-and-step of DLS or one pass of OD); Infinite runs until Stop.
+- **Threads.** The number of threads; the result is the same at any number.
+- **Start / Stop.** The merit function before and now and the cycles run update as the run
+  improves the design. Stop keeps the best design so far.
+- **Applying and Undo.** When a run ends, finished or stopped, its variables are written into
+  the lens as one step of the Lens Data Editor's undo (and into the multi-configuration table
+  when one of its cells is a variable, which clears that editor's undo history). Undo in the
+  Optimize window puts the variable cells back exactly as they were saved.
+
+The starting design must evaluate with no failed row (as in OpticStudio); during the run a
+design that cannot be built or traced is scored with the failed-row penalty and avoided. Rows
+with a negative weight are met exactly (OpticStudio's Lagrangian multipliers); bound operands
+are ordinary weighted rows. Rules and readings are in docs/Optics-Conventions.md §35. Not built:
+glass variables (OP-59), global optimization (OP-58), analytic derivatives, per-type scale and
+derivative-increment settings in the window (the library takes them), saving the Optimize
+window's settings, and the "Auto Update" of open analysis windows during a run (they update
+when the result is applied).
 
 ## RMS against field, wavelength and focus
 
@@ -974,8 +1007,9 @@ Not built yet, and not to be relied on until they appear in this guide:
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);
-- optimization and tolerancing of a lens (the merit function and its editor are built; the
-  full operand catalogue, the default merit function wizard and the optimizer are not);
+- global optimization, glass substitution and tolerancing of a lens (the merit function, its
+  editor and the local optimizer are built; the full operand catalogue and the default merit
+  function wizard are not);
 - thermal configurations (Make Thermal, thermal pickups) and Make Conjugate in the
   Multi-Configuration Editor;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

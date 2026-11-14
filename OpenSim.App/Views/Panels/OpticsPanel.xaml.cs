@@ -42,6 +42,23 @@ public partial class OpticsPanel : UserControl
         _meritEditor.Show();
     }
 
+    // OP-57
+    private OptimizeWindow? _optimize;
+
+    /// <summary>Opens the Optimize tool (OP-57), or brings the open one forward.</summary>
+    private void Optimize_Click(object sender, RoutedEventArgs e)
+    {
+        if (_optimize is { IsLoaded: true })
+        {
+            _optimize.Activate();
+            return;
+        }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _optimize = new OptimizeWindow(optics.Optimize) { Owner = Window.GetWindow(this) };
+        _optimize.Closed += (_, _) => _optimize = null;
+        _optimize.Show();
+    }
+
     /// <summary>Opens the Multi-Configuration Editor (OP-30), or brings the open one forward.</summary>
     private void MultiConfigEditor_Click(object sender, RoutedEventArgs e)
     {

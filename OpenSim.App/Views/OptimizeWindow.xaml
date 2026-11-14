@@ -1,0 +1,43 @@
+<Window x:Class="OpenSim.App.Views.OptimizeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        Title="Local Optimization" Width="560" Height="520" MinWidth="420" MinHeight="320"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-57: the Optimize tool. DataContext is the OpticsOptimizeViewModel. Start optimizes the
+         project's lens against its merit function; Stop keeps the best design so far; the result
+         is written into the lens when the run ends, and Undo puts the variables back. -->
+    <DockPanel Margin="8">
+        <controls:FormGrid DockPanel.Dock="Top">
+            <Label Content="Algorithm"/>
+            <ComboBox ItemsSource="{Binding Algorithms}" SelectedItem="{Binding SelectedAlgorithm}" DisplayMemberPath="Label"
+                      IsEnabled="{Binding IsIdle}"
+                      AutomationProperties.AutomationId="OptimizeAlgorithmCombo"/>
+            <Label Content="Cycles"/>
+            <ComboBox ItemsSource="{Binding CycleChoices}" SelectedItem="{Binding SelectedCycles}" DisplayMemberPath="Label"
+                      IsEnabled="{Binding IsIdle}"
+                      AutomationProperties.AutomationId="OptimizeCyclesCombo"/>
+            <Label Content="Threads"/>
+            <TextBox Text="{Binding Threads}" IsEnabled="{Binding IsIdle}"
+                     ToolTip="The number of threads; the result is the same at any number."/>
+            <Label Content="Merit before"/>
+            <TextBlock Text="{Binding MeritBeforeText}" VerticalAlignment="Center"/>
+            <Label Content="Merit now"/>
+            <TextBlock Text="{Binding MeritNowText}" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            <Label Content="Cycles run"/>
+            <TextBlock Text="{Binding CyclesText}" VerticalAlignment="Center"/>
+        </controls:FormGrid>
+        <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,4">
+            <Button Content="Start" Command="{Binding StartCommand}" Margin="0,0,4,4" MinWidth="70"
+                    AutomationProperties.AutomationId="OptimizeStartButton"/>
+            <Button Content="Stop" Command="{Binding StopCommand}" Margin="0,0,4,4" MinWidth="70"
+                    AutomationProperties.AutomationId="OptimizeStopButton"/>
+            <Button Content="Undo" Command="{Binding UndoCommand}" Margin="8,0,4,4" MinWidth="70"
+                    ToolTip="Put the variables back as they were before the last run."
+                    AutomationProperties.AutomationId="OptimizeUndoButton"/>
+        </WrapPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+        <ListBox ItemsSource="{Binding Log}"/>
+    </DockPanel>
+</Window>

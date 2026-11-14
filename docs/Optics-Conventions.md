@@ -758,6 +758,19 @@ single place in the code, so a correction is one line and its test.
     - *Math rows* read earlier rows only (the help says "prior" for DIVB alone); OSUM, QSUM,
       MAXX and MINN read their range inclusively; GOTO, SKIS and SKIN jump forward only.
     - *MXCT* is read as MNCT with the sign turned (the help's worked example is MNCT's).
+
+31. **Local optimization readings** (OP-57). Section 35 follows OpticStudio's help (Optimize!;
+    Modifying the merit function), but none of it is compared with OpticStudio's output:
+    - *Orthogonal Descent* is described in the help only as an orthonormalization of the
+      variables with discrete sampling and no derivatives; this program's is Rosenbrock's
+      rotating-coordinates search, with step factors of its own choosing.
+    - *A cycle* is read as one derivative-and-step of DLS (one kernel iteration) or one pass
+      through every direction of OD.
+    - *Negative weights* are met by the method of multipliers; the help says only that they are
+      treated as Lagrangian multipliers and converge in a few cycles. The tolerance
+      (1e-9 × max(1, |T|)) and the penalty schedule are this program's.
+    - *Radius variables* are varied as curvatures (the help lists "curvatures" among the
+      variables).
     - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
     Check: a merit function with one row of each operand, saved by OpticStudio with its values,
     evaluated here on the same lens.
@@ -1545,7 +1558,7 @@ nullable fields and new readers, without a format change.
   - A pickup T = O + S·V given in lens units becomes O·f_t + (S·f_t/f_s)·V in SI, f_t and f_s
     the SI factors of the target and source columns (a parameter's from its type). A
     curvature picks up a curvature with the scale unchanged.
-  - Kept, not evaluated: variables (the optimizer is not built); the semi-diameters'
+  - Kept, not evaluated: variables (the optimizer, §35, reads them); the semi-diameters'
     "Automatic", which stays the sizing of section 13; chip-zone and mechanical
     semi-diameter pickups, which have no column in OpticStudio's Summary of Solves (System
     Check warns).
@@ -2415,8 +2428,7 @@ equation images are saved rendered as PNG beside their SVGs).
   definition"). Rows with weight 0, control rows, CONF and skipped rows are not in either sum.
   With no weighted row the merit value is 0. Each sum adds its terms smallest first, so
   reordering rows that do not read each other gives the same bits. Negative weights count by
-  their absolute value; their Lagrange-multiplier meaning belongs to the optimizer (OP-57) and is
-  not built.
+  their absolute value; their Lagrange-multiplier meaning belongs to the optimizer (§35).
 - **Percent contribution.** 100·Wᵢ(Vᵢ − Tᵢ)² / Σⱼ Wⱼ(Vⱼ − Tⱼ)² (help: Notes on Operand Weights).
 - **Residuals.** One per row, rᵢ = √(Wᵢ/ΣW)·(Vᵢ − Tᵢ), zero for rows that do not count, so
   Σ rᵢ² = MF². `MeritResiduals` hands them to the optimizer kernel as its `ResidualFunction`
@@ -2461,8 +2473,8 @@ general math operands ABSO, ACOS, ASIN, ATAN, CONS, COSI, DIFF, DIVB, DIVI, LOGE
 MINN, OPGT, OPLT, OPVA, OSUM, PROB, PROD, QSUM, RECI, SQRT, SUMM, SINE, TANG, ABGT and ABLT.
 
 **Not built.** The rest of the operand catalogue (OP-55); EQUA (the help does not say how its
-value meets its target); the default merit function and its wizard (OP-56); the optimizer and
-Lagrange multipliers (OP-57); the merit function listing; reading or writing OpticStudio's .MF
+value meets its target); the default merit function and its wizard (OP-56); the optimizer is
+§35; the merit function listing; reading or writing OpticStudio's .MF
 files (the help names the file but does not document its format).
 
 ## 34. RMS against field, wavelength and focus
@@ -2521,3 +2533,68 @@ approximation"", a section not found in the online help (its "Strehl Ratio" page
 PSF peak ratio), so it waits for OP-38's PSF Strehl. Plot Scale; Use Polarization; the Field
 Map's Surface setting (image surface only); OpticStudio's halving of arms for symmetric systems;
 afocal units.
+
+## 35. Local optimization
+
+`OpenSim.Optics/Optimization` (OP-57) optimizes the project's system against its merit function
+(§31). The help read is OpticStudio 2025 R2's Optimize! page, saved under
+`plans/sources/optics/op-57-help/`, with Modifying the merit function from OP-54's folder.
+
+- **Variables** (`LensVariables`). Surface cells flagged Variable, in surface order and, within a
+  surface, flag order, then multi-configuration cells flagged Variable, row by row
+  (`MultiConfiguration.Variables`). Kinds: curvature (a Radius cell, varied as 1/R in 1/lens
+  unit, 0 written as a plane), thickness, conic, semi-diameter, TCE, parameter (any "Par n",
+  parameters and extra data, in the column's unit) and configuration (a real-number table
+  cell, in its operand's unit). Refused with the cell named: a material (glass variables are
+  OP-59), an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text,
+  whole-number or infinite table cell, any other column.
+- **Evaluation.** Each trial design writes the variables into a copy of the optics record and
+  builds every configuration through `ProjectMeritConfigurations` (the multi-configuration
+  table, then solves and pickups by `ProjectLens`), so solves and pickups follow the variables
+  inside every residual. The residuals are the merit function's (§31): Σ r² = MF².
+- **Damped least squares** is the kernel `Core/Numerics/Optimization/DampedLeastSquares`
+  (Levenberg–Marquardt through the SVD, Moré's column scaling, finite differences forward then
+  central), unchanged except an accepted-step callback (`OnAcceptedStep`) added for progress
+  and best-so-far.
+- **Orthogonal Descent** is `Core/Numerics/Optimization/OrthogonalDescent` (new): trial steps
+  along orthonormal directions, a success growing that direction's step by 3 and a failure
+  reversing it and halving it, the directions re-orthonormalised (Gram–Schmidt on the summed
+  progress, Rosenbrock 1960) once each has had a success and a failure. First steps 5 % of
+  |value| (5 % of the scale for a zero value); it stops when every step is below 1e-9 of its
+  first size. The factors are this program's choice.
+- **Scaling and increments** per kind (`LensVariableKindSettings`): the algorithms work on
+  value / Scale (default 1); a derivative increment, in the variable's unit, replaces the
+  kernel's relative finite-difference step (a kind without one then takes √ε·max(|x₀|, 1),
+  fixed at the start of each run).
+- **Cycles.** Automatic: the algorithm's own stopping tests (DLS at most 1000 iterations).
+  Fixed: that many cycles in all. Infinite: restarted from the best design whenever it stops,
+  until cancelled.
+- **Constraints.** Bound operands are weighted rows (§31). A row with a negative weight is an
+  exact constraint: with cᵢ its residual, rows √ρ(cᵢ + λᵢ/2ρ) are appended; after each run
+  λᵢ += 2ρcᵢ, and ρ (from 1) grows tenfold when ‖c‖ fell by less than a factor 4; the row is met
+  when |V − T| ≤ 1e-9 × max(1, |T|), otherwise the run ends after 30 rounds as "constraints not
+  met". The merit value reported is §31's, with absolute weights.
+- **Start and failures.** A starting design with a failed row is refused with every failure
+  named (help: "If any of the operands cannot be computed, the optimization cannot begin");
+  later designs that fail get §31's penalty and the algorithm steps away.
+- **Cancellation** returns the last accepted design, which without negative-weight rows is the
+  best so far (every accepted step lowers the merit).
+- **Determinism.** The finite-difference columns and the ray traces run in parallel slots; the
+  result is bitwise the same at any thread count. OD evaluates sequentially.
+- **Apply and undo** (`LocalOptimizationResult.ApplyTo`, `UndoOn`) copy only the variable cells
+  (the saved radius itself, not 1/(1/R)) into the current record, refusing if its variables are
+  no longer the run's.
+- **App.** The Optimize window (algorithm, cycles, threads, Start/Stop, merit before and now,
+  log) applies each run's result through the Lens Data Editor as one undo step, and the
+  multi-configuration table by reloading its editor.
+
+**Gate** (`Gates/LocalOptimizationGateTests`): a perturbed doublet returns to the optimum the
+test builds by optimizing it once; a 0.2 mm singlet with an F/# solve bends to the Coddington
+shape factor 2(N² − 1)/(N + 2), derived in the test from the Seidel sum, and agrees with an
+independent Brent search; results are bitwise identical at 1, 4 and unlimited threads;
+cancellation keeps the best design so far.
+
+**Not built.** Glass variables and substitution (OP-59); global optimization (OP-58); analytic
+or automatic derivatives (finite differences only; the kernel accepts an analytic Jacobian);
+OpticStudio's own Orthogonal Descent (unpublished); the window's per-kind scale and increment
+settings and saving its settings; Auto Update of analysis windows during a run.

@@ -82,7 +82,21 @@ public sealed class LeastSquaresOptions
     public int? MaxDegreeOfParallelism { get; init; } = 1;
 
     public CancellationToken CancellationToken { get; init; }
+
+    // OP-57
+    /// <summary>Called after every accepted step, on the solver's thread, with a copy of the new
+    /// point; null for none. The cost only falls from one call to the next, so the last call holds
+    /// the best point so far: a caller that cancels keeps it. An exception it throws ends the solve.</summary>
+    public Action<LeastSquaresIterate>? OnAcceptedStep { get; init; }
 }
+
+// OP-57
+/// <summary>An accepted step of <see cref="DampedLeastSquares"/>.</summary>
+/// <param name="Iteration">The iteration that took it (1 = the first).</param>
+/// <param name="X">The new point (a copy).</param>
+/// <param name="SumOfSquares">Σ rᵢ² there.</param>
+/// <param name="Evaluations">Residual evaluations so far, finite-difference ones included.</param>
+public sealed record LeastSquaresIterate(int Iteration, double[] X, double SumOfSquares, int Evaluations);
 
 /// <summary>The outcome of <see cref="DampedLeastSquares.Solve"/>.</summary>
 /// <param name="X">The best point found.</param>
@@ -283,6 +297,7 @@ public static class DampedLeastSquares
                     double shrink = 2 * rho - 1;
                     mu *= Math.Max(1.0 / 3, 1 - shrink * shrink * shrink);
                     nu = 2;
+                    options.OnAcceptedStep?.Invoke(new LeastSquaresIterate(iteration, (double[])x.Clone(), cost, evaluations));   // OP-57
                     if (reduction <= options.CostTolerance * previous) stop = LeastSquaresStatus.CostConverged;
                     break;
                 }

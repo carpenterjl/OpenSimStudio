@@ -7,7 +7,7 @@ namespace OpenSim.Optics.Sequential.LensEditing;
 /// tab › Automatic Optimization: Remove All Variables, Set All Radii Variable, Set All Thickness
 /// Variable; plans/sources/optics/ansyshelp-op31/Remove_All_Variables.html,
 /// Set_All_Radii_Variable.html, Set_All_Thickness_Variable.html). They change flags only; the
-/// optimizer that reads them is OP-54.
+/// optimizer that reads them is OP-57 (<c>OpenSim.Optics.Optimization.LocalOptimizer</c>).
 /// </summary>
 public static class VariableTools
 {

@@ -20,8 +20,8 @@ public sealed record SavedSolveSet
     /// a lens with any must not be traced as solved.</summary>
     public required IReadOnlyList<string> Problems { get; init; }
 
-    /// <summary>Flags kept but not evaluated by design (variables are for the optimizer, which
-    /// is not built; the semi-diameters' "Automatic" is the sizing; chip zone and mechanical
+    /// <summary>Flags kept but not evaluated by design (variables are for the optimizer, OP-57,
+    /// which reads them itself; the semi-diameters' "Automatic" is the sizing; chip zone and mechanical
     /// semi-diameter pickups have no solve column), one line each.</summary>
     public required IReadOnlyList<string> NotEvaluated { get; init; }
 

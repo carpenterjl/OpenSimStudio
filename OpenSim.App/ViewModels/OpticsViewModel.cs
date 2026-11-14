@@ -97,6 +97,28 @@ public partial class OpticsViewModel : ObservableObject
     /// <summary>The merit function (OP-54), saved with the lens.</summary>
     public OpticsMeritEditorViewModel MeritEditor { get; }
 
+    // OP-57
+    private OpticsOptimizeViewModel? _optimize;
+
+    /// <summary>The Optimize tool (OP-57): local optimization of the project's lens against the
+    /// merit function, its result written back through the editors.</summary>
+    public OpticsOptimizeViewModel Optimize => _optimize ??=
+        new OpticsOptimizeViewModel(ToSettings, () => BuildLensEditContext().Catalogs, ApplyOptimization);
+
+    /// <summary>Writes an optimization (or its undo) into the workspace: the surfaces as one
+    /// undo step of the Lens Data Editor, then the multi-configuration table when one of its
+    /// cells was a variable (reloading that editor clears its undo history). Null on success.</summary>
+    private string? ApplyOptimization(OpticsSettings settings, bool table, string description)
+    {
+        if (settings.Surfaces is { } surfaces && LensEditor.Apply(surfaces, description) is { } refusal) return refusal;
+        if (!table) return null;
+        var notes = new List<string>();
+        MultiConfig.LoadSettings(settings.MultiConfiguration, notes);
+        if (notes.Count > 0) return string.Join(" ", notes);
+        PublishFromMultiConfig();
+        return null;
+    }
+
     /// <summary>What the lens editor's tools and check read: the system data as saved, the
     /// active glass catalogs and the coating names.</summary>
     private LensEditContext BuildLensEditContext() =>

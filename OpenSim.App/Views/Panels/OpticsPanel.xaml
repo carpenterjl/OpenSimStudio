@@ -28,6 +28,9 @@
             <DockPanel Margin="0,4,0,0">
                 <Button DockPanel.Dock="Left" Content="Merit Function Editor…" Click="MeritFunctionEditor_Click"
                         AutomationProperties.AutomationId="OpticsMeritFunctionEditorButton"/>
+                <!-- OP-57: local optimization against the merit function. -->
+                <Button DockPanel.Dock="Left" Content="Optimize…" Click="Optimize_Click" Margin="4,0,0,0"
+                        AutomationProperties.AutomationId="OpticsOptimizeButton"/>
                 <TextBlock Text="{Binding Optics.MeritEditor.OperandCount, StringFormat='{}{0} operands'}"
                            VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
             </DockPanel>
