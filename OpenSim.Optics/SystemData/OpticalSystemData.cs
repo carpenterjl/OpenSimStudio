@@ -31,6 +31,8 @@ public sealed record OpticalSystemData
     // OP-51
     /// <summary>The system polarization (OP-51).</summary>
     public SystemPolarization Polarization { get; init; } = new();
+    /// <summary>Ray aiming (OP-22); off by default.</summary>
+    public RayAiming RayAiming { get; init; } = new();
 
     /// <summary>The system a new project starts with: a 10 mm entrance pupil, one on-axis
     /// angle field, 0.55 µm, 20 °C and 1 atm, millimeters.</summary>
@@ -45,6 +47,7 @@ public sealed record OpticalSystemData
         Wavelengths.Validate(problems);
         Environment.Validate(problems);
         Polarization.Validate(problems);
+        RayAiming.Validate(problems);
         // Every table wavelength must be one the air model can convert to vacuum (OP-13).
         Environment.ValidateWavelengths(Wavelengths.Wavelengths.Select(w => w.Micrometers), problems);
         return problems;

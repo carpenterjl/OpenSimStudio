@@ -207,9 +207,9 @@ object space and afocal systems. Signs and reference points are in
 
 The analysis **System data and paraxial rays** (Reports) lists them. There is no sequential
 surface editor yet, so in the app this analysis says the system has no surfaces; the engine is
-used from code and tests until the lens data editor (OP-31) feeds it. Not built: real image
-height fields (need ray aiming, OP-22), configurations (OP-30), and any comparison of these
-numbers with OpticStudio's output.
+used from code and tests until the lens data editor (OP-31) feeds it. A real image height
+field is refused here (the real ray launcher solves it; see Ray aiming and vignetting). Not
+built: configurations (OP-30), and any comparison of these numbers with OpticStudio's output.
 
 ## Real ray trace
 
@@ -228,8 +228,8 @@ reason and the surface number.
   The mechanical semi-diameter includes the chip zone.
 - **Ignore this surface** traces the surface as if it were not there; **skip rays to this
   surface** only affects drawing.
-- **Rays** are launched from normalised field and pupil coordinates with ray aiming off: pupil
-  coordinates are on the paraxial entrance pupil.
+- **Rays** are launched from normalised field and pupil coordinates; with ray aiming off the
+  pupil coordinates are on the paraxial entrance pupil (ray aiming is the next section).
 - A batch trace over fields, wavelengths and pupil points gives the same numbers, bit for bit,
   however many processor cores it runs on.
 
@@ -239,7 +239,7 @@ status. Like the paraxial report, it says the system has no surfaces until the l
 (OP-31) supplies them; the trace is used from code and tests until then. The equations and the
 points not yet compared with OpticStudio are in `docs/Optics-Conventions.md` §13 and §10 item 9.
 
-Not built: the lens data editor and saving surfaces (OP-31), ray aiming and vignetting factors (OP-22), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, OPD
+Not built: the lens data editor and saving surfaces (OP-31), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, OPD
 against the reference sphere (OP-35), and layouts drawing traced rays.
 
 ## Gaussian beams
@@ -339,6 +339,43 @@ yet compared with OpticStudio are in `docs/Optics-Conventions.md` §15 and §10 
 Not built: saving or editing the new surface fields (OP-31), pick-ups of break values and
 multi-configuration control, tilting the object surface, layouts drawing tilted surfaces, and
 paraxial data, ray aiming and ray launching for non-axial systems (OP-22).
+
+## Ray aiming and vignetting
+
+The **Ray aiming** group of the system data (`OpenSim.App/Views/Panels/OpticsSystemDataPanel.xaml`)
+sets how rays are launched (`OpenSim.Optics/Sequential/RayLauncher.cs`):
+
+- **Off** launches rays through the paraxial entrance pupil, as before. **Paraxial** and
+  **Real** aim every ray so it crosses the stop at the requested pupil point, the stop radius
+  set by the paraxial or the real marginal ray (with *float by stop size*, the stop's
+  semi-diameter). Aiming matters when the pupil is aberrated: wide-angle lenses, a stop behind
+  strong optics, fast systems.
+- **Pupil shift x, y, z** (lens units) and **pupil compress x, y** only give the aim a better
+  first guess; they never change the pupil. **Scale pupil shift x and y by field** scales the x
+  and y shifts with the field (the z shift always is).
+- **Robust ray aiming (slow)** reaches every ray step by step from the axis and refuses a ray
+  that reaches the stop by a virtual path; use it for wide-angle systems.
+- A ray that cannot be aimed is reported as not converged at the stop, not traced.
+- **Real image height** fields work: the chief ray is found that lands at that height on the
+  image surface.
+
+The **vignetting factors** of each field (VDX, VDY, VCX, VCY, TAN) move, shrink and turn the
+pupil that field's rays are launched into, by OpticStudio's equations; with aiming on, the
+remapped point is on the stop. Between defined fields they are interpolated along y.
+**Set Vignetting**, **Clear Vignetting** and **Replace Vignetting With Apertures** exist in the
+library (`VignettingTools`) but have no buttons yet, because there are no saved surfaces until
+the lens data editor (OP-31).
+
+The analysis **Vignetting plot** (Rays) shows the fraction of rays that reach the image against
+field along +y, at the primary wavelength, from a (2n + 1) × (2n + 1) grid per field (ray
+density n, at least 5) at the chosen number of fields. By default the fields' vignetting factors
+are first replaced by surface apertures. Like the other ray analyses it says the system has no
+surfaces until OP-31. Details, the closed-form checks and what is this program's own reading
+are in `docs/Optics-Conventions.md` §16 and §10 item 12.
+
+Not built: a 180° fisheye (fields must stay below 90°), aiming in systems with tilted mirrors
+(OP-21), OpticStudio's enhanced ray aiming, the ray-aiming cache switch and wizard, automatic
+pupil shifts, and any comparison with OpticStudio's output.
 
 ## Aspheres
 

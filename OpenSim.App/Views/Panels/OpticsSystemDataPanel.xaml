@@ -31,6 +31,31 @@
         <CheckBox Content="Afocal image space" IsChecked="{Binding Optics.AfocalImageSpace}" Margin="2,2,0,0"
                   ToolTip="The image is at infinity: image-space results are angles, not positions."/>
 
+        <!-- OP-22: ray aiming. The shift and compression only seed the aim (docs/Optics-Conventions.md §16). -->
+        <TextBlock Text="Ray aiming" FontWeight="Bold" Margin="0,8,0,2"/>
+        <controls:FormGrid>
+            <Label Content="Ray aiming"/>
+            <ComboBox ItemsSource="{Binding Optics.RayAimingChoices}" SelectedItem="{Binding Optics.SelectedRayAiming}"
+                      DisplayMemberPath="Label" AutomationProperties.AutomationId="OpticsRayAimingCombo"
+                      ToolTip="Off: rays go to the paraxial entrance pupil. Paraxial or Real: rays are aimed at the stop, whose radius the paraxial or the real marginal ray sets."/>
+            <Label Content="{Binding Optics.LengthUnitSymbol}" ContentStringFormat="Pupil shift x [{0}]"/>
+            <TextBox Text="{Binding Optics.PupilShiftX}" IsEnabled="{Binding Optics.RayAimingIsOn}"/>
+            <Label Content="{Binding Optics.LengthUnitSymbol}" ContentStringFormat="Pupil shift y [{0}]"/>
+            <TextBox Text="{Binding Optics.PupilShiftY}" IsEnabled="{Binding Optics.RayAimingIsOn}"/>
+            <Label Content="{Binding Optics.LengthUnitSymbol}" ContentStringFormat="Pupil shift z [{0}]"/>
+            <TextBox Text="{Binding Optics.PupilShiftZ}" IsEnabled="{Binding Optics.RayAimingIsOn}"
+                     ToolTip="Moves the first guess along z at full field, scaled with the field."/>
+            <Label Content="Pupil compress x"/>
+            <TextBox Text="{Binding Optics.PupilCompressX}" IsEnabled="{Binding Optics.RayAimingIsOn}"/>
+            <Label Content="Pupil compress y"/>
+            <TextBox Text="{Binding Optics.PupilCompressY}" IsEnabled="{Binding Optics.RayAimingIsOn}"/>
+        </controls:FormGrid>
+        <CheckBox Content="Scale pupil shift x and y by field" IsChecked="{Binding Optics.ScalePupilShiftByField}"
+                  IsEnabled="{Binding Optics.RayAimingIsOn}" Margin="2,2,0,0"/>
+        <CheckBox Content="Robust ray aiming (slow)" IsChecked="{Binding Optics.RobustRayAiming}"
+                  IsEnabled="{Binding Optics.RayAimingIsOn}" Margin="2,2,0,0"
+                  ToolTip="Reach every ray by continuation from the axis and refuse a virtual path to the stop; for wide-angle systems."/>
+
         <TextBlock Text="Fields" FontWeight="Bold" Margin="0,8,0,2"/>
         <controls:FormGrid>
             <Label Content="Field type"/>

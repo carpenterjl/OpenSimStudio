@@ -192,7 +192,8 @@ public partial class OpticsViewModel
                 CarbonDioxideMicromolesPerMole = CarbonDioxideMicromolesPerMole,
                 RelativeHumidityPercent = RelativeHumidityPercent
             },
-            Polarization = BuildPolarization()   // OP-51
+            Polarization = BuildPolarization(),   // OP-51
+            RayAiming = BuildRayAiming(perUnit)
         };
     }
 
@@ -216,6 +217,7 @@ public partial class OpticsViewModel
         SemiDiameterMargin = Convert(SemiDiameterMargin);
         if (!FieldTypes.IsAngle(SelectedFieldType.Value))
             foreach (var f in Fields) { f.X = Convert(f.X); f.Y = Convert(f.Y); }
+        ConvertRayAimingLengths(Convert);
     }
 
     // A picker pushes a transient null while its list rebuilds; none of these is ever unset.
@@ -323,6 +325,7 @@ public partial class OpticsViewModel
             CarbonDioxideMicromolesPerMole = data.Environment.CarbonDioxideMicromolesPerMole;
             RelativeHumidityPercent = data.Environment.RelativeHumidityPercent;
             LoadPolarization(data.Polarization);   // OP-51
+            LoadRayAiming(data.RayAiming, perUnit);
         }
         finally
         {

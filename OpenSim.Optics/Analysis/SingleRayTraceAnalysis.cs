@@ -17,11 +17,11 @@ public sealed record SingleRayTraceSettings
     public double Hy { get; init; }
 
     [DisplayName("Px")]
-    [Description("Normalised pupil x (paraxial entrance pupil; ray aiming is not built).")]
+    [Description("Normalised pupil x (paraxial entrance pupil, or the stop with ray aiming on).")]
     public double Px { get; init; }
 
     [DisplayName("Py")]
-    [Description("Normalised pupil y (paraxial entrance pupil; ray aiming is not built).")]
+    [Description("Normalised pupil y (paraxial entrance pupil, or the stop with ray aiming on).")]
     public double Py { get; init; }
 
     /// <summary>The wavelength row (1 = the first); 0 is the primary wavelength.</summary>
@@ -138,9 +138,13 @@ public sealed class SingleRayTraceAnalysis : OpticsAnalysis<SingleRayTraceSettin
         var assumptions = new List<string>
         {
             "Real ray trace of rotationally symmetric conic surfaces (docs/Optics-Conventions.md §13).",
-            "Ray aiming is off: the pupil coordinates are on the paraxial entrance pupil of the primary wavelength (ray aiming is OP-22).",
+            system.RayAiming.IsOn
+                ? $"Ray aiming {RayAimingModes.Names.Label(system.RayAiming.Mode).ToLowerInvariant()}: the pupil coordinates are on the stop, radius {L(launcher.StopRadius)} {u} (docs/Optics-Conventions.md §16)."
+                : "Ray aiming is off: the pupil coordinates are on the paraxial entrance pupil of the primary wavelength.",
+            "The field's vignetting factors, if any, remap the pupil coordinates first.",
             "Indices and the optical path are relative to the system's air. " + system.Environment.AirModelDescription,
         };
+        assumptions.AddRange(launcher.Notes);
         assumptions.AddRange(notes);
         return OpticsAnalysisResult.FromSections(Name, sections, assumptions);
     }

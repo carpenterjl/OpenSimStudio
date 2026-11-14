@@ -564,7 +564,7 @@ public sealed class ParaxialSystem
     /// <item>Object height: from the object point through the entrance-pupil centre (parallel
     /// to the axis when the pupil is at infinity).</item>
     /// <item>Paraxial image height: the chief ray that meets the image surface at that height.</item>
-    /// <item>Real image height: needs the real ray trace and ray aiming (OP-20, OP-22); refused.</item>
+    /// <item>Real image height: defined by the real chief ray; refused here (RayLauncher solves it, OP-22).</item>
     /// </list>
     /// </summary>
     public (ParaxialRay X, ParaxialRay Y) TraceChiefRay(FieldPoint field)
@@ -606,7 +606,7 @@ public sealed class ParaxialSystem
                 return (x / h, y / h);
             }
             case FieldType.RealImageHeight:
-                throw new NotSupportedException("Paraxial trace: a real-image-height field needs the real ray trace and ray aiming (OP-20, OP-22), which are not built; use paraxial image height for first-order data.");
+                throw new NotSupportedException("Paraxial trace: a real-image-height field is defined by the real chief ray, which the paraxial engine does not trace (the real ray trace launches it, OP-22); use paraxial image height for first-order data.");
             default:
                 throw new InvalidOperationException($"Paraxial trace: the field type {type} is not known to the paraxial engine.");
         }

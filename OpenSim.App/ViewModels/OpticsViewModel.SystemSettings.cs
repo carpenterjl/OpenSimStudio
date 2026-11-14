@@ -19,7 +19,7 @@ public partial class OpticsViewModel
     [ObservableProperty] private string _lensFileStatus = "";
 
     /// <summary>The panel's system data as the files store it.</summary>
-    private OpticsSystemSettings SystemDataToSettings() => new()
+    private OpticsSystemSettings SystemDataToSettings() => WithRayAiming(new()
     {
         Title = SystemTitle,
         Notes = SystemNotes,
@@ -51,7 +51,7 @@ public partial class OpticsViewModel
         CarbonDioxideMicromolesPerMole = CarbonDioxideMicromolesPerMole,
         RelativeHumidityPercent = RelativeHumidityPercent,
         Polarization = PolarizationToSettings()   // OP-51
-    };
+    });
 
     /// <summary>Sets the panel from a file's system data; null (a file from before OP-10) leaves
     /// the panel as it is. A saved name this build does not know is kept out and named in
@@ -101,6 +101,7 @@ public partial class OpticsViewModel
             CarbonDioxideMicromolesPerMole = saved.CarbonDioxideMicromolesPerMole ?? AirConditions.DefaultCarbonDioxide;
             RelativeHumidityPercent = saved.RelativeHumidityPercent ?? 0;
             LoadPolarizationSettings(saved.Polarization, notes);   // OP-51
+            LoadRayAimingSettings(saved, notes);
         }
         finally
         {

@@ -55,6 +55,8 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new SingleRayTraceAnalysis());
         // OP-21: global vertices and coordinate breaks (no saved surfaces until OP-31).
         registry.Register(new GlobalVertexAnalysis());
+        // OP-22: the vignetting plot.
+        registry.Register(new VignettingPlotAnalysis());
         // Materials (OP-14).
         registry.Register(new GlassMapAnalysis());
         registry.Register(new AthermalGlassMapAnalysis());

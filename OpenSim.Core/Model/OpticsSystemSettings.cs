@@ -54,6 +54,17 @@ public sealed record OpticsSystemSettings
 
     // OP-51: the system polarization. Null — every file written before OP-51 — is the default.
     public OpticsPolarizationSettings? Polarization { get; init; }
+    // Ray aiming (OP-22). Null — every file written before OP-22 — is the default: aiming off,
+    // not robust, no pupil shift or compression, shifts not scaled by field. The mode is by
+    // saved name; the shifts are in lens units.
+    public string? RayAiming { get; init; }
+    public bool? RobustRayAiming { get; init; }
+    public double? PupilShiftX { get; init; }
+    public double? PupilShiftY { get; init; }
+    public double? PupilShiftZ { get; init; }
+    public double? PupilCompressX { get; init; }
+    public double? PupilCompressY { get; init; }
+    public bool? ScalePupilShiftByField { get; init; }
 }
 
 /// <summary>One field point: x and y in the field type's unit, the weight and the vignetting

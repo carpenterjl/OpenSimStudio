@@ -58,6 +58,13 @@ public sealed class OpticsSettingsTests : IDisposable
         optics.PolarizationYPhaseDegrees = -40;
         optics.SelectedPolarizationReference = optics.PolarizationReferenceChoices.Single(c => c.Value == PolarizationReference.YAxis);
         optics.ConvertThinFilmPhase = false;
+        // OP-22: ray aiming, with lengths in inches.
+        optics.SelectedRayAiming = optics.RayAimingChoices.Single(c => c.Value == RayAimingMode.Real);
+        optics.RobustRayAiming = true;
+        optics.PupilShiftY = 1.0 / 3;
+        optics.PupilShiftZ = -0.7;
+        optics.PupilCompressX = 0.125;
+        optics.ScalePupilShiftByField = true;
         optics.SelectedMode = optics.Modes.Single(m => m.Mode == OpticsMode.NonSequential);
         // OP-15: a coating catalog with a material, a layer coating and an ideal coating.
         optics.Coatings.AddMaterialCommand.Execute(null);

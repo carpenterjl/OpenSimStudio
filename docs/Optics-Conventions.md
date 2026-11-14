@@ -8,7 +8,7 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of coordinate breaks and tilts (section 15) in `OpenSim.Tests/Optics/CoordinateBreakTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; those of the polarization ray trace (section 21) in `OpenSim.Tests/Optics/PolarizationTraceTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of coordinate breaks and tilts (section 15) in `OpenSim.Tests/Optics/CoordinateBreakTests.cs`; those of ray aiming and vignetting (section 16) in `OpenSim.Tests/Optics/RayAimingTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; those of the polarization ray trace (section 21) in `OpenSim.Tests/Optics/PolarizationTraceTests.cs`; the cross-checks against other programs (section 22) in
 `OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
@@ -256,8 +256,9 @@ scripting item (OP-98) maps `RayStatus` and `FailedAtSurface` to those codes.
     −1 ≤ Hx, Hy ≤ 1.
 - **Pupil (Px, Py).** A point on the unit circle. The radius it scales is the paraxial
   entrance-pupil radius, or the stop radius when ray aiming is on. (0, 0) is the chief ray and
-  (0, 1) the upper marginal ray. Px² + Py² ≤ 1. The real ray trace launches on the paraxial
-  entrance pupil (ray aiming off, section 13); ray aiming is OP-22.
+  (0, 1) the upper marginal ray. Px² + Py² ≤ 1. With ray aiming off the real ray trace launches
+  on the paraxial entrance pupil (section 13); with it on, rays are aimed at the stop
+  (section 16). A field's vignetting factors remap (Px, Py) first (section 16).
 
 ## 8. Where our default differs from OpticStudio
 
@@ -472,6 +473,28 @@ single place in the code, so a correction is one line and its test.
     - *A ray parallel to a break's plane* is left where it is; OpticStudio's behaviour there was
       not read.
 
+12. **Ray aiming and vignetting choices** (OP-22). Each is this program's reading of the
+    OpticStudio help or a choice of its own (section 16); none is compared with OpticStudio's
+    output. Check: one pupil-aberrated singlet with ray aiming paraxial and real, one field
+    with vignetting factors, and Set Vignetting on a lens with one clipping aperture, each
+    compared with OpticStudio's single ray trace and field data.
+    - *Pupil shift and compress:* how they enter the first guess (x and y shifts scaled with
+      the radial normalised field only when asked, the z shift always; compress multiplies the
+      pupil coordinates by 1 − c), and the default of "scale by field" (off; the help does not
+      give one).
+    - *Robust aiming:* continuation from the axis and the virtual-segment check are this
+      program's; OpticStudio's robust algorithm is not described.
+    - *Interpolation of vignetting factors* between fields: linear in Hy when every field is on
+      the y axis, the nearest field otherwise.
+    - *Set Vignetting:* edges searched along the lines through the centre, the centre moved to
+      the midpoints; the angle set to zero.
+    - *Replace Vignetting With Apertures:* circular apertures at the largest height of the
+      vignetted pupils' rim rays; the help does not describe OpticStudio's algorithm.
+    - *Vignetting Plot with the factors kept:* the fraction is multiplied by
+      (1 − VCX)(1 − VCY).
+    - *Real stop radius when the marginal ray fails:* the paraxial radius, with a note.
+
+
 13. **Asphere readings** (OP-23). Section 17's forms follow the OpticStudio 2025 R2 help pages
     where they give an equation; these points are this program's reading and are not compared
     with OpticStudio's output:
@@ -601,8 +624,9 @@ is ignored: heights there are in the vertex plane.
   direction (cos el·sin az, sin el, cos el·cos az), slopes tan az and tan el / cos az; an
   object height the ray from the object point through the pupil centre (parallel to the
   axis when the pupil is at infinity); a paraxial image height the chief ray reaching that
-  height on the image surface. Real image height needs the real trace and ray aiming
-  (OP-20, OP-22) and is refused. The x and y planes are traced independently.
+  height on the image surface. Real image height is defined by the real chief ray and is
+  refused here; the real ray launcher solves it (section 16). The x and y planes are traced
+  independently.
 - **Marginal and chief rays.** The marginal ray runs from the axial object point to the top
   of the entrance pupil; the chief ray of the reports is that of the largest y field
   (Hy = 1). Lateral magnification is ν/ν′ of the marginal ray (zero for an object at
@@ -723,8 +747,8 @@ is derived in `ConicIntersection.cs` and the gate tests, not copied.
   Object at infinity: direction (ūx, ūy, 1) normalised, through the pupil point, starting on the
   plane through surface 1's vertex at right angles to it. Finite object: from the object point
   (x̄, ȳ, −t0) to the pupil point; with the entrance pupil at infinity, direction (Px·u, Py·u, 1),
-  u the paraxial marginal slope. The object surface is taken as a plane. Vignetting factors and
-  real image height are ray aiming's (OP-22).
+  u the paraxial marginal slope. The object surface is taken as a plane. Ray aiming, vignetting
+  factors and real image height are section 16.
 - **Apertures** (`SurfaceAperture`) are tested at the intersection, on the local x and y:
   circular (minimum and maximum radius), rectangular (half-widths), elliptical (semi-axes),
   spider (arm width and count), user-defined polygon (even-odd rule) and floating (the clear
@@ -879,6 +903,105 @@ Section 10, item 11, lists what is not yet compared with OpticStudio's output.
   and colours/comments options of the tools; hiding the trailing dummy; tilting the object
   surface; layouts drawing tilted surfaces; paraxial data, ray aiming and the launcher for
   non-axial systems.
+
+## 16. Ray aiming and vignetting
+
+Ray aiming and vignetting factors (OP-22) are in `OpenSim.Optics/Sequential/RayLauncher.cs`,
+`PupilVignetting.cs` and `VignettingTools.cs`; the setting is `OpticalSystemData.RayAiming`
+(`OpenSim.Optics/SystemData/RayAiming.cs`). Sources: Ansys OpticStudio 2025 R2 help on
+ansyshelp.ansys.com, the topics "Ray Aiming", "Vignetting Factors" (Conventions and
+Definitions), "Vignetting", "Vignetting Plot", "Replace Vignetting With Apertures" and "Field
+Type" (copies in `plans/sources/optics/ansys-op22/`, not in the repository). Optiland's robust
+scheme was not read; nothing is taken from it.
+
+- **Modes.** *Off:* rays go through the paraxial entrance pupil of the primary wavelength
+  (section 13), bit for bit the launch OP-20 built. *Paraxial* and *Real:* every ray is aimed so
+  it crosses the stop surface at (Px·R, Py·R) in the stop's local frame; R is the paraxial
+  marginal ray's height at the stop (Paraxial) or the real marginal ray's (Real), the real one
+  traced from the centre of the object through the rim of the paraxial pupil at the primary
+  wavelength, apertures ignored. With the aperture type *float by stop size* R is the stop's
+  semi-diameter in both modes (help: "both real and paraxial rays will be aimed to the real
+  stop exactly"). When the real marginal ray does not reach the stop, the paraxial R is used and
+  the launcher says so in its notes, as the help says OpticStudio does.
+- **Unknowns.** A field fixes the object side: the direction (object at infinity) or the object
+  point (finite object). The two unknowns are where the ray crosses the paraxial entrance-pupil
+  plane z = z_E, or its two slopes (the x and y components of a direction (a, b, 1)) when that
+  plane is at infinity. Aiming off is these unknowns at (Px·r, Py·r) (or (Px·u, Py·u)).
+- **Solve.** `DampedNewton2D` (`OpenSim.Core/Numerics`): Newton on the stop landing point, with a
+  forward-difference Jacobian (step 10⁻⁷ of the pupil radius or marginal slope) and a
+  backtracking line search that halves the step until the residual norm falls by the Armijo
+  fraction. Converged at a miss of 10⁻¹³·R; when it stalls at rounding, accepted up to 10⁻¹¹·R.
+  The chief ray of a field starts from the paraxial chief ray moved by the pupil shift (below);
+  a pupil ray starts from its field's chief solution plus the paraxial pupil offset (with the
+  compression). When Newton fails, continuation: the chief ray is followed in field from the
+  axis (the field scaled by t from 0 to 1), a pupil ray in pupil from the chief ray, in steps of
+  1/4 that halve on a failure (to 1/512) and double on a success, each seeded by linear
+  extrapolation of the last two solutions. A ray that still cannot be aimed is returned failed,
+  `RayStatus.NoConvergence` at the stop, with the reason (`RayLauncher.LaunchAimed`).
+- **Robust.** Always continues (steps of 1/8, not grown) instead of trying Newton from the
+  paraxial guess first, so the root found is the one connected to the axial ray; and refuses a
+  ray that reaches the stop along a virtual segment: a segment from surface 2 to the stop
+  whose length has the opposite sign to thickness times sense of travel (the help: robust mode
+  makes sure that if several ray paths reach a stop point "only the correct one is chosen").
+- **Pupil shift and compress** only seed the solve (help: "just to get the ray aiming
+  started"). The first guess is the aim point (Px(1 − cx)·r + sx·k, Py(1 − cy)·r + sy·k,
+  z_E + sz·|H|), k = |H| (the radial normalised field) when the shifts scale with field and 1
+  otherwise, carried along the field's family of rays to the plane z = z_E. Shifts are meters
+  (lens units in the file). With the entrance pupil at infinity only the compressions apply.
+- **Chief-ray solving and caching.** A field's chief aim is cached per wavelength and field; a
+  solve is a pure function of its inputs, so the cache does not depend on order and a batch
+  traced in parallel is bitwise the sequential one.
+- **Real image height.** The field is the paraxial image height whose real chief ray (aimed as
+  the system says, primary wavelength, apertures ignored) meets the image surface at the
+  requested height: Newton on the two image coordinates from the paraxial guess, then
+  continuation in height; with aiming on, each trial field's chief ray is aimed by one Newton
+  solve from the last converged aim. The paraxial engine still refuses the type; the launcher
+  builds its paraxial model with the fields read as paraxial image heights. A height no chief
+  ray reaches throws, naming it. This closes OP-18's deferred check "every field type launches
+  the same chief ray where equivalent" for real image height (`RayAimingTests`).
+- **Vignetting factors** (`PupilVignetting`): copied from the help's "Vignetting Factors",
+  first P′x = VDX + Px(1 − VCX), P′y = VDY + Py(1 − VCY), then turned by the angle θ (TAN):
+  P″x = P′x cos θ − P′y sin θ, P″y = P′x sin θ + P′y cos θ. The remapped point goes to the
+  paraxial pupil with aiming off and to the stop with it on (help: "If ray aiming is turned on,
+  then the remapping is done at the stop surface"). All-zero factors leave the point
+  unchanged, bit for bit. At a field that is not a defined one: linear interpolation in Hy
+  between neighbouring fields when every field has x = 0 and the point has Hx = 0 (held at the
+  end values beyond them); otherwise the nearest defined field. The help says it interpolates
+  for rotationally symmetric systems and fields along y, and uses the closest field otherwise.
+- **Set Vignetting** (`VignettingTools.SetVignetting`), primary wavelength, the factors cleared
+  first: a 21 × 21 grid is traced with apertures; a ray passes when it reaches the image (a
+  miss, total internal reflection or a failed aim is vignetted). From the centroid of the
+  passing rays (or the passing ray nearest it), the edges are found along the vertical and
+  horizontal lines through the centre by a 64-step scan to the unit circle and bisection to
+  10⁻¹⁰; the centre moves to the midpoints and the search repeats (at most four rounds). Then
+  VDX, VDY are the midpoints, VCX = 1 − (right − left)/2, VCY = 1 − (top − bottom)/2, TAN = 0.
+  An unvignetted field (the centre passes and all four edges from it reach the unit circle)
+  gets zeros. A field with no passing ray keeps its factors, with a note. *Clear Vignetting* is
+  `VignettingTools.Clear`.
+- **Replace Vignetting With Apertures** (`VignettingTools.ReplaceWithApertures`): 64 rays round
+  the rim of each defined field's vignetted pupil, primary wavelength, apertures ignored; every
+  surface between object and image without an aperture (and not ignored) gets a circular
+  aperture of the largest radial height they reach there; the factors are cleared.
+- **Vignetting Plot** (`VignettingPlotAnalysis`, Rays): fields Hy = 0 to 1 along +y, a
+  (2n + 1) × (2n + 1) grid (points (i/n, k/n) inside the unit circle) at the primary wavelength;
+  the fraction reaching the image. By default the factors are first replaced with apertures
+  (the help's default); kept, the fraction is multiplied by (1 − VCX)(1 − VCY). Ray density at
+  least 5 (the help's minimum).
+- **Gate** (`RayAimingTests`): with aiming paraxial or real, robust or not, every pupil point
+  (the chief ray included) lands on its stop point within 10⁻¹⁰·R, read from an independent
+  trace, on a singlet with the stop 20 mm behind it (a third of the stop radius of pupil
+  aberration at 20°), a wide-angle pair to 75° (where the unaimed chief ray does not reach the
+  stop), and coaxial Cassegrain and three-mirror systems used off axis through field-biased
+  fields. With aiming off the launch equals OP-20's bit for bit. Set Vignetting and the
+  Vignetting Plot are checked against a closed form (a clipping aperture in object space).
+- **Not built / not covered.** A 180° fisheye: angle fields must stay below 90° and the launch
+  for an object at infinity takes the direction (ūx, ūy, 1), so fields at or past 90° cannot be
+  stated; the off-axis three-mirror system with tilted mirrors needs OP-21's tilts. Not built:
+  OpticStudio's enhanced ray aiming, the ray-aiming cache switch and wizard, automatic pupil
+  shifts, aiming to a decentered stop aperture's centre (the aim is the stop's vertex), real
+  image height in afocal image space, and Set Vignetting and Replace Vignetting buttons in the
+  app (they are library functions until surfaces are saved, OP-31). Section 10, item 12 lists
+  the checks against OpticStudio.
 
 ## 17. Aspheres
 

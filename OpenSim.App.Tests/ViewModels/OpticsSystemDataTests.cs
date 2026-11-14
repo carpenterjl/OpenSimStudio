@@ -216,4 +216,39 @@ public sealed class OpticsSystemDataTests : IDisposable
         Assert.Equal(System.Text.Json.JsonSerializer.Serialize(OpticalSystemData.Default),
             System.Text.Json.JsonSerializer.Serialize(optics.BuildSystemData()));
     }
+
+    /// <summary>OP-22: the ray-aiming group. Shifts are lens units in the panel and meters in
+    /// the record, keep their size through a change of lens unit, and a compression of 1 is a
+    /// problem the check names. Aiming is off in a new project.</summary>
+    [Fact]
+    public void RayAiming_IsBuiltInMeters_KeepsItsLengths_AndIsChecked()
+    {
+        var optics = Optics;
+        Assert.False(optics.RayAimingIsOn);
+        Assert.Equal(RayAimingMode.Off, optics.BuildSystemData().RayAiming.Mode);
+        optics.SelectedRayAiming = optics.RayAimingChoices.Single(c => c.Value == RayAimingMode.Paraxial);
+        Assert.True(optics.RayAimingIsOn);
+        optics.PupilShiftX = 2;
+        optics.PupilShiftZ = -5;
+        optics.PupilCompressY = 0.25;
+        optics.RobustRayAiming = true;
+        var aiming = optics.BuildSystemData().RayAiming;
+        Assert.Equal(RayAimingMode.Paraxial, aiming.Mode);
+        Assert.Equal(0.002, aiming.PupilShiftX, 15);
+        Assert.Equal(-0.005, aiming.PupilShiftZ, 15);
+        Assert.Equal(0.25, aiming.PupilCompressY);
+        Assert.True(aiming.Robust);
+
+        optics.SelectedLensUnit = optics.LensUnitChoices.Single(c => c.Value == LensUnit.Centimeter);
+        Assert.Equal(0.2, optics.PupilShiftX, 14);
+        Assert.Equal(0.002, optics.BuildSystemData().RayAiming.PupilShiftX, 15);
+
+        Assert.False(optics.HasSystemProblems);
+        optics.PupilCompressX = 1;
+        Assert.Contains(optics.SystemProblems, p => p.StartsWith("Ray aiming:"));
+
+        optics.Reset();
+        Assert.Equal(RayAimingMode.Off, optics.SelectedRayAiming.Value);
+        Assert.Equal(0, optics.PupilShiftX);
+    }
 }

@@ -4,7 +4,7 @@ namespace OpenSim.Optics;
 /// One field point: where in the scene light comes from, in the unit of the field type
 /// (degrees or meters), its weight in merit functions and averaged results, and its
 /// vignetting factors. The vignetting factors move (decenter) and shrink (compress) the pupil
-/// a field's rays are launched into, and tilt the shrunk pupil by an angle; ray aiming (OP-22)
+/// a field's rays are launched into, and tilt the shrunk pupil by an angle; the ray launcher (OP-22)
 /// applies them. All five are zero for an unvignetted field.
 /// </summary>
 public sealed record FieldPoint

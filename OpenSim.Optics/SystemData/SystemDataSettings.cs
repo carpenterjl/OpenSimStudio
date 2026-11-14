@@ -50,7 +50,15 @@ public static class SystemDataSettings
             AirIndexModel = AirIndexModels.Names.SavedName(data.Environment.AirModel),
             CarbonDioxideMicromolesPerMole = data.Environment.CarbonDioxideMicromolesPerMole,
             RelativeHumidityPercent = data.Environment.RelativeHumidityPercent,
-            Polarization = PolarizationToSettings(data.Polarization)
+            Polarization = PolarizationToSettings(data.Polarization),
+            RayAiming = RayAimingModes.Names.SavedName(data.RayAiming.Mode),
+            RobustRayAiming = data.RayAiming.Robust,
+            PupilShiftX = data.RayAiming.PupilShiftX / perUnit,
+            PupilShiftY = data.RayAiming.PupilShiftY / perUnit,
+            PupilShiftZ = data.RayAiming.PupilShiftZ / perUnit,
+            PupilCompressX = data.RayAiming.PupilCompressX,
+            PupilCompressY = data.RayAiming.PupilCompressY,
+            ScalePupilShiftByField = data.RayAiming.ScalePupilShiftByField
         };
     }
 
@@ -138,7 +146,18 @@ public static class SystemDataSettings
                 CarbonDioxideMicromolesPerMole = saved.CarbonDioxideMicromolesPerMole ?? d.Environment.CarbonDioxideMicromolesPerMole,
                 RelativeHumidityPercent = saved.RelativeHumidityPercent ?? d.Environment.RelativeHumidityPercent
             },
-            Polarization = PolarizationFromSettings(saved.Polarization, notes)
+            Polarization = PolarizationFromSettings(saved.Polarization, notes),
+            RayAiming = new RayAiming
+            {
+                Mode = Pick(RayAimingModes.Names, saved.RayAiming, d.RayAiming.Mode, "Ray aiming", notes),
+                Robust = saved.RobustRayAiming ?? d.RayAiming.Robust,
+                PupilShiftX = saved.PupilShiftX is double sx ? sx * perUnit : d.RayAiming.PupilShiftX,
+                PupilShiftY = saved.PupilShiftY is double sy ? sy * perUnit : d.RayAiming.PupilShiftY,
+                PupilShiftZ = saved.PupilShiftZ is double sz ? sz * perUnit : d.RayAiming.PupilShiftZ,
+                PupilCompressX = saved.PupilCompressX ?? d.RayAiming.PupilCompressX,
+                PupilCompressY = saved.PupilCompressY ?? d.RayAiming.PupilCompressY,
+                ScalePupilShiftByField = saved.ScalePupilShiftByField ?? d.RayAiming.ScalePupilShiftByField
+            }
         };
     }
 
