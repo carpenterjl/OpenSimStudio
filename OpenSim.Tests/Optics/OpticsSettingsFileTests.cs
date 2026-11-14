@@ -202,11 +202,15 @@ public sealed class OpticsSettingsFileTests : IDisposable
         foreach (var property in type.GetProperties().Where(p => p.CanWrite))
         {
             counter++;
-            var t = property.PropertyType;
+            var t = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
             object value;
             if (t == typeof(double)) value = counter / 7.0 + 0.1;
             else if (t == typeof(int)) value = 1000 + counter;
-            else if (t == typeof(bool)) value = !(bool)property.GetValue(instance)!;
+            else if (t == typeof(bool)) value = property.GetValue(instance) is bool b ? !b : true;
+            // The analysis windows (OP-9) keep each analysis's settings as raw JSON.
+            else if (t == typeof(JsonElement)) value = JsonFor(counter);
+            else if (t == typeof(Dictionary<string, JsonElement>))
+                value = new Dictionary<string, JsonElement> { [$"key {counter}"] = JsonFor(counter), [$"key {counter + 1}"] = JsonFor(counter + 1) };
             else if (t == typeof(string)) value = $"label {counter}";
             else if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>))
             {
@@ -220,4 +224,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         }
         return instance;
     }
+
+    private static JsonElement JsonFor(int counter) =>
+        JsonDocument.Parse($"{{\"n\":{counter},\"s\":\"label {counter}\"}}").RootElement.Clone();
 }
