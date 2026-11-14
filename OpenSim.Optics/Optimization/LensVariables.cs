@@ -170,7 +170,6 @@ public static class LensVariables
         ArgumentNullException.ThrowIfNull(variables);
         ArgumentNullException.ThrowIfNull(values);
         if (values.Count != variables.Count) throw new ArgumentException($"There are {variables.Count} variables; {values.Count} values were given.", nameof(values));
-        List<OpticsSurfaceSettings>? surfaces = null;
         var result = optics;
         for (int i = 0; i < variables.Count; i++)
         {
@@ -178,8 +177,9 @@ public static class LensVariables
             double x = values[i];
             if (!double.IsFinite(x)) throw new ArgumentException($"{v.Label}: the value {x.ToString(CultureInfo.InvariantCulture)} is not finite.", nameof(values));
             if (v.Cell is { } cell) { result = MultiConfiguration.WithValue(result, cell, x); continue; }
-            surfaces ??= (optics.Surfaces ?? throw new ArgumentException($"{v.Label}: the system has no surfaces.")).ToList();
-            var s = SurfaceAt(optics, v);
+            // Read the surface from the record as edited so far, so two variables on one surface both apply.
+            var s = SurfaceAt(result, v);
+            var surfaces = result.Surfaces!.ToList();
             surfaces[v.Surface] = v.Kind switch
             {
                 LensVariableKind.Curvature => s with { Radius = x == 0 ? null : 1 / x },
@@ -190,8 +190,9 @@ public static class LensVariables
                 LensVariableKind.Parameter => WithParameter(s, SavedSurfaces.ParameterNumber(v.Column)!.Value, x),
                 _ => throw new ArgumentException($"{v.Label}: not a surface variable."),
             };
+            result = result with { Surfaces = surfaces };
         }
-        return surfaces is null ? result : result with { Surfaces = surfaces };
+        return result;
     }
 
     /// <summary>The record <paramref name="to"/> with the variables' cells copied exactly from
@@ -201,14 +202,13 @@ public static class LensVariables
         ArgumentNullException.ThrowIfNull(from);
         ArgumentNullException.ThrowIfNull(to);
         ArgumentNullException.ThrowIfNull(variables);
-        List<OpticsSurfaceSettings>? surfaces = null;
         var result = to;
         foreach (var v in variables)
         {
             if (v.Cell is { } cell) { result = MultiConfiguration.WithValue(result, cell, MultiConfiguration.ValueOf(from, cell)); continue; }
             var source = SurfaceAt(from, v);
-            surfaces ??= (to.Surfaces ?? throw new ArgumentException($"{v.Label}: the system has no surfaces.")).ToList();
-            var s = SurfaceAt(to, v);
+            var s = SurfaceAt(result, v);
+            var surfaces = result.Surfaces!.ToList();
             surfaces[v.Surface] = v.Kind switch
             {
                 LensVariableKind.Curvature => s with { Radius = source.Radius },
@@ -220,8 +220,9 @@ public static class LensVariables
                     SavedSurfaces.Value(source, SavedSurfaces.ParameterNumber(v.Column)!.Value)),
                 _ => throw new ArgumentException($"{v.Label}: not a surface variable."),
             };
+            result = result with { Surfaces = surfaces };
         }
-        return surfaces is null ? result : result with { Surfaces = surfaces };
+        return result;
     }
 
     private static OpticsSurfaceSettings SurfaceAt(OpticsSettings optics, LensVariable v)
