@@ -35,6 +35,8 @@ public static class MakeDoublePass
         {
             if (!SavedSurfaces.IsStandard(surfaces[j]))
                 throw new ArgumentException($"Make Double Pass: surface {j} is a '{surfaces[j].Type}' surface; only Standard surfaces can be copied in this build.");
+            if (surfaces[j].TiltBefore is not null || surfaces[j].TiltAfter is not null)
+                throw new ArgumentException($"Make Double Pass: surface {j} has a surface tilt or decenter; only untilted surfaces can be copied in this build.");
             if (j < k && SavedSurfaces.IsMirror(surfaces[j]))
                 throw new ArgumentException($"Make Double Pass: surface {j} is already a mirror; reflect at a surface before it, or remove the mirror.");
         }

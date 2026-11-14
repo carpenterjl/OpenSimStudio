@@ -360,8 +360,8 @@ public sealed record PickupSolve : SurfaceSolve
 
 /// <summary>Parameter: chief ray. Works only on coordinate-break surfaces' first four
 /// parameters, setting a decenter or tilt so the real chief ray of a field and wavelength is
-/// centred or leaves at zero angle ("Parameter Solves"). Coordinate breaks are OP-21, so this
-/// solve is defined but not built: the engine reports it as an error.</summary>
+/// centred or leaves at zero angle ("Parameter Solves"). The solve is defined but not built:
+/// the engine reports it as an error naming the cell.</summary>
 public sealed record ParameterChiefRaySolve : SurfaceSolve
 {
     public required int Parameter { get; init; }

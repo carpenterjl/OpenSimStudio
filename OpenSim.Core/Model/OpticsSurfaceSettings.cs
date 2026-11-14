@@ -11,8 +11,8 @@ namespace OpenSim.Core.Model;
 /// surfaces OP-27, coordinate breaks OP-21, freeforms) fit without a format change: the type is
 /// a name, its numeric data is a numbered parameter list (OpticStudio's "Par 1" … columns) and
 /// an extra-data list, and the per-cell variable, solve and pickup flags are stored with their
-/// parameters as given, without being evaluated here (solves are OP-29). A name or flag this
-/// build does not know is kept and written back unchanged.
+/// parameters as given (OpenSim.Optics' <c>ProjectLens</c> evaluates the solves and pickups,
+/// TC-6). A name or flag this build does not know is kept and written back unchanged.
 /// </para>
 /// </summary>
 public sealed record OpticsSurfaceSettings
@@ -97,6 +97,52 @@ public sealed record OpticsSurfaceSettings
 
     /// <summary>The cells that are not fixed: variable, solved or picked up, one entry each.</summary>
     public List<OpticsCellFlagSettings>? Flags { get; init; }
+
+    /// <summary>The surface's own tilt and decenter before it (OpticStudio's Surface Properties ›
+    /// Tilt/Decenter, "before surface"), or null for none (TC-6). Not on a coordinate break.</summary>
+    public OpticsTiltDecenterSettings? TiltBefore { get; init; }
+
+    /// <summary>The surface's tilt and decenter after it ("after surface"), with its mode
+    /// (<see cref="OpticsTiltDecenterSettings.Mode"/>), or null for none (TC-6).</summary>
+    public OpticsTiltDecenterSettings? TiltAfter { get; init; }
+
+    /// <summary>A coordinate break's Coordinate Return, or null for none (TC-6); read only on a
+    /// surface of type "Coordinate Break".</summary>
+    public OpticsCoordinateReturnSettings? CoordinateReturn { get; init; }
+}
+
+/// <summary>
+/// A surface tilt and decenter as OpticStudio's Tilt/Decenter page gives it: decenters in lens
+/// units, tilts in degrees (right-handed about the positive axes), and the order. For the
+/// "after" values <see cref="Mode"/> says where they come from and <see cref="Surface"/> names
+/// the prior surface of the two pick-up modes. Names are OpenSim.Optics' <c>SavedSurfaces</c>
+/// constants; null fields are the defaults.
+/// </summary>
+public sealed record OpticsTiltDecenterSettings
+{
+    public double DecenterX { get; init; }
+    public double DecenterY { get; init; }
+    public double TiltX { get; init; }
+    public double TiltY { get; init; }
+    public double TiltZ { get; init; }
+
+    /// <summary>"DecenterThenTilt" (null) or "TiltThenDecenter".</summary>
+    public string? Order { get; init; }
+
+    /// <summary>After only: "Explicit" (null), "PickUpThisSurface", "ReverseThisSurface",
+    /// "PickUpSurface" or "ReverseSurface".</summary>
+    public string? Mode { get; init; }
+
+    /// <summary>After only: the prior surface (0-based) of "PickUpSurface" and "ReverseSurface".</summary>
+    public int Surface { get; init; }
+}
+
+/// <summary>A coordinate break's Coordinate Return: "None", "OrientationOnly", "OrientationXY"
+/// or "OrientationXYZ", to the prior surface <see cref="Surface"/> (0-based).</summary>
+public sealed record OpticsCoordinateReturnSettings
+{
+    public string? Mode { get; init; }
+    public int Surface { get; init; }
 }
 
 /// <summary>A model glass: d-line index, Abbe number and partial-dispersion deviation.</summary>

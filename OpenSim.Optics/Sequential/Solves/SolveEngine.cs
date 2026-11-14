@@ -262,6 +262,16 @@ public static class SolveEngine
     private static string Where(SurfaceSolve solve) =>
         $"Surface {solve.Surface}, {SolveColumns.Label(solve.Column, solve.ParameterIndex)}, {solve.Name.ToLowerInvariant()} solve";
 
+    private static bool TryGetParameter(SequentialSurface s, int number, out double value)
+    {
+        if (s.Shape is IParameterizedShape p)
+        {
+            value = number < p.ParameterCount ? p.GetParameter(number) : 0;
+            return number < p.ParameterCount;
+        }
+        return SurfaceTypes.TryGetParameter(s, number, out value);
+    }
+
     private static bool SameCell(SequentialLens a, SequentialLens b, SurfaceCell cell, SolveOptions o)
     {
         var x = a.Surfaces[cell.Surface];
@@ -280,9 +290,7 @@ public static class SolveEngine
                 return x.IsMirror == y.IsMirror && x.Medium.Index == y.Medium.Index
                     && ReferenceEquals(x.Medium.Material, y.Medium.Material);
             case SolveColumn.Parameter:
-                return x.Shape is IParameterizedShape px && y.Shape is IParameterizedShape py
-                    && cell.Parameter < px.ParameterCount && cell.Parameter < py.ParameterCount
-                    && Close(px.GetParameter(cell.Parameter), py.GetParameter(cell.Parameter));
+                return TryGetParameter(x, cell.Parameter, out double px) && TryGetParameter(y, cell.Parameter, out double py) && Close(px, py);
             default: return false;
         }
     }
@@ -519,7 +527,7 @@ public static class SolveEngine
                     return Number(p.Offset + p.Scale * Read(lens, p.Source));
 
                 case ParameterChiefRaySolve:
-                    throw new NotSupportedException("the chief ray parameter solve works on coordinate-break surfaces, which are OP-21 and not built in this program yet.");
+                    throw new NotSupportedException("the chief ray parameter solve is not built in this program (it needs a real chief ray solved through the coordinate break's decenter or tilt).");
 
                 default:
                     throw new NotSupportedException($"the solve type {solve.GetType().Name} is not known to the solve engine.");
@@ -538,7 +546,7 @@ public static class SolveEngine
                 SolveColumn.Conic => s.Conic,
                 SolveColumn.Tce => s.ThermalExpansion,
                 SolveColumn.SemiDiameter => s.SemiDiameter ?? Sizing(lens).Clear[cell.Surface],
-                SolveColumn.Parameter => Parameters(s, cell).GetParameter(cell.Parameter),
+                SolveColumn.Parameter => GetParameter(s, cell),
                 _ => throw Fail($"the {SolveColumns.Label(cell.Column)} is not a number."),
             };
         }
@@ -551,17 +559,44 @@ public static class SolveEngine
             SolveColumn.Tce => s with { ThermalExpansion = value },
             SolveColumn.SemiDiameter => value >= 0 ? s with { SemiDiameter = value }
                 : throw Fail($"the solve gives a semi-diameter of {value:g6} m; it must be zero or positive."),
-            SolveColumn.Parameter => s with { Shape = Parameters(s, cell).WithParameter(cell.Parameter, value) },
+            SolveColumn.Parameter => SetParameter(s, cell, value),
             _ => throw Fail($"the {SolveColumns.Label(cell.Column)} is not a number."),
         };
 
-        private static IParameterizedShape Parameters(SequentialSurface s, SurfaceCell cell)
+        /// <summary>A parameter through the shape's <see cref="IParameterizedShape"/>, or else
+        /// through the registry of saved surface types (<see cref="SurfaceTypes"/>: a registered
+        /// shape's parameter columns, a coordinate break's six values), TC-6.</summary>
+        private static double GetParameter(SequentialSurface s, SurfaceCell cell)
         {
-            if (s.Shape is not IParameterizedShape shape)
-                throw Fail($"surface {cell.Surface} ({s.Shape?.TypeName ?? "Standard"}) has no parameters a solve can use.");
-            if (cell.Parameter >= shape.ParameterCount)
-                throw Fail($"surface {cell.Surface} ({s.Shape!.TypeName}) has parameters 0 to {shape.ParameterCount - 1}; there is no parameter {cell.Parameter}.");
-            return shape;
+            if (s.Shape is IParameterizedShape shape)
+            {
+                if (cell.Parameter >= shape.ParameterCount)
+                    throw Fail($"surface {cell.Surface} ({s.Shape!.TypeName}) has parameters 0 to {shape.ParameterCount - 1}; there is no parameter {cell.Parameter}.");
+                return shape.GetParameter(cell.Parameter);
+            }
+            if (SurfaceTypes.TryGetParameter(s, cell.Parameter, out double value)) return value;
+            throw Fail(NoParameter(s, cell));
+        }
+
+        private static SequentialSurface SetParameter(SequentialSurface s, SurfaceCell cell, double value)
+        {
+            if (s.Shape is IParameterizedShape shape)
+            {
+                if (cell.Parameter >= shape.ParameterCount)
+                    throw Fail($"surface {cell.Surface} ({s.Shape!.TypeName}) has parameters 0 to {shape.ParameterCount - 1}; there is no parameter {cell.Parameter}.");
+                return s with { Shape = shape.WithParameter(cell.Parameter, value) };
+            }
+            if (!SurfaceTypes.TryGetParameter(s, cell.Parameter, out _)) throw Fail(NoParameter(s, cell));
+            return SurfaceTypes.WithParameter(s, cell.Parameter, value);
+        }
+
+        private static string NoParameter(SequentialSurface s, SurfaceCell cell)
+        {
+            string type = s.IsCoordinateBreak ? SurfaceTypes.CoordinateBreak : s.Shape?.TypeName ?? "Standard";
+            int count = SurfaceTypes.ParameterCount(s);
+            return count == 0
+                ? $"surface {cell.Surface} ({type}) has no parameters a solve can use."
+                : $"surface {cell.Surface} ({type}) has no parameter {cell.Parameter}.";
         }
 
         /// <summary>Σ t_j for j = first … last (0 when last &lt; first); fails on an infinite one.</summary>

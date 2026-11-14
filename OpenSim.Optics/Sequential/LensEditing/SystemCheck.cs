@@ -31,11 +31,13 @@ public sealed record CheckFinding(CheckSeverity Severity, string Message)
 /// <item>Errors: every problem of the system data (<see cref="OpticalSystemData.Validate"/>) and
 /// of the surfaces (<see cref="SavedSurfaces.ToLens"/>: unknown surface types, glasses not in
 /// the active catalogs, the stop, signs and numbers).</item>
-/// <item>Warnings: a coating name not in the lens's coating catalog; a solve stored on a cell
-/// (solves are not evaluated in this build, the cell's value is traced); a pickup whose cell
-/// does not hold source × scale + offset, or whose source is missing; a glass that does not
-/// cover a system wavelength; and the chief ray and the four marginal rays (Px, Py = ±1) of
-/// every field and wavelength that fail to reach the image, with the reason and the surface.</item>
+/// <item>Errors also: every solve or pickup that cannot be evaluated or fails
+/// (<see cref="Analysis.ProjectLens.Solve"/>, TC-6), named by surface and cell.</item>
+/// <item>Warnings: a coating name not in the lens's coating catalog; a flag kept but not
+/// evaluated (a chip-zone or mechanical semi-diameter pickup, which has no solve column); a
+/// pickup whose source surface is missing; a glass that does not cover a system wavelength; and
+/// the chief ray and the four marginal rays (Px, Py = ±1) of every field and wavelength that
+/// fail to reach the image, with the reason and the surface.</item>
 /// </list>
 /// </summary>
 public static class SystemCheck
@@ -79,32 +81,11 @@ public static class SystemCheck
                 && !names.Contains(coating, StringComparer.OrdinalIgnoreCase))
                 findings.Add(new(CheckSeverity.Warning, $"{where}: the coating '{coating}' is not in the lens's coating catalog."));
             foreach (var f in s.Flags ?? new List<OpticsCellFlagSettings>())
-            {
-                if (SurfaceFlags.IsKind(f, SavedSurfaces.SolveFlag))
-                {
-                    if (f.Column == SavedSurfaces.SemiDiameterColumn && f.Solve == ApertureTools.MaximumSolve) continue;
-                    findings.Add(new(CheckSeverity.Warning, $"{where}, {f.Column}: a '{f.Solve}' solve is stored but solves are not evaluated in this build; the cell's value is traced."));
-                }
-                else if (SurfaceFlags.IsKind(f, SavedSurfaces.PickupFlag))
-                    CheckPickup(surfaces, j, f, where, findings);
-            }
+                if (SurfaceFlags.IsKind(f, SavedSurfaces.PickupFlag) && (f.PickupSurface < 0 || f.PickupSurface >= surfaces.Count))
+                    findings.Add(new(CheckSeverity.Warning, $"{where}, {f.Column}: the pickup's source surface {f.PickupSurface} does not exist."));
         }
-    }
-
-    private static void CheckPickup(IReadOnlyList<OpticsSurfaceSettings> surfaces, int j, OpticsCellFlagSettings f, string where, List<CheckFinding> findings)
-    {
-        if (f.PickupSurface < 0 || f.PickupSurface >= surfaces.Count)
-        {
-            findings.Add(new(CheckSeverity.Warning, $"{where}, {f.Column}: the pickup's source surface {f.PickupSurface} does not exist."));
-            return;
-        }
-        if (Value(surfaces[j], f.Column) is not double target || Value(surfaces[f.PickupSurface], f.PickupColumn) is not double source)
-            return;   // text cells (material, coating) and unknown columns are not compared
-        double expected = source * f.PickupScale + f.PickupOffset;
-        if (expected == target || (double.IsInfinity(expected) && double.IsInfinity(target))) return;
-        if (Math.Abs(expected - target) <= 1e-12 * Math.Max(1, Math.Abs(expected))) return;
-        findings.Add(new(CheckSeverity.Warning, string.Create(CultureInfo.InvariantCulture,
-            $"{where}, {f.Column}: picks up surface {f.PickupSurface}'s {f.PickupColumn} × {f.PickupScale:G8} + {f.PickupOffset:G8} = {expected:G10}, but holds {target:G10}; pickups are not evaluated in this build, the cell's value is traced.")));
+        foreach (var line in SavedSolves.Translate(surfaces, context.Unit).NotEvaluated)
+            findings.Add(new(CheckSeverity.Warning, line));
     }
 
     /// <summary>A numeric cell's value in lens units (radius: infinity for a plane), or null.</summary>
@@ -117,8 +98,7 @@ public static class SystemCheck
         SavedSurfaces.MechanicalSemiDiameterColumn => s.MechanicalSemiDiameter,
         SavedSurfaces.ConicColumn => s.Conic,
         SavedSurfaces.TceColumn => s.Tce,
-        { } c when c.StartsWith("Par", StringComparison.Ordinal) && int.TryParse(c.AsSpan(3), NumberStyles.None, CultureInfo.InvariantCulture, out int n)
-            => SavedSurfaces.Parameter(s, n),
+        { } c when SavedSurfaces.ParameterNumber(c) is int n => SavedSurfaces.Value(s, n),
         _ => null,
     };
 

@@ -10,11 +10,14 @@ namespace OpenSim.Optics.Sequential;
 /// to and from the real ray tracer's <see cref="SequentialLens"/> (meters), plan item OP-31;
 /// docs/Optics-Conventions.md section 20.
 /// <para>
-/// Only OpticStudio's Standard surface converts in this build. Every other type (aspheres OP-23,
-/// special surfaces OP-27, coordinate breaks OP-21) is saved and edited as its name and
-/// numbered parameters, and converting a lens that holds one is refused with a message naming
-/// the surface and the type, never traced as something else. Cell flags (variables, solves,
-/// pickups) are stored, not evaluated: the values in the cells are what is traced.
+/// The Standard surface and every type of <see cref="SurfaceTypes"/> (the aspheres of OP-23,
+/// the special surfaces of OP-27 and the coordinate break of OP-21) convert, with their
+/// parameters scaled by each column's unit; surface tilts and decenters before and after, and
+/// a coordinate break's return, convert too (TC-6). A type not registered there is saved and
+/// edited as its name and numbered parameters, and converting a lens that holds one is refused
+/// with a message naming the surface and the type, never traced as something else. Cell flags
+/// are not read here: <see cref="Analysis.ProjectLens"/> evaluates the solves and pickups
+/// (<see cref="SavedSolves"/>) on the lens this returns.
 /// </para>
 /// </summary>
 public static class SavedSurfaces
@@ -75,9 +78,57 @@ public static class SavedSurfaces
     public static bool IsPlane(OpticsSurfaceSettings surface) =>
         surface.Radius is not double r || r == 0 || double.IsInfinity(r);
 
-    /// <summary>The value of parameter <paramref name="number"/>, zero when not listed.</summary>
+    /// <summary>The value of parameter <paramref name="number"/> in the parameter list, zero when
+    /// not listed.</summary>
     public static double Parameter(OpticsSurfaceSettings surface, int number) =>
         surface.Parameters?.LastOrDefault(p => p.Number == number)?.Value ?? 0;
+
+    /// <summary>True when parameter <paramref name="number"/> of the surface is saved in the
+    /// extra-data list: a registered type's numbers from <see cref="SurfaceTypes.FirstExtraData"/>
+    /// on (<see cref="SurfaceTypes"/>); an unregistered type keeps every number in the parameter list.</summary>
+    public static bool IsExtraData(OpticsSurfaceSettings surface, int number) =>
+        number >= SurfaceTypes.FirstExtraData && SurfaceTypes.Find(surface.Type) is not null;
+
+    /// <summary>The value of parameter column <paramref name="number"/> ("Par n") wherever the
+    /// surface's type keeps it, zero when not listed.</summary>
+    public static double Value(OpticsSurfaceSettings surface, int number) => IsExtraData(surface, number)
+        ? surface.ExtraData?.LastOrDefault(p => p.Number == number)?.Value ?? 0
+        : Parameter(surface, number);
+
+    /// <summary>The number of a "Par n" column key, or null for another key.</summary>
+    public static int? ParameterNumber(string? column) =>
+        column is not null && column.StartsWith("Par", StringComparison.Ordinal)
+        && int.TryParse(column.AsSpan(3), NumberStyles.None, CultureInfo.InvariantCulture, out int n) && n >= 0 ? n : null;
+
+    // Saved names of the tilt/decenter fields (OpticsTiltDecenterSettings, OpticsCoordinateReturnSettings).
+    public static string OrderName(TiltDecenterOrder order) => order.ToString();
+    public static string AfterModeName(TiltAfterKind kind) => kind.ToString();
+    public static string ReturnModeName(CoordinateReturnMode mode) => mode.ToString();
+
+    /// <summary>The saved tilt/decenter as the trace's (lengths × <paramref name="perUnit"/>), or
+    /// null and a problem when its order is not a known name.</summary>
+    public static TiltDecenter? ToTiltDecenter(OpticsTiltDecenterSettings t, double perUnit, string where, ICollection<string> problems)
+    {
+        if (!TryParse(t.Order, TiltDecenterOrder.DecenterThenTilt, out TiltDecenterOrder order))
+        {
+            problems.Add($"{where}: the order '{t.Order}' is not one this version knows ({string.Join(", ", Enum.GetNames<TiltDecenterOrder>())}).");
+            return null;
+        }
+        return new TiltDecenter(t.DecenterX * perUnit, t.DecenterY * perUnit, t.TiltX, t.TiltY, t.TiltZ, order);
+    }
+
+    private static bool TryParse<T>(string? name, T fallback, out T value) where T : struct, Enum
+    {
+        if (string.IsNullOrWhiteSpace(name)) { value = fallback; return true; }
+        return Enum.TryParse(name.Trim(), ignoreCase: false, out value) && Enum.IsDefined(value);
+    }
+
+    private static OpticsTiltDecenterSettings FromTiltDecenter(TiltDecenter t, double perUnit) => new()
+    {
+        DecenterX = t.DecenterX / perUnit, DecenterY = t.DecenterY / perUnit,
+        TiltX = t.TiltXDegrees, TiltY = t.TiltYDegrees, TiltZ = t.TiltZDegrees,
+        Order = t.Order == TiltDecenterOrder.DecenterThenTilt ? null : OrderName(t.Order),
+    };
 
     // ------------------------------------------------------------------ to the trace
 
@@ -102,13 +153,24 @@ public static class SavedSurfaces
         {
             var s = surfaces[j] ?? new OpticsSurfaceSettings();
             string where = Where(j, surfaces.Count);
-            if (!IsStandard(s))
+            SurfaceShape? shape = null;
+            CoordinateBreak? coordinateBreak = null;
+            if (IsStandard(s))
             {
-                problems.Add($"{where}: the surface type '{s.Type}' is saved with the lens but this build traces only the {StandardType} surface; change the type or remove the surface to trace the lens.");
+                if (s.Parameters?.FirstOrDefault(p => p.Value != 0) is { } p)
+                    problems.Add($"{where}: a {StandardType} surface has no parameters, but parameter {p.Number} is {p.Value.ToString("R", CultureInfo.InvariantCulture)}.");
+                if (s.ExtraData?.FirstOrDefault(p => p.Value != 0) is { } x)
+                    problems.Add($"{where}: a {StandardType} surface has no extra data, but extra data {x.Number} is {x.Value.ToString("R", CultureInfo.InvariantCulture)}.");
+            }
+            else if (SurfaceTypes.Find(s.Type) is not { } layout)
+            {
+                problems.Add($"{where}: the surface type '{s.Type}' is saved with the lens but this build does not trace it (the types it traces are {StandardType}, {string.Join(", ", SurfaceTypes.All.Select(t => t.Name))}); change the type or remove the surface to trace the lens.");
                 continue;
             }
-            if (s.Parameters?.FirstOrDefault(p => p.Value != 0) is { } p)
-                problems.Add($"{where}: a {StandardType} surface has no parameters, but parameter {p.Number} is {p.Value.ToString("R", CultureInfo.InvariantCulture)}.");
+            else if (!TypedSurface(s, layout, perUnit, where, problems, out shape, out coordinateBreak))
+                continue;
+            if (s.CoordinateReturn is not null && coordinateBreak is null)
+                problems.Add($"{where}: only a coordinate break has a coordinate return; remove it or make the surface a {SurfaceTypes.CoordinateBreak}.");
             double? radius = s.Radius;
             if (radius is double rr && double.IsNaN(rr)) problems.Add($"{where}: the radius must be a number.");
             if (!s.ThicknessIsInfinite && !double.IsFinite(s.Thickness)) problems.Add($"{where}: the thickness must be a number.");
@@ -117,8 +179,14 @@ public static class SavedSurfaces
             SurfaceAperture? aperture = null;
             if (s.Aperture is { } a)
                 aperture = Aperture(a, perUnit, where, problems);
+            TiltDecenter? tiltBefore = s.TiltBefore is { } tb ? ToTiltDecenter(tb, perUnit, where + ", tilt/decenter before", problems) : null;
+            SurfaceTiltAfter? tiltAfter = s.TiltAfter is { } ta ? TiltAfter(ta, perUnit, where, problems) : null;
             result[j] = new SequentialSurface
             {
+                Shape = shape,
+                CoordinateBreak = coordinateBreak,
+                TiltBefore = tiltBefore,
+                TiltAfter = tiltAfter,
                 Curvature = radius is double r ? OpticsConventions.CurvatureFromRadius(r * perUnit) : 0,
                 Conic = s.Conic,
                 Thickness = s.ThicknessIsInfinite ? double.PositiveInfinity : s.Thickness * perUnit,
@@ -143,6 +211,72 @@ public static class SavedSurfaces
             if (problems.Count == 0) return lens;
         }
         throw new ArgumentException(string.Join(Environment.NewLine, problems));
+    }
+
+    /// <summary>
+    /// A registered type's shape or coordinate break from its saved parameters: each value in
+    /// lens units times u^power of its column (<see cref="SurfaceParameterInfo.LengthPower"/>),
+    /// numbers 1–12 from the parameter list and 13 on from the extra data. A value in a column
+    /// the type does not have, a radius or conic on a type that ignores them, and a value the
+    /// shape refuses are problems naming the surface and the parameter.
+    /// </summary>
+    private static bool TypedSurface(OpticsSurfaceSettings s, SurfaceTypeLayout layout, double perUnit, string where,
+        List<string> problems, out SurfaceShape? shape, out CoordinateBreak? coordinateBreak)
+    {
+        shape = null;
+        coordinateBreak = null;
+        int before = problems.Count;
+        foreach (var p in s.Parameters ?? new List<OpticsSurfaceParameterSettings>())
+            if (p.Value != 0 && (layout.Parameter(p.Number) is not { } info || info.IsExtraData))
+                problems.Add($"{where}: the {layout.Name} has no parameter {p.Number} in its parameter list, but it is {p.Value.ToString("R", CultureInfo.InvariantCulture)}.");
+        foreach (var p in s.ExtraData ?? new List<OpticsSurfaceParameterSettings>())
+            if (p.Value != 0 && (layout.Parameter(p.Number) is not { } info || !info.IsExtraData))
+                problems.Add($"{where}: the {layout.Name} has no extra data {p.Number}, but it is {p.Value.ToString("R", CultureInfo.InvariantCulture)}.");
+        if (!layout.UsesRadiusAndConic)
+        {
+            if (!IsPlane(s)) problems.Add($"{where}: a {layout.Name} surface has no radius (its shape is its own); leave the radius infinite.");
+            if (s.Conic != 0) problems.Add($"{where}: a {layout.Name} surface has no conic; leave it at zero.");
+        }
+        double Si(int number) => layout.Parameter(number) is { } info && Value(s, number) is var v && v != 0
+            ? v * SurfaceTypes.Factor(info.LengthPower, perUnit)
+            : 0;
+        if (layout.IsCoordinateBreak)
+        {
+            if (!IsAir(s)) problems.Add($"{where}: a coordinate break takes the medium of the surface before it; leave its material empty.");
+            if (s.TiltBefore is not null || s.TiltAfter is not null)
+                problems.Add($"{where}: a coordinate break cannot have a surface tilt or decenter; put the values in its parameters.");
+            var values = SurfaceTypes.BreakFrom(Si);
+            var mode = CoordinateReturnMode.None;
+            int to = 0;
+            if (s.CoordinateReturn is { } r)
+            {
+                if (!TryParse(r.Mode, CoordinateReturnMode.None, out mode))
+                    problems.Add($"{where}: the coordinate return '{r.Mode}' is not one this version knows ({string.Join(", ", Enum.GetNames<CoordinateReturnMode>())}).");
+                to = r.Surface;
+            }
+            coordinateBreak = new CoordinateBreak { Values = values, Return = mode, ReturnToSurface = mode == CoordinateReturnMode.None ? 0 : to };
+            return problems.Count == before;
+        }
+        try { shape = layout.Build(Si); }
+        catch (ArgumentException ex) { problems.Add($"{where}: {ex.Message}"); }
+        return problems.Count == before;
+    }
+
+    private static SurfaceTiltAfter? TiltAfter(OpticsTiltDecenterSettings t, double perUnit, string where, List<string> problems)
+    {
+        if (!TryParse(t.Mode, TiltAfterKind.Explicit, out TiltAfterKind kind))
+        {
+            problems.Add($"{where}, tilt/decenter after: the mode '{t.Mode}' is not one this version knows ({string.Join(", ", Enum.GetNames<TiltAfterKind>())}).");
+            return null;
+        }
+        return kind switch
+        {
+            TiltAfterKind.Explicit => ToTiltDecenter(t, perUnit, where + ", tilt/decenter after", problems) is { } values ? SurfaceTiltAfter.Explicit(values) : null,
+            TiltAfterKind.PickUpThisSurface => SurfaceTiltAfter.PickUpThis,
+            TiltAfterKind.ReverseThisSurface => SurfaceTiltAfter.ReverseThis,
+            TiltAfterKind.PickUpSurface => SurfaceTiltAfter.PickUp(t.Surface),
+            _ => SurfaceTiltAfter.Reverse(t.Surface),
+        };
     }
 
     private static ParaxialMedium? Medium(OpticsSurfaceSettings s, bool mirror, string where,
@@ -203,10 +337,13 @@ public static class SavedSurfaces
     // ------------------------------------------------------------------ from the trace
 
     /// <summary>
-    /// The saved form of a lens built in code: Standard surfaces only (a lens with a
-    /// <see cref="SequentialSurface.Shape"/> is refused), lengths in <paramref name="unit"/>, a
-    /// catalog material by "catalog:name" (or its name when it has no catalog). A model glass
-    /// cannot be told from another formula glass and is written by name.
+    /// The saved form of a lens built in code: the Standard surface and every registered type
+    /// (<see cref="SurfaceTypes"/>; a shape of another type is refused, naming it), with each
+    /// parameter divided by u^power of its column; tilts, decenters and coordinate breaks with
+    /// their returns; lengths in <paramref name="unit"/>; a catalog material by "catalog:name"
+    /// (or its name when it has no catalog). A model glass cannot be told from another formula
+    /// glass and is written by name. Parameters equal to zero are left out (a missing number is
+    /// zero).
     /// </summary>
     public static List<OpticsSurfaceSettings> FromLens(SequentialLens lens, LensUnit unit)
     {
@@ -216,11 +353,45 @@ public static class SavedSurfaces
         for (int j = 0; j < lens.Surfaces.Count; j++)
         {
             var s = lens.Surfaces[j];
-            if (s.Shape is { } shape)
-                throw new ArgumentException($"{Where(j, lens.Surfaces.Count)}: the surface type '{shape.TypeName}' cannot be saved by this build; only the {StandardType} surface converts.");
+            string? type = null;
+            IReadOnlyDictionary<int, double>? values = null;
+            SurfaceTypeLayout? layout = null;
+            OpticsCoordinateReturnSettings? coordinateReturn = null;
+            if (s.CoordinateBreak is { } cb)
+            {
+                layout = SurfaceTypes.Find(SurfaceTypes.CoordinateBreak)!;
+                values = SurfaceTypes.BreakValues(cb.Values);
+                if (cb.Return != CoordinateReturnMode.None)
+                    coordinateReturn = new OpticsCoordinateReturnSettings { Mode = ReturnModeName(cb.Return), Surface = cb.ReturnToSurface };
+            }
+            else if (s.Shape is { } shape)
+            {
+                layout = SurfaceTypes.Find(shape.TypeName)
+                    ?? throw new ArgumentException($"{Where(j, lens.Surfaces.Count)}: the surface type '{shape.TypeName}' cannot be saved by this build; it has no parameter layout (the saved types are {StandardType}, {string.Join(", ", SurfaceTypes.All.Select(t => t.Name))}).");
+                values = layout.Read(shape);
+            }
+            List<OpticsSurfaceParameterSettings>? parameters = null, extra = null;
+            if (layout is not null)
+            {
+                type = layout.Name;
+                foreach (var (number, v) in values!.OrderBy(p => p.Key))
+                {
+                    if (v == 0) continue;
+                    var info = layout.Parameter(number)!;
+                    var entry = new OpticsSurfaceParameterSettings { Number = number, Value = v / SurfaceTypes.Factor(info.LengthPower, perUnit) };
+                    if (info.IsExtraData) (extra ??= new()).Add(entry);
+                    else (parameters ??= new()).Add(entry);
+                }
+            }
             var m = s.Medium;
             list.Add(new OpticsSurfaceSettings
             {
+                Type = type,
+                Parameters = parameters,
+                ExtraData = extra,
+                CoordinateReturn = coordinateReturn,
+                TiltBefore = s.TiltBefore is { } tb ? FromTiltDecenter(tb, perUnit) : null,
+                TiltAfter = s.TiltAfter is { } ta ? FromTiltAfter(ta, perUnit) : null,
                 Comment = s.Comment.Length > 0 ? s.Comment : null,
                 Coating = s.Coating,
                 Tce = s.ThermalExpansion,
@@ -243,6 +414,13 @@ public static class SavedSurfaces
         }
         return list;
     }
+
+    private static OpticsTiltDecenterSettings FromTiltAfter(SurfaceTiltAfter t, double perUnit) => t.Kind switch
+    {
+        TiltAfterKind.Explicit => FromTiltDecenter(t.Values, perUnit),
+        TiltAfterKind.PickUpSurface or TiltAfterKind.ReverseSurface => new OpticsTiltDecenterSettings { Mode = AfterModeName(t.Kind), Surface = t.Surface },
+        _ => new OpticsTiltDecenterSettings { Mode = AfterModeName(t.Kind) },
+    };
 
     private static OpticsSurfaceApertureSettings FromAperture(SurfaceAperture a, double perUnit)
     {

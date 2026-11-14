@@ -151,9 +151,11 @@ public sealed class ParaxialShape : SurfaceShape
     /// travel), infinite when that ray arrives parallel to the axis. Returns the lens with those
     /// surfaces replaced. The surfaces' frames are taken as the paraxial engine's (no tilts or
     /// decenters); throws when a Paraxial surface sits at an image of the object (the marginal
-    /// ray crosses the axis on it), where no object distance exists.
+    /// ray crosses the axis on it), where no object distance exists. With
+    /// <paramref name="only"/> just those surfaces are resolved (a saved lens's surfaces in OPD
+    /// mode 3, TC-6) and the others keep their object distance.
     /// </summary>
-    public static SequentialLens ResolveConjugates(SequentialLens lens, OpticalSystemData system)
+    public static SequentialLens ResolveConjugates(SequentialLens lens, OpticalSystemData system, IReadOnlyCollection<int>? only = null)
     {
         ArgumentNullException.ThrowIfNull(lens);
         ArgumentNullException.ThrowIfNull(system);
@@ -163,6 +165,7 @@ public sealed class ParaxialShape : SurfaceShape
         for (int j = 1; j < lens.ImageIndex; j++)
         {
             if (surfaces[j].Shape is not ParaxialShape shape || surfaces[j].IsIgnored) continue;
+            if (only is not null && !only.Contains(j)) continue;
             double h = marginal.Heights[j], u = marginal.Slopes[j - 1];
             double travel = Math.Sign(paraxial.SignedIndices[j - 1]);
             double ell;

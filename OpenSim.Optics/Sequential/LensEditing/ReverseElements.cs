@@ -20,8 +20,9 @@ namespace OpenSim.Optics.Sequential.LensEditing;
 /// radius, thickness and material cells inside the group are removed (a variable moves with its
 /// value), pickups elsewhere that read a moved surface follow it, and those that read a
 /// reversed radius, thickness or material are removed. The help warns of mirrors, coordinate
-/// breaks, tilts and non-standard surfaces in the group; this tool refuses mirrors and any
-/// surface type but Standard there instead of guessing.
+/// breaks, tilts and non-standard surfaces in the group; this tool refuses mirrors, surface
+/// tilts and decenters, and any surface type but Standard (coordinate breaks, aspheres, special
+/// surfaces) there by name instead of guessing.
 /// </para>
 /// </summary>
 public static class ReverseElements
@@ -39,6 +40,8 @@ public static class ReverseElements
                 throw new ArgumentException($"Reverse Elements: surface {j} is a '{surfaces[j].Type}' surface; only Standard surfaces can be reversed in this build.");
             if (SavedSurfaces.IsMirror(surfaces[j]))
                 throw new ArgumentException($"Reverse Elements: surface {j} is a mirror; a group with a mirror cannot be reversed.");
+            if (surfaces[j].TiltBefore is not null || surfaces[j].TiltAfter is not null)
+                throw new ArgumentException($"Reverse Elements: surface {j} has a surface tilt or decenter; a group with tilts cannot be reversed in this build.");
         }
 
         int n = last - first + 1;

@@ -572,6 +572,6 @@ public sealed class SolveEngineTests
         Assert.Contains("on the axis", chiefOnAxis.Errors[0]);
 
         var notBuilt = SolveEngine.Apply(Singlet(), Sys(), new[] { new ParameterChiefRaySolve { Surface = 1, Parameter = 0 } });
-        Assert.Contains("OP-21", notBuilt.Errors[0]);
+        Assert.Contains("chief ray parameter solve is not built", notBuilt.Errors[0]);
     }
 }

@@ -23,9 +23,14 @@ public sealed record LensEditContext(OpticsSystemSettings? SystemData, IReadOnly
     public OpticalSystemData System(ICollection<string>? notes = null) =>
         SystemDataSettings.FromSettings(SystemData, notes ?? new List<string>());
 
-    /// <summary>The traceable lens (<see cref="SavedSurfaces.ToLens"/>); throws with every problem.</summary>
-    public SequentialLens ToLens(IReadOnlyList<OpticsSurfaceSettings> surfaces) =>
-        ProjectLens.From(new OpticsSettings { SystemData = SystemData, Surfaces = surfaces.ToList() }, Catalogs)
+    /// <summary>The traceable lens with its solves evaluated (<see cref="ProjectLens.From"/>);
+    /// throws <see cref="ArgumentException"/> with every problem.</summary>
+    public SequentialLens ToLens(IReadOnlyList<OpticsSurfaceSettings> surfaces) => Solve(surfaces).LensOrThrow();
+
+    /// <summary>The lens as entered and solved, with each solve's status (<see cref="ProjectLens.Solve"/>);
+    /// throws <see cref="ArgumentException"/> when the surfaces cannot be converted.</summary>
+    public ProjectLensSolution Solve(IReadOnlyList<OpticsSurfaceSettings> surfaces) =>
+        ProjectLens.Solve(new OpticsSettings { SystemData = SystemData, Surfaces = surfaces.ToList() }, Catalogs)
         ?? throw new ArgumentException("Saved lens: there are no surfaces.");
 }
 
@@ -73,7 +78,8 @@ public static class SurfaceFlags
 
     public static bool IsKind(OpticsCellFlagSettings flag, string kind) => string.Equals(flag.Kind, kind, StringComparison.Ordinal);
 
-    /// <summary>True for the columns whose values are lengths (scaled by Scale Lens).</summary>
+    /// <summary>True for the shared columns whose values are lengths (scaled by Scale Lens); a
+    /// parameter column's unit is its type's (<see cref="SurfaceTypes"/>).</summary>
     public static bool IsLengthColumn(string? column) => column is SavedSurfaces.RadiusColumn or SavedSurfaces.ThicknessColumn
         or SavedSurfaces.SemiDiameterColumn or SavedSurfaces.ChipZoneColumn or SavedSurfaces.MechanicalSemiDiameterColumn;
 
