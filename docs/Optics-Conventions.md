@@ -507,7 +507,13 @@ single place in the code, so a correction is one line and its test.
       exactly this with κ ≠ 0 was not checked.
     - *Convert Asphere Types:* the fit (samples, equal weights, Qbfs's curvature from the conic
       through the edge point) is this program's; the help says only "least squares".
-    Check: each form with non-zero terms, one ray traced in both programs.
+    - *Paraxial curvature* (TC-6, section 17): cone terms (β1 r, Extended Odd's α1 ρ, cosine
+      terms with P = 1) are left out of first-order data; an Odd Cosine P = 2 term with odd B
+      contributes the mean of its ±y halves; the Alternate forms use their sag's vertex
+      curvature; the Periodic surface its y–z value. The help does not describe the paraxial
+      trace of any of these.
+    Check: each form with non-zero terms, one ray traced in both programs, and the EFL of a
+    lens with a non-zero r² term and with a non-zero β1 in both programs.
 
 14. **Idealised and special surfaces** (OP-27). Section 18's surfaces follow their OpticStudio
     2025 R2 help pages; these points are this program's reading where a page is silent, and
@@ -1077,12 +1083,52 @@ equation numbers).
 - **Not built.** Cubic Spline and Extended Cubic Spline: the help gives the sample points and
   says the segments have continuous first and second derivatives, but not the end conditions
   at the vertex and the edge, so the curve between samples cannot be reproduced and the forms
-  are left out. The fast even-asphere trace (Newton is used for every form). The paraxial
-  engine still sees only c: the r² terms of the Even (2α1), Odd (2β2), Extended and Odd Cosine
-  forms, Qbfs's axial curvature c + (2/ρmax²)S(0), and the Periodic surface's curvature are
-  not passed to `SequentialLens.ToParaxialLens` (a paraxial-equivalent hook on `SurfaceShape`
-  is OP-27's). Saving these surfaces is OP-31's. Section 10, item 13, lists the readings not yet
-  compared with OpticStudio.
+  are left out. The fast even-asphere trace (Newton is used for every form). Saving these
+  surfaces is OP-31's. Section 10, item 13, lists the readings not yet compared with
+  OpticStudio.
+- **Paraxial curvature** (TC-6). Each form overrides `SurfaceShape.ParaxialEquivalent` with
+  its sag's second derivative at the vertex along the y meridian, so first-order data (EFL,
+  BFL, pupils, the paraxial rays, ray aiming's paraxial mode, the solves) include its
+  second-order term. Derived from the sag equations above, in each override's comment:
+
+  | Form | Paraxial curvature |
+  |---|---|
+  | Even Asphere, Alternate Even | c + 2α1 |
+  | Odd Asphere, Alternate Odd | c + 2β2 |
+  | Extended Asphere | c + 2α1/R_n² |
+  | Extended Odd Asphere | c + 2α2/R_n² |
+  | Qcon | c (x²S(x) is O(r⁴)) |
+  | Qbfs | c + 2S(0)/ρmax², S(0) = Σ a_m Q^bfs_m(0) |
+  | Superconic | c (the U and V terms start at r⁴) |
+  | Periodic | c + 2π²Aβ² (y–z; the x–z value c + 2π²Aα² is not used) |
+  | Odd Cosine | c + 2β2 + Σ over terms with P = 2 of (2Aᵢ/R²)·½[cos(Bᵢπ/2 + Cᵢ) + cos(−Bᵢπ/2 + Cᵢ)] (R > 0) |
+
+  Readings (OpticStudio's help does not say how its paraxial trace treats these terms):
+  - *Cone terms.* β1 r (Odd, Alternate Odd, Odd Cosine), α1 ρ (Extended Odd) and a cosine
+    term with P = 1 are cones at the vertex: along y the sag has a slope that jumps from −β1
+    to +β1, which turns every ray by about the same angle whatever its height. A first-order
+    model is linear in height and cannot hold that, so these terms are left out and the
+    curvature is the limit of d²z/dr² as r → 0⁺. Nothing at run time says a cone was left out;
+    the real trace keeps it. Terms in r³ and higher have no second-order part.
+  - *Odd Cosine halves.* A P = 2 cosine term whose B is not even differs on the +y and −y
+    halves of the meridian; the paraxial engine is given the mean, the part even in y. A term
+    with P = 0 is a step at the vertex and adds no curvature. A non-zero term with
+    0 < P < 2 (P ≠ 1) or P < 0 has unbounded curvature at the vertex; `ToParaxialLens` refuses
+    it with an `ArgumentException` naming the surface and the term, so the real trace, which
+    is launched from the paraxial data, refuses it too.
+  - *Alternate forms* take the vertex curvature of their sag, though their rays meet the
+    surface at the conic's other root.
+  - *Periodic.* The curvature is the vertex value; when the period is short against the beam
+    it describes a region much smaller than the beam.
+  - A form without a second-order term gives exactly the Standard surface's curvature (the
+    same double).
+
+  Gates (`OpenSim.Tests/Optics/AsphereParaxialTests.cs`): each form's curvature equals the
+  derived value to 64 ulps and a Richardson-extrapolated second difference of its own sag at
+  the vertex to 1e-7 m⁻¹; an Even Asphere with only α1 has the first-order data of the sphere
+  of curvature 2α1, bit for bit; real marginal rays at heights 0.2 mm down to 1.6 µm converge
+  to the paraxial focus (Aitken limit within 2e-9 m); forms without an r² term leave the
+  paraxial lens unchanged bit for bit; the Odd Cosine refusal names the surface and the term.
 
 ## 18. Idealised and special surfaces
 

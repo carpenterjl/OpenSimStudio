@@ -76,6 +76,15 @@ public sealed class SuperconicSurface : RadialSagShape
         return double.IsFinite(z) && double.IsFinite(dzdr);
     }
 
+    /// <summary>
+    /// The vertex curvature c (TC-6), whatever the U and V. Derived from the implicit form in
+    /// the class summary: near the vertex z = O(r²) and s² = r² + z² = r² + O(r⁴), so
+    /// A z² = O(r⁴), 2Bz = 2z + 2U1 s² z + … = 2z + O(r⁴) and C = c r² + O(r⁴); F = 0 then
+    /// gives z = c r²/2 + O(r⁴), and d²z/dr² at 0 is c. The U and V terms start at fourth order.
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface) =>
+        new() { Curvature = surface.Curvature };
+
     /// <summary>F, ∂F/∂z (with q = r² + z² following z) and ∂F/∂q = C′(q) − 2zB′(q).</summary>
     private bool Evaluate(double a, double c, double r2, double z, out double f, out double fz, out double fq)
     {

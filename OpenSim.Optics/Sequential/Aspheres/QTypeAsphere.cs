@@ -83,4 +83,26 @@ public sealed class QTypeAsphere : RadialSagShape
         dzdr += dw * g + w * dg;
         return true;
     }
+
+    /// <summary>
+    /// The vertex curvature (TC-6), derived from the two sags in the class summary with
+    /// u = r/ρmax, x = u²:
+    /// <list type="bullet">
+    /// <item>Qcon: the added term x²·S(x) = (r/ρmax)⁴·S is O(r⁴), so d²z/dr² at 0 is the conic's
+    /// c.</item>
+    /// <item>Qbfs: w = ψ/φ = 1 + O(r²) (ψ² − φ² = c²r²) and x(1 − x)S(x) = (r²/ρmax²)·S(0) + O(r⁴),
+    /// so the added term is S(0)·r²/ρmax² + O(r⁴) and the curvature is c + 2S(0)/ρmax², with
+    /// S(0) = Σ a_m Q^bfs_m(0) from the same Clenshaw sum the sag uses (Forbes 2010b
+    /// Eqs. 3.7–3.9).</item>
+    /// </list>
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface)
+    {
+        if (Kind == QTypeKind.Qcon || _a.Length == 0) return new() { Curvature = surface.Curvature };
+        QPolynomials.BfsSumAuxiliary(_auxiliary, 0, out double s0, out _);
+        return new()
+        {
+            Curvature = ParaxialCurvature.Add(surface.Curvature, 2 * s0 / (NormalizationRadius * NormalizationRadius)),
+        };
+    }
 }

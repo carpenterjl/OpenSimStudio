@@ -34,6 +34,15 @@ public class EvenAsphere : RadialSagShape
         dzdr += dp;
         return true;
     }
+
+    /// <summary>
+    /// The vertex curvature c + 2α1 (TC-6). Derived from the sag of "Even Asphere": the conic
+    /// c r²/(1 + √(1 − (1 + k)c²r²)) = c r²/2 + O(r⁴) for every k, and Σ αᵢ r²ⁱ = α1 r² + O(r⁴),
+    /// so d²z/dr² at r = 0 is c + 2α1. Alternate Even inherits it: its sag is the Even
+    /// Asphere's ("identical … except the alternate solution is used"), §17.
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface) =>
+        new() { Curvature = ParaxialCurvature.Add(surface.Curvature, 2 * ParaxialCurvature.Term(_alpha, 0)) };
 }
 
 /// <summary>
@@ -62,6 +71,20 @@ public class OddAsphere : RadialSagShape
         dzdr += dp;
         return true;
     }
+
+    /// <summary>
+    /// The vertex curvature c + 2β2 (TC-6), the limit of d²z/dr² as r → 0⁺. Derived from the sag
+    /// of "Odd Asphere": the conic is c r²/2 + O(r⁴); β2 r² adds 2β2; β1 r has zero second
+    /// derivative for r &gt; 0, and β3 r³ … β8 r⁸ have second derivatives that vanish as r → 0.
+    /// β1 r is a cone (axicon) at the vertex: along the y meridian it is β1|y|, a slope that
+    /// jumps from −β1 to +β1, which turns every ray by about the same angle whatever its height.
+    /// A first-order model is linear in height and cannot hold that, so β1 is left out of the
+    /// paraxial data (OpticStudio's help does not say how its paraxial trace treats β1; this is
+    /// this program's reading, docs/Optics-Conventions.md §17 and §10 item 13). The real trace
+    /// keeps every term. Alternate Odd inherits this.
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface) =>
+        new() { Curvature = ParaxialCurvature.Add(surface.Curvature, 2 * ParaxialCurvature.Term(_beta, 1)) };
 }
 
 /// <summary>
@@ -98,6 +121,17 @@ public sealed class ExtendedAsphere : RadialSagShape
         dzdr += dp / NormalizationRadius;
         return true;
     }
+
+    /// <summary>
+    /// The vertex curvature c + 2α1/R_n² (TC-6). Derived from the sag of "Extended Asphere":
+    /// α1 ρ² = (α1/R_n²) r², and every other term is O(r⁴), as is the conic beyond c r²/2.
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface) =>
+        new()
+        {
+            Curvature = ParaxialCurvature.Add(surface.Curvature,
+                2 * ParaxialCurvature.Term(_alpha, 0) / (NormalizationRadius * NormalizationRadius)),
+        };
 }
 
 /// <summary>
@@ -132,6 +166,19 @@ public sealed class ExtendedOddAsphere : RadialSagShape
         dzdr += dp / NormalizationRadius;
         return true;
     }
+
+    /// <summary>
+    /// The vertex curvature c + 2α2/R_n² (TC-6), the limit of d²z/dr² as r → 0⁺. Derived from the
+    /// sag of "Extended Odd Asphere": α2 ρ² = (α2/R_n²) r²; α1 ρ is a cone and α3 ρ³ … vanish to
+    /// second order, as for <see cref="OddAsphere.ParaxialEquivalent"/>, whose reading of the cone
+    /// term applies here too.
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface) =>
+        new()
+        {
+            Curvature = ParaxialCurvature.Add(surface.Curvature,
+                2 * ParaxialCurvature.Term(_alpha, 1) / (NormalizationRadius * NormalizationRadius)),
+        };
 }
 
 /// <summary>
@@ -158,6 +205,18 @@ public sealed class AlternateOddAsphere : OddAsphere
     public override string TypeName => "Alternate Odd";
 
     public override bool UsesAlternateRoot => true;
+}
+
+/// <summary>Shared arithmetic of the forms' <see cref="SurfaceShape.ParaxialEquivalent"/> overrides (TC-6).</summary>
+internal static class ParaxialCurvature
+{
+    /// <summary>Coefficient <paramref name="index"/> (0-based), or 0 when the list is shorter.</summary>
+    public static double Term(double[] coefficients, int index) =>
+        index < coefficients.Length ? coefficients[index] : 0;
+
+    /// <summary>c + δ, but c itself when δ = 0, so a surface without a second-order term gives
+    /// the paraxial engine exactly the Standard surface's curvature (−0 stays −0).</summary>
+    public static double Add(double curvature, double delta) => delta == 0 ? curvature : curvature + delta;
 }
 
 /// <summary>Horner evaluation of the power series of the asphere forms, with derivative.</summary>

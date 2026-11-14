@@ -107,7 +107,7 @@ public sealed record SequentialLens
             bool dummy = s.IsIgnored || s.IsCoordinateBreak;
             var equivalent = dummy || s.Shape is null || j == 0 || j == image
                 ? new ParaxialShapeEquivalent { Curvature = dummy ? 0 : s.Curvature }
-                : s.Shape.ParaxialEquivalent(s);
+                : ShapeEquivalent(s, j);
             surfaces[j] = new ParaxialSurface
             {
                 Curvature = equivalent.Curvature,
@@ -122,6 +122,20 @@ public sealed record SequentialLens
             };
         }
         return new ParaxialLens { Surfaces = surfaces };
+    }
+
+    /// <summary>The shape's first-order model; a shape that has none (it throws
+    /// <see cref="ArgumentException"/>) is reported with the surface number.</summary>
+    private static ParaxialShapeEquivalent ShapeEquivalent(SequentialSurface s, int j)
+    {
+        try
+        {
+            return s.Shape!.ParaxialEquivalent(s);
+        }
+        catch (ArgumentException e)
+        {
+            throw new ArgumentException($"Surface {j}: {e.Message}", e);
+        }
     }
 
     /// <summary>

@@ -46,6 +46,22 @@ public sealed class PeriodicSurface : SagSurfaceShape
         dzdy += Amplitude * (Math.PI * FrequencyY / 2) * Math.Sin(by) * cx;
         return double.IsFinite(z) && double.IsFinite(dzdx) && double.IsFinite(dzdy);
     }
+
+    /// <summary>
+    /// The y–z vertex curvature c + 2π²Aβ² (TC-6; the paraxial engine traces the y meridian,
+    /// <see cref="SurfaceShape.ParaxialEquivalent"/>). Derived from the sag of "Periodic": on
+    /// x = 0, ¼(1 + 1)(1 + cos 2πβy) − 1 = −(1 − cos 2πβy)/2, so the modulation adds
+    /// (A/2)(1 − cos 2πβy) = (A/2)(2πβy)²/2 + O(y⁴) = π²Aβ²y² + O(y⁴), whose second derivative at
+    /// 0 is 2π²Aβ². The x–z curvature, c + 2π²Aα², is not passed on: the surface is anamorphic
+    /// when α ≠ β. This is the curvature at the vertex only; for a modulation whose period is
+    /// short against the beam, first-order data describe a region far smaller than the beam.
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface) =>
+        new()
+        {
+            Curvature = ParaxialCurvature.Add(surface.Curvature,
+                2 * Math.PI * Math.PI * Amplitude * FrequencyY * FrequencyY),
+        };
 }
 
 /// <summary>One cosine term A·s^P·cos(B·θ + C) of the <see cref="OddCosineSurface"/>.</summary>
@@ -127,5 +143,48 @@ public sealed class OddCosineSurface : SagSurfaceShape
             }
         }
         return double.IsFinite(z) && double.IsFinite(dzdx) && double.IsFinite(dzdy);
+    }
+
+    /// <summary>
+    /// The y–z vertex curvature (TC-6), derived from the sag of "Odd Cosine" term by term:
+    /// <list type="bullet">
+    /// <item>The conic and Σ βᵢ rⁱ give c + 2β2, the limit of d²z/dr² as r → 0⁺; β1 r is a cone
+    /// and is left out, as for <see cref="OddAsphere.ParaxialEquivalent"/>.</item>
+    /// <item>A cosine term A s^P cos(Bθ + C), s = r/R, R &gt; 0, is A (|y|/R)^P cos(Bθ± + C) on
+    /// the two halves of the y meridian, θ± = atan2(±1, 0) = ±π/2. Its second derivative there
+    /// is A P(P − 1)|y|^(P−2)/R^P · cos(Bθ± + C). As y → 0 this tends to 2A cos(Bθ± + C)/R² for
+    /// P = 2, to 0 for P &gt; 2 and for P = 1 (a cone, left out like β1) and P = 0 (a step in
+    /// the sag at the vertex, no curvature), and has no finite limit for 0 &lt; P &lt; 2 with
+    /// P ≠ 1 or for P &lt; 0.</item>
+    /// <item>When B is not even the two halves differ (cos(Bπ/2 + C) ≠ cos(−Bπ/2 + C)), and the
+    /// paraxial engine, which assumes a surface symmetric about the axis, is given their mean:
+    /// the part of the sag even in y, which is also what a central second difference of the sag
+    /// across the vertex measures.</item>
+    /// </list>
+    /// A non-zero cosine term whose curvature has no finite limit at the vertex is refused with
+    /// an <see cref="ArgumentException"/>: the surface has no paraxial curvature there, so
+    /// first-order data (and the real trace, which is launched from them) are not defined.
+    /// </summary>
+    public override ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface)
+    {
+        double delta = 2 * ParaxialCurvature.Term(_beta, 1);
+        if (NormalizationRadius > 0)
+        {
+            double up = Math.Atan2(1.0, 0.0), down = Math.Atan2(-1.0, 0.0);
+            for (int i = 0; i < _terms.Length; i++)
+            {
+                var t = _terms[i];
+                if (t.A == 0) continue;
+                if (t.P < 0 || (t.P > 0 && t.P < 2 && t.P != 1))
+                    throw new ArgumentException(
+                        $"Odd Cosine: cosine term {i + 1} has the power P = {t.P}; its curvature A·P(P − 1)·s^(P − 2)/R² has no finite value at the vertex " +
+                        "for 0 < P < 2 (P ≠ 1) or P < 0, so the surface has no paraxial curvature and first-order data are not defined. " +
+                        "Use P = 0, 1, 2 or more than 2, or set its amplitude A to zero.");
+                if (t.P != 2) continue;
+                double mean = 0.5 * (Math.Cos(t.B * up + t.C) + Math.Cos(t.B * down + t.C));
+                delta += 2 * t.A * mean / (NormalizationRadius * NormalizationRadius);
+            }
+        }
+        return new() { Curvature = ParaxialCurvature.Add(surface.Curvature, delta) };
     }
 }
