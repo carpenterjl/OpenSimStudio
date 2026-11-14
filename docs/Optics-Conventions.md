@@ -598,55 +598,6 @@ single place in the code, so a correction is one line and its test.
     `OpenSim.Tests/References/OP-102/lenses.py` in OpticStudio (Single Ray Trace and System
     Data), stored beside the others as OpticStudio reference files when access exists.
 
-24. **Surface shape analyses** (OP-43). Section 28's readings of OpticStudio's help are not
-    compared with its output. Check each on one Even Asphere in both programs (Sag Table,
-    Surface Sag, Surface Curvature, Surface Slope and their cross-sections):
-    - *RMS criteria:* the RMS is area-weighted (2πr dr) over the annulus; the help does not say
-      how OpticStudio weights it.
-    - *BFS Sag and Deviation:* BFS Sag is the sphere's sag from its own vertex and Deviation is
-      BFS Sag − Sag, both without the vertex offset; Remove includes the offset. The help says
-      Deviation ignores the offset but not whether BFS Sag does.
-    - *Air side and Reverse Direction:* the lower-index side is air (the side the light arrives
-      from on a mirror); Reverse Direction takes the other side, as the Sag Table page says. The
-      Surface Sag page says instead that it "changes the sign on the radius of curvature of the
-      best-fit sphere"; the two were not reconciled.
-    - *Curvature modulus:* read as the larger magnitude of the two principal curvatures; the help
-      says only "the maximum length of the curvature vector".
-    - *Tangential and sagittal:* read as the normal curvatures and slopes along the radial and
-      azimuthal directions from the vertex; the help names them without a formula.
-    - *Remove on slope and curvature maps:* the removed sphere's own slope or curvature at the
-      same point is subtracted; the help says the base radius is "subtracted from the current
-      curvature" (or slope) without a formula.
-    - *Automatic step* of the Sag Table and the default sampling of 65: OpenSim's choices.
-
-26. **Jones and Mueller matrix surfaces** (OP-52). Section 30's readings of OpticStudio's help
-    are not compared with its output. Check with a Jones surface at normal and at 20° incidence
-    (Polarization Ray Trace listing):
-    - *Complex convention:* the entries Ar + i·Ai are taken in the convention of OpticStudio's
-      Jones-vector phases, so this program applies their conjugates; the help does not say.
-    - *Frame:* Ex and Ey along the surface's local x and y axes.
-    - *Off normal incidence:* the matrix acts in the transverse basis (û, v̂) built from the
-      local x axis; OpticStudio's adjustment of Ez or of Ex and Ey is not given as a formula.
-    - *Interface:* the surface is also an ordinary interface (Fresnel or coating), and the matrix
-      acts after it.
-    - *Image surface:* a matrix type on the image surface is not applied (no interface is).
-
-21. **Ray fans, spot diagrams and footprints** (OP-34). Section 25's readings of OpticStudio's
-    help that its output was not compared with:
-    - *Pupil patterns:* hexapolar rings at radii k/N, the square grid cell-centred (n × n,
-      2/n apart), and a dithered pattern of as many rays as the hexapolar one, uniform over the
-      disk from a fixed seed. The help gives the ray counts of the hexapolar pattern only.
-    - *Wavelength weights:* every wavelength traces the full pattern and each ray weighs its
-      wavelength's weight in the RMS and the centroid; OpticStudio instead thins the grids of
-      lower-weight wavelengths. The two agree in expectation, not ray for ray.
-    - *Working F/# off axis:* θ is taken between the chief ray and each of the four marginal
-      rays at the image surface; the help names "the axis ray" without defining it further.
-    - *Chief ray as reference:* traced with apertures ignored, so an obscured chief ray still
-      gives a reference point; the help does not say what OpticStudio does then.
-    - *Incident angle sign:* atan2(M, |N|) in the image surface's local frame.
-    Check: the standard spot (RMS, GEO, Airy radius), a ray fan and a footprint of a singlet at
-    two fields in OpticStudio, with all three patterns.
-
 19. **Toroidal, biconic and irregular surfaces** (OP-24). Section 23's surfaces follow their
     OpticStudio 2025 R2 help pages; these points are this program's reading where a page is
     silent, and none is compared with OpticStudio's output.
@@ -668,39 +619,34 @@ single place in the code, so a correction is one line and its test.
     Check: one lens per type traced in both programs (ray positions and directions), and the
     paraxial data of a lens holding a Zernike defocus term.
 
-25. **Report readings** (OP-44). Section 29's report layouts are this program's (the help lists
-    the sections, not their columns), and these readings of OpticStudio are not compared with
-    its output: the edge thickness taken at the surface's own clear semi-diameter; a cemented
-    doublet listed as two elements; the clear (not mechanical) semi-diameter used for element
-    volumes; non-rotational faces squared up rather than tapered; the cardinal-plane signs
-    (positions along z from the first and last vertex, as §11); the surface focal lengths n′/φ
-    and −n/φ and the element focal length 1/φ in Surface Data; and Index Data's TCE column as
-    the glass's catalog value. Check: Prescription Data, Surface Data and Cardinal Points of a
-    singlet, a cemented doublet and an immersed-image lens in both programs.
+20. **Multi-configuration readings** (OP-30). Section 24's operands follow the help's table, but
+    no configuration is compared with OpticStudio's. Check, with a two-configuration zoom saved
+    in both programs (Multi-Configuration Editor and Prescription Data per configuration):
+    - *An operand over a solved cell* drops the solve in that configuration; OpticStudio's
+      precedence was not read.
+    - *Insert Configuration* copies the column at the cursor; what OpticStudio's new column
+      holds was not read.
+    - *PUCN* applies to fixed and variable cells only, and a negative PUCN is refused.
+    - *APMX on a spider* is the number of arms, read from the order of the help's sentence.
+    - *SDIA and MCSD on an automatic semi-diameter* read no value (Add All Data skips them);
+      writing one fixes the cell.
+    - *Next and Previous* stop at the ends; whether OpticStudio wraps was not read.
 
-27. **Merit function readings** (OP-54). Section 31's rules come from OpticStudio's help, but
-    none is compared with its output, and some are this program's reading where the help is
-    silent:
-    - *Parameter columns.* The help names each operand's parameters (Surf, Wave, Op#, Flag,
-      Factor) but places only some of them: Data1 to Data4 are Hx, Hy, Px, Py; CTGT, CTVA,
-      CVVA and COVA take their surface in Int1; TTHI, SUMM, DIVI, PROD and DIFF take theirs in
-      Int1 and Int2; OPGT its row in Int1. Wave in Int2 (EFFL, REAX, REAY, REAZ, REAR), the
-      trigonometric Flag in Int2, and DIVB's and PROB's Factor in Data1 are read by that pattern,
-      not from the help.
-    - *Wavelength numbers* start at 1; Wave 0 is refused (whether OpticStudio reads it as the
-      primary was not found).
-    - *A failed ray* fails its row only, scored with the penalty 10⁶ in place of V − T; the help
-      does not say how OpticStudio scores it. A ray that fails after the surface a row reads
-      does not fail the row.
-    - *Rotational symmetry* for SKIS and SKIN is tested on the lens alone (no tilt, decenter or
-      coordinate break; Standard, radial asphere or Paraxial surfaces only); the help gives no
-      test.
-    - *Math rows* read earlier rows only (the help says "prior" for DIVB alone); OSUM, QSUM,
-      MAXX and MINN read their range inclusively; GOTO, SKIS and SKIN jump forward only.
-    - *MXCT* is read as MNCT with the sign turned (the help's worked example is MNCT's).
-    - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
-    Check: a merit function with one row of each operand, saved by OpticStudio with its values,
-    evaluated here on the same lens.
+21. **Ray fans, spot diagrams and footprints** (OP-34). Section 25's readings of OpticStudio's
+    help that its output was not compared with:
+    - *Pupil patterns:* hexapolar rings at radii k/N, the square grid cell-centred (n × n,
+      2/n apart), and a dithered pattern of as many rays as the hexapolar one, uniform over the
+      disk from a fixed seed. The help gives the ray counts of the hexapolar pattern only.
+    - *Wavelength weights:* every wavelength traces the full pattern and each ray weighs its
+      wavelength's weight in the RMS and the centroid; OpticStudio instead thins the grids of
+      lower-weight wavelengths. The two agree in expectation, not ray for ray.
+    - *Working F/# off axis:* θ is taken between the chief ray and each of the four marginal
+      rays at the image surface; the help names "the axis ray" without defining it further.
+    - *Chief ray as reference:* traced with apertures ignored, so an obscured chief ray still
+      gives a reference point; the help does not say what OpticStudio does then.
+    - *Incident angle sign:* atan2(M, |N|) in the image surface's local frame.
+    Check: the standard spot (RMS, GEO, Airy radius), a ray fan and a footprint of a singlet at
+    two fields in OpticStudio, with all three patterns.
 
 22. **OPD references and the OPD analyses** (OP-35). Section 26 follows OpticStudio's help
     wording; these readings are not checked against its output:
@@ -725,19 +671,6 @@ single place in the code, so a correction is one line and its test.
     fan (one and all wavelengths, chief and centroid), wavefront map and interferogram compared
     with OpticStudio's; a telecentric lens's OPD fan. This also settles item 2.
 
-20. **Multi-configuration readings** (OP-30). Section 24's operands follow the help's table, but
-    no configuration is compared with OpticStudio's. Check, with a two-configuration zoom saved
-    in both programs (Multi-Configuration Editor and Prescription Data per configuration):
-    - *An operand over a solved cell* drops the solve in that configuration; OpticStudio's
-      precedence was not read.
-    - *Insert Configuration* copies the column at the cursor; what OpticStudio's new column
-      holds was not read.
-    - *PUCN* applies to fixed and variable cells only, and a negative PUCN is refused.
-    - *APMX on a spider* is the number of arms, read from the order of the help's sentence.
-    - *SDIA and MCSD on an automatic semi-diameter* read no value (Add All Data skips them);
-      writing one fixes the cell.
-    - *Next and Previous* stop at the ends; whether OpticStudio wraps was not read.
-
 23. **Field curvature, distortion, colour and relative illumination** (OP-37, section 27). Read
     from the help pages' wording; no OpticStudio number was compared:
     - *Field curvature* is measured from the chief ray's image point along the image surface's
@@ -761,6 +694,73 @@ single place in the code, so a correction is one line and its test.
       integrand as transmission does.
     Check: a singlet's field curvature, F-tan and calibrated distortion, grid distortion and RI
     against OpticStudio's text output.
+
+24. **Surface shape analyses** (OP-43). Section 28's readings of OpticStudio's help are not
+    compared with its output. Check each on one Even Asphere in both programs (Sag Table,
+    Surface Sag, Surface Curvature, Surface Slope and their cross-sections):
+    - *RMS criteria:* the RMS is area-weighted (2πr dr) over the annulus; the help does not say
+      how OpticStudio weights it.
+    - *BFS Sag and Deviation:* BFS Sag is the sphere's sag from its own vertex and Deviation is
+      BFS Sag − Sag, both without the vertex offset; Remove includes the offset. The help says
+      Deviation ignores the offset but not whether BFS Sag does.
+    - *Air side and Reverse Direction:* the lower-index side is air (the side the light arrives
+      from on a mirror); Reverse Direction takes the other side, as the Sag Table page says. The
+      Surface Sag page says instead that it "changes the sign on the radius of curvature of the
+      best-fit sphere"; the two were not reconciled.
+    - *Curvature modulus:* read as the larger magnitude of the two principal curvatures; the help
+      says only "the maximum length of the curvature vector".
+    - *Tangential and sagittal:* read as the normal curvatures and slopes along the radial and
+      azimuthal directions from the vertex; the help names them without a formula.
+    - *Remove on slope and curvature maps:* the removed sphere's own slope or curvature at the
+      same point is subtracted; the help says the base radius is "subtracted from the current
+      curvature" (or slope) without a formula.
+    - *Automatic step* of the Sag Table and the default sampling of 65: OpenSim's choices.
+
+25. **Report readings** (OP-44). Section 29's report layouts are this program's (the help lists
+    the sections, not their columns), and these readings of OpticStudio are not compared with
+    its output: the edge thickness taken at the surface's own clear semi-diameter; a cemented
+    doublet listed as two elements; the clear (not mechanical) semi-diameter used for element
+    volumes; non-rotational faces squared up rather than tapered; the cardinal-plane signs
+    (positions along z from the first and last vertex, as §11); the surface focal lengths n′/φ
+    and −n/φ and the element focal length 1/φ in Surface Data; and Index Data's TCE column as
+    the glass's catalog value. Check: Prescription Data, Surface Data and Cardinal Points of a
+    singlet, a cemented doublet and an immersed-image lens in both programs.
+
+26. **Jones and Mueller matrix surfaces** (OP-52). Section 30's readings of OpticStudio's help
+    are not compared with its output. Check with a Jones surface at normal and at 20° incidence
+    (Polarization Ray Trace listing):
+    - *Complex convention:* the entries Ar + i·Ai are taken in the convention of OpticStudio's
+      Jones-vector phases, so this program applies their conjugates; the help does not say.
+    - *Frame:* Ex and Ey along the surface's local x and y axes.
+    - *Off normal incidence:* the matrix acts in the transverse basis (û, v̂) built from the
+      local x axis; OpticStudio's adjustment of Ez or of Ex and Ey is not given as a formula.
+    - *Interface:* the surface is also an ordinary interface (Fresnel or coating), and the matrix
+      acts after it.
+    - *Image surface:* a matrix type on the image surface is not applied (no interface is).
+
+27. **Merit function readings** (OP-54). Section 31's rules come from OpticStudio's help, but
+    none is compared with its output, and some are this program's reading where the help is
+    silent:
+    - *Parameter columns.* The help names each operand's parameters (Surf, Wave, Op#, Flag,
+      Factor) but places only some of them: Data1 to Data4 are Hx, Hy, Px, Py; CTGT, CTVA,
+      CVVA and COVA take their surface in Int1; TTHI, SUMM, DIVI, PROD and DIFF take theirs in
+      Int1 and Int2; OPGT its row in Int1. Wave in Int2 (EFFL, REAX, REAY, REAZ, REAR), the
+      trigonometric Flag in Int2, and DIVB's and PROB's Factor in Data1 are read by that pattern,
+      not from the help.
+    - *Wavelength numbers* start at 1; Wave 0 is refused (whether OpticStudio reads it as the
+      primary was not found).
+    - *A failed ray* fails its row only, scored with the penalty 10⁶ in place of V − T; the help
+      does not say how OpticStudio scores it. A ray that fails after the surface a row reads
+      does not fail the row.
+    - *Rotational symmetry* for SKIS and SKIN is tested on the lens alone (no tilt, decenter or
+      coordinate break; Standard, radial asphere or Paraxial surfaces only); the help gives no
+      test.
+    - *Math rows* read earlier rows only (the help says "prior" for DIVB alone); OSUM, QSUM,
+      MAXX and MINN read their range inclusively; GOTO, SKIS and SKIN jump forward only.
+    - *MXCT* is read as MNCT with the sign turned (the help's worked example is MNCT's).
+    - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
+    Check: a merit function with one row of each operand, saved by OpticStudio with its values,
+    evaluated here on the same lens.
 
 ## 11. Paraxial optics
 
@@ -1736,166 +1736,149 @@ surface, a paraboloid mirror, and a paraboloid–hyperboloid two-mirror lens. 24
 OPD against a reference sphere, diffraction (prysm and POPPY, later items), and any OpticStudio
 reference file.
 
-## 28. Surface shape analyses
+## 23. Toroidal, biconic and irregular surfaces
 
-`OpenSim.Optics/Analysis/SurfaceAnalyses/` (OP-43) holds OpticStudio's Sag Table, Surface Sag,
-Surface Curvature, Surface Slope and the three cross-sections, registered under the category
-"Surface". Their settings and the meaning of each column are read from OpticStudio's 2025 R2
-help pages "Sag Table" (Tolerance tab, Manufacturing Drawings and Data), "Surface Sag",
-"Surface Curvature", "Surface Slope", "Surface Sag Cross Section", "Surface Curvature Cross
-Section", "Surface Slope Cross Section" and the operand page "Best Fit Sphere Data", saved under
-`plans/sources/optics/op-43-help/`.
+OP-24 adds four `SurfaceShape` subclasses in `OpenSim.Optics/Sequential/Anamorphic/`. Each
+definition is quoted from its OpticStudio 2025 R2 help page (ansyshelp.ansys.com, OpticStudio
+User Guide, "Sequential Surfaces (lens data editor)": "Toroidal", "Biconic", "Biconic Zernike",
+"Irregular", and "Zernike Standard Sag" for the Zernike terms) on the class; the pages are saved
+under `plans/sources/optics/op-24-help/`. Formulas not on a page are derived in the class
+comments and in `AnamorphicSurfaceTests`. All four use the asphere intersection of §17
+(damped Newton from the base conic's root, bisection fallback). Coefficients are SI.
 
-- **Frame.** Every quantity is in the surface's local frame (§3): vertex at the origin, +z along
-  the local axis, curvature positive when the surface bends toward +z. The maps cover the clear
-  semi-diameter round the vertex on an n × n grid (n odd, 5 to 1025, default 65), blank (NaN)
-  outside it and where the surface's aperture blocks; the cross-sections run along a line through
-  the vertex at an angle from the local x axis, across the full clear diameter. An automatic
-  clear semi-diameter is sized from rays (§13).
-- **Sag and slopes** (`SurfaceProbe`). The Standard surface's sag and slopes are the conic's
-  (`ConicSag`, §13); an asphere's are its own analytic sag and slopes (§17); any other shape's
-  sag is `SurfaceShape.Sag` and its slopes are −nx/nz and −ny/nz from `SurfaceShape.Normal`, the
-  slope the trace refracts with. Slopes are dimensionless dz along a direction of the vertex
-  plane: tangential is radial from the vertex, sagittal at right angles to it (both +x on the
-  axis), x and y the axes, and the modulus |∇z| ("the maximum length of the slope vector").
-- **Curvatures.** The normal curvature of the surface in the direction of the vertex plane
-  (u, v): κ = (Lu² + 2Muv + Nv²)/(Eu² + 2Fuv + Gv²), with E = 1 + zx², F = zx·zy, G = 1 + zy²
-  and L, M, N = zxx, zxy, zyy divided by W = √(1 + zx² + zy²). For a surface of revolution this
-  is z″/(1 + z′²)^(3/2) tangentially and z′/(r·√(1 + z′²)) sagittally, so a sphere's is 1/R
-  everywhere. The modulus is the larger magnitude of the principal curvatures, the eigenvalues
-  of the Weingarten matrix I⁻¹·II (from its entries, so the root keeps its digits on a sphere).
-  The Standard conic's second derivatives are analytic (d²z/dr² = c/φ³, (dz/dr)/r = c/φ,
-  φ = √(1 − (1 + k)c²r²)); every other shape's are central differences of its analytic slopes,
-  Richardson-extrapolated from h and h/2 with h = 10⁻³ of the clear semi-diameter: truncation
-  error −h⁴/480 times the sag's sixth derivative, rounding about ε·|slope|/h, together below
-  10⁻¹² of the curvature for a 50 mm sphere at a 10 mm semi-diameter. Where a stencil point
-  falls outside the sag's domain the sample is blank and the count is reported.
-- **Best-fit sphere** (`BestFitSphere`). As the Sag Table help says, "only the Y-coordinate of
-  the surface is considered": the fit reads the profile z(0, y) over [minimum, maximum radius]
-  (both 0: 0 to the clear semi-diameter), sampled at 2001 equal steps, with integrals by
-  Simpson's rule and the area weight 2πr. Sphere sag s(r) = c·r²/(1 + √(1 − c²r²)).
-  *Minimum RMS, no offset:* c minimises the area-weighted RMS of z − s. *Minimum RMS, with
-  offset:* the offset is the weighted mean of z − s, and c minimises the RMS of what is left.
-  *Minimum volume:* the sphere is moved along z until it touches the surface from the air side,
-  so every depth to remove is ≥ 0, and c minimises the volume ∫ depth·2πr dr. c is found by
-  scanning 400 values over |c| < 1/r_max (and the vertex curvature), refining with Brent's
-  method (10⁻¹⁰ relative), and for the RMS criteria Gauss–Newton steps on c with
-  ∂s/∂c = r²/(φ(1 + φ)) (derived), kept only while they lower the RMS.
-- **Air side.** The side with the lower index at the primary wavelength is air; on a mirror the
-  side the light arrives from. The light travels +z after an even number of mirrors and −z after
-  an odd number (§3). With equal indices the side cannot be told: +z is taken to go from air to
-  glass (as OpticStudio's listing words it) and the result says so. Reverse Direction takes the
-  other side.
-- **Sag Table columns** (the help's eight): Y-coord; Sag; BFS Sag, the sphere's sag from its own
-  vertex; Deviation = BFS Sag − Sag, "ignoring any vertex offset"; Remove, the depth from the
-  sphere placed at its vertex offset to the surface, measured into the material (positive =
-  material to remove); Slope, BFS Slope and Slope Delta = Slope − BFS Slope (dz/dr along +y).
-  Figures: BFS radius and vertex offset; for minimum volume the maximum and RMS depth to remove
-  and the volume to remove; for the RMS criteria the RMS difference (OpenSim's addition); the
-  maximum and RMS slope deviation over the help's "1000 equally spaced Y-points". Rows run from
-  the vertex in steps of the step size (0: the maximum radius over 50 rounded down to 1, 2 or
-  5 × 10ⁿ, OpenSim's rule) to the maximum radius.
-- **Remove** (maps and cross-sections). None; Base Radius, the sphere of the vertex radius
-  (conic 0, no offset); Best Fit Sphere by the chosen criterion, fitted over 0 to the clear
-  semi-diameter. The removed sphere's own value at the same point (its sag plus its vertex
-  offset, its slope, or its curvature) is subtracted.
-- **Contour format** (Surface Sag help, "The Contour Format String"): blank for the default; one
-  value for the interval (more than 100 contours fall back to the default, with a note); several
-  values for only those contours; in the map's units.
+- **Toroidal** (`ToroidalSurface`): the y–z curve z_y = c·y²/(1 + √(1 − (1 + k)c²y²)) + α1·y² +
+  … + α7·y¹⁴ (c, k the surface's own) turned about the line z = R parallel to y, R the radius
+  of rotation (parameter 1, 0 = infinite). With ρ = R − z_y,
+  z = z_y + x²/(ρ + sign(ρ)·√(ρ² − x²)); ∂z/∂x = sign(ρ)·x/√(ρ² − x²), ∂z/∂y = |ρ|/√(ρ² − x²)·z_y′.
+  Not defined where x² ≥ ρ² or ρ has the other sign from R. Optional Zernike Standard terms
+  (parameters 0, 13, 14, 15–245). **Cylinder:** R = 0 gives z = z_y(y), power in y only; c = 0
+  with R ≠ 0 gives power in x only.
+- **Biconic** (`BiconicSurface`): z = (cx·x² + cy·y²)/(1 + √(1 − (1 + kx)cx²x² − (1 + ky)cy²y²)),
+  cy and ky the surface's, Rx and kx parameters 1 and 2 (Rx = 0 is infinite). With cx = cy and
+  kx = ky it is the Standard conic.
+- **Biconic Zernike** (`BiconicZernikeSurface`): the biconic + Σ αᵢ·xⁱ + Σ βᵢ·yⁱ (i = 1…16,
+  parameters 13–28 and 29–44) + Σ Aᵢ·Zᵢ (parameters 3 the term count up to 210, 4 the
+  normalization radius, 45–254 the coefficients, 0 the extrapolate flag).
+- **Zernike terms** (`ZernikeSagTerms`): Noll-ordered Standard polynomials of OP-33
+  (`ZernikeBasis`, φ counter-clockwise from +x) at (x/R_n, y/R_n), coefficients in lens units;
+  extrapolate 0 drops them for ρ > 1. A term count above zero needs R_n > 0.
+- **Irregular** (`IrregularSurface`): z = conic + Zs·ρ⁴ + Za·ρ′y² + Zc·ρ²·ρ′y, ρ = r/r_max,
+  ρ′y = ρy·cos θ − ρx·sin θ, r_max the surface's fixed clear semi-diameter (an automatic one
+  is refused when a Z term is non-zero). The whole sag lives in the frame of the coordinate
+  break (dx, dy, tilt x, tilt y, 0, order 0) of §4: the ray is carried into it, met there and
+  carried back with its normal; the distance along the ray is the same in both frames. The
+  shape's `Sag` is the local z line's intersection with the placed surface.
+- **Paraxial model.** The paraxial engine is rotationally symmetric and traces the y–z meridian
+  (§18), so each surface gives its y–z vertex curvature ∂²z/∂y²(0, 0): Toroidal c + 2α1,
+  Biconic cy, Biconic Zernike cy + 2β2, Irregular c + 2Za·cos²θ/r_max², plus the Zernike terms'
+  share (−2N·A·p_k(0)/R_n² from each cos 2θ term, N its normalisation and p_k(0) its radial
+  polynomial's lowest coefficient from the recurrence at the origin; −2N·A/R_n² for n = 2). The x–z curvature is not passed on, as for Paraxial XY. A surface
+  whose vertex is off z = 0 (Zernike piston and every m = 0 term), has a slope there (Zernike
+  tilt and coma, α1, β1, a tilted or decentered Irregular surface other than a decentered
+  plane) or has ∂²z/∂x∂y ≠ 0 (Zernike sin 2θ, an Irregular Za at an angle not a multiple of
+  90°) has no such model and is refused with an `ArgumentException` naming the cause and the
+  surface, as the engine refuses a tilted or decentered lens (§15). Such a lens still traces
+  real rays from given starting points; the launcher, ray aiming, solves and every analysis
+  that needs paraxial data refuse it. `OpdLimitation` is null: the path through these surfaces
+  is the true one.
+- **Saved layouts** (`SurfaceTypes`, §20): parameter numbers, names and units from each page's
+  parameter table; parameter 0 (extrapolate) is a whole number 0 or 1; numbers 13 and above
+  are extra data.
+- **Gates** (`AnamorphicSurfaceTests`): a Biconic and a Biconic Zernike with equal x and y terms,
+  an Irregular surface with zero terms and a toroid with R = Ry, k = 0 trace as the Standard
+  surface to 1e-12 m; a cylinder lens focuses collimated y rays, Richardson-extrapolated to
+  zero height, at the derived back focal distance Rc/(n − 1) − t/n to 1e-11 m, with x rays
+  undeviated (a line focus), and the paraxial engine puts its focus there too; normals match
+  central differences of the sag to 1e-8; intersections lie on the surface to 1e-14 m.
+- **Not built:** OpticStudio's import of Zernike coefficients into the Toroidal surface (they
+  are typed in the editor); the Cylinder as a separate type name (it is the Toroidal surface);
+  any comparison with OpticStudio's output.
 
-**Not built.** Surface Phase, Phase Slope and their cross-sections (no surface type carries a
-phase: there are no diffractive surfaces yet); Off-Axis Coordinates; Remove "Base Sag" and
-"Composite Sag" (no STAR data or composite surfaces); Show As surface plot and grey scale; the
-BFSD operand (a merit-function item); a best-fit sphere of a surface that is not rotationally
-symmetric beyond its y profile. The readings in §10 item 24 are not compared with OpticStudio's
-output.
+## 24. Multi-configuration
 
-## 30. Jones and Mueller matrix surfaces
+A multi-configuration system (OP-30) is the optics record plus a table,
+`OpticsSettings.MultiConfiguration` (`OpenSim.Core/Model/OpticsMultiConfigSettings.cs`): operand
+rows, each with an operand code, up to three integer arguments and one value per
+configuration, the number of configurations and the current one. Null is one configuration, the
+system as entered; the project format version is unchanged. The operand list, the arguments and
+the integer codes are OpticStudio's (OpticStudio 2025 R2 help, "Multi-Configuration Operands" and
+the pages under "Multiple Configuration Editor", saved in `plans/sources/optics/op-30-help/`).
 
-OP-52 adds two plane surface types that act on the polarization ray trace of section 21:
-OpticStudio's Jones Matrix surface and a Mueller Matrix surface of this program's own
-(`OpenSim.Optics/Polarization/MatrixSurfaces.cs`, `StokesVector.cs`, and additions to
-`PolarizationTracer.cs`). Sources, saved under `plans/sources/optics/op-52-help/`: OpticStudio
-2025 R2 help, "Jones Matrix (sequential surfaces, lens data editor)", "Defining Polarizing
-Components" (its sample Jones matrices) and "Summary Table of Sequential Surface Types";
-Wikipedia, "Stokes parameters" and "Mueller calculus".
-
-- **Geometry.** Both are planes ("The surface shape is always plane"), traced by the same
-  `ConicIntersection` calls as a Standard surface of zero curvature and conic, so the geometric
-  trace is a plane's bit for bit. Rays refract or reflect there by the media on the two sides,
-  and the surface is an ordinary interface for the Fresnel or coating amplitudes of section 21;
-  the matrix acts after that interface, on the light leaving the surface. Radius and conic are
-  refused on both types when a saved lens is read. Only the polarization trace and its analyses
-  see the matrix, as the help says of the Jones surface.
-- **Jones Matrix parameters** (help table): 1 Ar, 2 Ai, 3 Br, 4 Bi, 5 Cr, 6 Ci, 7 Dr, 8 Di;
-  (Ex′, Ey′) = (A Ex + B Ey, C Ex + D Ey). The entries are read as OpticStudio complex numbers
-  in its convention, so the matrix applied in this program's convention (section 21) is the
-  conjugate, A = Ar − i·Ai and so on (a field in one convention is the conjugate of the field in
-  the other, and conj(JE) = conj(J)·conj(E)).
-- **Local frame.** Ex and Ey are read along the surface's local x and y axes. For a ray leaving
-  along k̂ the transverse basis is û = the part of x̂_L at right angles to k̂, normalised, and
-  v̂ = k̂ × û (where k̂ lies along x̂_L: v̂ = the part of ŷ_L at right angles to k̂, û = v̂ × k̂).
-  At normal incidence (û, v̂) = (x̂_L, ŷ_L). `PlaneMatrixShape.TransverseBasis`.
-- **Embedding in the 3 × 3 calculus.** P_J = [û v̂]·J·[û v̂]ᵀ + k̂k̂ᵀ
-  = û(A ûᵀ + B v̂ᵀ) + v̂(C ûᵀ + D v̂ᵀ) + k̂k̂ᵀ. It maps a transverse field Eu û + Ev v̂ to
-  (A Eu + B Ev) û + (C Eu + D Ev) v̂ and k̂ to k̂, like the interface matrices, and multiplies
-  the surface's interface matrix from the left (P = P_J·P_interface), so the system matrix stays
-  the product of the surfaces' matrices. The help says OpticStudio adjusts Ez, or Ex and Ey,
-  after the matrix so that k·E = 0 without increasing |E|, and gives no formula; this program's
-  embedding keeps the field transverse by construction, never increases |E| for a passive
-  matrix (singular values at most 1) and keeps |E| for a unitary one at every angle, but off
-  normal incidence it need not give OpticStudio's numbers (section 10, item 26). An exact
-  identity matrix (Ar = Dr = 1, the rest 0) is skipped, so it leaves every number of the trace
-  unchanged.
-- **Mueller Matrix surface.** OpticStudio has no sequential Mueller surface (the summary table
-  lists none). Parameters 1 to 16 are M00 … M33 row-major (parameter 4r + c + 1 is M_rc),
-  dimensionless; 13–16 are saved as extra data like every registered type's numbers from 13.
-  S_out = M·S_in with the Stokes vector in the basis (û, v̂) above. An output that is not a
-  physical Stokes vector (I < −10⁻¹²·I_in, or √(Q² + U² + V²) > I + 10⁻¹²·I_in) stops the
-  trace with a message naming the surface; a full test of the physical realisability of M is
-  not made.
-- **Stokes vector.** In a basis (û, v̂), I = |Eu|² + |Ev|², Q = |Eu|² − |Ev|²,
-  U = 2 Re(Eu Ev*), V = −2 Im(Eu Ev*) ("Stokes parameters", representation in a fixed basis),
-  applied to this program's amplitudes; it is S = A·(E ⊗ E*) with "Mueller calculus"'s matrix A,
-  and a Jones matrix's Mueller matrix is A·(J ⊗ J*)·A⁻¹ (`StokesVector.MuellerFromJones`). Which
-  sign of V is right-handed is not asserted; the degree of circular polarization is V/I, signed.
-  The degrees of polarization, of linear and of circular polarization are √(Q² + U² + V²)/I,
-  √(Q² + U²)/I and V/I, NaN where I = 0.
-- **How the two calculi compose.** A ray is described by its field E until it meets a Mueller
-  surface. There the trace forms the 3 × 3 coherency matrix Φ = E E^H (surface 1's frame),
-  reads the Stokes vector from its transverse 2 × 2 block in (û, v̂), applies M, and writes the
-  result back as Φ = Σ c_ab â b̂ᵀ with c00 = (I + Q)/2, c11 = (I − Q)/2, c01 = (U − iV)/2
-  (`CoherencyMatrix`). From then on every polarization matrix P of section 21 (interfaces, Jones
-  surfaces) acts as Φ → P Φ P^H and bulk absorption as Φ → T·Φ; further Mueller surfaces act as
-  above. The power is tr Φ. A fully polarized state has Φ = E E^H, so for a ray that meets no
-  Mueller surface the two descriptions agree; every step is linear in Φ, so unpolarized light is
-  still the mean of the (1, 0) and (0, 1) traces (`PolarizationTracer.FinalStokes`).
-- **What is reported after a Mueller surface.** The field and the system matrix are not defined
-  (NaN in `PolarizedSurface.FieldOut`, `Cumulative` and `Ray.Field`); `PolarizedSurface.Coherency`
-  and `PolarizedPath.FinalCoherency` hold the state, and `PolarizedPath.MuellerSurface` names
-  the first such surface. Every transmission (per surface, per ray, the Transmission and
-  Transmission fan analyses, `PolarizationTracer.Transmission`) is tr Φ. The Polarization ray
-  trace shows dashes for Ex, Ey, Ez after the surface, "not defined" for the system
-  diattenuation and no system matrix; for every ray it now also lists the Stokes vector at the
-  last surface reached (that surface's local x, y basis) with the three degrees of polarization.
-  The Polarization pupil map at or after a Mueller surface, and the Phase aberration of a lens
-  with one, refuse with a message naming the surface, since partially polarized light has no
-  single ellipse or phase.
-- **Gates** (`OpenSim.Tests/Optics/JonesMuellerSurfaceTests`): Malus's law, cos²θ through two
-  polarizers (½cos²θ unpolarized, degree of polarization 1 after them); a quarter-wave plate at
-  45° (the help's quarter-wave plate rotated) turns x-linear light circular, |V|/I = 1; the
-  depolarizer diag(1, d, d, d) leaves a degree of polarization d for linear and circular light,
-  and an analyzer behind it passes (1 + d)/2; an identity Jones surface leaves positions,
-  directions, path, fields and matrices unchanged bit for bit against a Standard plane; a
-  unitary Jones matrix keeps the power at oblique incidence; A·(J ⊗ J*)·A⁻¹ reproduces two
-  entries of "Mueller calculus"'s table, and a Mueller surface holding the quarter-wave plate's
-  matrix gives the Jones surface's Stokes vector.
-- **Not built.** The non-sequential Jones Matrix object and any Mueller object (they need the
-  non-sequential core, OP-70); a test of the physical realisability of a Mueller matrix (only
-  its output on each ray is checked); diattenuation and retardance of a system containing a
-  Mueller surface; the pupil map of the polarized part of partially polarized light;
-  depolarization by anything but a Mueller surface (scattering, coatings; birefringence is
-  OP-53).
+- **Substitution.** Configuration k is the entered record with every row's value in column k
+  written into the data the operand controls (`MultiConfiguration.SettingsFor`,
+  `OpenSim.Optics/MultiConfig/MultiConfiguration.cs`); the result has no table, and
+  `ProjectLens` gives its solved lens (`SolveFor`, `LensFor`). Rows are applied in table order,
+  so a later row wins where two control the same value (the help says so for IGNR and IGNM).
+  Every problem (an unknown or unsupported code, a missing surface, field or wavelength, a
+  value the target refuses) is listed in one `ArgumentException`, a line each naming the row,
+  its code and arguments, and the configuration.
+- **Units and numbering.** Values are in the saved record's units: lens units, 1/lens unit for
+  CRVT, degrees, micrometers, °C, atmospheres. Surfaces count from the object (0), fields and
+  wavelengths from 1. THIC takes +infinity (saved as `IsInfinite`, since JSON has no infinity).
+  Operand strings are limited to 32 characters (help: "Comment About Operands that Define
+  Character Strings"); the table to 160 configurations (help: "Defining the Number of
+  Configurations").
+- **Solves under an operand.** Writing a surface cell (CRVT, THIC, GLSS, CONN, SDIA, MCSD, CHZN,
+  TCEX, PRAM, the model glass, APER under float by stop size) removes a solve or pickup the Lens
+  Data Editor has on that cell, keeping a variable flag, so the operand's value is the one
+  traced in that configuration. This is this program's rule: the help does not say which wins.
+  The solve-parameter operands (CSP, TSP, PSP) instead change the cell's solve: for a pickup the
+  parameters are surface, scale factor, offset (help: "Summary of Solves"; a curvature pickup
+  has no offset), for a solve its own parameters in that table's order.
+- **Cells.** Fixed, `Variable` (listed by `MultiConfiguration.Variables` for the optimizer,
+  written back by `WithValue`), `Pickup` (target × scale + offset from a cell whose
+  configuration and operand numbers are each no greater than its own and which is not itself,
+  help: "Solve Types"; a text cell copies the text) or `ThermalPickup` (from a reference
+  configuration; stored but not evaluated: thermal analysis is OP-91, and a configuration that
+  reaches one fails by name). PUCN with value c in configuration k makes the fixed and variable
+  cells of the rows below it, up to the next PUCN row, take configuration c's value; c must be
+  less than k (help); 0 ends the range; a negative PUCN ("a negative pickup") is not defined
+  further by the help and is refused.
+- **Weights.** The weight of configuration k is the value of the last CWGT row there, 1 without
+  one (`MultiConfiguration.WeightOf`); CWGT, PUCN, HOLD and MOFF change nothing in the system.
+- **Supported operands.** 92 of the help's 116 codes: surface data (CRVT, THIC, GLSS, CONN,
+  SDIA, MCSD, CHZN, TCEX, COTN, MCOM, PRAM and the obsolete PAR1–PAR8 as PRAM 1–8, MIND, MABB,
+  MDPG), flags and stop (IGNR, IGNM, SDRW, SRTS, STPS), apertures (APTP 0–10, APMN, APMX, APDX,
+  APDY), tilt and decenter before and after (CBDX … CBOR, CADX … CAOR), coordinate returns
+  (CROR, CRSR), solve parameters (CSP1–2, TSP1–3, PSP1–3), system data (AFOC, TELE, APDF, APDT,
+  SATP, APER, FLTP, RAAM, MTFU, TEMP, PRES, PSHX/Y/Z, PSCX/Y, LTTL, PRWV), polarization (GPJX,
+  GPJY, GPPX, GPPY, GPIU), fields (XFIE, YFIE, FLWT, FVDX, FVDY, FVCX, FVCY, FTAN, and the
+  obsolete FVAN as FTAN), wavelengths (WAVE, WLWT), and CWGT, PUCN, HOLD, MOFF. The type
+  operands' integers are the help's and equal the enumerations' values (`ApertureType`,
+  `FieldType`, `ApodizationType`, `RayAimingMode`, `MtfUnit`, `TiltDecenterOrder`,
+  `CoordinateReturnMode`). APMN and APMX are the first and second parameter of the aperture
+  (circular: minimum and maximum radius; rectangular and elliptical: x and y half-widths;
+  spider: arm width and number of arms, the order of the help's "Aperture" page); they refuse a
+  user-defined or floating aperture. APER under float by stop size is the stop's semi-diameter
+  (help). SDIA and MCSD read no value from an automatic semi-diameter.
+- **Not supported** (registered, so a table naming them fails with the code and the reason):
+  AICN and CPCN (Inventor and Creo parts), CSDX–CSTZ (composite surfaces, OP-32), FCMM (fields
+  have no comment), GCRS, MCHI and OPDR (not in the saved system data), GQPO (the default merit
+  function, OP-54), HLGV (no optically fabricated hologram), IGTO (tolerancing, OP-63), NCOM,
+  NCOT, NGLS, NPAR, NPOS, NPRO (non-sequential, OP-70 on), PXAR (no physical optics), UDAF
+  (apertures are vertex lists, not files), GPEX and GPEY (obsolete, no meaning given).
+- **Tools** (`OpenSim.Optics/MultiConfig/MultiConfigTools.cs`). Insert Configuration at a
+  position copies the stored values of the configuration that was there (the last when
+  appending) as fixed values: the help does not say what a new column holds. Insert with
+  Pickups makes every new cell pick up the same row of configuration 1. Insert and Delete move
+  pickup references, thermal references, PUCN values and the current configuration with their
+  configuration; Delete turns a pickup from the deleted configuration into a fixed cell and a
+  PUCN naming it into 0, and says so. Make Single Configuration is `SettingsFor` the current
+  configuration. Add All Data adds, for one chosen operand, a row for each target the system
+  holds such data for (every thickness, every field's y value, each surface with a tilt …) that
+  the table does not already control, each cell fixed at the value the target has in that
+  configuration, so no configuration changes. Next and Previous stop at the ends.
+- **Current configuration.** Every analysis computes on the current configuration:
+  `OpticsAnalysis<T>.Compute` passes its context through
+  `MultiConfiguration.ForCurrentConfiguration` (help: "The program will use the current
+  configuration for all calculations and graphics", "Changing Configurations"). The Lens Data
+  Editor keeps the entered lens; it does not show the current configuration's values.
+- **Not built.** Make Thermal and the evaluation of thermal pickups (OP-91: the TCE the editor
+  saves is not enough without the thermal expansion model and the mount data); Make Conjugate
+  (the help names its assumptions but not how the subset's object thickness and "other data as
+  appropriate" are formed); ZPL-macro and substitute solves; Add Hologram Variables; showing
+  the current configuration's values in the Lens Data Editor and writing Lens Data Editor
+  edits back into the table, as OpticStudio does.
 
 ## 25. Ray fans, spot diagrams and footprints
 
@@ -1980,63 +1963,237 @@ repository).
   are on the image surface regardless). Section 10, item 21 lists the checks against
   OpticStudio.
 
-## 23. Toroidal, biconic and irregular surfaces
+## 26. Optical path difference and wavefront
 
-OP-24 adds four `SurfaceShape` subclasses in `OpenSim.Optics/Sequential/Anamorphic/`. Each
-definition is quoted from its OpticStudio 2025 R2 help page (ansyshelp.ansys.com, OpticStudio
-User Guide, "Sequential Surfaces (lens data editor)": "Toroidal", "Biconic", "Biconic Zernike",
-"Irregular", and "Zernike Standard Sag" for the Zernike terms) on the class; the pages are saved
-under `plans/sources/optics/op-24-help/`. Formulas not on a page are derived in the class
-comments and in `AnamorphicSurfaceTests`. All four use the asphere intersection of §17
-(damped Newton from the base conic's root, bisection fallback). Coefficients are SI.
+OP-35. Code: `OpenSim.Optics/Wavefront/OpdEngine.cs`, `WavefrontTools.cs` and
+`FoucaultShadowgram.cs`; the analyses in `OpenSim.Optics/Analysis/WavefrontAnalyses.cs`. Tests:
+`OpenSim.Tests/Optics/WavefrontAnalysisTests.cs` and the gate
+`OpenSim.Tests/Optics/Gates/OpdGateTests.cs`. OpticStudio's definitions are read from its 2025 R2
+help ("Reference OPD", "Exit Pupil", "Infinity", "Absolute/Absolute 2", "Afocal Image Space",
+"Optical Path Difference", "Ray Aberration (Aberrations)", "Wavefront Map", "Interferogram",
+"Foucault Analysis (Wavefront)", "Pupil Aberration", "RMS vs. Field"), saved under
+`plans/sources/optics/op-35-help/`. Welford's "Aberrations of Optical Systems" and Hopkins were
+not on hand; the formulas below are derived from the definitions, not copied.
 
-- **Toroidal** (`ToroidalSurface`): the y–z curve z_y = c·y²/(1 + √(1 − (1 + k)c²y²)) + α1·y² +
-  … + α7·y¹⁴ (c, k the surface's own) turned about the line z = R parallel to y, R the radius
-  of rotation (parameter 1, 0 = infinite). With ρ = R − z_y,
-  z = z_y + x²/(ρ + sign(ρ)·√(ρ² − x²)); ∂z/∂x = sign(ρ)·x/√(ρ² − x²), ∂z/∂y = |ρ|/√(ρ² − x²)·z_y′.
-  Not defined where x² ≥ ρ² or ρ has the other sign from R. Optional Zernike Standard terms
-  (parameters 0, 13, 14, 15–245). **Cylinder:** R = 0 gives z = z_y(y), power in y only; c = 0
-  with R ≠ 0 gives power in x only.
-- **Biconic** (`BiconicSurface`): z = (cx·x² + cy·y²)/(1 + √(1 − (1 + kx)cx²x² − (1 + ky)cy²y²)),
-  cy and ky the surface's, Rx and kx parameters 1 and 2 (Rx = 0 is infinite). With cx = cy and
-  kx = ky it is the Standard conic.
-- **Biconic Zernike** (`BiconicZernikeSurface`): the biconic + Σ αᵢ·xⁱ + Σ βᵢ·yⁱ (i = 1…16,
-  parameters 13–28 and 29–44) + Σ Aᵢ·Zᵢ (parameters 3 the term count up to 210, 4 the
-  normalization radius, 45–254 the coefficients, 0 the extrapolate flag).
-- **Zernike terms** (`ZernikeSagTerms`): Noll-ordered Standard polynomials of OP-33
-  (`ZernikeBasis`, φ counter-clockwise from +x) at (x/R_n, y/R_n), coefficients in lens units;
-  extrapolate 0 drops them for ρ > 1. A term count above zero needs R_n > 0.
-- **Irregular** (`IrregularSurface`): z = conic + Zs·ρ⁴ + Za·ρ′y² + Zc·ρ²·ρ′y, ρ = r/r_max,
-  ρ′y = ρy·cos θ − ρx·sin θ, r_max the surface's fixed clear semi-diameter (an automatic one
-  is refused when a Z term is non-zero). The whole sag lives in the frame of the coordinate
-  break (dx, dy, tilt x, tilt y, 0, order 0) of §4: the ray is carried into it, met there and
-  carried back with its normal; the distance along the ray is the same in both frames. The
-  shape's `Sag` is the local z line's intersection with the placed surface.
-- **Paraxial model.** The paraxial engine is rotationally symmetric and traces the y–z meridian
-  (§18), so each surface gives its y–z vertex curvature ∂²z/∂y²(0, 0): Toroidal c + 2α1,
-  Biconic cy, Biconic Zernike cy + 2β2, Irregular c + 2Za·cos²θ/r_max², plus the Zernike terms'
-  share (−2N·A·p_k(0)/R_n² from each cos 2θ term, N its normalisation and p_k(0) its radial
-  polynomial's lowest coefficient from the recurrence at the origin; −2N·A/R_n² for n = 2). The x–z curvature is not passed on, as for Paraxial XY. A surface
-  whose vertex is off z = 0 (Zernike piston and every m = 0 term), has a slope there (Zernike
-  tilt and coma, α1, β1, a tilted or decentered Irregular surface other than a decentered
-  plane) or has ∂²z/∂x∂y ≠ 0 (Zernike sin 2θ, an Irregular Za at an angle not a multiple of
-  90°) has no such model and is refused with an `ArgumentException` naming the cause and the
-  surface, as the engine refuses a tilted or decentered lens (§15). Such a lens still traces
-  real rays from given starting points; the launcher, ray aiming, solves and every analysis
-  that needs paraxial data refuse it. `OpdLimitation` is null: the path through these surfaces
-  is the true one.
-- **Saved layouts** (`SurfaceTypes`, §20): parameter numbers, names and units from each page's
-  parameter table; parameter 0 (extrapolate) is a whole number 0 or 1; numbers 13 and above
-  are extra data.
-- **Gates** (`AnamorphicSurfaceTests`): a Biconic and a Biconic Zernike with equal x and y terms,
-  an Irregular surface with zero terms and a toroid with R = Ry, k = 0 trace as the Standard
-  surface to 1e-12 m; a cylinder lens focuses collimated y rays, Richardson-extrapolated to
-  zero height, at the derived back focal distance Rc/(n − 1) − t/n to 1e-11 m, with x rays
-  undeviated (a line focus), and the paraxial engine puts its focus there too; normals match
-  central differences of the sag to 1e-8; intersections lie on the surface to 1e-14 m.
-- **Not built:** OpticStudio's import of Zernike coefficients into the Toroidal surface (they
-  are typed in the editor); the Cylinder as a separate type name (it is the Toroidal surface);
-  any comparison with OpticStudio's output.
+- **What is compared.** A ray and the chief ray of the same field and wavelength are traced to
+  the image surface (`BatchTracer`; ΔP, the ray's path minus the chief ray's, summed segment by
+  segment) and carried along their image-space lines to the reference surface.
+  **OPD = chief path − ray path** (section 6), in waves of the traced wavelength in the system's
+  air (paths are relative to the air index, section 13). The chief ray's OPD is zero by
+  construction. This is the help's "OPD = OPD Absolute + OPD Correction".
+- **Reference point** (`OpdReferencePoint`): the chief ray's image-surface intercept, or the
+  centroid, the mean intercept of the rays of an n × n grid of pupil nodes (n = 33 by default).
+  Moving the centre adds, to first order, a tilt.
+- **Reference sphere** (Reference OPD = Exit Pupil, the default). Centre C, radius R = |E − C|,
+  E the centre of the primary wavelength's paraxial exit pupil (`ParaxialSystem.ExitPupilPosition`,
+  placed from the last surface's vertex as the OPD solve does), on E's side of C (σ = −1 when E
+  lies behind C along the reference ray, +1 when ahead). With q a ray's image intercept, d its
+  unit direction, w = q − C, b = w·d and p = −|w − b·d|²:
+  `OPD = −ΔP + n·[(b_r − b_c) + σ·(p_c − p_r)/(√(R² + p_c) + √(R² + p_r))]`, n the image-space
+  index. A ray whose line passes farther than R from C misses the sphere and is reported.
+- **Infinity, and telecentric image space.** As R → ∞ the bracket tends to b_r − b_c, the error
+  at most n·|w|²/R: each ray carried to the plane through C normal to itself. This is the help's
+  Infinity reference (the correction "given strictly by the angular error in the ray"), and it is
+  what the exit-pupil reference uses when the paraxial exit pupil is at infinity, so a telecentric
+  lens is the continuous limit of nearby non-telecentric ones (the sphere's sheet changes side as
+  the exit pupil passes through infinity; the OPD does not jump).
+- **Absolute, Absolute 2** (focal): no correction, OPD = −ΔP, the paths to the image surface.
+  The reference point plays no part.
+- **Afocal image space** (`Aperture.AfocalImageSpace`): a plane with unit normal u, the chief
+  ray's direction (the mean ray direction for the centroid reference), through Q; a ray meets it
+  at t = (Q − q)·u/(d·u) and OPD = −ΔP + n·(t_c − t_r). Exit Pupil (and Infinity, which the help
+  says is the same in afocal mode): Q is the point of the chief ray's line nearest E; with the
+  exit pupil at infinity this is refused. Absolute: Q is the chief ray's image intercept.
+  Absolute 2: no correction.
+- **Reference to primary.** The centre (or afocal direction) is the primary wavelength's; the
+  OPD is still against the traced wavelength's own chief ray (section 10, item 22).
+- **OPD limitations.** A surface whose shape says the OPD through it is approximate or undefined
+  (`SurfaceShape.OpdLimitation`) makes the engine refuse, naming the surface, unless "Allow OPD
+  limitations" is on; the result then lists it.
+- **Failed rays** keep their status and surface; their OPD is NaN; they are blank on maps,
+  left out of curves and statistics, and counted in the assumptions.
+- **Statistics** (`WavefrontTools.Statistics`): peak-to-valley = max − min; RMS about the mean
+  (piston removed), every sample weighted equally (the help's rectangular-array method;
+  Gaussian quadrature is not built).
+- **Tilt and focus removal** (`WavefrontTools.Remove`): a joint least-squares fit of Fringe
+  Zernike terms 1–3 or 1–4 (`ZernikeFit`; terms 2, 3 and 4 are x, y and 2ρ² − 1 on the
+  normalised pupil); only the removed terms are subtracted.
+- **Pupil grids.** Maps use an n × n grid of nodes from −1 to 1 (an odd n puts a node on the
+  chief ray); nodes outside the unit circle are blank. This is a private grid until OP-34's
+  shared pupil sampling lands.
+- **Interferogram:** intensity (1 − cos 2πΔ)/2, Δ = s·W + (t_x·Px + t_y·Py)/2, dark where Δ is
+  a whole number.
+- **Foucault:** the pupil field is e^{2πiW} (zero where the ray failed); a pupil node stands for
+  the image-space direction d_c + (a_x·Px, a_y·Py), a fitted to the rays' directions; the image
+  field U(x) = Σ e^{2πi(W − n·Δd·x/λ)} is the matrix Fourier transform on a window of
+  ±(1.5 × the rays' geometric spread + 16 λ/(n·a)) at spacing λ/(4n·a); the knife zeroes its
+  half-plane (left x ≤ pos, right x ≥ pos, above y ≥ pos, below y ≤ pos, in the image surface's
+  frame, from the chief ray); the inverse sum returns to the pupil; the intensity is divided by
+  the mean of the same reconstruction without the knife. A window needing more than 4097 samples
+  per axis is refused, as is afocal image space. A pupil sampled every Δp makes the image
+  field periodic with period λ/(n·a·Δp); so the spot's replicas do not overlap the window
+  (±half), the pupil grid is raised until Δp ≤ λ/(2n·a·half), with 10 % to spare, up to 1025
+  nodes per side (refused beyond), and the result says so.
+- **Pupil aberration:** 100 × (real stop intercept − P × r)/r, r the on-axis primary-wavelength
+  paraxial marginal ray height at the stop; the y component against Py (tangential), x against
+  Px (sagittal); apertures ignored.
+
+Not built: OpticStudio's system-level Reference OPD setting (each analysis has its own), the
+Rimmer centroid correction, polarization phase in the wavefront, "Use Exit Pupil Shape" on the
+maps, rotation and surface plots, analyses at intermediate surfaces, subapertures, STAR data,
+Gaussian-quadrature RMS, the interferogram's second beam from another configuration, "Ref Beam
+To Vertex" and "Consider Path Length Difference", the Foucault reference bitmap, the difference
+display, its registration and the FOUC operand.
+
+## 27. Field curvature, distortion, colour and relative illumination
+
+OP-37 adds six analyses under `OpenSim.Optics/Analysis/FieldAberrations/`. Their definitions are
+read from the Ansys OpticStudio 2025 R2 help pages "Field Curvature and Distortion", "Grid
+Distortion", "Longitudinal Aberration", "Lateral Color", "Chromatic Focal Shift", "Relative
+Illumination" and "Apodization Type" (saved in `plans/sources/optics/op-37-help/` with their
+equation images). The tests are `OpenSim.Tests/Optics/FieldAberrationTests.cs` and
+`OpenSim.Tests/Optics/Gates/FieldAberrationGateTests.cs`. Readings not checked against
+OpticStudio are section 10, item 23.
+
+**Field scans.** A scan runs along +y, +x, −y or −x (`FieldScan`) in normalised field H from 0 to
+1, with the fields normalised radially for the scan, so H = 1 is the largest radial field
+(`FieldScanCommon.ScanSystem`). The tangential plane contains the scan direction; the sagittal
+direction is its normal (x̂ for a y scan, ŷ for an x scan).
+
+**Coddington traces** (`CoddingtonTrace`). Along the traced real chief ray, the sagittal and
+tangential distances s and t to the foci (along the ray, positive in the direction of travel)
+follow n′/s′ = n/s + φ_s and n′cos²I′/t′ = n cos²I/t + φ_t, then s ← s′ − d and t ← t′ − d over
+each segment d. The equations are those of RayOptics 0.9.10 (`raytr/trace.py`,
+`trace_coddington_fan`, BSD 3-Clause), which states them for spheres with
+φ = c(n′cos I′ − n cos I). Here φ_t and φ_s use the surface's normal curvatures κ_t and κ_s in
+the tangential and sagittal directions at the hit point, from the second fundamental form of its
+sag (closed form for the Standard conic; central differences of the slopes for a sag shape;
+second differences of the sag otherwise). This extension is derived in the code, not taken from
+a source; the tests check it against finite-difference foci of real rays. Cosines are signed
+against the surface's +z-at-vertex normal and indices are positive, so mirrors need no special
+case. The trace refuses, naming the surface, when the chief ray or a normal leaves the meridional
+plane (a skew pencil), when the tangential and sagittal directions are not principal directions
+of the surface, and at a surface that turns rays by its own rule (paraxial, ABCD, Fresnel,
+lenslet, retroreflector). Field curvature is t and s at the image surface times |N| of the chief
+ray: the distance along the image surface's z from the chief ray's image point to each focus,
+positive in the direction of travel.
+
+**Distortion** (`FieldCurvatureDistortion`). The real chief ray's radial image height r against
+the reference f·g: g is tan θ (F-tan) or θ (F-θ), θ the object-space chief ray's angle to the
+axis, for angle fields, or the field height for height fields (F-θ is refused for those). f is
+the slope dr/dg from chief rays at H = ±10⁻⁴; the calibrated forms replace it by Σ r·g/Σ g² over
+the scan. Percent distortion is 100·(r − f·g)/(f·g), at the axis its limit 100·(k/f − 1). An
+F-tan scan of angle fields beyond 89° stops at 89°. Real image heights are read as paraxial
+image heights. When the Coddington trace refuses, the distortion is still given and the field
+curvature is listed as not computed.
+
+**Grid distortion** (`GridDistortion`). Field coordinates are (tan θx, tan θy) for angle fields
+and heights otherwise; the grid's corner is at the largest radial field, or the grid has a given
+full x width, with the H/W aspect; the ABCD matrix comes from central differences at ±10⁻⁴ of
+the half-width about the reference field; percent distortion follows the help's sign rule;
+SMIA-TV uses the four corners and the ends of the centre column. Theodolite fields are refused.
+
+**Longitudinal aberration, lateral colour, chromatic focal shift.** Axis crossings are measured
+from the image surface's vertex along its z, positive in the direction of travel
+(`FieldScanCommon.AxisCrossing`; paraxially −h/u at the image surface). Longitudinal aberration
+uses on-axis rays (0, 0, 0, ρ) at each wavelength, ρ = 0 being the paraxial marginal ray.
+Lateral colour is the chief ray's image-surface y, real (as the launcher aims it) or paraxial
+(each wavelength's own paraxial chief ray). The focal shift is the marginal ray's crossing
+(paraxial, or real at a pupil zone) minus the primary wavelength's paraxial crossing, at
+wavelengths spread evenly over the table's range; the depth of focus is 4λF² with the paraxial
+working F/#.
+
+**Relative illumination** (`RelativeIllumination`). Rimmer's paper (Proc. SPIE 655, 1986), which
+the help cites, was not available; the integral is derived in the code. With radiance conserved
+along rays and a uniform Lambertian object, the image irradiance is proportional to
+A = ∫∫ τ·a²·(d̂·n̂)/|N|·|∂(L, M)/∂(Px, Py)| dPx dPy over the unit pupil: the projected solid
+angle of the exit pupil seen from the image point, as an area in direction-cosine space. τ is
+the ray's transmission (1, or the polarization trace's unpolarized transmission), a the
+apodization amplitude (Gaussian e^(−Gρ²), cosine cubed (1 + (ρ tan α)²)^(−3/4), from "Apodization
+Type"), n̂ the image surface's normal. The quadrature is ⌈n/2⌉ Gauss–Legendre radii by 2n angles;
+the Jacobian comes from central differences at ±10⁻⁵ traced with apertures ignored.
+RI = A/max A; effective F/# = √(π/(4A)).
+
+**Not built.** The afocal forms (diopters, angles); field curvature through skew pencils (a
+general astigmatic trace) and through surfaces that redirect rays by their own rule; the SMIA-TV
+option, reference field and H/W aspect of Field Curvature and Distortion; the Display (cross or
+vector) choice of Grid Distortion; the Airy disk of Lateral Color; the solid-angle apodization
+of an object-cone-angle aperture; plot-scale settings (the plot window scales itself). The
+Vignetting Plot is OP-22's (section 16).
+
+## 28. Surface shape analyses
+
+`OpenSim.Optics/Analysis/SurfaceAnalyses/` (OP-43) holds OpticStudio's Sag Table, Surface Sag,
+Surface Curvature, Surface Slope and the three cross-sections, registered under the category
+"Surface". Their settings and the meaning of each column are read from OpticStudio's 2025 R2
+help pages "Sag Table" (Tolerance tab, Manufacturing Drawings and Data), "Surface Sag",
+"Surface Curvature", "Surface Slope", "Surface Sag Cross Section", "Surface Curvature Cross
+Section", "Surface Slope Cross Section" and the operand page "Best Fit Sphere Data", saved under
+`plans/sources/optics/op-43-help/`.
+
+- **Frame.** Every quantity is in the surface's local frame (§3): vertex at the origin, +z along
+  the local axis, curvature positive when the surface bends toward +z. The maps cover the clear
+  semi-diameter round the vertex on an n × n grid (n odd, 5 to 1025, default 65), blank (NaN)
+  outside it and where the surface's aperture blocks; the cross-sections run along a line through
+  the vertex at an angle from the local x axis, across the full clear diameter. An automatic
+  clear semi-diameter is sized from rays (§13).
+- **Sag and slopes** (`SurfaceProbe`). The Standard surface's sag and slopes are the conic's
+  (`ConicSag`, §13); an asphere's are its own analytic sag and slopes (§17); any other shape's
+  sag is `SurfaceShape.Sag` and its slopes are −nx/nz and −ny/nz from `SurfaceShape.Normal`, the
+  slope the trace refracts with. Slopes are dimensionless dz along a direction of the vertex
+  plane: tangential is radial from the vertex, sagittal at right angles to it (both +x on the
+  axis), x and y the axes, and the modulus |∇z| ("the maximum length of the slope vector").
+- **Curvatures.** The normal curvature of the surface in the direction of the vertex plane
+  (u, v): κ = (Lu² + 2Muv + Nv²)/(Eu² + 2Fuv + Gv²), with E = 1 + zx², F = zx·zy, G = 1 + zy²
+  and L, M, N = zxx, zxy, zyy divided by W = √(1 + zx² + zy²). For a surface of revolution this
+  is z″/(1 + z′²)^(3/2) tangentially and z′/(r·√(1 + z′²)) sagittally, so a sphere's is 1/R
+  everywhere. The modulus is the larger magnitude of the principal curvatures, the eigenvalues
+  of the Weingarten matrix I⁻¹·II (from its entries, so the root keeps its digits on a sphere).
+  The Standard conic's second derivatives are analytic (d²z/dr² = c/φ³, (dz/dr)/r = c/φ,
+  φ = √(1 − (1 + k)c²r²)); every other shape's are central differences of its analytic slopes,
+  Richardson-extrapolated from h and h/2 with h = 10⁻³ of the clear semi-diameter: truncation
+  error −h⁴/480 times the sag's sixth derivative, rounding about ε·|slope|/h, together below
+  10⁻¹² of the curvature for a 50 mm sphere at a 10 mm semi-diameter. Where a stencil point
+  falls outside the sag's domain the sample is blank and the count is reported.
+- **Best-fit sphere** (`BestFitSphere`). As the Sag Table help says, "only the Y-coordinate of
+  the surface is considered": the fit reads the profile z(0, y) over [minimum, maximum radius]
+  (both 0: 0 to the clear semi-diameter), sampled at 2001 equal steps, with integrals by
+  Simpson's rule and the area weight 2πr. Sphere sag s(r) = c·r²/(1 + √(1 − c²r²)).
+  *Minimum RMS, no offset:* c minimises the area-weighted RMS of z − s. *Minimum RMS, with
+  offset:* the offset is the weighted mean of z − s, and c minimises the RMS of what is left.
+  *Minimum volume:* the sphere is moved along z until it touches the surface from the air side,
+  so every depth to remove is ≥ 0, and c minimises the volume ∫ depth·2πr dr. c is found by
+  scanning 400 values over |c| < 1/r_max (and the vertex curvature), refining with Brent's
+  method (10⁻¹⁰ relative), and for the RMS criteria Gauss–Newton steps on c with
+  ∂s/∂c = r²/(φ(1 + φ)) (derived), kept only while they lower the RMS.
+- **Air side.** The side with the lower index at the primary wavelength is air; on a mirror the
+  side the light arrives from. The light travels +z after an even number of mirrors and −z after
+  an odd number (§3). With equal indices the side cannot be told: +z is taken to go from air to
+  glass (as OpticStudio's listing words it) and the result says so. Reverse Direction takes the
+  other side.
+- **Sag Table columns** (the help's eight): Y-coord; Sag; BFS Sag, the sphere's sag from its own
+  vertex; Deviation = BFS Sag − Sag, "ignoring any vertex offset"; Remove, the depth from the
+  sphere placed at its vertex offset to the surface, measured into the material (positive =
+  material to remove); Slope, BFS Slope and Slope Delta = Slope − BFS Slope (dz/dr along +y).
+  Figures: BFS radius and vertex offset; for minimum volume the maximum and RMS depth to remove
+  and the volume to remove; for the RMS criteria the RMS difference (OpenSim's addition); the
+  maximum and RMS slope deviation over the help's "1000 equally spaced Y-points". Rows run from
+  the vertex in steps of the step size (0: the maximum radius over 50 rounded down to 1, 2 or
+  5 × 10ⁿ, OpenSim's rule) to the maximum radius.
+- **Remove** (maps and cross-sections). None; Base Radius, the sphere of the vertex radius
+  (conic 0, no offset); Best Fit Sphere by the chosen criterion, fitted over 0 to the clear
+  semi-diameter. The removed sphere's own value at the same point (its sag plus its vertex
+  offset, its slope, or its curvature) is subtracted.
+- **Contour format** (Surface Sag help, "The Contour Format String"): blank for the default; one
+  value for the interval (more than 100 contours fall back to the default, with a note); several
+  values for only those contours; in the map's units.
+
+**Not built.** Surface Phase, Phase Slope and their cross-sections (no surface type carries a
+phase: there are no diffractive surfaces yet); Off-Axis Coordinates; Remove "Base Sag" and
+"Composite Sag" (no STAR data or composite surfaces); Show As surface plot and grey scale; the
+BFSD operand (a merit-function item); a best-fit sphere of a surface that is not rotationally
+symmetric beyond its y profile. The readings in §10 item 24 are not compared with OpticStudio's
+output.
 
 ## 29. Reports
 
@@ -2135,6 +2292,93 @@ back. It reads only this program's report, not OpticStudio files. Not carried: v
 and pickup flags (the read-back lens holds the solved values), the drawing options (hide rays,
 do not draw, row colour), and model glasses, which `SavedSurfaces.FromLens` writes by name.
 
+## 30. Jones and Mueller matrix surfaces
+
+OP-52 adds two plane surface types that act on the polarization ray trace of section 21:
+OpticStudio's Jones Matrix surface and a Mueller Matrix surface of this program's own
+(`OpenSim.Optics/Polarization/MatrixSurfaces.cs`, `StokesVector.cs`, and additions to
+`PolarizationTracer.cs`). Sources, saved under `plans/sources/optics/op-52-help/`: OpticStudio
+2025 R2 help, "Jones Matrix (sequential surfaces, lens data editor)", "Defining Polarizing
+Components" (its sample Jones matrices) and "Summary Table of Sequential Surface Types";
+Wikipedia, "Stokes parameters" and "Mueller calculus".
+
+- **Geometry.** Both are planes ("The surface shape is always plane"), traced by the same
+  `ConicIntersection` calls as a Standard surface of zero curvature and conic, so the geometric
+  trace is a plane's bit for bit. Rays refract or reflect there by the media on the two sides,
+  and the surface is an ordinary interface for the Fresnel or coating amplitudes of section 21;
+  the matrix acts after that interface, on the light leaving the surface. Radius and conic are
+  refused on both types when a saved lens is read. Only the polarization trace and its analyses
+  see the matrix, as the help says of the Jones surface.
+- **Jones Matrix parameters** (help table): 1 Ar, 2 Ai, 3 Br, 4 Bi, 5 Cr, 6 Ci, 7 Dr, 8 Di;
+  (Ex′, Ey′) = (A Ex + B Ey, C Ex + D Ey). The entries are read as OpticStudio complex numbers
+  in its convention, so the matrix applied in this program's convention (section 21) is the
+  conjugate, A = Ar − i·Ai and so on (a field in one convention is the conjugate of the field in
+  the other, and conj(JE) = conj(J)·conj(E)).
+- **Local frame.** Ex and Ey are read along the surface's local x and y axes. For a ray leaving
+  along k̂ the transverse basis is û = the part of x̂_L at right angles to k̂, normalised, and
+  v̂ = k̂ × û (where k̂ lies along x̂_L: v̂ = the part of ŷ_L at right angles to k̂, û = v̂ × k̂).
+  At normal incidence (û, v̂) = (x̂_L, ŷ_L). `PlaneMatrixShape.TransverseBasis`.
+- **Embedding in the 3 × 3 calculus.** P_J = [û v̂]·J·[û v̂]ᵀ + k̂k̂ᵀ
+  = û(A ûᵀ + B v̂ᵀ) + v̂(C ûᵀ + D v̂ᵀ) + k̂k̂ᵀ. It maps a transverse field Eu û + Ev v̂ to
+  (A Eu + B Ev) û + (C Eu + D Ev) v̂ and k̂ to k̂, like the interface matrices, and multiplies
+  the surface's interface matrix from the left (P = P_J·P_interface), so the system matrix stays
+  the product of the surfaces' matrices. The help says OpticStudio adjusts Ez, or Ex and Ey,
+  after the matrix so that k·E = 0 without increasing |E|, and gives no formula; this program's
+  embedding keeps the field transverse by construction, never increases |E| for a passive
+  matrix (singular values at most 1) and keeps |E| for a unitary one at every angle, but off
+  normal incidence it need not give OpticStudio's numbers (section 10, item 26). An exact
+  identity matrix (Ar = Dr = 1, the rest 0) is skipped, so it leaves every number of the trace
+  unchanged.
+- **Mueller Matrix surface.** OpticStudio has no sequential Mueller surface (the summary table
+  lists none). Parameters 1 to 16 are M00 … M33 row-major (parameter 4r + c + 1 is M_rc),
+  dimensionless; 13–16 are saved as extra data like every registered type's numbers from 13.
+  S_out = M·S_in with the Stokes vector in the basis (û, v̂) above. An output that is not a
+  physical Stokes vector (I < −10⁻¹²·I_in, or √(Q² + U² + V²) > I + 10⁻¹²·I_in) stops the
+  trace with a message naming the surface; a full test of the physical realisability of M is
+  not made.
+- **Stokes vector.** In a basis (û, v̂), I = |Eu|² + |Ev|², Q = |Eu|² − |Ev|²,
+  U = 2 Re(Eu Ev*), V = −2 Im(Eu Ev*) ("Stokes parameters", representation in a fixed basis),
+  applied to this program's amplitudes; it is S = A·(E ⊗ E*) with "Mueller calculus"'s matrix A,
+  and a Jones matrix's Mueller matrix is A·(J ⊗ J*)·A⁻¹ (`StokesVector.MuellerFromJones`). Which
+  sign of V is right-handed is not asserted; the degree of circular polarization is V/I, signed.
+  The degrees of polarization, of linear and of circular polarization are √(Q² + U² + V²)/I,
+  √(Q² + U²)/I and V/I, NaN where I = 0.
+- **How the two calculi compose.** A ray is described by its field E until it meets a Mueller
+  surface. There the trace forms the 3 × 3 coherency matrix Φ = E E^H (surface 1's frame),
+  reads the Stokes vector from its transverse 2 × 2 block in (û, v̂), applies M, and writes the
+  result back as Φ = Σ c_ab â b̂ᵀ with c00 = (I + Q)/2, c11 = (I − Q)/2, c01 = (U − iV)/2
+  (`CoherencyMatrix`). From then on every polarization matrix P of section 21 (interfaces, Jones
+  surfaces) acts as Φ → P Φ P^H and bulk absorption as Φ → T·Φ; further Mueller surfaces act as
+  above. The power is tr Φ. A fully polarized state has Φ = E E^H, so for a ray that meets no
+  Mueller surface the two descriptions agree; every step is linear in Φ, so unpolarized light is
+  still the mean of the (1, 0) and (0, 1) traces (`PolarizationTracer.FinalStokes`).
+- **What is reported after a Mueller surface.** The field and the system matrix are not defined
+  (NaN in `PolarizedSurface.FieldOut`, `Cumulative` and `Ray.Field`); `PolarizedSurface.Coherency`
+  and `PolarizedPath.FinalCoherency` hold the state, and `PolarizedPath.MuellerSurface` names
+  the first such surface. Every transmission (per surface, per ray, the Transmission and
+  Transmission fan analyses, `PolarizationTracer.Transmission`) is tr Φ. The Polarization ray
+  trace shows dashes for Ex, Ey, Ez after the surface, "not defined" for the system
+  diattenuation and no system matrix; for every ray it now also lists the Stokes vector at the
+  last surface reached (that surface's local x, y basis) with the three degrees of polarization.
+  The Polarization pupil map at or after a Mueller surface, and the Phase aberration of a lens
+  with one, refuse with a message naming the surface, since partially polarized light has no
+  single ellipse or phase.
+- **Gates** (`OpenSim.Tests/Optics/JonesMuellerSurfaceTests`): Malus's law, cos²θ through two
+  polarizers (½cos²θ unpolarized, degree of polarization 1 after them); a quarter-wave plate at
+  45° (the help's quarter-wave plate rotated) turns x-linear light circular, |V|/I = 1; the
+  depolarizer diag(1, d, d, d) leaves a degree of polarization d for linear and circular light,
+  and an analyzer behind it passes (1 + d)/2; an identity Jones surface leaves positions,
+  directions, path, fields and matrices unchanged bit for bit against a Standard plane; a
+  unitary Jones matrix keeps the power at oblique incidence; A·(J ⊗ J*)·A⁻¹ reproduces two
+  entries of "Mueller calculus"'s table, and a Mueller surface holding the quarter-wave plate's
+  matrix gives the Jones surface's Stokes vector.
+- **Not built.** The non-sequential Jones Matrix object and any Mueller object (they need the
+  non-sequential core, OP-70); a test of the physical realisability of a Mueller matrix (only
+  its output on each ray is checked); diattenuation and retardance of a system containing a
+  Mueller surface; the pupil map of the polarized part of partially polarized light;
+  depolarization by anything but a Mueller surface (scattering, coatings; birefringence is
+  OP-53).
+
 ## 31. Merit function
 
 `OpenSim.Optics/Merit` (OP-54) evaluates a merit function: a list of operand rows, each with
@@ -2199,247 +2443,3 @@ MINN, OPGT, OPLT, OPVA, OSUM, PROB, PROD, QSUM, RECI, SQRT, SUMM, SINE, TANG, AB
 value meets its target); the default merit function and its wizard (OP-56); the optimizer and
 Lagrange multipliers (OP-57); the merit function listing; reading or writing OpticStudio's .MF
 files (the help names the file but does not document its format).
-
-## 26. Optical path difference and wavefront
-
-OP-35. Code: `OpenSim.Optics/Wavefront/OpdEngine.cs`, `WavefrontTools.cs` and
-`FoucaultShadowgram.cs`; the analyses in `OpenSim.Optics/Analysis/WavefrontAnalyses.cs`. Tests:
-`OpenSim.Tests/Optics/WavefrontAnalysisTests.cs` and the gate
-`OpenSim.Tests/Optics/Gates/OpdGateTests.cs`. OpticStudio's definitions are read from its 2025 R2
-help ("Reference OPD", "Exit Pupil", "Infinity", "Absolute/Absolute 2", "Afocal Image Space",
-"Optical Path Difference", "Ray Aberration (Aberrations)", "Wavefront Map", "Interferogram",
-"Foucault Analysis (Wavefront)", "Pupil Aberration", "RMS vs. Field"), saved under
-`plans/sources/optics/op-35-help/`. Welford's "Aberrations of Optical Systems" and Hopkins were
-not on hand; the formulas below are derived from the definitions, not copied.
-
-- **What is compared.** A ray and the chief ray of the same field and wavelength are traced to
-  the image surface (`BatchTracer`; ΔP, the ray's path minus the chief ray's, summed segment by
-  segment) and carried along their image-space lines to the reference surface.
-  **OPD = chief path − ray path** (section 6), in waves of the traced wavelength in the system's
-  air (paths are relative to the air index, section 13). The chief ray's OPD is zero by
-  construction. This is the help's "OPD = OPD Absolute + OPD Correction".
-- **Reference point** (`OpdReferencePoint`): the chief ray's image-surface intercept, or the
-  centroid, the mean intercept of the rays of an n × n grid of pupil nodes (n = 33 by default).
-  Moving the centre adds, to first order, a tilt.
-- **Reference sphere** (Reference OPD = Exit Pupil, the default). Centre C, radius R = |E − C|,
-  E the centre of the primary wavelength's paraxial exit pupil (`ParaxialSystem.ExitPupilPosition`,
-  placed from the last surface's vertex as the OPD solve does), on E's side of C (σ = −1 when E
-  lies behind C along the reference ray, +1 when ahead). With q a ray's image intercept, d its
-  unit direction, w = q − C, b = w·d and p = −|w − b·d|²:
-  `OPD = −ΔP + n·[(b_r − b_c) + σ·(p_c − p_r)/(√(R² + p_c) + √(R² + p_r))]`, n the image-space
-  index. A ray whose line passes farther than R from C misses the sphere and is reported.
-- **Infinity, and telecentric image space.** As R → ∞ the bracket tends to b_r − b_c, the error
-  at most n·|w|²/R: each ray carried to the plane through C normal to itself. This is the help's
-  Infinity reference (the correction "given strictly by the angular error in the ray"), and it is
-  what the exit-pupil reference uses when the paraxial exit pupil is at infinity, so a telecentric
-  lens is the continuous limit of nearby non-telecentric ones (the sphere's sheet changes side as
-  the exit pupil passes through infinity; the OPD does not jump).
-- **Absolute, Absolute 2** (focal): no correction, OPD = −ΔP, the paths to the image surface.
-  The reference point plays no part.
-- **Afocal image space** (`Aperture.AfocalImageSpace`): a plane with unit normal u, the chief
-  ray's direction (the mean ray direction for the centroid reference), through Q; a ray meets it
-  at t = (Q − q)·u/(d·u) and OPD = −ΔP + n·(t_c − t_r). Exit Pupil (and Infinity, which the help
-  says is the same in afocal mode): Q is the point of the chief ray's line nearest E; with the
-  exit pupil at infinity this is refused. Absolute: Q is the chief ray's image intercept.
-  Absolute 2: no correction.
-- **Reference to primary.** The centre (or afocal direction) is the primary wavelength's; the
-  OPD is still against the traced wavelength's own chief ray (section 10, item 22).
-- **OPD limitations.** A surface whose shape says the OPD through it is approximate or undefined
-  (`SurfaceShape.OpdLimitation`) makes the engine refuse, naming the surface, unless "Allow OPD
-  limitations" is on; the result then lists it.
-- **Failed rays** keep their status and surface; their OPD is NaN; they are blank on maps,
-  left out of curves and statistics, and counted in the assumptions.
-- **Statistics** (`WavefrontTools.Statistics`): peak-to-valley = max − min; RMS about the mean
-  (piston removed), every sample weighted equally (the help's rectangular-array method;
-  Gaussian quadrature is not built).
-- **Tilt and focus removal** (`WavefrontTools.Remove`): a joint least-squares fit of Fringe
-  Zernike terms 1–3 or 1–4 (`ZernikeFit`; terms 2, 3 and 4 are x, y and 2ρ² − 1 on the
-  normalised pupil); only the removed terms are subtracted.
-- **Pupil grids.** Maps use an n × n grid of nodes from −1 to 1 (an odd n puts a node on the
-  chief ray); nodes outside the unit circle are blank. This is a private grid until OP-34's
-  shared pupil sampling lands.
-- **Interferogram:** intensity (1 − cos 2πΔ)/2, Δ = s·W + (t_x·Px + t_y·Py)/2, dark where Δ is
-  a whole number.
-- **Foucault:** the pupil field is e^{2πiW} (zero where the ray failed); a pupil node stands for
-  the image-space direction d_c + (a_x·Px, a_y·Py), a fitted to the rays' directions; the image
-  field U(x) = Σ e^{2πi(W − n·Δd·x/λ)} is the matrix Fourier transform on a window of
-  ±(1.5 × the rays' geometric spread + 16 λ/(n·a)) at spacing λ/(4n·a); the knife zeroes its
-  half-plane (left x ≤ pos, right x ≥ pos, above y ≥ pos, below y ≤ pos, in the image surface's
-  frame, from the chief ray); the inverse sum returns to the pupil; the intensity is divided by
-  the mean of the same reconstruction without the knife. A window needing more than 4097 samples
-  per axis is refused, as is afocal image space. A pupil sampled every Δp makes the image
-  field periodic with period λ/(n·a·Δp); so the spot's replicas do not overlap the window
-  (±half), the pupil grid is raised until Δp ≤ λ/(2n·a·half), with 10 % to spare, up to 1025
-  nodes per side (refused beyond), and the result says so.
-- **Pupil aberration:** 100 × (real stop intercept − P × r)/r, r the on-axis primary-wavelength
-  paraxial marginal ray height at the stop; the y component against Py (tangential), x against
-  Px (sagittal); apertures ignored.
-
-Not built: OpticStudio's system-level Reference OPD setting (each analysis has its own), the
-Rimmer centroid correction, polarization phase in the wavefront, "Use Exit Pupil Shape" on the
-maps, rotation and surface plots, analyses at intermediate surfaces, subapertures, STAR data,
-Gaussian-quadrature RMS, the interferogram's second beam from another configuration, "Ref Beam
-To Vertex" and "Consider Path Length Difference", the Foucault reference bitmap, the difference
-display, its registration and the FOUC operand.
-
-## 24. Multi-configuration
-
-A multi-configuration system (OP-30) is the optics record plus a table,
-`OpticsSettings.MultiConfiguration` (`OpenSim.Core/Model/OpticsMultiConfigSettings.cs`): operand
-rows, each with an operand code, up to three integer arguments and one value per
-configuration, the number of configurations and the current one. Null is one configuration, the
-system as entered; the project format version is unchanged. The operand list, the arguments and
-the integer codes are OpticStudio's (OpticStudio 2025 R2 help, "Multi-Configuration Operands" and
-the pages under "Multiple Configuration Editor", saved in `plans/sources/optics/op-30-help/`).
-
-- **Substitution.** Configuration k is the entered record with every row's value in column k
-  written into the data the operand controls (`MultiConfiguration.SettingsFor`,
-  `OpenSim.Optics/MultiConfig/MultiConfiguration.cs`); the result has no table, and
-  `ProjectLens` gives its solved lens (`SolveFor`, `LensFor`). Rows are applied in table order,
-  so a later row wins where two control the same value (the help says so for IGNR and IGNM).
-  Every problem (an unknown or unsupported code, a missing surface, field or wavelength, a
-  value the target refuses) is listed in one `ArgumentException`, a line each naming the row,
-  its code and arguments, and the configuration.
-- **Units and numbering.** Values are in the saved record's units: lens units, 1/lens unit for
-  CRVT, degrees, micrometers, °C, atmospheres. Surfaces count from the object (0), fields and
-  wavelengths from 1. THIC takes +infinity (saved as `IsInfinite`, since JSON has no infinity).
-  Operand strings are limited to 32 characters (help: "Comment About Operands that Define
-  Character Strings"); the table to 160 configurations (help: "Defining the Number of
-  Configurations").
-- **Solves under an operand.** Writing a surface cell (CRVT, THIC, GLSS, CONN, SDIA, MCSD, CHZN,
-  TCEX, PRAM, the model glass, APER under float by stop size) removes a solve or pickup the Lens
-  Data Editor has on that cell, keeping a variable flag, so the operand's value is the one
-  traced in that configuration. This is this program's rule: the help does not say which wins.
-  The solve-parameter operands (CSP, TSP, PSP) instead change the cell's solve: for a pickup the
-  parameters are surface, scale factor, offset (help: "Summary of Solves"; a curvature pickup
-  has no offset), for a solve its own parameters in that table's order.
-- **Cells.** Fixed, `Variable` (listed by `MultiConfiguration.Variables` for the optimizer,
-  written back by `WithValue`), `Pickup` (target × scale + offset from a cell whose
-  configuration and operand numbers are each no greater than its own and which is not itself,
-  help: "Solve Types"; a text cell copies the text) or `ThermalPickup` (from a reference
-  configuration; stored but not evaluated: thermal analysis is OP-91, and a configuration that
-  reaches one fails by name). PUCN with value c in configuration k makes the fixed and variable
-  cells of the rows below it, up to the next PUCN row, take configuration c's value; c must be
-  less than k (help); 0 ends the range; a negative PUCN ("a negative pickup") is not defined
-  further by the help and is refused.
-- **Weights.** The weight of configuration k is the value of the last CWGT row there, 1 without
-  one (`MultiConfiguration.WeightOf`); CWGT, PUCN, HOLD and MOFF change nothing in the system.
-- **Supported operands.** 92 of the help's 116 codes: surface data (CRVT, THIC, GLSS, CONN,
-  SDIA, MCSD, CHZN, TCEX, COTN, MCOM, PRAM and the obsolete PAR1–PAR8 as PRAM 1–8, MIND, MABB,
-  MDPG), flags and stop (IGNR, IGNM, SDRW, SRTS, STPS), apertures (APTP 0–10, APMN, APMX, APDX,
-  APDY), tilt and decenter before and after (CBDX … CBOR, CADX … CAOR), coordinate returns
-  (CROR, CRSR), solve parameters (CSP1–2, TSP1–3, PSP1–3), system data (AFOC, TELE, APDF, APDT,
-  SATP, APER, FLTP, RAAM, MTFU, TEMP, PRES, PSHX/Y/Z, PSCX/Y, LTTL, PRWV), polarization (GPJX,
-  GPJY, GPPX, GPPY, GPIU), fields (XFIE, YFIE, FLWT, FVDX, FVDY, FVCX, FVCY, FTAN, and the
-  obsolete FVAN as FTAN), wavelengths (WAVE, WLWT), and CWGT, PUCN, HOLD, MOFF. The type
-  operands' integers are the help's and equal the enumerations' values (`ApertureType`,
-  `FieldType`, `ApodizationType`, `RayAimingMode`, `MtfUnit`, `TiltDecenterOrder`,
-  `CoordinateReturnMode`). APMN and APMX are the first and second parameter of the aperture
-  (circular: minimum and maximum radius; rectangular and elliptical: x and y half-widths;
-  spider: arm width and number of arms, the order of the help's "Aperture" page); they refuse a
-  user-defined or floating aperture. APER under float by stop size is the stop's semi-diameter
-  (help). SDIA and MCSD read no value from an automatic semi-diameter.
-- **Not supported** (registered, so a table naming them fails with the code and the reason):
-  AICN and CPCN (Inventor and Creo parts), CSDX–CSTZ (composite surfaces, OP-32), FCMM (fields
-  have no comment), GCRS, MCHI and OPDR (not in the saved system data), GQPO (the default merit
-  function, OP-54), HLGV (no optically fabricated hologram), IGTO (tolerancing, OP-63), NCOM,
-  NCOT, NGLS, NPAR, NPOS, NPRO (non-sequential, OP-70 on), PXAR (no physical optics), UDAF
-  (apertures are vertex lists, not files), GPEX and GPEY (obsolete, no meaning given).
-- **Tools** (`OpenSim.Optics/MultiConfig/MultiConfigTools.cs`). Insert Configuration at a
-  position copies the stored values of the configuration that was there (the last when
-  appending) as fixed values: the help does not say what a new column holds. Insert with
-  Pickups makes every new cell pick up the same row of configuration 1. Insert and Delete move
-  pickup references, thermal references, PUCN values and the current configuration with their
-  configuration; Delete turns a pickup from the deleted configuration into a fixed cell and a
-  PUCN naming it into 0, and says so. Make Single Configuration is `SettingsFor` the current
-  configuration. Add All Data adds, for one chosen operand, a row for each target the system
-  holds such data for (every thickness, every field's y value, each surface with a tilt …) that
-  the table does not already control, each cell fixed at the value the target has in that
-  configuration, so no configuration changes. Next and Previous stop at the ends.
-- **Current configuration.** Every analysis computes on the current configuration:
-  `OpticsAnalysis<T>.Compute` passes its context through
-  `MultiConfiguration.ForCurrentConfiguration` (help: "The program will use the current
-  configuration for all calculations and graphics", "Changing Configurations"). The Lens Data
-  Editor keeps the entered lens; it does not show the current configuration's values.
-- **Not built.** Make Thermal and the evaluation of thermal pickups (OP-91: the TCE the editor
-  saves is not enough without the thermal expansion model and the mount data); Make Conjugate
-  (the help names its assumptions but not how the subset's object thickness and "other data as
-  appropriate" are formed); ZPL-macro and substitute solves; Add Hologram Variables; showing
-  the current configuration's values in the Lens Data Editor and writing Lens Data Editor
-  edits back into the table, as OpticStudio does.
-
-## 27. Field curvature, distortion, colour and relative illumination
-
-OP-37 adds six analyses under `OpenSim.Optics/Analysis/FieldAberrations/`. Their definitions are
-read from the Ansys OpticStudio 2025 R2 help pages "Field Curvature and Distortion", "Grid
-Distortion", "Longitudinal Aberration", "Lateral Color", "Chromatic Focal Shift", "Relative
-Illumination" and "Apodization Type" (saved in `plans/sources/optics/op-37-help/` with their
-equation images). The tests are `OpenSim.Tests/Optics/FieldAberrationTests.cs` and
-`OpenSim.Tests/Optics/Gates/FieldAberrationGateTests.cs`. Readings not checked against
-OpticStudio are section 10, item 23.
-
-**Field scans.** A scan runs along +y, +x, −y or −x (`FieldScan`) in normalised field H from 0 to
-1, with the fields normalised radially for the scan, so H = 1 is the largest radial field
-(`FieldScanCommon.ScanSystem`). The tangential plane contains the scan direction; the sagittal
-direction is its normal (x̂ for a y scan, ŷ for an x scan).
-
-**Coddington traces** (`CoddingtonTrace`). Along the traced real chief ray, the sagittal and
-tangential distances s and t to the foci (along the ray, positive in the direction of travel)
-follow n′/s′ = n/s + φ_s and n′cos²I′/t′ = n cos²I/t + φ_t, then s ← s′ − d and t ← t′ − d over
-each segment d. The equations are those of RayOptics 0.9.10 (`raytr/trace.py`,
-`trace_coddington_fan`, BSD 3-Clause), which states them for spheres with
-φ = c(n′cos I′ − n cos I). Here φ_t and φ_s use the surface's normal curvatures κ_t and κ_s in
-the tangential and sagittal directions at the hit point, from the second fundamental form of its
-sag (closed form for the Standard conic; central differences of the slopes for a sag shape;
-second differences of the sag otherwise). This extension is derived in the code, not taken from
-a source; the tests check it against finite-difference foci of real rays. Cosines are signed
-against the surface's +z-at-vertex normal and indices are positive, so mirrors need no special
-case. The trace refuses, naming the surface, when the chief ray or a normal leaves the meridional
-plane (a skew pencil), when the tangential and sagittal directions are not principal directions
-of the surface, and at a surface that turns rays by its own rule (paraxial, ABCD, Fresnel,
-lenslet, retroreflector). Field curvature is t and s at the image surface times |N| of the chief
-ray: the distance along the image surface's z from the chief ray's image point to each focus,
-positive in the direction of travel.
-
-**Distortion** (`FieldCurvatureDistortion`). The real chief ray's radial image height r against
-the reference f·g: g is tan θ (F-tan) or θ (F-θ), θ the object-space chief ray's angle to the
-axis, for angle fields, or the field height for height fields (F-θ is refused for those). f is
-the slope dr/dg from chief rays at H = ±10⁻⁴; the calibrated forms replace it by Σ r·g/Σ g² over
-the scan. Percent distortion is 100·(r − f·g)/(f·g), at the axis its limit 100·(k/f − 1). An
-F-tan scan of angle fields beyond 89° stops at 89°. Real image heights are read as paraxial
-image heights. When the Coddington trace refuses, the distortion is still given and the field
-curvature is listed as not computed.
-
-**Grid distortion** (`GridDistortion`). Field coordinates are (tan θx, tan θy) for angle fields
-and heights otherwise; the grid's corner is at the largest radial field, or the grid has a given
-full x width, with the H/W aspect; the ABCD matrix comes from central differences at ±10⁻⁴ of
-the half-width about the reference field; percent distortion follows the help's sign rule;
-SMIA-TV uses the four corners and the ends of the centre column. Theodolite fields are refused.
-
-**Longitudinal aberration, lateral colour, chromatic focal shift.** Axis crossings are measured
-from the image surface's vertex along its z, positive in the direction of travel
-(`FieldScanCommon.AxisCrossing`; paraxially −h/u at the image surface). Longitudinal aberration
-uses on-axis rays (0, 0, 0, ρ) at each wavelength, ρ = 0 being the paraxial marginal ray.
-Lateral colour is the chief ray's image-surface y, real (as the launcher aims it) or paraxial
-(each wavelength's own paraxial chief ray). The focal shift is the marginal ray's crossing
-(paraxial, or real at a pupil zone) minus the primary wavelength's paraxial crossing, at
-wavelengths spread evenly over the table's range; the depth of focus is 4λF² with the paraxial
-working F/#.
-
-**Relative illumination** (`RelativeIllumination`). Rimmer's paper (Proc. SPIE 655, 1986), which
-the help cites, was not available; the integral is derived in the code. With radiance conserved
-along rays and a uniform Lambertian object, the image irradiance is proportional to
-A = ∫∫ τ·a²·(d̂·n̂)/|N|·|∂(L, M)/∂(Px, Py)| dPx dPy over the unit pupil: the projected solid
-angle of the exit pupil seen from the image point, as an area in direction-cosine space. τ is
-the ray's transmission (1, or the polarization trace's unpolarized transmission), a the
-apodization amplitude (Gaussian e^(−Gρ²), cosine cubed (1 + (ρ tan α)²)^(−3/4), from "Apodization
-Type"), n̂ the image surface's normal. The quadrature is ⌈n/2⌉ Gauss–Legendre radii by 2n angles;
-the Jacobian comes from central differences at ±10⁻⁵ traced with apertures ignored.
-RI = A/max A; effective F/# = √(π/(4A)).
-
-**Not built.** The afocal forms (diopters, angles); field curvature through skew pencils (a
-general astigmatic trace) and through surfaces that redirect rays by their own rule; the SMIA-TV
-option, reference field and H/W aspect of Field Curvature and Distortion; the Display (cross or
-vector) choice of Grid Distortion; the Airy disk of Lateral Color; the solid-angle apodization
-of an object-cone-angle aperture; plot-scale settings (the plot window scales itself). The
-Vignetting Plot is OP-22's (section 16).

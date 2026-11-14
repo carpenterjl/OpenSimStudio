@@ -610,115 +610,6 @@ not need Python. How each program's conventions map onto this program's is in
 the workspace. Not built: checks with catalog glasses, tilts, aspheres or ray aiming, and any
 comparison with OpticStudio, which was not available.
 
-## Surface shape analyses
-
-The analysis menu's **Surface** group (OP-43) shows the shape of any surface of the lens, as a
-fabricator or an asphere designer reads it. Every analysis takes the **Surface** number (1 to the
-image surface; a coordinate break is refused) and works over that surface's clear semi-diameter.
-
-- **Sag table**: the sag along +y from the vertex with its best-fit sphere (BFS). Settings:
-  **Step size** (0 chooses one), **Best fit sphere criterion** (minimum volume, minimum RMS with
-  no offset, minimum RMS with offset), **Reverse direction** (take the other side of the surface
-  as the air side), **Minimum radius** and **Maximum radius** of the fit (both 0: the whole
-  clear semi-diameter). The listing gives the BFS radius and vertex offset, the depth and volume
-  of material to remove (minimum volume), the slope deviations, and the eight columns Y-coord,
-  Sag, BFS sag, Deviation, Remove, Slope, BFS slope and Slope delta, with a plot of the sag and
-  the sphere.
-- **Surface sag**, **Surface slope**, **Surface curvature**: false-colour or contour maps
-  (**Show as**, **Contour format**: blank, one interval, or a list of levels) on an n × n grid
-  (**Sampling**, odd, default 65), blank outside the clear aperture. Slope and curvature take a
-  **Data** choice: tangential, sagittal, x, y or modulus. Sag is in lens units, slope
-  dimensionless, curvature in 1/lens unit.
-- **Surface sag/slope/curvature cross section**: the same quantities along a line through the
-  vertex at **Angle** degrees from the local x axis, across the clear diameter.
-- **Remove** (maps and cross-sections): nothing, the sphere of the vertex radius, or the
-  best-fit sphere (with its criterion and Reverse direction).
-
-Each result lists what it assumed: the clear semi-diameter and where it came from, how the
-curvatures were computed (analytic for a Standard surface, differenced for other types), which
-side was taken as air, and the sphere removed. Definitions and the readings of OpticStudio's
-help are in `docs/Optics-Conventions.md` §28. Not built: Surface Phase and Phase Slope (no
-surface type carries a phase yet), off-axis coordinates, the Base Sag and Composite Sag removal
-options, and the 3-D surface plot and grey-scale display.
-
-## Jones and Mueller matrix surfaces
-
-Two surface types act on the polarization of light without changing the geometry of the trace
-(OP-52). Both are planes: rays refract or reflect there as at a plane Standard surface, and
-the surface's coating or Fresnel amplitudes apply as at any interface. Pick them in the Lens
-Data Editor's type column; neither takes a radius or conic.
-
-- **Jones Matrix** (as in OpticStudio): parameters 1–8 are Ar, Ai, Br, Bi, Cr, Ci, Dr, Di, the
-  real and imaginary parts of the 2 × 2 matrix [[A, B], [C, D]] acting on the field's
-  components along the surface's local x and y axes, in OpticStudio's sign convention for
-  phases. Examples from OpticStudio's help: an X analyzer is A = 1 and the rest 0; a
-  quarter-wave plate in x is A = (0, 1), D = (1, 0); a 25% intensity filter is A = D = 0.5. The
-  matrix is meant for normal incidence; at other angles it acts in the plane at right angles to
-  the ray, which keeps the field transverse and never adds power.
-- **Mueller Matrix** (this program's own type; OpticStudio has no sequential one): parameters
-  1–16 are the 4 × 4 Mueller matrix M00 … M33 row by row, acting on the Stokes vector
-  (I, Q, U, V) in the surface's local x, y axes. It can depolarize: diag(1, d, d, d) keeps the
-  power and multiplies the degree of polarization by d. A matrix that would turn a ray's Stokes
-  vector into an unphysical one (negative intensity, or more polarized power than power) stops
-  the analysis with a message naming the surface.
-
-After a Mueller surface a ray carries partially polarized light, which has no single field:
-
-- **Polarization ray trace** shows dashes for Ex, Ey, Ez from that surface on, and "not
-  defined" for the system diattenuation and matrix. For every ray it lists the Stokes vector at
-  the last surface reached and the degrees of polarization, linear polarization and circular
-  polarization (V/I, signed).
-- **Transmission** and **Transmission fan** work as before (the power is exact).
-- **Polarization pupil map** at or after a Mueller surface, and **Phase aberration** of a lens
-  with one, stop with a message naming the surface.
-
-Only the polarization analyses see the matrices; the geometric analyses treat both types as
-plain planes. The equations and the readings of OpticStudio's help are in
-`docs/Optics-Conventions.md` §30 and §10 item 26.
-
-Not built: the non-sequential Jones Matrix object and any non-sequential Mueller object (they
-need the non-sequential core, OP-70); a check that a Mueller matrix is physically realisable
-for every input (only each ray's output is checked); the pupil map of the polarized part of
-partially polarized light.
-
-## Ray fans, spot diagrams and footprints
-
-Eight analyses in the group **Rays and spots** trace the lens of the Lens Data Editor with the
-real ray trace, ray aiming and the fields' vignetting factors as the system data sets them:
-
-- **Ray aberration (ray fan):** for each field, the tangential fan (EY against Py) and the
-  sagittal fan (EX against Px) on the image surface, in µm, one curve per wavelength, relative
-  to the primary wavelength's chief ray (or the shown wavelength's when one is chosen). Number
-  of rays per side, field, wavelength, the plotted component of each fan, and whether apertures
-  are checked are settings.
-- **Standard spot diagram:** the rays of a hexapolar, square or dithered pupil pattern on the
-  image surface (or any surface), in µm about the chief ray, centroid, middle or vertex, with
-  the RMS and GEO radii and the Airy disk (1.22 λ times the real working F/#). The ray density
-  is the number of hexapolar rings, or the rays across the square grid; at least 3.
-- **Through focus spot diagram:** five spots per field at −2, −1, 0, 1 and 2 times the delta
-  focus (µm) from the image surface.
-- **Full field spot diagram:** every field on one plot in lens units, relative to field 1's
-  reference, with an exaggeration factor on each spot's size.
-- **Matrix spot diagram:** one spot per field and wavelength, optionally each referred to its
-  own point ("ignore lateral color").
-- **Footprint diagram:** a (2n + 1) × (2n + 1) grid of rays where it meets any surface, in lens
-  units, over the circle of the surface's semi-diameter, with the percentage of rays through.
-- **Y-Ybar drawing:** paraxial marginal ray height against chief ray height at each surface.
-- **Incident angle vs. image height:** the angle at the image surface of the lower marginal,
-  chief and upper marginal rays against image height, for fields along +y.
-
-Rays that fail or are stopped by an aperture are never drawn; each analysis lists how many,
-why and at which surface. The dithered pattern uses a fixed seed, so it is the same on every
-run. The definitions, and what was chosen where OpticStudio's help is silent, are in
-`docs/Optics-Conventions.md` §25 and §10 item 21.
-
-Not built: the Configuration Matrix Spot (it needs multi-configuration, OP-30); apodized pupil
-sampling (a Gaussian or cosine-cubed apodization is named in the result and not applied); the
-Airy ellipse (a circle is drawn) and the Airy disk on the matrix spot; spots in direction
-cosines; polarization and scattering in the spots; the ray fan at intermediate surfaces; the
-footprint's "Ring" density and aperture shapes other than the semi-diameter circle; afocal-mode
-spots.
-
 ## Toroidal, biconic and irregular surfaces
 
 The real ray trace also takes four surfaces without rotational symmetry (OP-24,
@@ -752,99 +643,6 @@ compared with OpticStudio are in `docs/Optics-Conventions.md` §23 and §10 item
 
 Not built: importing Zernike coefficients from a file into the Toroidal surface, a separate
 "Cylinder" type name, and any comparison with OpticStudio's output.
-
-## Reports
-
-Six analyses in the Reports group follow OpticStudio's Reports group (details and formulas in
-`docs/Optics-Conventions.md` §29). They read the project's surfaces with solves evaluated, list
-lengths in the system's lens unit, and give the same text on every run.
-
-- **System data**: the system summary, the aperture, fields and wavelengths as entered, and the
-  paraxial system data with focal data by wavelength.
-- **Prescription data**: the full prescription in OpticStudio's section order: general data,
-  surface data, surface detail (parameters, tilts and decenters, apertures), edge thickness,
-  solves and variables, indices at every wavelength, global vertices and centres of curvature
-  (in the frame of the "Global reference surface" setting), element volume and mass, cardinal
-  points and the glass catalog files used. Each optional section has a checkbox. Element mass
-  needs a catalog glass with a density; a constant index has none.
-- **Surface data**: one surface's shape, sag and edge thickness, surface and element powers and
-  focal lengths, indices before and after, and its element's volume.
-- **Cardinal points**: focal, principal, anti-principal, nodal and anti-nodal planes of a range
-  of surfaces at one wavelength.
-- **System summary graphic**: the handful of first-order numbers a report page shows, as text.
-- **Report graphic**: 4, 6 or 9 analyses on one page. Type each position's analysis id (for
-  example `SingleRayTrace`, `CardinalPoints`, `ParaxialGaussianBeam`); each runs with the
-  settings it was last used with. The window lists the plots of all positions in order.
-
-The prescription's text reads back: `PrescriptionReader.Read` (OpenSim.Optics) turns the Text
-tab of a prescription into the saved surfaces of the same lens, tilts, aspheres, apertures and
-comments included; solve and variable flags are not carried.
-
-Not built: Multi-Config Data, OpticStudio's real working F/# per field and wavelength, POP
-settings, the XZ orientation of Cardinal points, the best fit glass of a model glass, a drawn
-system summary graphic, and the report graphic's page arrangement and saved report files.
-Element volumes take circular edges at the clear semi-diameters; surface apertures do not enter.
-
-## Merit function
-
-**Merit Function Editor…** in the Optics panel opens the merit function: a list of operands,
-one per row, saved with the project and the lens file. Type an operand's four-letter code
-(EFFL), its name (Effective focal length) or pick it in the Operand column; the parameter
-columns then show what the operand reads (Surf, Wave, Hx, Hy, Px, Py, Op#...). "Find an
-operand" searches the codes and names. Insert, Delete, Undo and Redo work as in the Lens Data
-Editor, as do the grid's own keys.
-
-**Update** evaluates the merit function on the project's lens, solves applied, and fills the
-Value and % Contrib columns; the merit value is shown at the top. The merit value is the
-weighted root-mean-square of value minus target, √(Σ W(V − T)² / Σ W), with W the absolute
-value of the weight. Any edit clears the values until the next Update. A row that cannot be
-computed (a ray that misses a surface, a surface that does not exist) shows "failed", with the
-reason in its tooltip and below the grid; it is scored with a large penalty and the other rows
-are unaffected. A list that cannot be evaluated at all (an unknown code, a GOTO to an earlier
-row, a math row reading a later one) is refused with every problem named.
-
-Built: the control operands (BLNK, DMFS, ENDX, GOTO, OOFF, SKIN, SKIS, USYM), CONF, effective
-focal length, total track, a few lens-data constraints and bounds, real ray coordinates and the
-general math operands. Rules and readings are in docs/Optics-Conventions.md §31. Not built: the
-rest of the operand catalogue, the default merit function wizard, optimization, the merit
-function listing, and .MF files.
-
-## Optical path difference and wavefront
-
-Five analyses read the lens data editor's surfaces and measure the optical path difference (OPD)
-against the chief ray, in waves (positive: the ray's wavefront is ahead of the reference). Four
-are in the **Wavefront** group, one in **Aberrations**.
-
-- **Optical path difference:** the OPD fan against Py (tangential, Px = 0) and Px (sagittal,
-  Py = 0), with *Number of rays* on each side of the centre, one field or all (field 0), one
-  wavelength or all (wavelength 0; every wavelength then uses the primary wavelength's reference
-  point). A table lists every value; a failed ray is marked "failed".
-- **Wavefront map:** the OPD over an n × n pupil grid as a false-colour image or contours, with
-  its peak-to-valley and its RMS about the mean. *Remove tilt* and *Remove focus* subtract a
-  least-squares fit; *Reference to primary* uses the primary wavelength's reference point.
-- **Interferogram:** the fringes of this beam against a perfect reference beam, dark where the
-  OPD is a whole number of waves; *Scale factor* (2 for double pass) and *X-tilt*, *Y-tilt*
-  (fringes across the pupil diameter).
-- **Foucault analysis:** the knife-edge shadowgram: the diffraction field at focus, the knife
-  (left, right, above or below, at *Position* µm from the chief ray) taking away its half, and
-  the field propagated back to the pupil. *Logarithmic* shows log10 of the relative intensity.
-- **Pupil aberration:** where real rays cross the stop compared with where the paraxial pupil
-  puts them, as a percentage of the stop radius. More than a few percent means ray aiming is
-  needed; with aiming on it is near zero.
-
-Common settings: **Reference OPD** — *Exit pupil* (the default: a sphere centred on the image
-point through the paraxial exit pupil; a plane per ray when the exit pupil is at infinity),
-*Infinity*, *Absolute* (no correction) or *Absolute 2*; in afocal image space the reference is a
-plane normal to the chief ray. **Reference point** — chief ray or centroid. **Check apertures**,
-and **Allow OPD limitations**, which lets the analyses run through a surface (ABCD, a Fresnel on
-a curved substrate, a lenslet array, Paraxial XY) whose OPD is approximate or undefined; without
-it such a lens is refused with the surface named. The result lists the reference used and how
-many rays failed. The rules are in `docs/Optics-Conventions.md` §26; readings not yet checked
-against OpticStudio are in §10 item 22.
-
-Not built: the Reference OPD as one system setting (each analysis has its own), polarization
-phase, exit-pupil-shaped maps, intermediate surfaces, subapertures, the interferogram's second
-beam from another configuration, the Foucault reference bitmap and the FOUC operand.
 
 ## Multiple configurations
 
@@ -893,6 +691,81 @@ lens without one is a single configuration, and files from before this feature o
   Conjugate, ZPL-macro solves, and showing or editing the current configuration's values in
   the Lens Data Editor.
 
+## Ray fans, spot diagrams and footprints
+
+Eight analyses in the group **Rays and spots** trace the lens of the Lens Data Editor with the
+real ray trace, ray aiming and the fields' vignetting factors as the system data sets them:
+
+- **Ray aberration (ray fan):** for each field, the tangential fan (EY against Py) and the
+  sagittal fan (EX against Px) on the image surface, in µm, one curve per wavelength, relative
+  to the primary wavelength's chief ray (or the shown wavelength's when one is chosen). Number
+  of rays per side, field, wavelength, the plotted component of each fan, and whether apertures
+  are checked are settings.
+- **Standard spot diagram:** the rays of a hexapolar, square or dithered pupil pattern on the
+  image surface (or any surface), in µm about the chief ray, centroid, middle or vertex, with
+  the RMS and GEO radii and the Airy disk (1.22 λ times the real working F/#). The ray density
+  is the number of hexapolar rings, or the rays across the square grid; at least 3.
+- **Through focus spot diagram:** five spots per field at −2, −1, 0, 1 and 2 times the delta
+  focus (µm) from the image surface.
+- **Full field spot diagram:** every field on one plot in lens units, relative to field 1's
+  reference, with an exaggeration factor on each spot's size.
+- **Matrix spot diagram:** one spot per field and wavelength, optionally each referred to its
+  own point ("ignore lateral color").
+- **Footprint diagram:** a (2n + 1) × (2n + 1) grid of rays where it meets any surface, in lens
+  units, over the circle of the surface's semi-diameter, with the percentage of rays through.
+- **Y-Ybar drawing:** paraxial marginal ray height against chief ray height at each surface.
+- **Incident angle vs. image height:** the angle at the image surface of the lower marginal,
+  chief and upper marginal rays against image height, for fields along +y.
+
+Rays that fail or are stopped by an aperture are never drawn; each analysis lists how many,
+why and at which surface. The dithered pattern uses a fixed seed, so it is the same on every
+run. The definitions, and what was chosen where OpticStudio's help is silent, are in
+`docs/Optics-Conventions.md` §25 and §10 item 21.
+
+Not built: the Configuration Matrix Spot (it needs multi-configuration, OP-30); apodized pupil
+sampling (a Gaussian or cosine-cubed apodization is named in the result and not applied); the
+Airy ellipse (a circle is drawn) and the Airy disk on the matrix spot; spots in direction
+cosines; polarization and scattering in the spots; the ray fan at intermediate surfaces; the
+footprint's "Ring" density and aperture shapes other than the semi-diameter circle; afocal-mode
+spots.
+
+## Optical path difference and wavefront
+
+Five analyses read the lens data editor's surfaces and measure the optical path difference (OPD)
+against the chief ray, in waves (positive: the ray's wavefront is ahead of the reference). Four
+are in the **Wavefront** group, one in **Aberrations**.
+
+- **Optical path difference:** the OPD fan against Py (tangential, Px = 0) and Px (sagittal,
+  Py = 0), with *Number of rays* on each side of the centre, one field or all (field 0), one
+  wavelength or all (wavelength 0; every wavelength then uses the primary wavelength's reference
+  point). A table lists every value; a failed ray is marked "failed".
+- **Wavefront map:** the OPD over an n × n pupil grid as a false-colour image or contours, with
+  its peak-to-valley and its RMS about the mean. *Remove tilt* and *Remove focus* subtract a
+  least-squares fit; *Reference to primary* uses the primary wavelength's reference point.
+- **Interferogram:** the fringes of this beam against a perfect reference beam, dark where the
+  OPD is a whole number of waves; *Scale factor* (2 for double pass) and *X-tilt*, *Y-tilt*
+  (fringes across the pupil diameter).
+- **Foucault analysis:** the knife-edge shadowgram: the diffraction field at focus, the knife
+  (left, right, above or below, at *Position* µm from the chief ray) taking away its half, and
+  the field propagated back to the pupil. *Logarithmic* shows log10 of the relative intensity.
+- **Pupil aberration:** where real rays cross the stop compared with where the paraxial pupil
+  puts them, as a percentage of the stop radius. More than a few percent means ray aiming is
+  needed; with aiming on it is near zero.
+
+Common settings: **Reference OPD** — *Exit pupil* (the default: a sphere centred on the image
+point through the paraxial exit pupil; a plane per ray when the exit pupil is at infinity),
+*Infinity*, *Absolute* (no correction) or *Absolute 2*; in afocal image space the reference is a
+plane normal to the chief ray. **Reference point** — chief ray or centroid. **Check apertures**,
+and **Allow OPD limitations**, which lets the analyses run through a surface (ABCD, a Fresnel on
+a curved substrate, a lenslet array, Paraxial XY) whose OPD is approximate or undefined; without
+it such a lens is refused with the surface named. The result lists the reference used and how
+many rays failed. The rules are in `docs/Optics-Conventions.md` §26; readings not yet checked
+against OpticStudio are in §10 item 22.
+
+Not built: the Reference OPD as one system setting (each analysis has its own), polarization
+phase, exit-pupil-shaped maps, intermediate surfaces, subapertures, the interferogram's second
+beam from another configuration, the Foucault reference bitmap and the FOUC operand.
+
 ## Field curvature, distortion, colour and illumination
 
 Six analyses (OP-37, `OpenSim.Optics/Analysis/FieldAberrations/`) read the lens data editor's
@@ -935,34 +808,148 @@ grid distortion, the Airy disk of lateral colour, apodization of an object-cone-
 and any comparison with OpticStudio's output. The vignetting plot is described under "Ray aiming
 and vignetting".
 
+## Surface shape analyses
+
+The analysis menu's **Surface** group (OP-43) shows the shape of any surface of the lens, as a
+fabricator or an asphere designer reads it. Every analysis takes the **Surface** number (1 to the
+image surface; a coordinate break is refused) and works over that surface's clear semi-diameter.
+
+- **Sag table**: the sag along +y from the vertex with its best-fit sphere (BFS). Settings:
+  **Step size** (0 chooses one), **Best fit sphere criterion** (minimum volume, minimum RMS with
+  no offset, minimum RMS with offset), **Reverse direction** (take the other side of the surface
+  as the air side), **Minimum radius** and **Maximum radius** of the fit (both 0: the whole
+  clear semi-diameter). The listing gives the BFS radius and vertex offset, the depth and volume
+  of material to remove (minimum volume), the slope deviations, and the eight columns Y-coord,
+  Sag, BFS sag, Deviation, Remove, Slope, BFS slope and Slope delta, with a plot of the sag and
+  the sphere.
+- **Surface sag**, **Surface slope**, **Surface curvature**: false-colour or contour maps
+  (**Show as**, **Contour format**: blank, one interval, or a list of levels) on an n × n grid
+  (**Sampling**, odd, default 65), blank outside the clear aperture. Slope and curvature take a
+  **Data** choice: tangential, sagittal, x, y or modulus. Sag is in lens units, slope
+  dimensionless, curvature in 1/lens unit.
+- **Surface sag/slope/curvature cross section**: the same quantities along a line through the
+  vertex at **Angle** degrees from the local x axis, across the clear diameter.
+- **Remove** (maps and cross-sections): nothing, the sphere of the vertex radius, or the
+  best-fit sphere (with its criterion and Reverse direction).
+
+Each result lists what it assumed: the clear semi-diameter and where it came from, how the
+curvatures were computed (analytic for a Standard surface, differenced for other types), which
+side was taken as air, and the sphere removed. Definitions and the readings of OpticStudio's
+help are in `docs/Optics-Conventions.md` §28. Not built: Surface Phase and Phase Slope (no
+surface type carries a phase yet), off-axis coordinates, the Base Sag and Composite Sag removal
+options, and the 3-D surface plot and grey-scale display.
+
+## Reports
+
+Six analyses in the Reports group follow OpticStudio's Reports group (details and formulas in
+`docs/Optics-Conventions.md` §29). They read the project's surfaces with solves evaluated, list
+lengths in the system's lens unit, and give the same text on every run.
+
+- **System data**: the system summary, the aperture, fields and wavelengths as entered, and the
+  paraxial system data with focal data by wavelength.
+- **Prescription data**: the full prescription in OpticStudio's section order: general data,
+  surface data, surface detail (parameters, tilts and decenters, apertures), edge thickness,
+  solves and variables, indices at every wavelength, global vertices and centres of curvature
+  (in the frame of the "Global reference surface" setting), element volume and mass, cardinal
+  points and the glass catalog files used. Each optional section has a checkbox. Element mass
+  needs a catalog glass with a density; a constant index has none.
+- **Surface data**: one surface's shape, sag and edge thickness, surface and element powers and
+  focal lengths, indices before and after, and its element's volume.
+- **Cardinal points**: focal, principal, anti-principal, nodal and anti-nodal planes of a range
+  of surfaces at one wavelength.
+- **System summary graphic**: the handful of first-order numbers a report page shows, as text.
+- **Report graphic**: 4, 6 or 9 analyses on one page. Type each position's analysis id (for
+  example `SingleRayTrace`, `CardinalPoints`, `ParaxialGaussianBeam`); each runs with the
+  settings it was last used with. The window lists the plots of all positions in order.
+
+The prescription's text reads back: `PrescriptionReader.Read` (OpenSim.Optics) turns the Text
+tab of a prescription into the saved surfaces of the same lens, tilts, aspheres, apertures and
+comments included; solve and variable flags are not carried.
+
+Not built: Multi-Config Data, OpticStudio's real working F/# per field and wavelength, POP
+settings, the XZ orientation of Cardinal points, the best fit glass of a model glass, a drawn
+system summary graphic, and the report graphic's page arrangement and saved report files.
+Element volumes take circular edges at the clear semi-diameters; surface apertures do not enter.
+
+## Jones and Mueller matrix surfaces
+
+Two surface types act on the polarization of light without changing the geometry of the trace
+(OP-52). Both are planes: rays refract or reflect there as at a plane Standard surface, and
+the surface's coating or Fresnel amplitudes apply as at any interface. Pick them in the Lens
+Data Editor's type column; neither takes a radius or conic.
+
+- **Jones Matrix** (as in OpticStudio): parameters 1–8 are Ar, Ai, Br, Bi, Cr, Ci, Dr, Di, the
+  real and imaginary parts of the 2 × 2 matrix [[A, B], [C, D]] acting on the field's
+  components along the surface's local x and y axes, in OpticStudio's sign convention for
+  phases. Examples from OpticStudio's help: an X analyzer is A = 1 and the rest 0; a
+  quarter-wave plate in x is A = (0, 1), D = (1, 0); a 25% intensity filter is A = D = 0.5. The
+  matrix is meant for normal incidence; at other angles it acts in the plane at right angles to
+  the ray, which keeps the field transverse and never adds power.
+- **Mueller Matrix** (this program's own type; OpticStudio has no sequential one): parameters
+  1–16 are the 4 × 4 Mueller matrix M00 … M33 row by row, acting on the Stokes vector
+  (I, Q, U, V) in the surface's local x, y axes. It can depolarize: diag(1, d, d, d) keeps the
+  power and multiplies the degree of polarization by d. A matrix that would turn a ray's Stokes
+  vector into an unphysical one (negative intensity, or more polarized power than power) stops
+  the analysis with a message naming the surface.
+
+After a Mueller surface a ray carries partially polarized light, which has no single field:
+
+- **Polarization ray trace** shows dashes for Ex, Ey, Ez from that surface on, and "not
+  defined" for the system diattenuation and matrix. For every ray it lists the Stokes vector at
+  the last surface reached and the degrees of polarization, linear polarization and circular
+  polarization (V/I, signed).
+- **Transmission** and **Transmission fan** work as before (the power is exact).
+- **Polarization pupil map** at or after a Mueller surface, and **Phase aberration** of a lens
+  with one, stop with a message naming the surface.
+
+Only the polarization analyses see the matrices; the geometric analyses treat both types as
+plain planes. The equations and the readings of OpticStudio's help are in
+`docs/Optics-Conventions.md` §30 and §10 item 26.
+
+Not built: the non-sequential Jones Matrix object and any non-sequential Mueller object (they
+need the non-sequential core, OP-70); a check that a Mueller matrix is physically realisable
+for every input (only each ray's output is checked); the pupil map of the polarized part of
+partially polarized light.
+
+## Merit function
+
+**Merit Function Editor…** in the Optics panel opens the merit function: a list of operands,
+one per row, saved with the project and the lens file. Type an operand's four-letter code
+(EFFL), its name (Effective focal length) or pick it in the Operand column; the parameter
+columns then show what the operand reads (Surf, Wave, Hx, Hy, Px, Py, Op#...). "Find an
+operand" searches the codes and names. Insert, Delete, Undo and Redo work as in the Lens Data
+Editor, as do the grid's own keys.
+
+**Update** evaluates the merit function on the project's lens, solves applied, and fills the
+Value and % Contrib columns; the merit value is shown at the top. The merit value is the
+weighted root-mean-square of value minus target, √(Σ W(V − T)² / Σ W), with W the absolute
+value of the weight. Any edit clears the values until the next Update. A row that cannot be
+computed (a ray that misses a surface, a surface that does not exist) shows "failed", with the
+reason in its tooltip and below the grid; it is scored with a large penalty and the other rows
+are unaffected. A list that cannot be evaluated at all (an unknown code, a GOTO to an earlier
+row, a math row reading a later one) is refused with every problem named.
+
+Built: the control operands (BLNK, DMFS, ENDX, GOTO, OOFF, SKIN, SKIS, USYM), CONF, effective
+focal length, total track, a few lens-data constraints and bounds, real ray coordinates and the
+general math operands. Rules and readings are in docs/Optics-Conventions.md §31. Not built: the
+rest of the operand catalogue, the default merit function wizard, optimization, the merit
+function listing, and .MF files.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
 
-- the non-sequential object editor; in the Lens Data Editor, surface types other than
-  Standard, tilts and decenters, and the evaluation of solves and pickups;
-- system data (aperture, fields, wavelengths);
-- layouts with traced rays and the analysis windows beyond those above (OPD, MTF, PSF and the
-  rest; the Configuration Matrix Spot);
-
-- layouts with traced rays and the analysis windows (spot diagrams, ray fans, MTF, PSF and
-  the rest; the OPD and wavefront analyses are built, see "Optical path difference and
-  wavefront");
-- the solve column of the sequential surface editor (the solve library is built; see Solves);
+- the non-sequential object editor;
+- layouts with traced rays, and the analysis windows not described above (MTF, PSF, Seidel
+  coefficients, encircled energy and the rest; the Configuration Matrix Spot);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
-  OP-51 is built, but nothing but its own five analyses uses it yet);
+  OP-51 is built; besides its own five analyses only relative illumination uses it, as an
+  option);
 - optimization and tolerancing of a lens (the merit function and its editor are built; the
   full operand catalogue, the default merit function wizard and the optimizer are not);
-
-- layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
-  the rest; field curvature, distortion, colour and relative illumination are built, see above);
-- the solve column of the sequential surface editor (the solve library is built; see Solves);
-- real transmission and polarization in the image-quality analyses (the polarization trace of
-  OP-51 is built; besides its own five analyses only relative illumination uses it, as an option);
-- optimization and tolerancing of a lens;
 - thermal configurations (Make Thermal, thermal pickups) and Make Conjugate in the
   Multi-Configuration Editor;
+- the parts of OpticStudio's reports listed as not built under Reports (multi-configuration
+  data, real F/# per field, POP settings, the report graphic's page arrangement);
 - lens-file import;
 - reference results from OpticStudio itself (the cross-checks use open programs only).
-- the parts of OpticStudio's reports listed as not built under Reports (multi-configuration
-  data, real F/# per field, POP settings, the report graphic's page arrangement).
