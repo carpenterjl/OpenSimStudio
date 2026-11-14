@@ -75,6 +75,16 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new PolarizationTransmissionAnalysis());
         registry.Register(new PolarizationPhaseAberrationAnalysis());
         registry.Register(new PolarizationTransmissionFanAnalysis());
+        // OP-34: ray fans, spot diagrams and footprints.
+        registry.Register(new RayAberrationAnalysis());
+        registry.Register(new StandardSpotAnalysis());
+        registry.Register(new ThroughFocusSpotAnalysis());
+        registry.Register(new FullFieldSpotAnalysis());
+        registry.Register(new MatrixSpotAnalysis());
+        registry.Register(new FootprintDiagramAnalysis());
+        registry.Register(new YYbarAnalysis());
+        registry.Register(new IncidentAngleAnalysis());
+
         // OP-43: surface shape analyses (Surface Phase and Phase Slope not built: no surface carries a phase).
         registry.Register(new SagTableAnalysis());
         registry.Register(new SurfaceSagAnalysis());

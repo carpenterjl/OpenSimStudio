@@ -681,6 +681,44 @@ need the non-sequential core, OP-70); a check that a Mueller matrix is physicall
 for every input (only each ray's output is checked); the pupil map of the polarized part of
 partially polarized light.
 
+## Ray fans, spot diagrams and footprints
+
+Eight analyses in the group **Rays and spots** trace the lens of the Lens Data Editor with the
+real ray trace, ray aiming and the fields' vignetting factors as the system data sets them:
+
+- **Ray aberration (ray fan):** for each field, the tangential fan (EY against Py) and the
+  sagittal fan (EX against Px) on the image surface, in µm, one curve per wavelength, relative
+  to the primary wavelength's chief ray (or the shown wavelength's when one is chosen). Number
+  of rays per side, field, wavelength, the plotted component of each fan, and whether apertures
+  are checked are settings.
+- **Standard spot diagram:** the rays of a hexapolar, square or dithered pupil pattern on the
+  image surface (or any surface), in µm about the chief ray, centroid, middle or vertex, with
+  the RMS and GEO radii and the Airy disk (1.22 λ times the real working F/#). The ray density
+  is the number of hexapolar rings, or the rays across the square grid; at least 3.
+- **Through focus spot diagram:** five spots per field at −2, −1, 0, 1 and 2 times the delta
+  focus (µm) from the image surface.
+- **Full field spot diagram:** every field on one plot in lens units, relative to field 1's
+  reference, with an exaggeration factor on each spot's size.
+- **Matrix spot diagram:** one spot per field and wavelength, optionally each referred to its
+  own point ("ignore lateral color").
+- **Footprint diagram:** a (2n + 1) × (2n + 1) grid of rays where it meets any surface, in lens
+  units, over the circle of the surface's semi-diameter, with the percentage of rays through.
+- **Y-Ybar drawing:** paraxial marginal ray height against chief ray height at each surface.
+- **Incident angle vs. image height:** the angle at the image surface of the lower marginal,
+  chief and upper marginal rays against image height, for fields along +y.
+
+Rays that fail or are stopped by an aperture are never drawn; each analysis lists how many,
+why and at which surface. The dithered pattern uses a fixed seed, so it is the same on every
+run. The definitions, and what was chosen where OpticStudio's help is silent, are in
+`docs/Optics-Conventions.md` §25 and §10 item 21.
+
+Not built: the Configuration Matrix Spot (it needs multi-configuration, OP-30); apodized pupil
+sampling (a Gaussian or cosine-cubed apodization is named in the result and not applied); the
+Airy ellipse (a circle is drawn) and the Airy disk on the matrix spot; spots in direction
+cosines; polarization and scattering in the spots; the ray fan at intermediate surfaces; the
+footprint's "Ring" density and aperture shapes other than the semi-diameter circle; afocal-mode
+spots.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -688,8 +726,8 @@ Not built yet, and not to be relied on until they appear in this guide:
 - the non-sequential object editor; in the Lens Data Editor, surface types other than
   Standard, tilts and decenters, and the evaluation of solves and pickups;
 - system data (aperture, fields, wavelengths);
-- layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
-  the rest);
+- layouts with traced rays and the analysis windows beyond those above (OPD, MTF, PSF and the
+  rest; the Configuration Matrix Spot);
 - the solve column of the sequential surface editor (the solve library is built; see Solves);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built, but nothing but its own five analyses uses it yet);

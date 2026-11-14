@@ -629,6 +629,22 @@ single place in the code, so a correction is one line and its test.
       acts after it.
     - *Image surface:* a matrix type on the image surface is not applied (no interface is).
 
+21. **Ray fans, spot diagrams and footprints** (OP-34). Section 25's readings of OpticStudio's
+    help that its output was not compared with:
+    - *Pupil patterns:* hexapolar rings at radii k/N, the square grid cell-centred (n × n,
+      2/n apart), and a dithered pattern of as many rays as the hexapolar one, uniform over the
+      disk from a fixed seed. The help gives the ray counts of the hexapolar pattern only.
+    - *Wavelength weights:* every wavelength traces the full pattern and each ray weighs its
+      wavelength's weight in the RMS and the centroid; OpticStudio instead thins the grids of
+      lower-weight wavelengths. The two agree in expectation, not ray for ray.
+    - *Working F/# off axis:* θ is taken between the chief ray and each of the four marginal
+      rays at the image surface; the help names "the axis ray" without defining it further.
+    - *Chief ray as reference:* traced with apertures ignored, so an obscured chief ray still
+      gives a reference point; the help does not say what OpticStudio does then.
+    - *Incident angle sign:* atan2(M, |N|) in the image surface's local frame.
+    Check: the standard spot (RMS, GEO, Airy radius), a ray fan and a footprint of a singlet at
+    two fields in OpticStudio, with all three patterns.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -1763,3 +1779,86 @@ Wikipedia, "Stokes parameters" and "Mueller calculus".
   Mueller surface; the pupil map of the polarized part of partially polarized light;
   depolarization by anything but a Mueller surface (scattering, coatings; birefringence is
   OP-53).
+
+## 25. Ray fans, spot diagrams and footprints
+
+The ray and spot analyses of OP-34 are in `OpenSim.Optics/Analysis/Rays/` and the pupil
+patterns in `OpenSim.Optics/Analysis/Sampling/PupilSampling.cs`. Sources: Ansys OpticStudio
+2025 R2 help on ansyshelp.ansys.com, the topics "Hexapolar Rings", "Working F/#", "Ray
+Aberration (rays and spots)", "Standard Spot Diagram", "Through Focus Spot Diagram", "Full
+Field Spot Diagram", "Matrix Spot Diagram", "Footprint Diagram", "Y-Ybar Drawing" and
+"Incident Angle vs. Image Height" (copies in `plans/sources/optics/op-34-help/`, not in the
+repository).
+
+- **Pupil patterns** (`PupilSampling`). Hexapolar of N rings: the central ray, then ring k
+  (k = 1 … N) of 6k rays at radius k/N, at angles 2πj/(6k) starting on +x, 1 + 3N(N + 1) rays
+  (help: 6 rays in the first ring "with the first ray starting at 0 degrees", 6 more in each
+  ring, 91 rays for 5 rings). Square of n: the cell-centred n × n grid (points 2/n apart,
+  `BatchTracer.SquareGrid`) inside the unit circle. Dithered of N: 1 + 3N(N + 1) points
+  (√u cos 2πv, √u sin 2πv), u and v from SplitMix64 with the fixed seed
+  `PupilSampling.DitherSeed`, so it is the same on every run. The ray density's minimum for
+  the spot diagrams is 3 (help). The ring radii, the square grid's placement and the dithered
+  count are this program's choices; the help does not state them.
+- **Tracing** (`RaySampler`). Rays are launched by `RayLauncher` (ray aiming and vignetting
+  factors as section 16 says) and traced with the surface apertures. At the image surface the
+  rays come from `BatchTracer`; at another surface each ray is traced surface by surface and
+  its hit there is read, in that surface's local frame. A ray that fails is kept with its
+  status and surface; the analyses count and list the failures ("24 stopped by an aperture at
+  surface 1") and never draw or use them. The chief rays used as references are traced with
+  apertures ignored. Both paths run one work item per field and wavelength and give the same
+  bits at any degree of parallelism.
+- **Spot radii** (`SpotStatistics`). About a reference point (x_r, y_r):
+  RMS = √(Σ wᵢ rᵢ² / Σ wᵢ), RMS x and y the same with the x and y parts, GEO = max rᵢ (help:
+  GEO is the radius of the circle about the reference that holds every ray; RMS is the root of
+  the mean squared distance and considers the wavelength weighting). wᵢ is the wavelength's
+  weight in a polychromatic spot (a wavelength of weight zero is left out) and 1 in a
+  monochromatic one. References: the real chief ray at the primary wavelength (default), the
+  weighted centroid, the middle ((min + max)/2 in x and in y), or the vertex (0, 0).
+- **Working F/# and Airy disk** (`RealWorkingFNumber`). W = 1/(2 n sin θ) (help), θ between the
+  field's chief ray and each marginal ray (0, ±1), (±1, 0) of the vignetted pupil at the image
+  surface, n the image space's index; off axis, W = 1/(2√(mean of (n sin θ)²)) over the four
+  (help: "the average of the square of the numerical aperture"). Apertures are ignored and
+  vignetting factors kept, as the help says; W is capped at 10 000. The Airy radius is
+  1.22 λ W (help), λ the primary wavelength when polychromatic or the one shown, in the
+  system's air. It is drawn as a circle about the reference. When a marginal ray fails the
+  result says which; the help's smaller-pupil estimate is not built.
+- **Ray aberration (ray fan).** Tangential fan (0, Py), sagittal (Px, 0), Py and Px = k/n for
+  k = −n … n; the plotted value is the ray's image-surface coordinate minus the reference chief
+  ray's, in µm: the primary wavelength's chief ray when all wavelengths are shown, the shown
+  wavelength's when one is (help). Default components EY (tangential) and EX (sagittal).
+- **Through focus.** Five spots at −2, −1, 0, 1, 2 times the delta focus (µm): every ray and the
+  chief ray are carried in a straight line from the image surface to the plane z = dz of its
+  local frame, (x + dz·L/N, y + dz·M/N).
+- **Full field.** Every field on one plot in lens units, a ray at R_f + E·(p − R_f) − R_1, with
+  R_f its field's reference and R_1 the first field's (help: the chief ray of field 1 when the
+  chief ray is the reference), E the exaggeration.
+- **Matrix spot.** One spot per field and wavelength; referred to the field's point (primary
+  chief ray, or centroid or middle over every wavelength) or, with "ignore lateral color", to
+  each cell's own point.
+- **Footprint.** A (2n + 1) × (2n + 1) grid (i/n, k/n) inside the pupil (help: "a setting of 10
+  will trace a grid of 21 x 21 rays") on any surface, lens units, local frame, with the circle
+  of the surface's semi-diameter (or its automatic clear semi-diameter). Rays stopped before
+  the surface are never drawn; rays stopped at it (where they meet it) or later are drawn unless
+  "delete vignetted". Rays through = drawn / launched (help).
+- **Y-Ybar.** The paraxial marginal ray height y against the paraxial full-field chief ray
+  height ȳ at each surface (section 11), at one wavelength.
+- **Incident angle vs. image height.** Fields Hy = 0 … 1, Hx = 0; the rays (0, −1), (0, 0),
+  (0, 1); angle atan2(M, |N|) in degrees in the image surface's local frame (the help assumes
+  the image surface flat); image height the chief ray's local y.
+- **Gate** (`OpenSim.Tests/Optics/RayFanSpotTests`): a paraboloid on axis and an ideal Paraxial
+  surface at three fields have RMS and GEO radii of a few ulps; a concave spherical mirror's
+  ray fan equals its exact transverse aberration (closed form) to rounding, and an odd fit
+  a₁P + a₃P³ + a₅P⁵ gives a₃ = −(D/2)³/(2ρ²) (derived in the test by expanding the exact form;
+  OP-36's Seidel sums are not built) and a₁ = 0, both to 10⁻⁶ of a₃; the on-axis footprint of a
+  singlet at D = 20 µm equals the paraxial marginal beam diameter to 10⁻⁶ (and differs at
+  D = 20 mm); RMS, GEO and the four references on hand-built ray sets; the paraboloid's working
+  F/# 1/(2 sin θ) and its through-focus GEO |dz|·tan θ; the ideal lens's full-field offsets,
+  incident angles and Y-Ybar heights in closed form.
+- **Not built.** Configuration Matrix Spot (needs OP-30's configurations); apodized sampling (a
+  non-uniform apodization is named in the assumptions and not applied); OpticStudio's thinning
+  of lower-weight wavelengths; the Airy ellipse (a circle is drawn) and the Airy disk on the
+  matrix spot; direction-cosine spots; polarization and scattering in the spots; the ray fan at
+  intermediate surfaces and its vignetted-pupil scaling; the footprint's "Ring" density and
+  surface aperture shapes other than the semi-diameter circle; afocal-mode spots (positions
+  are on the image surface regardless). Section 10, item 21 lists the checks against
+  OpticStudio.
