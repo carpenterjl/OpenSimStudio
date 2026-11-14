@@ -183,7 +183,9 @@ public class SurfaceShapeAnalysisTests
                 inside++;
                 Close(expected, v, tolerance, $"{data} curvature at ({x}, {y})");
             }
-        Assert.True(inside > 800);
+        // Derived: the 33 x 33 grid over ±10 mm puts nodes at 0.625 mm steps, and 797 lattice
+        // points (i, j) with |i|, |j| ≤ 16 satisfy i² + j² ≤ 16², the clear aperture.
+        Assert.Equal(797, inside);
         Assert.DoesNotContain("could not be evaluated", result.Text);
         Assert.Contains(differenced ? "Richardson" : "analytic second derivatives", result.Text);
     }

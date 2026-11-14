@@ -95,8 +95,11 @@ public sealed record SequentialLens
     }
 
     /// <summary>Surface by surface with the thicknesses as entered: what the paraxial lens's
-    /// own rules check.</summary>
-    private ParaxialLens ToParaxialLensAsEntered()
+    /// own rules check. With <paramref name="forValidation"/>, a shape that has no first-order
+    /// model enters with its vertex curvature only, so the thickness, media and stop rules can
+    /// still be checked for a lens that traces but cannot be analysed paraxially (the refusal is
+    /// raised where paraxial data are asked for, not when the lens is built).</summary>
+    private ParaxialLens ToParaxialLensAsEntered(bool forValidation = false)
     {
         var media = EffectiveMedia();
         var surfaces = new ParaxialSurface[Surfaces.Count];
@@ -107,7 +110,7 @@ public sealed record SequentialLens
             bool dummy = s.IsIgnored || s.IsCoordinateBreak;
             var equivalent = dummy || s.Shape is null || j == 0 || j == image
                 ? new ParaxialShapeEquivalent { Curvature = dummy ? 0 : s.Curvature }
-                : ShapeEquivalent(s, j);
+                : forValidation ? ShapeEquivalentOrVertex(s) : ShapeEquivalent(s, j);
             surfaces[j] = new ParaxialSurface
             {
                 Curvature = equivalent.Curvature,
@@ -122,6 +125,12 @@ public sealed record SequentialLens
             };
         }
         return new ParaxialLens { Surfaces = surfaces };
+    }
+
+    private static ParaxialShapeEquivalent ShapeEquivalentOrVertex(SequentialSurface s)
+    {
+        try { return s.Shape!.ParaxialEquivalent(s); }
+        catch (ArgumentException) { return new ParaxialShapeEquivalent { Curvature = s.Curvature }; }
     }
 
     /// <summary>The shape's first-order model; a shape that has none (it throws
@@ -272,7 +281,7 @@ public sealed record SequentialLens
         // Coordinate breaks and tilts (OP-21).
         SurfacePlacement.Validate(Surfaces, ObjectAtInfinity, Where, problems);
         // Curvature, thickness, media, stop count and semi-diameters: the paraxial lens's own rules.
-        foreach (var p in ToParaxialLensAsEntered().Validate())
+        foreach (var p in ToParaxialLensAsEntered(forValidation: true).Validate())
             problems.Add(p.Replace("Paraxial lens:", "Sequential lens:"));
         return problems;
     }
