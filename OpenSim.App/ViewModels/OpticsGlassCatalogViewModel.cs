@@ -97,10 +97,28 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
     public string GlassFormula => SelectedGlass switch
     {
         null => "",
-        { Tabulated: not null } => "Tabulated n, k",
+        { Tabulated: { HasExtinction: true } } => "Tabulated n, k",
+        { Tabulated: not null } g => "Tabulated n" + (g.Extinction is null ? "" : "; k tabulated separately"),
+        { Numbering: FormulaNumbering.RefractiveIndexInfo, FormulaName: { } name } g => name + (g.Extinction is null ? "" : "; k tabulated separately"),
         { FormulaNumber: int n } g => DispersionFormulas.NameOf(n) + (g.Formula is { } f && !DispersionFormulas.IsVerified(f) ? " — unverified form" : ""),
         _ => "none"
     };
+
+    /// <summary>Where the selected material's data came from (OP-12): the database page and its
+    /// references; for an AGF glass, its catalog file.</summary>
+    public string GlassSource => SelectedGlass switch
+    {
+        null => "",
+        { Source: { } s } => $"{s.Database}, page {s.PagePath}" + (s.PageTitle.Length > 0 ? $" ({MaterialSource.PlainText(s.PageTitle)})" : "") +
+                             (s.References.Length > 0 ? "\n" + s.PlainReferences : ""),
+        _ => SelectedCatalogData?.SourcePath is { } path ? $"Catalog file {path}" : "Catalog file"
+    };
+
+    /// <summary>The selected page's stated measurement conditions (temperature in K and pressure
+    /// in Pa, as the database writes them); "" when none.</summary>
+    public string GlassConditions => SelectedGlass?.Source is { Conditions.Count: > 0 } s
+        ? string.Join("; ", s.Conditions.Select(c => $"{c.Key} {c.Value}"))
+        : SelectedGlass is null ? "" : "not stated";
 
     public string GlassCoefficients => SelectedGlass is null ? "" : string.Join("  ", SelectedGlass.Coefficients.Select(Number));
 
@@ -200,7 +218,7 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
         nameof(GlassComputedNdVd), nameof(GlassCheckResult), nameof(GlassStatusText), nameof(GlassCode), nameof(GlassThermal),
         nameof(GlassReferenceTemperature), nameof(GlassExpansion), nameof(GlassDensity), nameof(GlassDeltaPgF),
         nameof(GlassCostAndResistance), nameof(GlassTransmittance), nameof(GlassComment), nameof(ProbeResult),
-        nameof(ProbeEnvironmentResult)
+        nameof(ProbeEnvironmentResult), nameof(GlassSource), nameof(GlassConditions)
     };
 
     partial void OnSelectedGlassChanged(OpticalMaterial? value)

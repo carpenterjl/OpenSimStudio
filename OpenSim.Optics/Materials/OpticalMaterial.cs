@@ -38,14 +38,27 @@ public sealed record OpticalMaterial
     public string Comment { get; init; } = "";
 
     /// <summary>The dispersion formula number as the NM line prints it; null for a tabulated
-    /// material. A number outside 1–13 is kept, and evaluating the material names it.</summary>
+    /// material. A number outside 1–13 is kept, and evaluating the material names it. Counted in
+    /// <see cref="Numbering"/>: OpticStudio's thirteen for an AGF glass, the refractiveindex.info
+    /// database's nine for a page of that database (OP-12).</summary>
     public int? FormulaNumber { get; init; }
+
+    /// <summary>Which formula list <see cref="FormulaNumber"/> and <see cref="Coefficients"/> refer to.</summary>
+    public FormulaNumbering Numbering { get; init; } = FormulaNumbering.OpticStudio;
 
     /// <summary>C1, C2, … from the CD line, as printed.</summary>
     public IReadOnlyList<double> Coefficients { get; init; } = Array.Empty<double>();
 
     /// <summary>The n, k table of a tabulated material; null for a formula material.</summary>
     public TabulatedIndex? Tabulated { get; init; }
+
+    /// <summary>k as a table of its own, beside a formula or an n-only table (a refractiveindex.info
+    /// page with a "tabulated k" block); null otherwise. Its range may differ from the index's.</summary>
+    public ExtinctionTable? Extinction { get; init; }
+
+    /// <summary>Where the data came from (the shipped refractiveindex.info pages carry their page
+    /// path and references); null for an AGF glass.</summary>
+    public MaterialSource? Source { get; init; }
 
     /// <summary>The LD line: the shortest and longest wavelength (µm) the data are valid for.
     /// A tabulated material's range is its table's.</summary>
@@ -105,9 +118,15 @@ public sealed record OpticalMaterial
     /// <summary>IT: internal transmittance against wavelength, in file order.</summary>
     public IReadOnlyList<TransmittancePoint> Transmittance { get; init; } = Array.Empty<TransmittancePoint>();
 
-    /// <summary>The dispersion formula, when <see cref="FormulaNumber"/> is one of the thirteen.</summary>
+    /// <summary>The dispersion formula, when <see cref="FormulaNumber"/> is one of OpticStudio's thirteen.
+    /// Null for a material numbered by the refractiveindex.info list (<see cref="Numbering"/>).</summary>
     public DispersionFormula? Formula =>
-        FormulaNumber is int n && DispersionFormulas.IsDefined(n) ? (DispersionFormula)n : null;
+        Numbering == FormulaNumbering.OpticStudio && FormulaNumber is int n && DispersionFormulas.IsDefined(n) ? (DispersionFormula)n : null;
+
+    /// <summary>The formula's name in its own list ("2 (Sellmeier 1)", "refractiveindex.info
+    /// formula 2 (Sellmeier-2)"); null for a tabulated material.</summary>
+    public string? FormulaName => FormulaNumber is not int n ? null
+        : Numbering == FormulaNumbering.RefractiveIndexInfo ? RefractiveIndexInfoFormulas.NameOf(n) : DispersionFormulas.NameOf(n);
 
     /// <summary>The valid range actually used: the table's for a tabulated material, the LD
     /// line's otherwise; null when the material states none.</summary>
@@ -117,6 +136,12 @@ public sealed record OpticalMaterial
 
     /// <summary>True when <paramref name="micrometers"/> lies in <see cref="ValidRange"/> (ends included).</summary>
     public bool Covers(double micrometers) => ValidRange is { } r && micrometers >= r.Min && micrometers <= r.Max;
+
+    /// <summary>The range k is known over: the separate k table's, else the n, k table's when it
+    /// carries k; null when the material has no k data.</summary>
+    public (double Min, double Max)? ExtinctionRange =>
+        Extinction is { Points.Count: >= 2 } e ? (e.MinMicrometers, e.MaxMicrometers)
+        : Tabulated is { HasExtinction: true, Points.Count: >= 2 } t ? (t.MinMicrometers, t.MaxMicrometers) : null;
 
     /// <summary>
     /// The refractive index at <paramref name="micrometers"/> at the catalog's reference
@@ -130,6 +155,8 @@ public sealed record OpticalMaterial
     {
         CheckRange(micrometers);
         if (Tabulated is { } table) return Offset is { } tableOffset ? tableOffset.Apply(table.Interpolate(micrometers).N) : table.Interpolate(micrometers).N;
+        if (Numbering == FormulaNumbering.RefractiveIndexInfo)
+            return Offset is { } riiOffset ? riiOffset.Apply(RefractiveIndexInfoIndex(micrometers)) : RefractiveIndexInfoIndex(micrometers);
         var formula = RequireFormula();
         double n;
         try
@@ -146,12 +173,24 @@ public sealed record OpticalMaterial
         return Offset is { } offset ? offset.Apply(n) : n;
     }
 
-    /// <summary>The extinction coefficient k of a tabulated material at <paramref name="micrometers"/>,
-    /// range-checked like <see cref="RelativeIndex"/>. Null for a formula material: a catalog
-    /// glass carries its absorption in the <see cref="Transmittance"/> table, not as k.</summary>
+    /// <summary>The extinction coefficient k at <paramref name="micrometers"/>, range-checked like
+    /// <see cref="RelativeIndex"/> and, for a separate k table, against that table's own range
+    /// too (a wavelength with an index but outside the k table throws, naming both ranges). Null
+    /// when the material has no k data: an AGF glass carries its absorption in the
+    /// <see cref="Transmittance"/> table, and a refractiveindex.info page may give n only.</summary>
     public double? ExtinctionCoefficient(double micrometers)
     {
-        if (Tabulated is not { } table) return null;
+        if (Extinction is { } k)
+        {
+            CheckRange(micrometers);
+            if (k.Validate() is { Count: > 0 } problems)
+                throw new InvalidOperationException($"{Who}: the extinction table is not usable: {string.Join(" ", problems)}");
+            if (micrometers < k.MinMicrometers || micrometers > k.MaxMicrometers)
+                throw new ArgumentOutOfRangeException(nameof(micrometers), micrometers,
+                    $"{Who}: {Format(micrometers)} µm is inside the index range but outside the k table's range {Format(k.MinMicrometers)}–{Format(k.MaxMicrometers)} µm. k is not extrapolated.");
+            return k.Interpolate(micrometers);
+        }
+        if (Tabulated is not { HasExtinction: true } table) return null;
         CheckRange(micrometers);
         return table.Interpolate(micrometers).K;
     }
@@ -169,6 +208,27 @@ public sealed record OpticalMaterial
         if (!double.IsFinite(micrometers) || micrometers < lo || micrometers > hi)
             throw new ArgumentOutOfRangeException(nameof(micrometers), micrometers,
                 $"{Who}: {Format(micrometers)} µm is outside its valid range {Format(lo)}–{Format(hi)} µm. Indices are not extrapolated.");
+    }
+
+    private double RefractiveIndexInfoIndex(double micrometers)
+    {
+        if (FormulaNumber is not int number)
+            throw new InvalidOperationException($"{Who} has neither a dispersion formula nor an index table.");
+        if (!RefractiveIndexInfoFormulas.IsDefined(number))
+            throw new NotSupportedException($"{Who} uses {RefractiveIndexInfoFormulas.NameOf(number)}, which is not evaluated.");
+        double n;
+        try
+        {
+            n = RefractiveIndexInfoFormulas.Evaluate(number, Coefficients, micrometers);
+        }
+        catch (ArgumentException e)
+        {
+            throw new InvalidOperationException($"{Who}: {e.Message.Split(" (Parameter")[0]}", e);
+        }
+        if (!double.IsFinite(n) || n <= 0)
+            throw new InvalidOperationException(
+                $"{Who}: {RefractiveIndexInfoFormulas.NameOf(number)} gives no real positive index at {Format(micrometers)} µm (it gives {n}); the coefficients are not usable there.");
+        return n;
     }
 
     private DispersionFormula RequireFormula()

@@ -1,0 +1,59 @@
+# The materials OpenSim Studio ships from the refractiveindex.info database (CC0 1.0; see
+# LICENSE and permission.txt beside this file). Plan item OP-12.
+# Source: https://github.com/polyanskiy/refractiveindex.info-database, branch main, commit
+# e6d15e3, cloned 2026-11-14. The files under data/ are copied unchanged from database/data/.
+# Book and page ids and titles are copied from database/catalog-nk.yml.
+# One line per material, tab-separated: catalog, material name (book-page), data path,
+# book title, page title. Lines starting with # are comments.
+RII-MAIN	SiO2-Malitson	main/SiO2/nk/Malitson.yml	SiO<sub>2</sub> (Silicon dioxide, Silica, Quartz)	Malitson 1965: n 0.21–6.7 µm
+RII-MAIN	SiO2-Ghosh-o	main/SiO2/nk/Ghosh-o.yml	SiO<sub>2</sub> (Silicon dioxide, Silica, Quartz)	Ghosh 1999: α-Quartz, n(o) 0.198–2.05 µm
+RII-MAIN	SiO2-Ghosh-e	main/SiO2/nk/Ghosh-e.yml	SiO<sub>2</sub> (Silicon dioxide, Silica, Quartz)	Ghosh 1999: α-Quartz, n(e) 0.198–2.05 µm
+RII-MAIN	CaF2-Li	main/CaF2/nk/Li.yml	CaF<sub>2</sub> (Calcium fluoride)	Li 1980: n 0.15–12.0 µm; 20 °C
+RII-MAIN	BaF2-Li	main/BaF2/nk/Li.yml	BaF<sub>2</sub> (Barium fluoride)	Li 1980: n 0.15–15.0 µm
+RII-MAIN	SrF2-Li	main/SrF2/nk/Li.yml	SrF<sub>2</sub> (Strontium fluoride)	Li 1980: n 0.15–12.0 µm
+RII-MAIN	LiF-Li	main/LiF/nk/Li.yml	LiF (Lithium fluoride)	Li 1976: n 0.10–11 µm
+RII-MAIN	MgF2-Li-o	main/MgF2/nk/Li-o.yml	MgF<sub>2</sub> (Magnesium fluoride)	Li 1980: n(o) 0.14–7.5 µm
+RII-MAIN	MgF2-Li-e	main/MgF2/nk/Li-e.yml	MgF<sub>2</sub> (Magnesium fluoride)	Li 1980: n(e) 0.14–7.5 µm
+RII-MAIN	Al2O3-Malitson-o	main/Al2O3/nk/Malitson-o.yml	Al<sub>2</sub>O<sub>3</sub> (Aluminium sesquioxide, Sapphire, Alumina)	Malitson and Dodge 1972: α-Al2O3 (Sapphire); n(o) 0.20–5.0 µm
+RII-MAIN	Al2O3-Malitson-e	main/Al2O3/nk/Malitson-e.yml	Al<sub>2</sub>O<sub>3</sub> (Aluminium sesquioxide, Sapphire, Alumina)	Malitson and Dodge 1972: α-Al2O3 (Sapphire); n(e) 0.20–5.0 µm
+RII-MAIN	Si-Li-293K	main/Si/nk/Li-293K.yml	Si (Silicon)	Li 1980: n 1.2–14 µm; 293 K
+RII-MAIN	Ge-Li-293K	main/Ge/nk/Li-293K.yml	Ge (Germanium)	Li 1980: n 1.9–18 µm; 293 K
+RII-MAIN	ZnSe-Connolly	main/ZnSe/nk/Connolly.yml	ZnSe (Zinc selenide)	Connolly et al. 1979: n 0.54–18.2 µm
+RII-MAIN	ZnS-Debenham	main/ZnS/nk/Debenham.yml	ZnS (Zinc sulfide)	Debenham 1984: Cubic ZnS; n 0.405–13 µm
+RII-MAIN	KBr-Li	main/KBr/nk/Li.yml	KBr (Potassium bromide)	Li 1976: n 0.20–42 µm
+RII-MAIN	KCl-Li	main/KCl/nk/Li.yml	KCl (Potassium chloride)	Li 1976: n 0.18–35 µm
+RII-MAIN	NaCl-Li	main/NaCl/nk/Li.yml	NaCl (Sodium chloride)	Li 1976: n 0.20–30 µm
+RII-MAIN	CsI-Li	main/CsI/nk/Li.yml	CsI (Cesium iodide)	Li 1976: n 0.25–67 µm
+RII-MAIN	CsBr-Li	main/CsBr/nk/Li.yml	CsBr (Cesium bromide)	Li 1976: n 0.21–55 µm; 20 °C
+RII-MAIN	AgCl-Tilton	main/AgCl/nk/Tilton.yml	AgCl (Silver chloride)	Tilton et al. 1950: n 0.578–20.6 µm
+RII-MAIN	C-Peter	main/C/nk/Peter.yml	C (Carbon, diamond, graphite, graphene, carbon nanotubes)	Peter 1923: Diamond; n 0.226–0.760 µm
+RII-MAIN	CaCO3-Ghosh-o	main/CaCO3/nk/Ghosh-o.yml	CaCO<sub>3</sub> (Calcium carbonate, Calcite)	Ghosh 1999: n(o) 0.204–2.172 µm
+RII-MAIN	CaCO3-Ghosh-e	main/CaCO3/nk/Ghosh-e.yml	CaCO<sub>3</sub> (Calcium carbonate, Calcite)	Ghosh 1999: n(e) 0.204–2.172 µm
+RII-MAIN	LiNbO3-Zelmon-o	main/LiNbO3/nk/Zelmon-o.yml	LiNbO<sub>3</sub> (Lithium niobate)	Zelmon et al. 1997: n(o) 0.4–5.0 µm
+RII-MAIN	LiNbO3-Zelmon-e	main/LiNbO3/nk/Zelmon-e.yml	LiNbO<sub>3</sub> (Lithium niobate)	Zelmon et al. 1997: n(e) 0.4–5.0 µm
+RII-MAIN	KH2PO4-Zernike-o	main/KH2PO4/nk/Zernike-o.yml	KH<sub>2</sub>PO<sub>4</sub> (Potassium dihydrogen phosphate, KDP)	Zernike et al. 1964: n(o) 0.214–1.53 µm
+RII-MAIN	KH2PO4-Zernike-e	main/KH2PO4/nk/Zernike-e.yml	KH<sub>2</sub>PO<sub>4</sub> (Potassium dihydrogen phosphate, KDP)	Zernike et al. 1964: n(e) 0.214–1.53 µm
+RII-MAIN	BaB2O4-Eimerl-o	main/BaB2O4/nk/Eimerl-o.yml	BaB<sub>2</sub>O<sub>4</sub> (Barium borate, BBO)	Eimerl et al. 1987: n(o) 0.22–1.06 µm
+RII-MAIN	BaB2O4-Eimerl-e	main/BaB2O4/nk/Eimerl-e.yml	BaB<sub>2</sub>O<sub>4</sub> (Barium borate, BBO)	Eimerl et al. 1987: n(e) 0.22–1.06 µm
+RII-MAIN	Y3Al5O12-Zelmon	main/Y3Al5O12/nk/Zelmon.yml	Y<sub>3</sub>Al<sub>5</sub>O<sub>12</sub> (Yttrium aluminium garnet, YAG)	Zelmon et al. 1998: n 0.4–5.0 µm
+RII-MAIN	MgAl2O4-Tropf	main/MgAl2O4/nk/Tropf.yml	MgAl<sub>2</sub>O<sub>4</sub> (Magnesium aluminate, spinel)	Tropf and Thomas 1991: n 0.35–5.5 µm
+RII-MAIN	MgO-Stephens	main/MgO/nk/Stephens.yml	MgO (Magnesium monoxide)	Stephens and Malitson 1952: n 0.36–5.4 µm
+RII-MAIN	Y2O3-Nigara	main/Y2O3/nk/Nigara.yml	Y<sub>2</sub>O<sub>3</sub> (Yttrium sesquioxide)	Nigara 1968: n 0.25–9.6 µm
+RII-MAIN	TiO2-Devore-o	main/TiO2/nk/Devore-o.yml	TiO<sub>2</sub> (Titanium dioxide)	Devore 1951: n(o) 0.43–1.53 µm
+RII-MAIN	TiO2-Devore-e	main/TiO2/nk/Devore-e.yml	TiO<sub>2</sub> (Titanium dioxide)	Devore 1951: n(e) 0.43–1.53 µm
+RII-MAIN	HfO2-Al-Kuhaili	main/HfO2/nk/Al-Kuhaili.yml	HfO<sub>2</sub> (Hafnium dioxide, Hafnia)	Al-Kuhaili 2004: n 0.2–2.0 µm
+RII-MAIN	Ta2O5-Gao	main/Ta2O5/nk/Gao.yml	Ta<sub>2</sub>O<sub>5</sub> (Tantalum pentoxide)	Gao et al. 2012: n,k 0.35–1.8 µm
+RII-MAIN	Nb2O5-Lemarchand	main/Nb2O5/nk/Lemarchand.yml	Nb<sub>2</sub>O<sub>5</sub> (Niobium pentoxide)	Lemarchand 2013: n,k 0.25–2.5 µm
+RII-MAIN	Si3N4-Philipp	main/Si3N4/nk/Philipp.yml	Si<sub>3</sub>N<sub>4</sub>, SiN (Silicon nitride)	Philipp 1973: n 0.207–1.24 µm
+RII-MAIN	ZrO2-Wood	other/mixed crystals/ZrO2-Y2O3/nk/Wood.yml	ZrO<sub>2</sub> (Zirconium dioxide, Zirconia)	Wood and Nassau 1982: Cubic zirconia stabilized with yttria; n 0.361–5.14 µm
+RII-MAIN	AlN-Pastrnak-o	main/AlN/nk/Pastrnak-o.yml	AlN (Aluminium nitride)	Pastrňák and Roskovcová 1966: n(o) 0.22–5 µm
+RII-MAIN	AlN-Pastrnak-e	main/AlN/nk/Pastrnak-e.yml	AlN (Aluminium nitride)	Pastrňák and Roskovcová 1966: n(e) 0.22–5 µm
+RII-MAIN	H2O-Hale	main/H2O/nk/Hale.yml	H<sub>2</sub>O, D<sub>2</sub>O (Water, heavy water, ice)	Hale and Querry 1973: Water; n,k 0.2–200 µm; 25 °C
+RII-GLASS	soda-lime-Rubin-clear	glass/misc/soda-lime/nk/Rubin-clear.yml	Soda lime glass	Rubin 1985: Clear; n,k 0.31–4.6 µm
+RII-GLASS	BGG-Zelmon	glass/misc/BGG/nk/Zelmon.yml	BGG (barium gallogermanate) glass	Zelmon et al. 2002: n 0.4–5.0 µm
+RII-GLASS	ZBLAN-Gan	glass/misc/ZBLAN/nk/Gan.yml	ZBLAN fluoride glass	Gan 1995: n 0.365–3.50 µm
+RII-GLASS	Pilkington-Optiwhite-Treharne	glass/misc/Pilkington-Optiwhite/nk/Treharne.yml	Pilkington-Optiwhite (NSG)	Treharne et al. 2011: n,k 0.3–1.5 µm
+RII-ORGANIC	poly_methyl_methacrylate-Sultanova	organic/(C5H8O2)n - poly(methyl methacrylate)/nk/Sultanova.yml	(C<sub>5</sub>H<sub>8</sub>O<sub>2</sub>)<sub>n</sub> (Poly(methyl methacrylate), PMMA)	Sultanova et al. 2009: n 0.437–1.052 µm
+RII-ORGANIC	polystyrene-Sultanova	organic/(C8H8)n - polystyrene/nk/Sultanova.yml	(C<sub>8</sub>H<sub>8</sub>)<sub>n</sub> (Polystyrene, PS)	Sultanova et al. 2009: n 0.437–1.05 µm
+RII-ORGANIC	polycarbonate-Sultanova	organic/(C16H14O3)n - polycarbonate/nk/Sultanova.yml	(C<sub>16</sub>H<sub>14</sub>O<sub>3</sub>)<sub>n</sub> (Polycarbonate, PC)	Sultanova et al. 2009: n 0.437–1.05 µm
+RII-ORGANIC	polyethylene_terephthalate-Zhang	organic/(C10H8O4)n - polyethylene terephthalate/nk/Zhang.yml	(C<sub>10</sub>H<sub>8</sub>O<sub>4</sub>)<sub>n</sub> (Polyethylene terephthalate, PET)	Zhang et al. 2020: n,k 0.4–20 µm

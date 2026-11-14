@@ -72,12 +72,25 @@ When a project is opened:
 Below the system data, the **Glass catalogs** group (`OpenSim.App/Views/Panels/OpticsMaterialsPanel.xaml`)
 lists the glass catalogs the program has loaded and which of them the lens uses.
 
-- **Where catalogs come from.** OpticStudio AGF files in your catalog folder,
+- **What ships.** Three built-in catalogs from the refractiveindex.info database, which is in
+  the public domain (CC0 1.0; its licence ships with the program in
+  `OpenSim.Optics/Materials/RefractiveIndexInfo`): **RII-MAIN** (44 crystals, infrared
+  materials and coating materials, among them fused silica, CaF2, BaF2, MgF2, sapphire, Si, Ge,
+  ZnSe, ZnS, KBr, NaCl, LiF, crystal quartz and calcite), **RII-GLASS** (4 non-vendor glasses:
+  soda-lime, BGG, ZBLAN, Pilkington Optiwhite) and **RII-ORGANIC** (PMMA, polystyrene,
+  polycarbonate, PET). They are listed as *built in*. Each material is named after the
+  database's book and page (`CaF2-Li`, `Al2O3-Malitson-o` for sapphire's ordinary ray) and
+  its form shows where its data come from. No vendor glass ships: the database's copies of
+  vendor datasheets (its "specs" shelf) are left out, as vendor catalogs are; see
+  docs/Optics-Conventions.md §2 for the full list and how the pages were chosen.
+- **Vendor catalogs.** OpticStudio AGF files in your catalog folder,
   `%AppData%/OpenSimStudio/GlassCatalogs` unless you choose another with **Folder…** (the choice
   is kept for next time). **Import AGF…** copies a file into that folder and loads it; a copy of
-  the same name is replaced. A catalog is named after its file. No catalog ships with the
-  program yet: vendor catalogs may not be redistributed, so you download them from the vendor
-  and import them. AGF files in UTF-16 or ASCII/UTF-8, with either line end, are read.
+  the same name is replaced. A catalog is named after its file; a file named like a built-in
+  catalog replaces it, and the log says so. Vendor catalogs may not be redistributed, so you
+  download them from the vendor and
+  import them. AGF files in UTF-16 or ASCII/UTF-8, with either line end, are read. Importing a
+  refractiveindex.info page or YAML file of your own is not built.
 - **Active catalogs.** Tick the catalogs the lens draws its glasses from; a glass name is
   looked up in the ticked catalogs from the top. Until you change a tick every loaded catalog
   is active. The ticks save with the project and the lens file. A saved catalog this machine
@@ -85,15 +98,22 @@ lists the glass catalogs the program has loaded and which of them the lens uses.
 - **The self-check.** Selecting a catalog computes every glass's nd and Vd from its
   coefficients and compares them with the values the catalog prints, to the digits printed. The
   line under the list counts the glasses that match, those that do not, and those not checked
-  (placeholder entries such as infrared glasses printed with nd = 1, and glasses whose valid
-  range does not reach the visible). Some vendors print a melt's measured nd beside fitted
+  (placeholder entries such as infrared glasses printed with nd = 1, glasses whose valid
+  range does not reach the visible, and the shipped materials, whose pages state no nd and
+  Vd). Some vendors print a melt's measured nd beside fitted
   coefficients, so a few glasses can differ in the last printed digit or two without any error
   in the file or the program. Notes from reading the file (repeated glass names, skipped lines,
   a glass using formula 4, whose form is not yet confirmed) are listed under it.
 - **A glass's data.** The form shows the dispersion formula and coefficients, valid range,
   printed and computed nd and Vd with the glass's own self-check, glass code, status, reference
   temperature, the dn/dT constants, thermal expansion, density, ΔPgF, relative cost and
-  resistance classes, the internal transmittance table's extent and the vendor's comment.
+  resistance classes, the internal transmittance table's extent and the vendor's comment. For a
+  shipped material it shows the database's formula ("refractiveindex.info formula 1
+  (Sellmeier (preferred))" — the database numbers its formulas 1–9, not as OpticStudio does) or
+  "Tabulated n" / "Tabulated n, k", and under **Source** the database page and its references,
+  and under **Conditions** what the page states (temperature in K). The shipped indices are
+  used as their sources give them, without converting between vacuum and air wavelengths, and
+  they carry no dn/dT data.
   **Index at wavelength** evaluates the glass at any wavelength inside its valid range, at the
   catalog's reference temperature; outside the range it says so rather than extrapolate.
   With **Adjust indices to the environment** on (system data, Environment), a second line

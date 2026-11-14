@@ -78,6 +78,12 @@
             <TextBlock Text="{Binding Optics.GlassCatalogs.GlassTransmittance}"/>
             <Label Content="Comment"/>
             <TextBlock Text="{Binding Optics.GlassCatalogs.GlassComment}" TextWrapping="Wrap"/>
+            <Label Content="Source"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassSource}" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="OpticsGlassSource"/>
+            <Label Content="Conditions"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassConditions}" TextWrapping="Wrap"
+                       ToolTip="As the data page states them; the refractiveindex.info database writes temperature in K and pressure in Pa."/>
             <Label Content="Index at wavelength [µm]"/>
             <TextBox Text="{Binding Optics.GlassCatalogs.ProbeMicrometers}" IsEnabled="{Binding Optics.GlassCatalogs.HasSelectedGlass}"/>
         </controls:FormGrid>

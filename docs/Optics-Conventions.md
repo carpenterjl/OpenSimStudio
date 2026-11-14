@@ -88,6 +88,59 @@ still need a check against OpticStudio's own output.
   wavelength and the range. Nothing is extrapolated.
 - Tabulated materials interpolate n and k linearly between rows (`TabulatedIndex`); that
   choice is ours, not read from OpticStudio.
+- **Shipped material data** (OP-12, `OpenSim.Optics/Materials/RefractiveIndexInfo*.cs`). The
+  program ships 52 pages of the refractiveindex.info database (CC0 1.0), embedded unchanged in
+  OpenSim.Optics with the database's `LICENSE` and `permission.txt`
+  (`OpenSim.Optics/Materials/RefractiveIndexInfo/`, list in `manifest.tsv`; source: the
+  database's GitHub repository, branch main, commit e6d15e3, cloned 2026-11-14). They are three
+  built-in catalogs named after the database's shelves: **RII-MAIN** (44: fused silica and
+  crystal quartz, CaF2, BaF2, SrF2, LiF, MgF2 o/e, sapphire o/e, Si and Ge at 293 K, ZnSe, ZnS,
+  KBr, KCl, NaCl, CsI, CsBr, AgCl, diamond, calcite o/e, LiNbO3 o/e, KDP o/e, BBO o/e, YAG,
+  spinel, MgO, Y2O3, rutile o/e, and the coating materials HfO2, Ta2O5, Nb2O5, Si3N4, ZrO2,
+  AlN o/e, plus water), **RII-GLASS** (4 non-vendor glasses: clear soda-lime, BGG, ZBLAN,
+  Pilkington Optiwhite) and **RII-ORGANIC** (4: PMMA, polystyrene, polycarbonate, PET). A
+  material is named book-page as the database's `catalog-nk.yml` writes them (`SiO2-Malitson`,
+  `Al2O3-Malitson-o`) and carries the page path, the catalog's book and page titles, and the
+  page's REFERENCES, COMMENTS and CONDITIONS (`OpticalMaterial.Source`).
+  - *Which page.* One page per material (one per axis for a uniaxial crystal): the first page
+    the catalog lists for that book, except where the first page does not cover the material's
+    use as an optical material, when a later page from the same book is taken: Si and Ge
+    (Li 1980 at 293 K, 1.2–14 and 1.9–18 µm, instead of Aspnes 1983, 0.21–0.83 µm), ZnSe
+    (Connolly 1979, 0.54–18.2 µm, instead of Marple 1964, 0.48–2.5 µm), crystal quartz, calcite
+    and the other crystal axes (the e-axis page beside the o-axis page). Pages whose n falls to
+    1 or below inside an absorption band were not taken, because the gate requires n > 1 over
+    the whole range: diamond Phillip (Peter 1923 instead), Ta2O5 Bright (Gao 2012 instead),
+    Nb2O5 Franta (Lemarchand 2013 instead); the glass shelf's BK7 (Lane, 5–33 µm) and LZOS K108
+    (Bassarab) pages were left out for the same reason. Metals are not shipped (their n is
+    below 1).
+  - *Left out.* The database's `data/specs` shelf (copies of vendor datasheets: SCHOTT, OHARA,
+    HOYA, CDGM, Sumita, Hikari and others) is not shipped, by the same policy that ships no
+    vendor AGF catalog (OQ-4); the owner may revisit it. Nonlinear-index pages
+    (`catalog-n2.yml`, "tabulated n2") are not optical materials here and are refused by the
+    reader.
+  - *Formulas.* The database numbers its own nine formulas 1–9 (`RefractiveIndexInfoFormulas`,
+    from its "Dispersion formulas" sheet, 2014-06-29); they are not OpticStudio's thirteen, and
+    the same number means different things in the two lists, so a material records which list
+    it uses (`OpticalMaterial.Numbering`). λ is in µm. A page lists only the coefficients it
+    uses; the terms it gives are evaluated, and a list that stops inside a term is refused.
+  - *Tables.* "tabulated nk" is a `TabulatedIndex`; "tabulated n" is one whose k is not data
+    (`HasExtinction` false, `ExtinctionCoefficient` returns null); "tabulated k" beside a
+    formula or an n table is an `ExtinctionTable` with its own range, and asking for k outside
+    that range is refused, as n is outside the index range.
+  - *Reference conditions.* The database states no single convention: whether a page's
+    wavelengths are in vacuum or air, and whether n is absolute or relative to air, follow the
+    page's own source. The values are used as written, as a catalog index, without conversion.
+    The pages carry no TD data, so with *Adjust indices to the environment* on they get no dn/dT
+    and T0 = 20 °C like any glass without a TD line; their stated CONDITIONS (temperature in K,
+    as the database writes it) are shown, not applied.
+  - *The reader* (`RefractiveIndexInfoReader`, on a first-party YAML subset `YamlSubset`, no
+    package) reads REFERENCES, COMMENTS or NOTES, DATA, CONDITIONS and PROPERTIES (nd and Vd
+    from PROPERTIES go to the self-check). Run over all 3480 data files of the cloned database
+    outside its `n2` folders, it reads 3390 and refuses 90, each with the page and line named: duplicate or
+    decreasing wavelengths, negative k or n in a table, pages with k only, one page that gives
+    n twice (polyvinylpyrrolidone, König) and one whose coefficients stop inside a term
+    (AgGaSe2, Boyd-o). No page failed on its YAML. Reading a user's own database page into a
+    catalog is not built: user catalogs are AGF files.
 
 ## 3. Axes, radius, thickness and mirrors
 
@@ -239,6 +292,8 @@ OpticStudio help, which has the same wording.
 | Thermo-optical constant G of the athermal glass map | SCHOTT TIE-19 equation (10) and Table 2 (p. 9) |
 | Internal transmittance at another thickness | AGFFileReader.jl `src/utilities.jl`, `absorption` (absorption −ln(t)/τ per mm) |
 | What OpticStudio-compatible readers do with TD data | AGFFileReader.jl `src/utilities.jl` (`index`, `absairindex`); ZemaxGlass.py `get_dispersion` (lines ~780–917) |
+| refractiveindex.info formulas 1–9 and their names | M. Polyanskiy, "Dispersion formulas", RefractiveIndex.INFO, 2014-06-29 (`database/doc/Dispersion formulas.pdf` in the database repository; one page) |
+| refractiveindex.info page layout, book and page ids and titles, licence | The database files themselves (`database/data`, `catalog-nk.yml`, `LICENSE`, `doc/permission.txt`), commit e6d15e3; its schema test `tests/test_yaml.py`. The database's own Python scripts (GPL) were not used |
 
 The manual gives the tilt rules in words and has no matrices. The written-out matrix in section
 4 follows from those words, and agrees with two independent write-ups of what the program

@@ -44,11 +44,12 @@ public sealed class OpticsGlassCatalogTests : IDisposable
     {
         var optics = _app.Resolve<OpticsViewModel>();
         var panel = optics.GlassCatalogs;
-        Assert.Empty(panel.Catalogs);                                 // no built-ins until OP-12
+        Assert.NotEmpty(panel.Catalogs);                              // the shipped seed (OP-12)
+        Assert.All(panel.Catalogs, r => Assert.Equal("built in", r.Origin));
 
         string status = panel.ImportCatalogFile(WriteCatalog("TESTGLASS"));
         Assert.StartsWith("Imported catalog 'TESTGLASS': 2 glasses.", status);
-        var row = Assert.Single(panel.Catalogs);
+        var row = Assert.Single(panel.Catalogs, r => r.Origin == "user folder");
         Assert.Same(row, panel.SelectedCatalog);
         Assert.True(row.IsActive);
         Assert.Equal("user folder", row.Origin);
@@ -86,7 +87,7 @@ public sealed class OpticsGlassCatalogTests : IDisposable
         string broken = Path.Combine(_app.UserDirectory, "BROKEN.agf");
         File.WriteAllText(broken, "NM A 2 0 1.5 60\nCD 1 x 3\n");
         Assert.StartsWith("Catalog not imported:", panel.ImportCatalogFile(broken));
-        Assert.Single(panel.Catalogs);
+        Assert.Single(panel.Catalogs, r => r.Origin == "user folder");
     }
 
     [Fact]
@@ -100,15 +101,18 @@ public sealed class OpticsGlassCatalogTests : IDisposable
         Assert.Null(optics.ToSettings().Materials);                   // every catalog, not chosen
 
         var before = session.OpticsSystem;
-        panel.SelectedCatalog = panel.Catalogs[1];
+        panel.SelectedCatalog = panel.Catalogs.Single(r => r.Name == "SECOND");
         panel.SelectedGlass = panel.Glasses[1];
         panel.GlassFilter = "x";
         Assert.Same(before, session.OpticsSystem);
 
+        // The shipped catalogs stay active beside SECOND, in the list's order.
+        string[] expected = panel.Catalogs.Where(r => r.Name != "FIRST").Select(r => r.Name).ToArray();
+        Assert.Equal("SECOND", expected[^1]);
         panel.Catalogs.Single(r => r.Name == "FIRST").IsActive = false;
-        Assert.Equal(new[] { "SECOND" }, panel.ActiveCatalogNames);
-        Assert.Equal(new[] { "SECOND" }, optics.ToSettings().Materials!.ActiveCatalogs);
-        Assert.Equal(new[] { "SECOND" }, session.OpticsSystem!.Materials!.ActiveCatalogs);
+        Assert.Equal(expected, panel.ActiveCatalogNames);
+        Assert.Equal(expected, optics.ToSettings().Materials!.ActiveCatalogs);
+        Assert.Equal(expected, session.OpticsSystem!.Materials!.ActiveCatalogs);
 
         optics.Reset();
         Assert.Null(optics.ToSettings().Materials);
@@ -123,6 +127,7 @@ public sealed class OpticsGlassCatalogTests : IDisposable
         var panel = main.Optics.GlassCatalogs;
         panel.ImportCatalogFile(WriteCatalog("FIRST"));
         panel.ImportCatalogFile(WriteCatalog("SECOND"));
+        string[] expected = panel.Catalogs.Where(r => r.Name != "FIRST").Select(r => r.Name).ToArray();
         panel.Catalogs.Single(r => r.Name == "FIRST").IsActive = false;
 
         string path = Path.Combine(_app.UserDirectory, "glasses.ossproj");
@@ -132,7 +137,7 @@ public sealed class OpticsGlassCatalogTests : IDisposable
         Assert.Null(main.Optics.ToSettings().Materials);
 
         main.LoadProjectFromPath(path);
-        Assert.Equal(new[] { "SECOND" }, main.Optics.ToSettings().Materials!.ActiveCatalogs);
+        Assert.Equal(expected, main.Optics.ToSettings().Materials!.ActiveCatalogs);
         Assert.False(panel.Catalogs.Single(r => r.Name == "FIRST").IsActive);
 
         // A file naming a catalog this machine lacks: kept, shown as not loaded, logged.
@@ -144,5 +149,42 @@ public sealed class OpticsGlassCatalogTests : IDisposable
         Assert.False(panel.Catalogs.Single(r => r.Name == "SECOND").IsActive);
         Assert.Contains(_app.Log.Entries, e => e.Contains("'VENDOR'") && e.Contains("not loaded on this machine"));
         Assert.Equal("FIRST", _app.Resolve<GlassCatalogLibrary>().FindGlass("GOOD", panel.ActiveCatalogNames)!.Catalog);
+    }
+
+    /// <summary>OP-12: the shipped refractiveindex.info catalogs are listed as built in and active
+    /// for a new lens, and a shipped material shows its formula in the database's own numbering,
+    /// its page and references. The index at d is worked from Malitson.yml's coefficients
+    /// (OpenSim.Optics/Materials/RefractiveIndexInfo/data/main/SiO2/nk/Malitson.yml) in the test.</summary>
+    [Fact]
+    public void TheShippedCatalogs_AreListed_AndAMaterialShowsItsSource()
+    {
+        var optics = _app.Resolve<OpticsViewModel>();
+        var panel = optics.GlassCatalogs;
+        Assert.Equal(new[] { "RII-GLASS", "RII-MAIN", "RII-ORGANIC" }, panel.Catalogs.Select(r => r.Name));
+        Assert.All(panel.Catalogs, r => Assert.True(r.IsActive));
+        Assert.Null(optics.ToSettings().Materials);                   // every catalog, not chosen
+
+        panel.SelectedCatalog = panel.Catalogs.Single(r => r.Name == "RII-MAIN");
+        Assert.Contains("not checked", panel.CatalogSummary);
+        panel.GlassFilter = "SiO2-Malitson";
+        Assert.Equal("SiO2-Malitson", panel.SelectedGlass!.Name);
+        Assert.Equal("refractiveindex.info formula 1 (Sellmeier (preferred))", panel.GlassFormula);
+        Assert.Equal("0.21 – 6.7", panel.GlassRange);
+        Assert.StartsWith("refractiveindex.info database (CC0 1.0), page main/SiO2/nk/Malitson.yml (Malitson 1965: n 0.21–6.7 µm)", panel.GlassSource);
+        Assert.Contains("I. H. Malitson.", panel.GlassSource);
+        Assert.Equal("temperature 293", panel.GlassConditions);
+        Assert.Equal("Fused silica, 20 °C", panel.GlassComment);
+
+        double l2 = 0.5875618 * 0.5875618;                              // the d line, SpectralLines.LowerD
+        double n = Math.Sqrt(1 + 0.6961663 * l2 / (l2 - 0.0684043 * 0.0684043)
+                               + 0.4079426 * l2 / (l2 - 0.1162414 * 0.1162414)
+                               + 0.8974794 * l2 / (l2 - 9.896161 * 9.896161));
+        Assert.StartsWith($"n = {n.ToString("F7", System.Globalization.CultureInfo.InvariantCulture)}", panel.ProbeResult);
+
+        panel.GlassFilter = "Si-Li-293K";
+        Assert.Equal("Tabulated n", panel.GlassFormula);
+        panel.SelectedCatalog = panel.Catalogs.Single(r => r.Name == "RII-GLASS");
+        panel.GlassFilter = "soda-lime";
+        Assert.Equal("refractiveindex.info formula 5 (Cauchy); k tabulated separately", panel.GlassFormula);
     }
 }

@@ -10,6 +10,10 @@ public sealed class GlassCatalogLibraryTests : IDisposable
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
+    /// <summary>A library over the test directory without the shipped catalogs, so a test sees
+    /// only the user folder (the shipped seed has its own tests, RefractiveIndexInfoSeedTests).</summary>
+    private GlassCatalogLibrary UserOnly() => new(_directory, Array.Empty<OpticalCatalog>());
+
     private static OpticalCatalog Catalog(string name, params string[] glasses) => new()
     {
         Name = name,
@@ -20,7 +24,9 @@ public sealed class GlassCatalogLibraryTests : IDisposable
     public void AFreshLibrary_HasOnlyTheBuiltIns_AndNoWarnings()
     {
         var library = new GlassCatalogLibrary(_directory);
-        Assert.Empty(library.Catalogs);                             // OP-12 ships the seed; none yet
+        Assert.Equal(GlassCatalogLibrary.BuiltInCatalogs.Count, library.Catalogs.Count);    // the OP-12 seed
+        Assert.NotEmpty(library.Catalogs);
+        Assert.All(library.Catalogs, c => Assert.False(library.IsUserCatalog(c.Name)));
         Assert.Empty(library.LoadWarnings);
         Assert.Equal(Path.Combine(_directory, "GlassCatalogs"), library.CatalogFolder);
 
@@ -32,7 +38,7 @@ public sealed class GlassCatalogLibraryTests : IDisposable
     [Fact]
     public void Import_CopiesTheFile_AndLoadsIt_RefusingASecondCopyUnlessReplacing()
     {
-        var library = new GlassCatalogLibrary(_directory);
+        var library = UserOnly();
         var imported = library.Import(AgfReaderTests.FixturePath("OP11_FIXTURE.agf"));
         Assert.Equal("OP11_FIXTURE", imported.Name);
         Assert.True(File.Exists(Path.Combine(library.CatalogFolder, "OP11_FIXTURE.agf")));
@@ -45,7 +51,7 @@ public sealed class GlassCatalogLibraryTests : IDisposable
         Assert.Single(library.Catalogs);
 
         // A new library over the same folder finds it again.
-        Assert.Equal(21, new GlassCatalogLibrary(_directory).FindCatalog("OP11_FIXTURE")!.Materials.Count);
+        Assert.Equal(21, UserOnly().FindCatalog("OP11_FIXTURE")!.Materials.Count);
     }
 
     [Fact]
@@ -53,7 +59,7 @@ public sealed class GlassCatalogLibraryTests : IDisposable
     {
         string bad = Path.Combine(_directory, "BROKEN.agf");
         File.WriteAllText(bad, "NM A 2 0 1.5 60\nCD 1 x 3\n");
-        var library = new GlassCatalogLibrary(_directory);
+        var library = UserOnly();
         Assert.Throws<InvalidDataException>(() => library.Import(bad));
         Assert.False(File.Exists(Path.Combine(library.CatalogFolder, "BROKEN.agf")));
 
@@ -71,16 +77,16 @@ public sealed class GlassCatalogLibraryTests : IDisposable
         Directory.CreateDirectory(folder);
         File.Copy(AgfReaderTests.FixturePath("TEST_CAT.agf"), Path.Combine(folder, "TEST_CAT.agf"));
 
-        var library = new GlassCatalogLibrary(_directory);
+        var library = UserOnly();
         library.SetCatalogFolder(folder);
         Assert.Equal("TEST_CAT", library.Catalogs.Single().Name);
 
-        var next = new GlassCatalogLibrary(_directory);
+        var next = UserOnly();
         Assert.Equal(Path.GetFullPath(folder), next.CatalogFolder);
         Assert.Equal("TEST_CAT", next.Catalogs.Single().Name);
 
         File.WriteAllText(Path.Combine(_directory, "glass-catalogs.json"), "{ not json");
-        var broken = new GlassCatalogLibrary(_directory);
+        var broken = UserOnly();
         Assert.Equal(broken.DefaultFolder, broken.CatalogFolder);
         Assert.Contains(broken.LoadWarnings, w => w.Contains("glass-catalogs.json"));
     }

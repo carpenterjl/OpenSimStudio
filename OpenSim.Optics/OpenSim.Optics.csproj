@@ -10,6 +10,12 @@
     <InternalsVisibleTo Include="OpenSim.App.Tests" />
   </ItemGroup>
 
+  <!-- OP-12: the shipped refractiveindex.info pages (CC0 1.0), their licence and the manifest,
+       embedded unchanged. Resource names are "riidb/" plus the path under the folder. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Materials\RefractiveIndexInfo\**\*" Exclude="Materials\RefractiveIndexInfo\.gitattributes" LogicalName="riidb/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

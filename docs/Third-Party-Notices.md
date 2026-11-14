@@ -3,6 +3,19 @@
 OpenSim Studio's numerics are first-party. The data listed here is bundled from other authors
 and keeps its own licence.
 
+## refractiveindex.info database (optical constants)
+
+- **What:** 52 material pages (YAML) of the refractiveindex.info database, bundled unchanged in
+  `OpenSim.Optics/Materials/RefractiveIndexInfo/data` with the list `manifest.tsv`, and read by
+  `OpenSim.Optics.Materials.RefractiveIndexInfoSeed` (OP-12).
+- **Source:** https://github.com/polyanskiy/refractiveindex.info-database, branch main, commit
+  e6d15e3 (cloned 2026-11-14).
+- **Reference:** M. N. Polyanskiy, "Refractiveindex.info database of optical constants",
+  Scientific Data 11, 94 (2024). Each page names its own sources in its REFERENCES field.
+- **Licence:** CC0 1.0 Universal (public domain dedication). The full text ships as
+  `OpenSim.Optics/Materials/RefractiveIndexInfo/LICENSE`, and the author's statement as
+  `permission.txt` beside it.
+
 ## Sobol direction numbers (Joe and Kuo)
 
 - **What:** the table `new-joe-kuo-6.21201` (primitive polynomials and initial direction numbers

@@ -19,6 +19,11 @@ public sealed record TabulatedIndex
     /// <summary>The rows, wavelength strictly increasing.</summary>
     public required IReadOnlyList<TabulatedIndexPoint> Points { get; init; }
 
+    /// <summary>False for a table of n only (a refractiveindex.info "tabulated n" block): the
+    /// rows' K is then 0 as a placeholder, not data, and <see cref="OpticalMaterial.ExtinctionCoefficient"/>
+    /// reports no k from it.</summary>
+    public bool HasExtinction { get; init; } = true;
+
     public double MinMicrometers => Points[0].Micrometers;
     public double MaxMicrometers => Points[^1].Micrometers;
 

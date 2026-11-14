@@ -5,8 +5,9 @@ namespace OpenSim.Optics.Materials;
 /// <summary>
 /// The glass catalogs on offer: a built-in set overlaid by the AGF files in the user's catalog
 /// folder, on the pattern of <c>MaterialLibrary</c> (built-ins plus a user file, a user entry
-/// overriding a built-in of the same name). The built-in set is empty until OP-12 ships the
-/// CC0 seed; vendor catalogs are not redistributable and enter by import only.
+/// overriding a built-in of the same name). The built-in set is the CC0 seed from the
+/// refractiveindex.info database (<see cref="RefractiveIndexInfoSeed"/>, OP-12: catalogs RII-MAIN,
+/// RII-GLASS, RII-ORGANIC); vendor catalogs are not redistributable and enter by import only.
 /// <para>
 /// The folder is a per-user setting, kept in <c>%AppData%/OpenSimStudio/glass-catalogs.json</c>;
 /// by default it is <c>%AppData%/OpenSimStudio/GlassCatalogs</c>. Which catalogs a lens uses is
@@ -17,8 +18,8 @@ namespace OpenSim.Optics.Materials;
 /// </summary>
 public sealed class GlassCatalogLibrary
 {
-    /// <summary>The catalogs shipped with the program: none yet (OP-12).</summary>
-    public static IReadOnlyList<OpticalCatalog> BuiltInCatalogs { get; } = Array.Empty<OpticalCatalog>();
+    /// <summary>The catalogs shipped with the program: the refractiveindex.info seed (OP-12).</summary>
+    public static IReadOnlyList<OpticalCatalog> BuiltInCatalogs => RefractiveIndexInfoSeed.Catalogs;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,6 +33,7 @@ public sealed class GlassCatalogLibrary
     private readonly HashSet<string> _userNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _loadWarnings = new();
     private string? _settingWarning;
+    private readonly IReadOnlyList<string> _builtInWarnings;
 
     public GlassCatalogLibrary() : this(DefaultUserDirectory) { }
 
@@ -40,6 +42,7 @@ public sealed class GlassCatalogLibrary
     {
         _userDirectory = userDirectory;
         _builtIn = builtIn ?? BuiltInCatalogs;
+        _builtInWarnings = builtIn is null ? RefractiveIndexInfoSeed.Warnings : Array.Empty<string>();
         CatalogFolder = ReadFolderSetting() ?? DefaultFolder;
         Reload();
     }
@@ -86,6 +89,7 @@ public sealed class GlassCatalogLibrary
         _userNames.Clear();
         _loadWarnings.Clear();
         if (_settingWarning is not null) _loadWarnings.Add(_settingWarning);
+        _loadWarnings.AddRange(_builtInWarnings);
         _catalogs.AddRange(_builtIn.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase));
         if (!Directory.Exists(CatalogFolder)) return;
 

@@ -58,7 +58,9 @@ public sealed record GlassCheck
 /// </para>
 /// <para>
 /// <b>Not checked</b>, by these rules and no others (never by name): a glass without a dispersion
-/// formula (tabulated, or a number outside 1–13); a glass with no LD range; a printed nd that is
+/// formula (tabulated, or a number outside 1–13 — or 1–9 for a refractiveindex.info page, OP-12,
+/// whose formulas are checked like the others when the page's PROPERTIES state nd and Vd, and
+/// skipped when they do not); a glass with no LD range; a printed nd that is
 /// absent or ≤ 1 (vendors print 1.0 for infrared and birefringent entries whose nd is not
 /// meaningful); a glass whose LD range does not contain the F, d and C lines; a glass whose
 /// coefficients give exactly n = 1 at d (a placeholder entry). The Vd comparison is skipped,
@@ -81,7 +83,13 @@ public static class CatalogSelfCheck
         GlassCheck Skip(string why) => new() { Material = glass, Outcome = GlassCheckOutcome.NotChecked, Reason = why };
 
         if (glass.Tabulated is not null) return Skip("A tabulated material has no printed nd and Vd to check.");
-        if (glass.Formula is null) return Skip($"Dispersion formula {DispersionFormulas.NameOf(glass.FormulaNumber ?? 0)} is not evaluated.");
+        if (glass.Numbering == FormulaNumbering.RefractiveIndexInfo)
+        {
+            if (glass.FormulaNumber is not int rii || !RefractiveIndexInfoFormulas.IsDefined(rii))
+                return Skip($"{glass.FormulaName ?? "No formula"}: not evaluated.");
+            if (glass.Nd is null) return Skip("The refractiveindex.info page states no nd and Vd (in PROPERTIES) to check against.");
+        }
+        else if (glass.Formula is null) return Skip($"Dispersion formula {DispersionFormulas.NameOf(glass.FormulaNumber ?? 0)} is not evaluated.");
         if (glass.ValidRange is not { } range) return Skip("No LD line: the valid range is unknown.");
         if (glass.Nd is not { } nd || nd.Value <= 1) return Skip("The printed nd is a placeholder (absent or ≤ 1).");
         double d = SpectralLines.LowerD.Micrometers, f = SpectralLines.F.Micrometers, c = SpectralLines.C.Micrometers;
