@@ -374,6 +374,24 @@ public partial class ProjectSession : ObservableObject
 
     public bool IsStudySolved(AnalysisType study) => _solvedStudies.Contains(study);
 
+    /// <summary>The optical system as the Optics workspace last published it: an immutable
+    /// snapshot the analysis windows compute from off the UI thread (OP-9). Null until the
+    /// workspace publishes.</summary>
+    public OpticsSettings? OpticsSystem { get; private set; }
+
+    /// <summary>Raised after the optical system changed (mode, and the system data as the
+    /// editors arrive), so the analysis windows recompute.</summary>
+    public event EventHandler? OpticsChanged;
+
+    /// <summary>Publishes a new snapshot of the optical system and raises <see cref="OpticsChanged"/>.
+    /// Every edit of the system calls this once it is complete.</summary>
+    public void PublishOptics(OpticsSettings system)
+    {
+        ArgumentNullException.ThrowIfNull(system);
+        OpticsSystem = system;
+        OpticsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>Raised when face paint state (selection, electrodes) changed.</summary>
     public event EventHandler? HighlightsInvalidated;
 

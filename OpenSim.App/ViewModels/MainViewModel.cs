@@ -44,9 +44,11 @@ public partial class MainViewModel : ObservableObject
         FlowVisualizationViewModel flow, CfdSetupViewModel cfdSetup,
         StudyRailViewModel studyRail,
         ProjectSerializer serializer, RecentProjectsService recentProjects,
-        ThemeService theme, MagneticsViewModel magnetics, EmiViewModel emi, OpticsViewModel optics)
+        ThemeService theme, MagneticsViewModel magnetics, EmiViewModel emi, OpticsViewModel optics,
+        OpticsAnalysesViewModel opticsAnalyses)
     {
         Optics = optics;
+        OpticsAnalyses = opticsAnalyses;
         Magnetics = magnetics;
         Emi = emi;
         Session = session;
@@ -133,6 +135,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>The Optics workspace: its mode, and later its system and analyses.</summary>
     public OpticsViewModel Optics { get; }
+
+    /// <summary>The Optics workspace's dockable analysis windows (OP-9).</summary>
+    public OpticsAnalysesViewModel OpticsAnalyses { get; }
 
     /// <summary>The gated study-steps rail; its selected step drives the properties pane.</summary>
     public StudyRailViewModel StudyRail { get; }
@@ -335,6 +340,7 @@ public partial class MainViewModel : ObservableObject
         Session.IsHomeActive = false;
         Session.RaiseGeometryReplaced(leavingPcbMode: true);
         Optics.Reset();
+        OpticsAnalyses.Reset();
         Pcb.LoadStackupSettings(new Core.Model.PcbStackupSettings());   // a new project starts from the default boxes, no saved rows
         Session.RaiseMeshChanged();
         Log.Append("New project. Create a primitive or import an STL file to begin.");
@@ -426,7 +432,7 @@ public partial class MainViewModel : ObservableObject
         Session.Project.Solver = Solve.ToSolverSettings();
         Session.Project.Antenna = Antenna.ToSettings();
         Session.Project.SignalIntegrity = SignalIntegrity.ToSettings();
-        Session.Project.Optics = Optics.ToSettings();
+        Session.Project.Optics = Optics.ToSettings() with { Analyses = OpticsAnalyses.ToSettings() };
         Session.Project.Stackup = Pcb.BuildStackupSettings();
     }
 
@@ -449,7 +455,8 @@ public partial class MainViewModel : ObservableObject
             }
             Solve.LoadSolverSettings(project.Solver);
             foreach (var note in Antenna.LoadSettings(project.Antenna).Concat(SignalIntegrity.LoadSettings(project.SignalIntegrity))
-                         .Concat(Optics.LoadSettings(project.Optics)))
+                         .Concat(Optics.LoadSettings(project.Optics))
+                         .Concat(OpticsAnalyses.LoadSettings(project.Optics?.Analyses)))
                 Log.Append("Project: " + note);
 
             // The previous project's material copies leave the list first. The loaded body's

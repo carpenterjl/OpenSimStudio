@@ -1,0 +1,85 @@
+<UserControl x:Class="OpenSim.App.Views.Analyses.AnalysisWindowView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls"
+             xmlns:analyses="clr-namespace:OpenSim.App.Views.Analyses">
+    <!-- One analysis window's body (OP-9), docked in a pane or floating: the toolbar, the
+         settings form when open, then the plots and the text listing. DataContext is an
+         AnalysisWindowViewModel. -->
+    <UserControl.Resources>
+        <analyses:AnalysisPlotImageConverter x:Key="PlotImage"/>
+    </UserControl.Resources>
+    <DockPanel Background="{DynamicResource PanelBgBrush}">
+        <Border DockPanel.Dock="Top" Padding="4,2" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Padding="5"
+                        Command="{Binding UpdateCommand}" ToolTip="Update now"
+                        AutomationProperties.AutomationId="AnalysisUpdateButton">
+                    <controls:IconGlyph Width="13" Height="13" Geometry="{StaticResource IconRefreshCw}"
+                                        Foreground="{DynamicResource TextMutedBrush}"/>
+                </Button>
+                <CheckBox DockPanel.Dock="Left" Content="Auto" IsChecked="{Binding AutoUpdate}" Margin="4,0,6,0"
+                          VerticalAlignment="Center" ToolTip="Recompute whenever the system changes"
+                          AutomationProperties.AutomationId="AnalysisAutoUpdateCheck"/>
+                <Button DockPanel.Dock="Left" Style="{StaticResource GhostButton}" Padding="5"
+                        Command="{Binding ToggleSettingsCommand}" ToolTip="Settings"
+                        AutomationProperties.AutomationId="AnalysisSettingsButton">
+                    <controls:IconGlyph Width="13" Height="13" Geometry="{StaticResource IconSettings}"
+                                        Foreground="{DynamicResource TextMutedBrush}"/>
+                </Button>
+                <Button DockPanel.Dock="Right" Style="{StaticResource GhostButton}" Padding="5"
+                        Click="WindowMenu_Click" ToolTip="Dock, float or close"
+                        AutomationProperties.AutomationId="AnalysisWindowMenuButton">
+                    <controls:IconGlyph Width="13" Height="13" Geometry="{StaticResource IconChevronDown}"
+                                        Foreground="{DynamicResource TextMutedBrush}"/>
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Dock right" Command="{Binding DockRightCommand}"/>
+                            <MenuItem Header="Dock bottom" Command="{Binding DockBottomCommand}"/>
+                            <MenuItem Header="New pane on the right" Command="{Binding SplitRightCommand}"/>
+                            <MenuItem Header="New pane at the bottom" Command="{Binding SplitBottomCommand}"/>
+                            <MenuItem Header="Float" Command="{Binding FloatCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="Close" Command="{Binding CloseCommand}"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
+                <TextBlock Text="{Binding Status}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Style="{StaticResource FaintText}" ToolTip="{Binding Status}"/>
+            </DockPanel>
+        </Border>
+
+        <Border DockPanel.Dock="Top" Padding="8,6" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1"
+                Visibility="{Binding IsSettingsOpen, Converter={StaticResource BoolToVis}}">
+            <StackPanel>
+                <analyses:AnalysisSettingsForm Editor="{Binding SettingsEditor}"/>
+                <TextBlock Text="{Binding SettingsError}" TextWrapping="Wrap" Foreground="{DynamicResource ErrorBrush}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="Apply" Style="{StaticResource AccentButton}" Command="{Binding ApplySettingsCommand}"
+                            AutomationProperties.AutomationId="AnalysisApplySettingsButton"/>
+                    <Button Content="Defaults" Margin="6,0,0,0" Command="{Binding ResetSettingsCommand}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- The text box sizes to its text inside the scroll viewer: the theme's text box
+             centres a single scroll host, which would float a long listing mid-pane. -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <ItemsControl ItemsSource="{Binding Plots}"
+                              Visibility="{Binding HasPlots, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Image Source="{Binding Converter={StaticResource PlotImage}}" Stretch="Uniform"
+                                   MaxHeight="320" Margin="4" HorizontalAlignment="Left" ToolTip="{Binding Title}"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBox Text="{Binding ResultText, Mode=OneWay}" IsReadOnly="True" BorderThickness="0"
+                         Background="Transparent" TextWrapping="NoWrap" AcceptsReturn="True"
+                         HorizontalAlignment="Left" VerticalAlignment="Top"
+                         AutomationProperties.AutomationId="AnalysisTextOutput"/>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

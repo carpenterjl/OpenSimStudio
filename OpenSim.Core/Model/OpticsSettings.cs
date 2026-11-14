@@ -28,4 +28,8 @@ public sealed record OpticsSettings
     /// <summary>The system data: aperture, fields, wavelengths, environment, units, title and
     /// notes (OP-18). Null — a file from OP-1's version 4 — means the default system.</summary>
     public OpticsSystemSettings? SystemData { get; init; }
+
+    /// <summary>The analysis windows: which are open, their docking and their settings (OP-9).
+    /// Null — every file written before the analysis framework — opens none.</summary>
+    public OpticsAnalysesSettings? Analyses { get; init; }
 }

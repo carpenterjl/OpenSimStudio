@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:OpenSim.App.Views"
         xmlns:panels="clr-namespace:OpenSim.App.Views.Panels"
+        xmlns:analyses="clr-namespace:OpenSim.App.Views.Analyses"
         xmlns:controls="clr-namespace:OpenSim.App.Controls"
         xmlns:vm="clr-namespace:OpenSim.App.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -714,6 +715,7 @@
                                         <!-- Optics: one panel on every step, as RF and SI have. -->
                                         <StackPanel Style="{StaticResource OpticsOnly}">
                                             <panels:OpticsPanel/>
+                                            <panels:OpticsAnalysesPanel/>
                                         </StackPanel>
                                     </Grid>
                                 </ScrollViewer>
@@ -731,7 +733,12 @@
                                 <RowDefinition Height="*" MinHeight="200"/>
                                 <RowDefinition x:Name="LogRow" Height="128" MinHeight="64"/>
                             </Grid.RowDefinitions>
-                            <views:Viewport3DView x:Name="ViewportView" Grid.Row="0"/>
+                            <!-- The viewport, with the Optics analysis windows docked around it (OP-9). -->
+                            <analyses:AnalysisDockSite Grid.Row="0">
+                                <analyses:AnalysisDockSite.Center>
+                                    <views:Viewport3DView x:Name="ViewportView"/>
+                                </analyses:AnalysisDockSite.Center>
+                            </analyses:AnalysisDockSite>
 
                             <Border Grid.Row="1" Background="{DynamicResource PanelBgBrush}"
                                     BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0">

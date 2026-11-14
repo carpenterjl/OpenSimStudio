@@ -1,0 +1,76 @@
+<UserControl x:Class="OpenSim.App.Views.Analyses.AnalysisDockZone"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls"
+             xmlns:analyses="clr-namespace:OpenSim.App.Views.Analyses">
+    <!-- One dock zone of the Optics analysis windows (OP-9): a row or column of panes, each
+         pane a group of tabs. AnalysisDockSite places two of these, right and bottom of the
+         viewport, and gives each its panes. -->
+    <UserControl.Resources>
+        <Style x:Key="DockTab" TargetType="TabItem">
+            <Setter Property="AutomationProperties.AutomationId" Value="AnalysisTab"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Chrome" Padding="8,3,3,3" Background="Transparent"
+                                BorderBrush="Transparent" BorderThickness="0,0,0,2">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="Caption" Text="{Binding Title}" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource TextMutedBrush}"/>
+                                <Button Style="{StaticResource GhostButton}" Padding="3" Margin="4,0,0,0"
+                                        Command="{Binding CloseCommand}" ToolTip="Close"
+                                        AutomationProperties.AutomationId="AnalysisTabCloseButton">
+                                    <controls:IconGlyph Width="9" Height="9" Geometry="{StaticResource IconX}"
+                                                        Foreground="{DynamicResource TextFaintBrush}"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource PanelBgBrush}"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource PrimaryBrush}"/>
+                                <Setter TargetName="Caption" Property="Foreground" Value="{DynamicResource TextHeadingBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Caption" Property="Foreground" Value="{DynamicResource TextHeadingBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DockPaneTabs" TargetType="TabControl">
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DockTab}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel Background="{DynamicResource PanelBgBrush}">
+                            <Border DockPanel.Dock="Top" Background="{DynamicResource RailBgBrush}"
+                                    BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1">
+                                <TabPanel IsItemsHost="True"/>
+                            </Border>
+                            <ContentPresenter ContentSource="SelectedContent"/>
+                        </DockPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- One pane: a DockPane of analysis windows. -->
+        <DataTemplate x:Key="PaneTemplate">
+            <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Margin="1">
+                <TabControl Style="{StaticResource DockPaneTabs}" ItemsSource="{Binding Items}"
+                            SelectedItem="{Binding Selected}">
+                    <TabControl.ContentTemplate>
+                        <DataTemplate>
+                            <analyses:AnalysisWindowView/>
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+                </TabControl>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ItemsControl x:Name="PaneList" ItemTemplate="{StaticResource PaneTemplate}"/>
+</UserControl>

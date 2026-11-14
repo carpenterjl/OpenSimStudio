@@ -1,0 +1,11 @@
+<Window x:Class="OpenSim.App.Views.Analyses.AnalysisFloatWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:analyses="clr-namespace:OpenSim.App.Views.Analyses"
+        Title="{Binding Title}" Width="560" Height="420" MinWidth="240" MinHeight="160"
+        ShowInTaskbar="False" WindowStartupLocation="Manual"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- A floating analysis window (OP-9). DataContext is an AnalysisWindowViewModel; closing
+         the window closes the analysis, and its menu docks it back. -->
+    <analyses:AnalysisWindowView/>
+</Window>

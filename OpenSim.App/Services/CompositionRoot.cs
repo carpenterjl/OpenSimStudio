@@ -62,6 +62,9 @@ public static class CompositionRoot
         services.AddSingleton<MagneticsViewModel>();
         services.AddSingleton<EmiViewModel>();
         services.AddSingleton<OpticsViewModel>();
+        // The optics analyses on offer (OP-9); the analysis items register in CreateDefault.
+        services.AddSingleton(_ => OpenSim.Optics.Analysis.OpticsAnalysisRegistry.CreateDefault());
+        services.AddSingleton<OpticsAnalysesViewModel>();
         services.AddSingleton<BodiesViewModel>();
         services.AddSingleton<EnvironmentViewModel>();
         services.AddSingleton<FlowVisualizationViewModel>();
