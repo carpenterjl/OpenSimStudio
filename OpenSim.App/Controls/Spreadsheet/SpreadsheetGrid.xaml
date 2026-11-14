@@ -1,0 +1,174 @@
+<UserControl x:Class="OpenSim.App.Controls.Spreadsheet.SpreadsheetGrid"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
+    <UserControl.Resources>
+        <!-- The row tint: a translucent wash of one of the theme's data-kind colours behind each
+             cell, keyed on SheetRow.Tint. Dynamic resources, so a theme switch recolours rows. -->
+        <Style x:Key="SheetTintStyle" TargetType="Rectangle">
+            <Setter Property="Opacity" Value="0.18"/>
+            <Setter Property="IsHitTestVisible" Value="False"/>
+            <Setter Property="Fill" Value="Transparent"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Tint}" Value="0"><Setter Property="Fill" Value="{DynamicResource KindFunctionBrush}"/></DataTrigger>
+                <DataTrigger Binding="{Binding Tint}" Value="1"><Setter Property="Fill" Value="{DynamicResource KindTypeBrush}"/></DataTrigger>
+                <DataTrigger Binding="{Binding Tint}" Value="2"><Setter Property="Fill" Value="{DynamicResource KindConstantBrush}"/></DataTrigger>
+                <DataTrigger Binding="{Binding Tint}" Value="3"><Setter Property="Fill" Value="{DynamicResource KindVariableBrush}"/></DataTrigger>
+                <DataTrigger Binding="{Binding Tint}" Value="4"><Setter Property="Fill" Value="{DynamicResource KindModuleBrush}"/></DataTrigger>
+                <DataTrigger Binding="{Binding Tint}" Value="5"><Setter Property="Fill" Value="{DynamicResource KindMacroBrush}"/></DataTrigger>
+                <DataTrigger Binding="{Binding Tint}" Value="6"><Setter Property="Fill" Value="{DynamicResource KindInterfaceBrush}"/></DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="SheetGripper" TargetType="Thumb">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="Cursor" Value="SizeWE"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource PanelBgRaisedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextMutedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Padding" Value="6,3"/>
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridColumnHeader">
+                        <Grid>
+                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter VerticalAlignment="Center">
+                                    <ContentPresenter.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                        </Style>
+                                    </ContentPresenter.Resources>
+                                </ContentPresenter>
+                            </Border>
+                            <Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Style="{StaticResource SheetGripper}"/>
+                            <Thumb x:Name="PART_RightHeaderGripper" HorizontalAlignment="Right" Style="{StaticResource SheetGripper}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="DataGridRowHeader">
+            <Setter Property="Background" Value="{DynamicResource PanelBgRaisedBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextFaintBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="Padding" Value="4,0,6,0"/>
+            <Setter Property="FontFamily" Value="{DynamicResource MonoFont}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridRowHeader">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsRowSelected" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Stretch"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SelectionBgBrush}"/>
+                </Trigger>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- Row and column virtualisation with container recycling: only the rows in view have
+             containers, and scrolling reuses them instead of building new ones. -->
+        <DataGrid x:Name="SheetGrid"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
+                  CanUserSortColumns="False" CanUserReorderColumns="False"
+                  CanUserResizeColumns="True" CanUserResizeRows="False"
+                  SelectionMode="Extended" SelectionUnit="CellOrRowHeader"
+                  HeadersVisibility="All" GridLinesVisibility="All"
+                  EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                  VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.VirtualizationMode="Recycling"
+                  RowHeight="22" ColumnHeaderHeight="26" RowHeaderWidth="40"
+                  Background="{DynamicResource PanelBgBrush}"
+                  RowBackground="Transparent"
+                  Foreground="{DynamicResource TextBodyBrush}"
+                  BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1"
+                  HorizontalGridLinesBrush="{DynamicResource PanelBorderBrush}"
+                  VerticalGridLinesBrush="{DynamicResource PanelBorderBrush}"
+                  FontFamily="{DynamicResource MonoFont}" FontSize="12">
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Header" Value="{Binding Number}"/>
+                    <Setter Property="Background" Value="Transparent"/>
+                </Style>
+            </DataGrid.RowStyle>
+        </DataGrid>
+
+        <!-- The row's properties flyout and the cell-flag editor: forms built in code into a
+             FormGrid each time they open, because their fields follow the row's type. -->
+        <Popup x:Name="RowFlyout" StaysOpen="False" Placement="Bottom" AllowsTransparency="True"
+               PopupAnimation="Fade">
+            <Border Style="{DynamicResource CardBorder}" Width="320" Margin="0,2,8,8">
+                <StackPanel>
+                    <TextBlock x:Name="RowFlyoutTitle" Style="{DynamicResource PanelTitle}" Margin="0,0,0,6"/>
+                    <controls:FormGrid x:Name="RowForm"/>
+                    <TextBlock x:Name="RowError" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"
+                               Foreground="{DynamicResource DangerBrush}"/>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <Popup x:Name="FlagFlyout" StaysOpen="False" Placement="Bottom" AllowsTransparency="True"
+               PopupAnimation="Fade">
+            <Border Style="{DynamicResource CardBorder}" Width="300" Margin="0,2,8,8">
+                <StackPanel>
+                    <TextBlock x:Name="FlagFlyoutTitle" Style="{DynamicResource PanelTitle}" Margin="0,0,0,6"/>
+                    <controls:FormGrid x:Name="FlagForm"/>
+                    <TextBlock x:Name="FlagError" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"
+                               Foreground="{DynamicResource DangerBrush}"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="Cancel" Style="{DynamicResource GhostButton}" Margin="0,0,6,0" Click="OnFlagCancel"/>
+                        <Button Content="Apply" Style="{DynamicResource AccentButton}" IsDefault="True" Click="OnFlagApply"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</UserControl>
