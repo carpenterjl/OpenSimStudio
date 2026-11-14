@@ -116,6 +116,12 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new SurfaceSagCrossSectionAnalysis());
         registry.Register(new SurfaceCurvatureCrossSectionAnalysis());
         registry.Register(new SurfaceSlopeCrossSectionAnalysis());
+
+        // OP-40: RMS against field, wavelength and focus, and the RMS field map (Strehl not built).
+        registry.Register(new RmsVsFieldAnalysis());
+        registry.Register(new RmsVsWavelengthAnalysis());
+        registry.Register(new RmsVsFocusAnalysis());
+        registry.Register(new RmsFieldMapAnalysis());
         return registry;
     }
 }

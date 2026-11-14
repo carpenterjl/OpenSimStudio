@@ -762,6 +762,27 @@ single place in the code, so a correction is one line and its test.
     Check: a merit function with one row of each operand, saved by OpticStudio with its values,
     evaluated here on the same lens.
 
+30. **RMS against field, wavelength and focus** (OP-40, section 34). Read from the help pages'
+    wording; no OpticStudio number was compared:
+    - *Gaussian quadrature* is derived (Gauss–Legendre in ρ², equally spaced arms from +x), not
+      copied from Forbes's paper, which was not available; OpticStudio's ring radii, arm angles
+      and number of arms for the RMS analyses may differ (here 4 arms per ring). The values agree
+      wherever both rules are exact.
+    - *Centroid wavefront reference*: the weighted least-squares piston and tilt in pupil
+      coordinates are removed; the help's "mean shifted, tilted reference sphere" with Rimmer's
+      correction is not built.
+    - *Polychromatic wavefront* in waves of the primary wavelength, one mean and tilt over every
+      ray of every wavelength; the help does not name the unit.
+    - *Field scan extent*: the largest defined field component in the scan direction ("the
+      limits of the defined fields in the selected direction"); OP-37's scans use the largest
+      radial field instead.
+    - *Remove Vignetting Factors* replaces the factors with surface apertures, as in OP-37.
+    - *Field Map automatic size*: a field size of 0 means the largest radial defined field; the
+      help gives no default.
+    Check: RMS vs Field (wavefront and spot, chief and centroid, GQ and RA), RMS vs Focus and
+    RMS vs Wavelength of a singlet at two fields and three wavelengths against OpticStudio's
+    text output.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2443,3 +2464,60 @@ MINN, OPGT, OPLT, OPVA, OSUM, PROB, PROD, QSUM, RECI, SQRT, SUMM, SINE, TANG, AB
 value meets its target); the default merit function and its wizard (OP-56); the optimizer and
 Lagrange multipliers (OP-57); the merit function listing; reading or writing OpticStudio's .MF
 files (the help names the file but does not document its format).
+
+## 34. RMS against field, wavelength and focus
+
+`OpenSim.Optics/Analysis/Rms` (OP-40) computes OpticStudio's RMS vs Field, RMS vs Wavelength,
+RMS vs Focus and RMS Field Map; `OpenSim.Optics/Analysis/Sampling/PupilQuadrature.cs` holds the
+pupil integration rules. The definitions were read from OpticStudio's 2025 R2 help pages of
+those names and "Gaussian Quadrature", "Rectangular Array", "Strehl Ratio", "Diffraction
+Limited", saved under `plans/sources/optics/op-40-help/`.
+
+- **Gaussian quadrature** (`PupilQuadrature.Gaussian`). n rings at the Gauss–Legendre nodes of
+  u = ρ² on [ε², 1] (`OpenSim.Core/Numerics/GaussLegendre`), N arms at θ = 2πj/N from +x, each
+  point weighted gᵢ/((1 − ε²)N); the weights sum to 1. Derived in the class remarks (Forbes,
+  JOSA A 5, 1943 (1988), which the help cites, was not available): the rule averages every
+  polynomial of degree ≤ min(4n − 1, N − 1) in (Px, Py) exactly, so with N = 4n (the RMS
+  analyses' choice) an RMS is exact when the OPD or ray error is a polynomial of degree
+  ≤ 2n − 1, the help's "(2*n − 1)". Rings 1 to 20 (the help's maximum). ε is the linear
+  obscuration ("done as a linear fraction"); the RMS analyses use ε = 0.
+- **Rectangular array** (`PupilQuadrature.Rectangular`): OP-34's cell-centred square grid
+  (`PupilSampling.Square`), the points inside the unit pupil weighted equally.
+- **Spot RMS**: √(Σw r²/Σw) of the image-surface positions (local frame) about the chief ray's
+  image point (the computed wavelength's, or the primary's when polychromatic) or about the
+  weighted centroid; x and y alike (§25). w is the pupil weight, times the wavelength weight when
+  polychromatic.
+- **Wavefront RMS**: the OPD of §26 against the exit-pupil reference sphere centred on the chief
+  ray, in waves; chief ray reference removes the weighted mean, centroid reference the weighted
+  least-squares a + b·Px + c·Py. Polychromatic: every wavelength's OPD against the primary
+  wavelength's sphere (`ReferenceToPrimary`), pooled with weights w·(wavelength weight), in
+  waves of the primary wavelength.
+- **Failed rays.** Gaussian quadrature: a point where any ray fails (or misses the reference
+  sphere) has no value; its message names the rays and suggests the rectangular array. The
+  rectangular array leaves such rays out and counts them by status and surface.
+- **Fields and wavelengths between the tables.** A sampled field is appended to the field table
+  as one more point (carrying the launcher's vignetting factors at that field), a sampled
+  wavelength to the wavelength table; the primary wavelength is unchanged. Floating
+  semi-diameters are sized once for the system as defined and frozen, except on the stop.
+- **Focus** (help, "RMS vs. Focus"): the shift, in lens units, is added to the thickness of the
+  surface before the image.
+- **Scans.** RMS vs Field: evenly spaced fields from 0 to the largest defined field component in
+  the chosen direction (+y, +x, −y, −x), 2 to 100 points. RMS vs Wavelength: 2 to 100 evenly
+  spaced wavelengths from the table's shortest to longest, each monochromatic, one curve per
+  field row. RMS vs Focus: 2 to 100 shifts, one curve per field row, polychromatic or one
+  wavelength. RMS Field Map: an nx × ny grid of field positions centred on a field row, half
+  widths in field units (0: the largest radial field).
+- **Diffraction limit** (help, "Show Diffraction Limit"): spot, 1.22 λ times the working F/# of
+  the on-axis field (§25's `RealWorkingFNumber`; primary wavelength when polychromatic; a curve
+  against wavelength for RMS vs Wavelength); wavefront, 0.072 waves.
+- **Peak to valley** (Field Map, rectangular array, one wavelength): max − min of the residual
+  OPD after the reference's piston (and tilt) removal.
+- **Determinism.** The sample points are evaluated one per `ParallelSlots` slot, each tracing
+  with one thread, so the result is bitwise the same at any degree of parallelism.
+- **Afocal image space** is refused (the help's afocal forms in diopters are not built).
+
+**Not built.** Strehl ratio: the help computes it "using the method described in "Strehl ratio
+approximation"", a section not found in the online help (its "Strehl Ratio" page describes the
+PSF peak ratio), so it waits for OP-38's PSF Strehl. Plot Scale; Use Polarization; the Field
+Map's Surface setting (image surface only); OpticStudio's halving of arms for symmetric systems;
+afocal units.
