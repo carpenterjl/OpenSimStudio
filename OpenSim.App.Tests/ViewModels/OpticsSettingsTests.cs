@@ -51,6 +51,14 @@ public sealed class OpticsSettingsTests : IDisposable
         optics.CarbonDioxideMicromolesPerMole = 1000.0 / 3;
         optics.RelativeHumidityPercent = 45;
         optics.SelectedMode = optics.Modes.Single(m => m.Mode == OpticsMode.NonSequential);
+        // OP-15: a coating catalog with a material, a layer coating and an ideal coating.
+        optics.Coatings.AddMaterialCommand.Execute(null);
+        optics.Coatings.IndexRows[0].K = 0.125;
+        optics.Coatings.AddLayerCoatingCommand.Execute(null);
+        optics.Coatings.AddLayerCommand.Execute(null);
+        optics.Coatings.Layers[0].Thickness = 1.0 / 3;
+        optics.Coatings.AddIdealCoatingCommand.Execute(null);
+        optics.Coatings.IdealReflection = 0.1;
     }
 
     [Fact]

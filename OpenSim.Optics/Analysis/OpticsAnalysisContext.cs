@@ -19,4 +19,12 @@ public sealed record OpticsAnalysisContext(string ProjectName, OpticsSettings Sy
     /// <summary>The mode the snapshot is in; an unknown saved name reads as the default.</summary>
     public OpticsMode Mode =>
         OpticsModes.TryParseSavedName(System.Mode, out var mode) ? mode : OpticsModes.All[0];
+
+    /// <summary>The first glass of that name (any case) in <see cref="Catalogs"/> (the coating plots name their media this way, OP-15), or null.</summary>
+    public OpticalMaterial? FindGlass(string name)
+    {
+        foreach (var catalog in Catalogs)
+            if (catalog.Find(name) is { } glass) return glass;
+        return null;
+    }
 }

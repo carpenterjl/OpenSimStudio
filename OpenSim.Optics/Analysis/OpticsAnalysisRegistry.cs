@@ -59,6 +59,8 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new GlassCompareAnalysis());
         registry.Register(new ModelGlassAnalysis());
         registry.Register(new GlassFitAnalysis());
+        // OP-15: the twelve coating plots.
+        foreach (var coating in CoatingAnalyses.All()) registry.Register(coating);
         return registry;
     }
 }

@@ -1,0 +1,138 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.OpticsCoatingsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
+    <!-- OP-15: the coating catalog. Materials (n, k rows), layer coatings and ideal coatings are
+         edited here; IDEAL2 and table coatings and tapers come in from a coating file. Bindings go
+         through the shell DataContext, as the rest of the Optics panel's do. -->
+    <StackPanel>
+        <TextBlock Text="Coatings" FontWeight="Bold" Margin="0,8,0,2"/>
+        <UniformGrid Columns="2">
+            <Button x:Name="OpticsCoatingImportButton" Content="Read catalog…" Command="{Binding Optics.Coatings.ImportCommand}" Margin="0,0,2,0"
+                    ToolTip="Reads an OpticStudio coating file (.dat) or an OpenSim coating catalog (.json); it replaces this lens's catalog."/>
+            <Button Content="Write catalog…" Command="{Binding Optics.Coatings.ExportCommand}" Margin="2,0,0,0"
+                    ToolTip="Writes the catalog as an OpticStudio coating file (.dat) or an OpenSim coating catalog (.json)."/>
+        </UniformGrid>
+        <TextBlock Text="{Binding Optics.Coatings.Status}" TextWrapping="Wrap" Margin="0,2,0,0" Foreground="{DynamicResource TextFaintBrush}"/>
+        <controls:FormGrid Margin="0,4,0,0">
+            <Label Content="Name for add / rename"/>
+            <TextBox Text="{Binding Optics.Coatings.NewName, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Names have no spaces; a space becomes an underscore."/>
+        </controls:FormGrid>
+
+        <TextBlock Text="Materials" FontWeight="SemiBold" Margin="0,6,0,2"/>
+        <ListBox x:Name="OpticsCoatingMaterialList" ItemsSource="{Binding Optics.Coatings.MaterialNames}"
+                 SelectedItem="{Binding Optics.Coatings.SelectedMaterialName}" MaxHeight="110"
+                 AutomationProperties.AutomationId="OpticsCoatingMaterialList"/>
+        <UniformGrid Columns="3" Margin="0,2,0,0">
+            <Button Content="Add" Command="{Binding Optics.Coatings.AddMaterialCommand}" Margin="0,0,2,0"/>
+            <Button Content="Rename" Command="{Binding Optics.Coatings.RenameMaterialCommand}" Margin="2,0,2,0"/>
+            <Button Content="Remove" Command="{Binding Optics.Coatings.RemoveMaterialCommand}" Margin="2,0,0,0"/>
+        </UniformGrid>
+        <TextBlock Text="One row is a constant index. k is zero or positive for an absorbing material (n + ik); OpticStudio's file writes it negative, and reading and writing change the sign."
+                   TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,2,0,0"/>
+        <ItemsControl ItemsSource="{Binding Optics.Coatings.IndexRows}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,2,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="24"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Wavelength [µm]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                            <TextBox Text="{Binding Micrometers}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="2,0,0,0">
+                            <TextBlock Text="n" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                            <TextBox Text="{Binding N}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="2,0,0,0">
+                            <TextBlock Text="k" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                            <TextBox Text="{Binding K}"/>
+                        </StackPanel>
+                        <Button Grid.Column="3" Content="×" Padding="0" Margin="2,2,0,2" VerticalAlignment="Bottom" ToolTip="Remove this row"
+                                Command="{Binding DataContext.Optics.Coatings.RemoveIndexRowCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"/>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Content="Add a row" Command="{Binding Optics.Coatings.AddIndexRowCommand}" Margin="0,2,0,0" HorizontalAlignment="Left"
+                IsEnabled="{Binding Optics.Coatings.HasSelectedMaterial}"/>
+
+        <TextBlock Text="Coatings" FontWeight="SemiBold" Margin="0,6,0,2"/>
+        <ListBox x:Name="OpticsCoatingList" ItemsSource="{Binding Optics.Coatings.CoatingNames}"
+                 SelectedItem="{Binding Optics.Coatings.SelectedCoatingName}" MaxHeight="110"
+                 AutomationProperties.AutomationId="OpticsCoatingList"/>
+        <UniformGrid Columns="4" Margin="0,2,0,0">
+            <Button Content="Add layers" Command="{Binding Optics.Coatings.AddLayerCoatingCommand}" Margin="0,0,2,0"/>
+            <Button Content="Add ideal" Command="{Binding Optics.Coatings.AddIdealCoatingCommand}" Margin="2,0,2,0"/>
+            <Button Content="Rename" Command="{Binding Optics.Coatings.RenameCoatingCommand}" Margin="2,0,2,0"/>
+            <Button Content="Remove" Command="{Binding Optics.Coatings.RemoveCoatingCommand}" Margin="2,0,0,0"/>
+        </UniformGrid>
+        <TextBlock Text="{Binding Optics.Coatings.SelectedCoatingSummary}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   AutomationProperties.AutomationId="OpticsCoatingSummary"/>
+
+        <StackPanel Visibility="{Binding Optics.Coatings.IsLayerCoatingSelected, Converter={StaticResource BoolToVis}}">
+            <TextBlock Text="Layers from the incident side; the substrate is not listed (on a mirror the last layer is the substrate)."
+                       TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,2,0,0"/>
+            <ItemsControl ItemsSource="{Binding Optics.Coatings.Layers}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.4*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="0.6*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="24"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="Material" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                <TextBox Text="{Binding Material}"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="2,0,0,0">
+                                <TextBlock Text="Thickness" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                <TextBox Text="{Binding Thickness}" ToolTip="Waves of the primary wavelength in the layer, or µm when absolute."/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Content="µm" IsChecked="{Binding IsAbsolute}" VerticalAlignment="Bottom" Margin="4,0,0,4"
+                                      ToolTip="Absolute thickness in micrometers."/>
+                            <StackPanel Grid.Column="3" Margin="2,0,0,0">
+                                <TextBlock Text="Loop" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                <TextBox Text="{Binding LoopIndex}" ToolTip="Repeat count, written on the first and the last line of the group."/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4" Margin="2,0,0,0">
+                                <TextBlock Text="Taper" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                <TextBox Text="{Binding Taper}"/>
+                            </StackPanel>
+                            <Button Grid.Column="5" Content="×" Padding="0" Margin="2,2,0,2" VerticalAlignment="Bottom" ToolTip="Remove this layer"
+                                    Command="{Binding DataContext.Optics.Coatings.RemoveLayerCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button Content="Add a layer" Command="{Binding Optics.Coatings.AddLayerCommand}" Margin="0,2,0,0" HorizontalAlignment="Left"
+                    ToolTip="Adds a quarter-wave layer of the selected material."/>
+        </StackPanel>
+
+        <controls:FormGrid Visibility="{Binding Optics.Coatings.IsIdealCoatingSelected, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
+            <Label Content="Transmission T"/>
+            <TextBox Text="{Binding Optics.Coatings.IdealTransmission}"/>
+            <Label Content="Reflection R"/>
+            <TextBox Text="{Binding Optics.Coatings.IdealReflection}" ToolTip="If T + R exceeds 1, both are scaled so that they sum to 1."/>
+            <Label Content="Reflection under TIR"/>
+            <TextBox Text="{Binding Optics.Coatings.IdealTotalInternalReflection}"/>
+        </controls:FormGrid>
+
+        <TextBlock Text="{Binding Optics.Coatings.TaperSummary}" TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,4,0,0"/>
+        <TextBlock Text="{Binding Optics.Coatings.Problems}" TextWrapping="Wrap" Margin="0,2,0,0" Foreground="{DynamicResource ErrorBrush}"
+                   AutomationProperties.AutomationId="OpticsCoatingProblems"/>
+        <TextBlock Text="The coating plots (Analyses, Coatings group) show a coating of this catalog. Coatings are not yet applied to traced rays."
+                   TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,2,0,0"/>
+    </StackPanel>
+</UserControl>

@@ -211,6 +211,49 @@ used from code and tests until the surface editor (OP-20) feeds it. Not built: r
 height fields (need ray aiming, OP-22), configurations (OP-30), and any comparison of these
 numbers with OpticStudio's output.
 
+## Coatings
+
+Below the glass catalogs, the **Coatings** group (`OpenSim.App/Views/Panels/OpticsCoatingsPanel.xaml`)
+holds the lens's thin-film coating catalog. It saves with the project and the lens file.
+
+- **Materials.** A coating material is a table of wavelength (µm), n and k. One row is a
+  constant index; two or more interpolate linearly, and a wavelength outside the table is
+  refused rather than extrapolated (OpticStudio holds the end values instead). k is zero or
+  positive for an absorbing material (index n + ik). OpticStudio's coating file writes k
+  negative; reading and writing such a file change the sign.
+- **Coatings.** *Add layers* makes a layer coating: one line per layer, from the incident
+  side, each with its material, thickness, **µm** (absolute thickness; otherwise the
+  thickness is in waves of the primary wavelength in the layer, d = λ0·T/n0), **Loop**
+  (repeat a group: write the count on the group's first and last lines) and **Taper** (a taper
+  profile by name). The substrate is not listed. *Add ideal* makes an ideal coating given by
+  T, R and the reflection under total internal reflection.
+- **Read catalog… / Write catalog…** read and write OpticStudio coating files (`.dat`: MATE,
+  TAPR, COAT, IDEAL, IDEAL2, TABLE, the `COAT I.xx` shorthand) and this program's own
+  catalog (`.oscoat.json`). Reading replaces the catalog. Encrypted coatings cannot be read:
+  they are left out and named. IDEAL2 and table coatings and taper profiles are kept and
+  shown, but are edited in a file, not in the panel.
+- **Problems** in the catalog (an undefined material or taper, a repeated name, a loop
+  without its closing line) are listed in red under the group.
+
+The **Coatings** group of the analysis picker has twelve plots: Reflection, Transmission,
+Absorption, Diattenuation, Phase and Retardance, each against angle and against wavelength.
+Their settings name the coating (blank: an uncoated surface), the incident medium and the
+substrate (blank is air; a number is an index; otherwise a coating material or a glass of the
+active catalogs by name), whether the surface is a mirror (its coating's last layer is then
+the substrate; uncoated, aluminium 0.7 − 7.0i), the angle or wavelength range, the coating
+multiplier and index and extinction offsets, and the point and surface radius at which tapers
+are evaluated. Against angle, wavelength 0 means the primary wavelength; against wavelength,
+0 means the system's shortest or longest wavelength. From glass to air (an incident medium
+named and the substrate blank) the layers are applied in reverse order, as OpticStudio does.
+
+What the plots show: s, p and their average for R, T and A; diattenuation |s − p|/(s + p)
+for reflection and transmission; the phases of the s and p reflected and transmitted
+amplitudes in OpticStudio's convention; retardance φp − φs (transmission) and
+φp − φs + 180° (reflection). The equations and how they compare with other tools are in
+`docs/Optics-Conventions.md` §12. Not built: coatings on surfaces (there are no surfaces
+yet), coatings applied to traced rays, per-layer multipliers and offsets in the plots' settings
+(the library takes them), incoherent thick layers, and coating design or optimisation.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

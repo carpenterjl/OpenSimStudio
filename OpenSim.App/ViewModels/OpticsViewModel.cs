@@ -28,9 +28,14 @@ public partial class OpticsViewModel : ObservableObject
         GlassCatalogs = new OpticsGlassCatalogViewModel(glassCatalogs, PublishSystem, () => BuildSystemData().Environment);
         foreach (var warning in GlassCatalogs.LoadWarnings)
             log.Append($"Glass catalogs: {warning}");
+        Coatings = new OpticsCoatingCatalogViewModel(PublishSystem);
         _session = session;
         PublishSystem();
     }
+
+    /// <summary>The thin-film coating catalog (OP-15), saved with the lens and published with
+    /// the system so the coating plots recompute after every edit.</summary>
+    public OpticsCoatingCatalogViewModel Coatings { get; }
 
     /// <summary>The glass catalogs and the active ones (OP-11). Its own property changes do not
     /// reach this view model's, so browsing a catalog publishes nothing; changing which catalogs
@@ -77,7 +82,8 @@ public partial class OpticsViewModel : ObservableObject
     {
         Mode = OpticsModes.SavedName(Mode),
         SystemData = SystemDataToSettings(),
-        Materials = GlassCatalogs?.ToSettings()
+        Materials = GlassCatalogs?.ToSettings(),
+        Coatings = Coatings?.ToSettings()
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -97,6 +103,7 @@ public partial class OpticsViewModel : ObservableObject
         }
         LoadSystemDataSettings(saved.SystemData, notes);
         GlassCatalogs.LoadSettings(saved.Materials, notes);
+        Coatings.LoadSettings(saved.Coatings, notes);
         PublishSystem();
         return notes;
     }
@@ -107,6 +114,7 @@ public partial class OpticsViewModel : ObservableObject
         SelectedMode = OpticsModeOption.All[0];
         ResetSystemData();
         GlassCatalogs.Reset();
+        Coatings.Reset();
         PublishSystem();
     }
 }

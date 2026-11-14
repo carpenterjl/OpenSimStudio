@@ -37,4 +37,8 @@ public sealed record OpticsSettings
     /// <summary>The material choices: the active glass catalogs (OP-11). Null — every file
     /// written before OP-11 — makes every loaded catalog active.</summary>
     public OpticsMaterialsSettings? Materials { get; init; }
+
+    /// <summary>The thin-film coating catalog (OP-15). Null — every file written before OP-15 —
+    /// is an empty catalog.</summary>
+    public OpticsCoatingsSettings? Coatings { get; init; }
 }

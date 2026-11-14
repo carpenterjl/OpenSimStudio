@@ -22,6 +22,8 @@
             <panels:OpticsSystemDataPanel/>
             <!-- OP-11: the glass catalogs. -->
             <panels:OpticsMaterialsPanel/>
+            <!-- OP-15: the coating catalog. -->
+            <panels:OpticsCoatingsPanel/>
         </StackPanel>
     </GroupBox>
 </UserControl>

@@ -5,7 +5,8 @@ code that implements each rule is named beside the rule. The tests are in
 `OpenSim.Tests/Optics/OpticsConventionsTests.cs` and `OpenSim.Tests/Core/RigidTransformTests.cs`;
 those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/AirIndexTests.cs` and
 `OpenSim.Tests/Optics/ThermalIndexTests.cs`; those of paraxial optics (section 11) in
-`OpenSim.Tests/Optics/ParaxialTests.cs`.
+`OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
+`OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`.
 
 Two rules decide everything below:
 
@@ -261,6 +262,10 @@ scripting item (OP-98) maps `RayStatus` and `FailedAtSurface` to those codes.
 | Wavelength carried by a ray | vacuum | air at system temperature and pressure (file values) |
 | Index after a mirror | positive, direction in the ray | same results; only the bookkeeping differs |
 | Index of air | Ciddor (NIST Appendix A), CO2 450 µmol/mol, dry air | SCHOTT TIE-19 equations (8)–(9) |
+| Complex index inside the coating code | n + ik, k ≥ 0 absorbs, time factor e^(−iωt) (as tmm) | n − ik (OpticStudio's coating file writes k negative; the reader and writer change the sign) |
+| Coating phases reported | OpticStudio's convention (the conjugate of the internal amplitudes) | same |
+| Coating material outside its n, k table | refused | OpticStudio holds the first or last row's values |
+| Table coating outside its wavelengths | refused | not stated in OpticStudio's help |
 
 More rows are added by the items that introduce a physical model (OP-63).
 
@@ -291,6 +296,9 @@ OpticStudio help, which has the same wording.
 | Partial dispersion P_g,F and the normal line ΔP_g,F = P_g,F − (0.6438 − 0.001682·Vd) | ZemaxGlass user manual (zemaxglass_manual.txt, nomenclature, "P" and "dPgF"); AGFFileReader.jl `src/runtime.jl` line 77, crediting SCHOTT TIE-29 (TIE-29 itself not on this machine) |
 | Thermo-optical constant G of the athermal glass map | SCHOTT TIE-19 equation (10) and Table 2 (p. 9) |
 | Internal transmittance at another thickness | AGFFileReader.jl `src/utilities.jl`, `absorption` (absorption −ln(t)/τ per mm) |
+| Coating file layout (MATE, TAPR, COAT, loops, I.xx, IDEAL, IDEAL2, TABLE, comments), relative thickness d = λ0 T / n0, taper formulas, layer order on surfaces, uncoated mirror 0.7 − 7.0i, coating multiplier limit 10 | OpticStudio 2025 R2 help (ansyshelp.ansys.com, "Defining Coatings" and the pages it links; "Specifying Coatings on Surfaces"; "Properties of Uncoated Surfaces"; "Optimizing Coatings"), saved 2026-11-14 under `plans/sources/optics/coatingfile/` |
+| Index sign n − ik, propagation factor e^(−2πiτ/λ), definitions of R, T, A, diattenuation, phase and retardance | OpticStudio 2025 R2 help, "Defining Coatings" and "Definition of Polarization Terms" (same folder) |
+| Thin-film amplitude convention and the cross-check values | tmm 0.2.0 (S. Byrnes, MIT), `tmm_core.py`: `interface_r`, `interface_t`, `coh_tmm`, `T_from_t`, `power_entering_from_r` (`plans/sources/optics/tmm/`) |
 | What OpticStudio-compatible readers do with TD data | AGFFileReader.jl `src/utilities.jl` (`index`, `absairindex`); ZemaxGlass.py `get_dispersion` (lines ~780–917) |
 | refractiveindex.info formulas 1–9 and their names | M. Polyanskiy, "Dispersion formulas", RefractiveIndex.INFO, 2014-06-29 (`database/doc/Dispersion formulas.pdf` in the database repository; one page) |
 | refractiveindex.info page layout, book and page ids and titles, licence | The database files themselves (`database/data`, `catalog-nk.yml`, `LICENSE`, `doc/permission.txt`), commit e6d15e3; its schema test `tests/test_yaml.py`. The database's own Python scripts (GPL) were not used |
@@ -370,6 +378,26 @@ single place in the code, so a correction is one line and its test.
    relative partial dispersion. Both are this program's choices. Check: a model glass and an
    offset glass compared with OpticStudio's indices at the F, d, C and g lines and at 1 µm.
 
+8. **Coatings** (OP-15). Settled from OpticStudio's help pages, not from its numbers; no coating
+   file written by OpticStudio itself was available. Check each with one coating in
+   OpticStudio's coating plots.
+   - *Sign of p reflection.* OpticStudio's reflection retardance φp − φs + π implies that its
+     r_p is −r_s at normal incidence, as tmm's and this code's are; the help does not state it.
+   - *Diattenuation in reflection.* The help defines D with T_s and T_p; the reflection plot
+     here uses the same form with R_s and R_p.
+   - *Polynomial taper terms.* The help lists E_0 to E_6 and "etc."; the terms beyond E_6 follow
+     the visible pattern (degree by degree, falling power of x′). Its sum for f_p runs to 22
+     while the PT term range stops at 20; 20 is used.
+   - *Coating multiplier and index offsets.* The help ("Optimizing Coatings") calls them a
+     linear thickness scale and dimensionless offsets of the index and extinction coefficient;
+     the extinction offset is added to k in this code's sign (positive absorbs more), which
+     OpticStudio's sign convention may reverse. The surface coating tab that holds them was not
+     read.
+   - *Table coatings.* Phases interpolate as given (not unwrapped); under total internal
+     reflection a table coating reflects everything with phase π (the help does not say).
+   - *IDEAL2 amplitudes* with |r|² + |t|² above 1 are refused; the help does not say what
+     OpticStudio does.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -427,3 +455,72 @@ is ignored: heights there are in the vertex plane.
   H = n·(ū·y − u·ȳ) with the signed index, the same in every space.
 - The reports' signs and reference points are ours; section 10, item 6, lists the check
   against OpticStudio.
+
+## 12. Thin-film coatings
+
+`OpenSim.Optics/Coatings` (OP-15). The engine is `ThinFilm`, the coating model
+`CoatingCatalog`, and `CoatingEvaluator` applies a coating to a surface.
+
+**Index and time convention.** Inside the code a complex index is N = n + ik with k ≥ 0 for an
+absorbing material, and a plane wave is e^(i(k·r − ωt)), so a forward wave in an absorbing
+layer decays with depth. This is tmm's convention (`tmm_core.py`, `coh_tmm`: kz "positive
+imaginary part means decaying"). OpticStudio uses the conjugate one: n − ik, k written
+negative in its coating file, propagation factor e^(−2πiτ/λ) ("Defining Coatings",
+"Definition of Polarization Terms"). The coating file reader stores k = −(written value) and
+refuses a positive written value (gain); the writer writes −k.
+
+**The calculation** (`ThinFilm.Compute`). With β = n0 sin θ0 (n0 real):
+
+- each medium j: q_j = N_j cos θ_j = √(N_j² − β²), the root with Im q ≥ 0 (the forward,
+  decaying wave; for k ≥ 0 the principal root);
+- tilted admittances η_j = q_j for s and N_j² / q_j for p; phase thickness δ_j = 2π q_j d_j / λ;
+- writing a layer's tangential fields as E = A e^(iκz) + B e^(−iκz), H = η(A e^(iκz) − B e^(−iκz)),
+  κ = 2π q / λ, and eliminating A and B between its two faces gives
+  [E; H]_front = [[cos δ, −i sin δ / η], [−i η sin δ, cos δ]] [E; H]_back;
+- [B; C] = Π_j M_j [1; η_s] from the incident side; ρ = (η0 B − C)/(η0 B + C),
+  τ = 2η0 / (η0 B + C) (tangential E);
+- R = |ρ|², T = 4 η0 Re(η_s) / |η0 B + C|², A = 4 η0 Re(B C* − η_s) / |η0 B + C|². Each is
+  computed on its own, so R + T + A = 1 is a check (the tests hold it to 10⁻¹² in every case,
+  absorbing or not).
+
+Each M_j is multiplied by e^(iδ_j) (modulus ≤ 1), which turns its entries into (1 ± e^(2iδ))/2,
+bounded for any thickness; the product of the factors is carried apart and restores B and C. An
+opaque layer therefore gives T = 0 exactly instead of an overflow. Nothing is clamped (tmm caps
+Im δ at 35).
+
+**Amplitudes** returned by `ThinFilm` are tmm's: s amplitudes are the tangential ratios;
+p reflection is r_p = −ρ_p, so r_p = −r_s at normal incidence; p transmission is the full-field
+ratio τ_p cos θ0 / cos θ_s. With these, r, t, R and T equal tmm's `coh_tmm` output (to 10⁻¹³ in
+`ThinFilmTests`), and tmm's absorbed fraction (power_entering − T) equals A. tmm also accepts an
+absorbing incident medium; this code refuses one, since one plane wave does not define the
+incident power there.
+
+**Reported quantities** (`CoatingResponse`), as OpticStudio's help defines them:
+
+- the phase φ of each amplitude in OpticStudio's convention, φ = −arg(amplitude in ours),
+  wrapped to (−180°, 180°];
+- retardance in transmission φp − φs, in reflection φp − φs + 180°, wrapped; zero at normal
+  incidence for any stack;
+- diattenuation |T_s − T_p| / (T_s + T_p), and the same with R for reflection (zero when the
+  sum is zero);
+- A = 1 − R − T for ideal and table coatings (they have no physics to compute it from).
+
+**Coatings and surfaces** (OpticStudio help, read): layers are listed from the incident side
+and the substrate is not; from glass to air the order is reversed; on a mirror the last layer
+is the semi-infinite substrate, and an uncoated mirror is aluminium 0.7 − 7.0i (0.7 + 7.0i here);
+on a mirror everything not reflected counts as absorbed (this code's choice). A relative
+thickness is in waves of the primary wavelength in the layer, d = λ0 T / n0, n0 the real part
+of the layer's index there (before index offsets). Ideal (IDEAL, I.xx, IDEAL2) and table
+coatings follow their help pages (`Coating.cs` names each rule); a table interpolates linearly
+in cos θ between angles, holds the end angles' data beyond them, and is read at the refracted
+angle from high to low index.
+
+**Wavelength and media.** Coating material tables, like catalog glasses, are in µm in air and
+give indices relative to air; a relative index with the air wavelength gives the same phase
+thickness as the absolute index with the vacuum wavelength, so no conversion is made. The
+coating plots use catalog indices as they are; they do not adjust them to the environment.
+
+**Not built.** Coatings are not applied to traced rays (`Ray.Field` is carried, but nothing
+applies a coating to it yet); there are no surfaces to carry a coating; incoherent thick
+layers; coating design or optimisation (OpticStudio has none either).
+
