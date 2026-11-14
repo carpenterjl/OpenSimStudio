@@ -383,9 +383,13 @@ public sealed class ParaxialTests
         // centre z_E, starts at height h on the object plane: h = −(z_E + t0)·tan θ.
         double zE = byAngle.EntrancePupilPosition!.Value;
         double h = -(zE + objectDistance) * Math.Tan(angle * Math.PI / 180);
-        var byHeight = ParaxialSystem.Create(lens, Sys(null, FieldType.ObjectHeight, new FieldPoint(), new FieldPoint { Y = h }));
-        SameRay(reference, byHeight.ChiefRay, 1e-14);
-        Close(h, byHeight.ChiefRay.Heights[0], 1e-14);
+        // h is negative for a positive angle, and the reports' ChiefRay is that of Hy = +1, the
+        // field scale (largest |y|, §7), so compare the field point's own chief ray.
+        var heightField = new FieldPoint { Y = h };
+        var byHeight = ParaxialSystem.Create(lens, Sys(null, FieldType.ObjectHeight, new FieldPoint(), heightField));
+        var heightRay = byHeight.TraceChiefRay(heightField).Y;
+        SameRay(reference, heightRay, 1e-14);
+        Close(h, heightRay.Heights[0], 1e-14);
 
         // A paraxial image height is the height that chief ray reaches on the image surface.
         double hImage = byAngle.ImageSurfaceChiefHeight;
