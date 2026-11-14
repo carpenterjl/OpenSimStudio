@@ -27,10 +27,13 @@ public sealed class CatalogSelfCheckTests
             Assert.True(c.NdPassed && c.VdChecked && c.VdPassed, name);
         }
 
-        // The tolerance is half the last printed digit: "1.516372" → 5e−7, "1.51680E+00" → 5e−6.
-        Assert.Equal(5e-7, checks["SCHOTT-FORM"].NdTolerance!.Value, 12);
-        Assert.Equal(5e-6, checks["BK7-ENOTATION"].NdTolerance!.Value, 12);
-        Assert.Equal(5e-5, checks["BK7-ENOTATION"].VdTolerance!.Value, 12);
+        // The tolerance is half the last printed digit: "1.516372" → 5e−7, "1.51680E+00" → 5e−6,
+        // plus 1e−12 × the value for binary rounding (about 1.5e−12 for an index, 6e−11 for a
+        // Vd of 64), so compare to 10 places (9 for Vd), finer than any printed digit but above
+        // that slack.
+        Assert.Equal(5e-7, checks["SCHOTT-FORM"].NdTolerance!.Value, 10);
+        Assert.Equal(5e-6, checks["BK7-ENOTATION"].NdTolerance!.Value, 10);
+        Assert.Equal(5e-5, checks["BK7-ENOTATION"].VdTolerance!.Value, 9);
 
         var bad = checks["BADND"];
         Assert.Equal(GlassCheckOutcome.Failed, bad.Outcome);
