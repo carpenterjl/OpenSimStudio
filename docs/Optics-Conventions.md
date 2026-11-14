@@ -8,7 +8,7 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; the cross-checks against other programs (section 22) in
 `OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
@@ -445,6 +445,23 @@ single place in the code, so a correction is one line and its test.
       through the edge point) is this program's; the help says only "least squares".
     Check: each form with non-zero terms, one ray traced in both programs.
 
+14. **Idealised and special surfaces** (OP-27). Section 18's surfaces follow their OpticStudio
+    2025 R2 help pages; these points are this program's reading where a page is silent, and
+    none is compared with OpticStudio's output.
+    - *Paraxial OPD:* modes 2 and 3 are built as exact path terms (section 18); OpticStudio's
+      own formulas are not published, so its OPD numbers may differ in the residuals. Modes 0
+      and 1 are not built.
+    - *Paraxial XY OPD:* the paraxial thin-lens path −(φx·x² + φy·y²)/2, flagged approximate.
+    - *ABCD:* ω read as the slope L/N; the matrix ignores the indices; the ray leaves from the
+      moved point (x′, y′).
+    - *Extended Fresnel:* "accounts for both" read as the normal of z_s + z_f.
+    - *Lenslet Array:* built from the help's description of US_ARRAYEVEN (odd nx × ny cells,
+      even-asphere lenslets), not from the DLL; a ray outside the cells misses.
+    - *Paraxial engine:* anamorphic surfaces (Paraxial XY, ABCD, Cylinder Fresnel, Generalized
+      Fresnel) give their y-z behaviour.
+    Check: one lens per surface type traced in both programs (ray positions, directions, and
+    OPD for the Paraxial surface at finite and infinite conjugates).
+
 15. **Solves** (OP-29). Each solve follows the wording of OpticStudio's help (section 19); none
     is compared with OpticStudio's numbers. The readings that the help leaves open:
     - *Edge thickness at radial height 0* uses the mechanical semi-diameter, as "Thickness
@@ -773,6 +790,63 @@ equation numbers).
   not passed to `SequentialLens.ToParaxialLens` (a paraxial-equivalent hook on `SurfaceShape`
   is OP-27's). Saving these surfaces is OP-31's. Section 10, item 13, lists the readings not yet
   compared with OpticStudio.
+
+## 18. Idealised and special surfaces
+
+OP-27 adds `SurfaceShape` subclasses in `OpenSim.Optics/Sequential/Special/` for OpticStudio's
+idealised and special sequential surfaces. Each one's definition is quoted from its OpticStudio
+2025 R2 help page (ansyshelp.ansys.com, OpticStudio User Guide, "Sequential Surfaces (lens data
+editor)") on the class; the pages are saved under `plans/sources/optics/ansyshelp-op27/`.
+Formulas not on a page are derived in the class comments and in `IdealSurfaceTests`.
+
+- **The shape hook** (`SurfaceShape`): `ParaxialEquivalent` gives the paraxial engine a
+  curvature, a thin-lens power or an ABCD matrix (default: the surface's vertex curvature);
+  `SequentialLens.ToParaxialLens` uses it. `OpdLimitation` is null when the trace's optical
+  path through the shape is the true one, else a sentence saying why OPD is not defined there.
+- **Paraxial engine additions** (`ParaxialSurface.ThinLensPower`, `ParaxialSurface.SlopeMatrix`).
+  A thin-lens power adds to c·(n′ − n) and enters the signed-index formalism unchanged (a thin
+  lens has one power whichever way light crosses it). An ABCD matrix on (y, u) becomes
+  [[A, B/n], [n′C, n′D/n]] on (y, n·u) with signed indices. When B ≠ 0 the ray moves on the
+  vertex plane: `ParaxialRay.Heights` keeps the arriving height and the next transfer starts
+  from the moved one, so such a surface may not be surface 1, the stop or the last surface.
+  The Gaussian beam refuses a matrix of negative determinant (a retroreflector).
+- **Paraxial** (`ParaxialShape`): plane; n′_s·u′ = n_s·u − x·φ (and y), u = L/N, φ = 1/f with f
+  in air, signed indices (so the rule holds after mirrors). It images every point of every
+  plane perfectly (linear in the slopes). The optical path added at the hit X is
+  E = n·[ℓ(P→O) − ℓ(P→X)] + n′·[ℓ(O→P′) − ℓ(X→P′)], ℓ signed along the travel, O the vertex,
+  P where the incoming ray crosses the object plane the surface works at, P′ its image from
+  n′_s/z_i − n_s/z_o = φ. Every ray from P then has the same path to P′. Object at infinity
+  (default; OpticStudio's OPD mode 2): the object term is −n·(X·d). `ResolveConjugates` sets the
+  object plane from the paraxial marginal ray at the primary wavelength (mode 3). Paraxially
+  E ≈ −φ·r²/2 at any conjugates: with u the incoming slope, the object term is n·r²/(2a) − n·r·u
+  and the image term n′·r²/(2b) + n′·r·u′, and n′u′ − nu = −rφ with n/a + n′/b = φ.
+- **Paraxial XY** (`ParaxialXYShape`): the same rule with φx and φy; path −(φx·x² + φy·y²)/2,
+  OPD flagged approximate.
+- **ABCD** (`AbcdShape`): (x′, ω′) = M·(x, ω) per axis with ω = L/N; the ray leaves from (x′, y′);
+  A ≠ 0 (x is recovered from x′); no path term, OPD flagged undefined, as OpticStudio does.
+- **Retro Reflect** (`RetroReflectShape`): plane; on a mirror the direction leaving is −d; in
+  glass or air ordinary refraction. Paraxially the identity on (y, u), diag(1, −1) on (y, n·u).
+- **Conjugate** (`ConjugateShape`): |p − P₁| ± |p − P₂| = |P₁| ± |P₂| (+ when z₁, z₂ have one
+  sign); Newton's iteration for the intersection and the sag; normal ±∇F/|∇F|, +z at the
+  vertex; only the vertex sheet. Paraxial curvature ∂²z/∂y² at the vertex, (1/z₁ + 1/z₂)/2 on
+  the axis.
+- **Fresnel family** (`FresnelShapes.cs`): intercept the substrate, refract with the facet's
+  normal (−f_x, −f_y, 1)/|…|; no groove geometry, path to the substrate only. Fresnel: plane
+  substrate, facet the even asphere of the surface's c, k and α₁…α₈. Extended Fresnel:
+  even-asphere substrate, normal of z_s + z_f. Generalized Fresnel: even-asphere substrate,
+  facet Σ Aᵢ·Eᵢ(x/R, y/R) in the extended polynomial order (x, y, x², xy, y², …). Cylinder
+  Fresnel: substrate and facet in y only. OPD flagged undefined on a curved substrate.
+- **Lenslet Array** (`LensletArrayShape`): odd nx × ny cells W × H centred on the vertex, each the
+  even asphere of the surface's c, k and α about its centre; a ray outside the cells misses.
+- **Not built.** Slide (a bitmap's RGB values set the transmission through "a linear
+  interpolation algorithm" the help does not give, and no bitmap reader exists); Filter (the
+  help says only that it is a user-defined surface DLL); Data (a store of extra values for a
+  user-defined surface, which this program does not have); Atmospheric (the help cites
+  Seidelmann, Explanatory Supplement to the Astronomical Almanac §3.281, and Hohenkerk and
+  Sinclair, NAO Technical Note 63, neither of which is on this machine; the Starlink PAL routine
+  `palRefro`, saved in `plans/sources/optics/pal-refro/`, implements Hohenkerk and Sinclair with
+  its own refractivity changes and is LGPL, so it was not ported without the owner's decision);
+  Paraxial OPD modes 0 and 1; saving these surfaces (OP-31).
 
 ## 19. Solves
 

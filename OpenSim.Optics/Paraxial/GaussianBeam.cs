@@ -226,7 +226,16 @@ public sealed class GaussianBeamTrace
                 q += lens.Surfaces[j - 1].Thickness / n[j - 1];
                 gouy += Math.Atan(q.Real / q.Imaginary) - before;
             }
-            if (j < image && Model.Powers[j] != 0) q = Transform(ParaxialMatrix.Refraction(Model.Powers[j]), q);
+            if (j < image)
+            {
+                var m = Model.SurfaceMatrix(j);
+                // OP-27: a matrix that reverses the reduced slope (a retroreflector) would turn
+                // q̂ into −q̂, which is no beam; the time-reversed beam it makes is not modelled.
+                if (m.Determinant < 0)
+                    throw new InvalidOperationException(
+                        $"Gaussian beam: surface {j} sends rays back along themselves (a retroreflector), which the paraxial beam propagation does not model; remove it or end the beam before it.");
+                if (m != ParaxialMatrix.Identity) q = Transform(m, q);
+            }
             qs[j] = q;
             states[j] = GaussianBeamState.From(q, n[j], Wavelength, plane.MSquared, gouy);
         }

@@ -53,6 +53,40 @@ public abstract class SurfaceShape
         failure = RayStatus.Ok;
         return false;
     }
+
+    // OP-27: what the paraxial engine and the OPD analyses need from a shape.
+
+    /// <summary>
+    /// The surface as the paraxial engine sees it (<see cref="SequentialLens.ToParaxialLens"/>):
+    /// by default the vertex curvature of <paramref name="surface"/> and nothing else, which is
+    /// right for a shape whose sag is the Standard conic's to second order. A shape whose
+    /// first-order action differs (an ideal thin lens, an ABCD block, a Fresnel facet, a
+    /// polynomial whose r² term adds curvature) overrides it. The paraxial engine is
+    /// rotationally symmetric and traces the y meridian; an anamorphic shape gives its y-z
+    /// behaviour.
+    /// </summary>
+    public virtual ParaxialShapeEquivalent ParaxialEquivalent(SequentialSurface surface) =>
+        new() { Curvature = surface.Curvature };
+
+    /// <summary>
+    /// Null when the optical path the trace accumulates through this shape is the true one
+    /// (so OPD, MTF and Zernike fits are meaningful); otherwise one sentence saying why not,
+    /// which an analysis that needs OPD shows instead of a result (OpticStudio refuses OPD
+    /// through an ABCD surface and through a Fresnel surface on a curved substrate).
+    /// </summary>
+    public virtual string? OpdLimitation(SequentialSurface surface) => null;
+}
+
+/// <summary>
+/// The first-order model of one surface (OP-27): a vertex curvature that refracts with
+/// c·(n′ − n), a thin-lens power added to it, or an ABCD matrix on (height, slope u = dy/dz)
+/// that replaces both (<see cref="Paraxial.ParaxialSurface.SlopeMatrix"/>).
+/// </summary>
+public readonly record struct ParaxialShapeEquivalent
+{
+    public double Curvature { get; init; }
+    public double ThinLensPower { get; init; }
+    public Paraxial.ParaxialMatrix? SlopeMatrix { get; init; }
 }
 
 /// <summary>What <see cref="SurfaceShape.TryRedirect"/> is given at one surface.</summary>

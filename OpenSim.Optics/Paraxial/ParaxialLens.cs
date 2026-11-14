@@ -69,6 +69,18 @@ public sealed record ParaxialLens
             if (j < image && !(j > 0 && s.IsMirror)) s.Medium.Validate(where, problems);
             if (s.SemiDiameter is double sd && (!double.IsFinite(sd) || sd < 0))
                 problems.Add($"{where}: the semi-diameter must be zero or positive (it is {sd}).");
+            // OP-27: idealised surfaces.
+            if (!double.IsFinite(s.ThinLensPower))
+                problems.Add($"{where}: the thin-lens power must be a number (it is {s.ThinLensPower}).");
+            if (s.SlopeMatrix is { } m)
+            {
+                if (!double.IsFinite(m.A) || !double.IsFinite(m.B) || !double.IsFinite(m.C) || !double.IsFinite(m.D))
+                    problems.Add($"{where}: every entry of the ABCD matrix must be a number (it is {m}).");
+                if (j == 0 || j == image)
+                    problems.Add($"{where}: the object and image surfaces cannot carry an ABCD matrix.");
+                else if (m.B != 0 && (j == 1 || s.IsStop || j == image - 1))
+                    problems.Add($"{where}: an ABCD matrix with B ≠ 0 moves the ray across the surface, so it cannot be surface 1, the stop or the last surface; put a plane dummy surface before or after it.");
+            }
         }
         if (stops != 1)
             problems.Add(stops == 0

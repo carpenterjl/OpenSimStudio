@@ -40,18 +40,26 @@ public sealed record SequentialLens
     /// The same lens for the paraxial engine: vertex curvature, thickness, medium, stop, mirror,
     /// and the stop's semi-diameter. Conics and apertures do not enter first-order optics. An
     /// ignored surface becomes a plane with the medium before it, which is what the real trace
-    /// does with it.
+    /// does with it. A surface with a <see cref="SequentialSurface.Shape"/> gives the shape's
+    /// <see cref="SurfaceShape.ParaxialEquivalent"/> (OP-27): its curvature, thin-lens power or
+    /// ABCD matrix. The object and image surfaces are taken as planes by both engines.
     /// </summary>
     public ParaxialLens ToParaxialLens()
     {
         var media = EffectiveMedia();
         var surfaces = new ParaxialSurface[Surfaces.Count];
+        int image = Surfaces.Count - 1;
         for (int j = 0; j < Surfaces.Count; j++)
         {
             var s = Surfaces[j];
+            var equivalent = s.IsIgnored || s.Shape is null || j == 0 || j == image
+                ? new ParaxialShapeEquivalent { Curvature = s.IsIgnored ? 0 : s.Curvature }
+                : s.Shape.ParaxialEquivalent(s);
             surfaces[j] = new ParaxialSurface
             {
-                Curvature = s.IsIgnored ? 0 : s.Curvature,
+                Curvature = equivalent.Curvature,
+                ThinLensPower = equivalent.ThinLensPower,
+                SlopeMatrix = equivalent.SlopeMatrix,
                 Thickness = s.Thickness,
                 Medium = s.IsIgnored && j > 0 ? media[j - 1] : s.Medium,
                 IsStop = s.IsStop,

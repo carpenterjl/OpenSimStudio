@@ -28,6 +28,7 @@ public sealed class ParaxialSystem
     private static readonly double Epsilon = Math.BitIncrement(1.0) - 1.0;   // 2^-52
 
     private readonly double[] _thickness;
+    private readonly ParaxialMatrix?[] _slopeMatrix;
     private readonly ParaxialRay _unitMarginal, _unitChief, _unitMarginalSize, _unitChiefSize;
     private readonly double _tolerance;
     private readonly List<string> _notes = new();
@@ -54,8 +55,9 @@ public sealed class ParaxialSystem
     /// before the space.</summary>
     public IReadOnlyList<double> SignedIndices { get; }
 
-    /// <summary>The power of each surface, φ = c·(n′ − n) with signed indices, 1/m; zero on
-    /// the object and image surfaces.</summary>
+    /// <summary>The power of each surface, φ = c·(n′ − n) with signed indices plus any
+    /// thin-lens power (OP-27), 1/m; for a surface with an ABCD matrix, −C of its reduced
+    /// matrix (<see cref="SurfaceMatrix"/>). Zero on the object and image surfaces.</summary>
     public IReadOnlyList<double> Powers { get; }
 
     // ---- First-order properties ----
@@ -213,7 +215,20 @@ public sealed class ParaxialSystem
         SignedIndices = signed;
 
         var power = new double[count];
-        for (int j = 1; j <= last; j++) power[j] = surfaces[j].Curvature * (signed[j] - signed[j - 1]);
+        _slopeMatrix = new ParaxialMatrix?[count];
+        for (int j = 1; j <= last; j++)
+        {
+            var s = surfaces[j];
+            power[j] = s.Curvature * (signed[j] - signed[j - 1]) + s.ThinLensPower;
+            // OP-27: an ABCD matrix on (y, u) in reduced form on (y, n·u), signed indices.
+            if (s.SlopeMatrix is { } abcd)
+            {
+                double nb = signed[j - 1], na = signed[j];
+                var reduced = new ParaxialMatrix(abcd.A, abcd.B / nb, na * abcd.C, na * abcd.D / nb);
+                _slopeMatrix[j] = reduced;
+                power[j] = -reduced.C;
+            }
+        }
         Powers = power;
 
         double n0 = signed[0], nImage = signed[last];
@@ -365,13 +380,18 @@ public sealed class ParaxialSystem
         return Compose(first, last).M;
     }
 
+    /// <summary>The matrix of surface <paramref name="j"/> alone on (y, ν): the refraction by
+    /// <see cref="Powers"/>, or the reduced ABCD matrix of a surface that has one (OP-27).</summary>
+    public ParaxialMatrix SurfaceMatrix(int j) =>
+        j > 0 && j < _slopeMatrix.Length && _slopeMatrix[j] is { } m ? m : ParaxialMatrix.Refraction(Powers[j]);
+
     private (ParaxialMatrix M, ParaxialMatrix Abs) Compose(int first, int last)
     {
-        var m = ParaxialMatrix.Refraction(Powers[first]);
+        var m = SurfaceMatrix(first);
         var a = m.Abs();
         for (int j = first + 1; j <= last; j++)
         {
-            var step = ParaxialMatrix.Refraction(Powers[j]) * ParaxialMatrix.Transfer(_thickness[j - 1] / SignedIndices[j - 1]);
+            var step = SurfaceMatrix(j) * ParaxialMatrix.Transfer(_thickness[j - 1] / SignedIndices[j - 1]);
             m = step * m;
             a = step.Abs() * a;
         }
@@ -407,10 +427,17 @@ public sealed class ParaxialSystem
         v[0] = reducedSlope;
         u[0] = reducedSlope / SignedIndices[0];
         h[1] = height;
+        double leaving = height;   // the height leaving the previous surface (an ABCD matrix moves it)
         for (int j = 1; j < count; j++)
         {
-            if (j > 1) h[j] = h[j - 1] + _thickness[j - 1] / SignedIndices[j - 1] * v[j - 1];
-            v[j] = v[j - 1] - h[j] * Powers[j];
+            if (j > 1) h[j] = leaving + _thickness[j - 1] / SignedIndices[j - 1] * v[j - 1];
+            if (_slopeMatrix[j] is { } m)
+                (leaving, v[j]) = m.Apply(h[j], v[j - 1]);
+            else
+            {
+                v[j] = v[j - 1] - h[j] * Powers[j];
+                leaving = h[j];
+            }
             u[j] = v[j] / SignedIndices[j];
         }
         bool atInfinity = Lens.ObjectAtInfinity;
@@ -429,10 +456,17 @@ public sealed class ParaxialSystem
         v[0] = Math.Abs(reducedSlope);
         u[0] = v[0] / Math.Abs(SignedIndices[0]);
         h[1] = Math.Abs(height);
+        double leaving = h[1];
         for (int j = 1; j < count; j++)
         {
-            if (j > 1) h[j] = h[j - 1] + Math.Abs(_thickness[j - 1] / SignedIndices[j - 1]) * v[j - 1];
-            v[j] = v[j - 1] + h[j] * Math.Abs(Powers[j]);
+            if (j > 1) h[j] = leaving + Math.Abs(_thickness[j - 1] / SignedIndices[j - 1]) * v[j - 1];
+            if (_slopeMatrix[j] is { } m)
+                (leaving, v[j]) = m.Abs().Apply(h[j], v[j - 1]);
+            else
+            {
+                v[j] = v[j - 1] + h[j] * Math.Abs(Powers[j]);
+                leaving = h[j];
+            }
             u[j] = v[j] / Math.Abs(SignedIndices[j]);
         }
         return new ParaxialRay { Heights = h, Slopes = u, ReducedSlopes = v };
@@ -440,7 +474,9 @@ public sealed class ParaxialSystem
 
     /// <summary>H = ν̄·y − ν·ȳ of the marginal and chief rays at each surface (after it), from
     /// surface 1 to the image; the object plane is entry 0, NaN when the object is at infinity.
-    /// Every entry equals <see cref="LagrangeInvariant"/> up to rounding.</summary>
+    /// Every entry equals <see cref="LagrangeInvariant"/> up to rounding, except at a surface
+    /// whose ABCD matrix moves the ray (B ≠ 0, OP-27), where the arriving height meets the
+    /// leaving slope, and after a retroreflector, which reverses its sign.</summary>
     public IReadOnlyList<double> LagrangeInvariants()
     {
         var m = MarginalRay;

@@ -240,8 +240,7 @@ status. Like the paraxial report, it says the system has no surfaces until the l
 points not yet compared with OpticStudio are in `docs/Optics-Conventions.md` §13 and §10 item 9.
 
 Not built: the lens data editor and saving surfaces (OP-31), tilts, decenters and coordinate
-breaks (OP-21), ray aiming and vignetting factors (OP-22), other surface types beyond the
-aspheres (OP-24 on), hyperhemispheric surfaces, curved object surfaces, coatings applied to rays, OPD
+breaks (OP-21), ray aiming and vignetting factors (OP-22), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, coatings applied to rays, OPD
 against the reference sphere (OP-35), and layouts drawing traced rays.
 
 ## Gaussian beams
@@ -329,6 +328,33 @@ help does not give the spline's end conditions), the fast even-asphere trace, an
 terms' effect on paraxial data (paraxial results use the base curvature only). The equations,
 sources and the points not yet compared with OpticStudio are in `docs/Optics-Conventions.md`
 §17 and §10 item 13.
+
+## Idealised and special surfaces
+
+The real ray trace also takes these OpticStudio surface types (OP-27), each as its OpticStudio
+2025 R2 help page defines it:
+
+- **Paraxial:** an ideal thin lens of given focal length on a plane. Its optical path keeps it
+  free of aberration: exactly, for collimated light by default, or for the object distance the
+  paraxial marginal ray gives (OpticStudio's OPD modes 2 and 3).
+- **Paraxial XY:** an ideal cylindrical or toroidal thin lens with x and y powers; its OPD is
+  only paraxially accurate and is flagged so.
+- **ABCD:** a black box given by x and y ray matrices on height and slope. No OPD through it.
+- **Retro Reflect:** a plane that, as a mirror, sends every ray back along itself.
+- **Conjugate:** the mirror-like surface that images one given point perfectly onto another.
+- **Fresnel, Extended Fresnel, Generalized Fresnel, Cylinder Fresnel:** the ray meets the
+  substrate and turns by the slope of the Fresnel facets. No OPD through a curved substrate.
+- **Lenslet Array:** an odd number of rectangular even-asphere lenslets in x and y.
+
+The paraxial data take each surface's first-order effect (the y section of an anamorphic one).
+These surfaces are built and used from code and tests; the lens data editor (OP-31) will
+expose and save them. The equations and the points not yet compared with OpticStudio are in
+`docs/Optics-Conventions.md` §18 and §10 item 14.
+
+Not built: the Slide, Filter, Data and Atmospheric surfaces (the help pages do not define
+Slide's transmission, Filter and Data are user-defined DLL surfaces, and the atmospheric
+refraction model's sources are not on hand), the Paraxial surface's OPD modes 0 and 1, and
+any comparison with OpticStudio's output.
 
 ## Solves
 

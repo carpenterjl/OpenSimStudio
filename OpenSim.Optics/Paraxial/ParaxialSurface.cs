@@ -40,4 +40,24 @@ public sealed record ParaxialSurface
 
     /// <summary>The surface's comment, shown in reports.</summary>
     public string Comment { get; init; } = "";
+
+    // OP-27: idealised surfaces (docs/Optics-Conventions.md §18).
+
+    /// <summary>A power φ added to the surface's own c·(n′ − n), 1/m: the ideal thin lens of
+    /// OpticStudio's Paraxial surface (φ = 1/f, f measured in air). It enters the signed-index
+    /// formalism as it is, like the power of a real thin lens, which is the same whichever way
+    /// light crosses it. Zero for an ordinary surface.</summary>
+    public double ThinLensPower { get; init; }
+
+    /// <summary>
+    /// A first-order matrix that replaces the surface's refraction: it acts on (height, slope
+    /// u = dy/dz) at the vertex plane, as OpticStudio's ABCD surface does, and the engine turns
+    /// it into the reduced form [[A, B/n], [n′·C, n′·D/n]] with the signed indices before and
+    /// after (section 11). Null for an ordinary surface. A matrix with B ≠ 0 moves the ray on the
+    /// vertex plane: <see cref="ParaxialRay.Heights"/> keeps the height arriving there, and the
+    /// next transfer starts from the moved one. Such a surface cannot be surface 1, the stop or
+    /// the last surface (<see cref="ParaxialLens.Validate"/>), where the engine reads heights
+    /// and slopes of one surface together.
+    /// </summary>
+    public ParaxialMatrix? SlopeMatrix { get; init; }
 }
