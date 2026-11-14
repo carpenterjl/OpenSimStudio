@@ -49,6 +49,11 @@ public sealed record SheetColumn(string Key, string Header)
     /// <summary>A description shown when the pointer rests on the cell.</summary>
     public string? ToolTip { get; init; }
 
+    /// <summary>True when a row changing type does not carry this cell's value over, even to a
+    /// slot of the same key: the new type's cell takes its default. The lens data editor's
+    /// parameter columns use it, because a parameter's meaning is its type's (TC-6).</summary>
+    public bool ResetOnRetype { get; init; }
+
     /// <summary>The value a new or cleared cell takes: <see cref="Default"/>, else 0 for numbers,
     /// the first choice for a choice column, and empty text for text.</summary>
     public CellValue DefaultValue => Default ?? Kind switch

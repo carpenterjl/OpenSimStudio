@@ -279,6 +279,17 @@ public sealed partial class SheetDocument
         cell.Set(cell.Definition, value, cell.Flag);
     }
 
+    /// <summary>Attaches a note to a cell (or clears it with null), shown in its tooltip, with
+    /// "!" on the badge when <paramref name="isError"/>; no undo step and no
+    /// <see cref="Changed"/> event, like <see cref="SetComputed"/>.</summary>
+    public void SetNote(int row, int column, string? note, bool isError = false)
+    {
+        var r = RowAt(row);
+        CheckColumn(column);
+        if (column == SheetSchema.TypeColumn) throw new ArgumentException("The type column holds no note.", nameof(column));
+        r.Cells[column - 1].SetNote(note, isError);
+    }
+
     /// <summary>Sets a cell's flag after <see cref="ValidateFlag"/>. A solve given fewer
     /// parameters than its code names is padded with zeros.</summary>
     public SheetEditResult SetFlag(int row, int column, CellFlag flag)

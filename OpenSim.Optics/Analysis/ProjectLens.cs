@@ -43,8 +43,16 @@ public sealed record ProjectLensSolution
     {
         if (Result is null) return null;
         foreach (var cell in Solves)
-            if (cell.Surface == surface && cell.Column == column)
-                return Result.Statuses.FirstOrDefault(st => ReferenceEquals(st.Solve, cell.Solve))?.Error;
+        {
+            if (cell.Surface != surface || cell.Column != column) continue;
+            var error = Result.Statuses.FirstOrDefault(st => ReferenceEquals(st.Solve, cell.Solve))?.Error;
+            if (error is null) return null;
+            // A solve set refused before any pass marks every status "not applied"; the reason
+            // for this cell is the error line the engine names it in.
+            var s = cell.Solve;
+            string prefix = $"Surface {s.Surface}, {SolveColumns.Label(s.Column, s.ParameterIndex)}, {s.Name.ToLowerInvariant()} solve";
+            return Result.Errors.FirstOrDefault(e => e.StartsWith(prefix, StringComparison.Ordinal)) ?? error;
+        }
         return null;
     }
 

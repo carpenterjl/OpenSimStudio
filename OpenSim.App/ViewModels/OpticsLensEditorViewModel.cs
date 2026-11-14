@@ -6,6 +6,7 @@ using OpenSim.App.Controls.Spreadsheet;
 using OpenSim.Core.Model;
 using OpenSim.Core.Persistence;
 using OpenSim.Optics;
+using OpenSim.Optics.Analysis;
 using OpenSim.Optics.Sequential;
 using OpenSim.Optics.Sequential.LensEditing;
 using S = OpenSim.App.ViewModels.OpticsLensEditorSchema;
@@ -18,8 +19,9 @@ namespace OpenSim.App.ViewModels;
 /// <see cref="OpticsSurfaceSettings"/> with the project and the lens file, and the editing tools
 /// of <c>OpenSim.Optics.Sequential.LensEditing</c>. Every edit — typed, pasted, a tool's — lands
 /// on the sheet's undo stack, and each tool is one step. After every change the editor
-/// publishes the system (the analyses recompute), checks the lens, and shows the automatic
-/// semi-diameters it sized.
+/// publishes the system (the analyses recompute), checks the lens, evaluates its solves and
+/// pickups and shows the solved values (TC-6; a failing solve's message goes on its cell), and
+/// shows the automatic semi-diameters it sized.
 /// <para>
 /// Row 0 is the object and the last row the image; both are locked (they cannot be deleted or
 /// moved, and no row can be inserted before the object or after the image, as the OpticStudio
@@ -181,16 +183,21 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
     /// the system data or the catalogs, without publishing (the caller publishes).</summary>
     public void Refresh() => AfterChange(publish: false);
 
-    /// <summary>After any change: check the lens, show the automatic semi-diameters, publish.</summary>
+    /// <summary>After any change: check the lens, evaluate its solves and pickups and show the
+    /// solved values (a failing cell keeps its value and gets the failure as an error note),
+    /// show the automatic semi-diameters, publish.</summary>
     private void AfterChange(bool publish)
     {
         var surfaces = ToSettings();
         var problems = new List<string>();
+        ClearNotes();
         try
         {
             var context = _context();
-            var lens = context.ToLens(surfaces);
-            ShowAutomaticSemiDiameters(lens, context);
+            var solution = context.Solve(surfaces);
+            ShowSolves(solution, surfaces, context);
+            problems.AddRange(solution.Errors);
+            if (solution.Succeeded) ShowAutomaticSemiDiameters(solution.Lens, context);
         }
         catch (ArgumentException ex) { problems.AddRange(ex.Message.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)); }
         // The sizing traces rays through the paraxial launch, which refuses some system data
@@ -226,6 +233,58 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
 
     private static bool IsAutomatic(SheetCell cell) =>
         cell.Flag.Kind == CellFlagKind.Solve && cell.Flag.SolveCode == S.AutomaticSolve;
+
+    private void ClearNotes()
+    {
+        var doc = Document;
+        foreach (var row in doc.Rows)
+            foreach (var cell in row.Cells)
+                if (cell.Note is not null) doc.SetNote(row.Index, cell.Column, null);
+    }
+
+    /// <summary>
+    /// The solved value in each cell a solve or pickup drives (TC-6), written as a computed value
+    /// (no undo step), in surface order so a material pickup copies its source's text as shown;
+    /// a solve that failed leaves its cell's value and puts the engine's message, which names
+    /// the surface and the cell, on it as an error note.
+    /// </summary>
+    private void ShowSolves(ProjectLensSolution solution, IReadOnlyList<OpticsSurfaceSettings> surfaces, LensEditContext context)
+    {
+        var doc = Document;
+        double perUnit = OpticsConventions.MetersPer(context.Unit);
+        foreach (var cell in solution.Solves.OrderBy(c => c.Surface))
+        {
+            if (cell.Surface >= doc.RowCount) continue;
+            var row = doc.Rows[cell.Surface];
+            int slot = SlotOf(row, cell.Column);
+            if (slot < 0) continue;
+            if (solution.ErrorOf(cell.Surface, cell.Column) is { } error)
+            {
+                doc.SetNote(row.Index, slot + 1, error, isError: true);
+                continue;
+            }
+            if (solution.Result is null) continue;
+            var sheetCell = row.Cells[slot];
+            CellValue value;
+            if (cell.Solve is OpenSim.Optics.Sequential.Solves.PickupSolve { Target: OpenSim.Optics.Sequential.Solves.SolveColumn.Material } p)
+            {
+                if (p.FromSurface >= doc.RowCount) continue;
+                value = doc.Rows[p.FromSurface].Cells[S.MaterialSlot].Value;
+            }
+            else if (SavedSolves.SavedValue(solution.Lens, surfaces[cell.Surface], cell, perUnit) is double v)
+                value = CellValue.Of(v);
+            else continue;
+            if (sheetCell.Value == value || CellText.Validate(sheetCell.Definition!, value) is not null) continue;
+            doc.SetComputed(row.Index, slot + 1, value);
+        }
+    }
+
+    private static int SlotOf(SheetRow row, string? key)
+    {
+        for (int i = 0; i < row.Cells.Count; i++)
+            if (row.Cells[i].Definition is { } d && d.Key == key) return i;
+        return -1;
+    }
 
     // ------------------------------------------------------------------ sheet to saved
 
@@ -268,21 +327,36 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
         if (material != SavedSurfaces.FormatMaterial(b))
             s = SavedSurfaces.ParseMaterial(s, material, out _) ?? s with { Material = material, Index = null, ModelGlass = null };
 
-        // Parameters: the cells this type shows, and the base's beyond them (same type only).
+        // Parameters: the cells this type shows (by their "Par n" keys; a registered type's
+        // numbers from 13 on are extra data), and the base's beyond them (same type only).
+        bool registered = SurfaceTypes.Find(row.Type.Name) is not null;
         var parameters = new SortedDictionary<int, double>();
+        var extra = new SortedDictionary<int, double>();
         if (sameType && b.Parameters is { } bp)
             foreach (var p in bp) parameters[p.Number] = p.Value;
-        for (int n = 1; n <= S.ParameterCount; n++)
+        if (sameType && b.ExtraData is { } be)
+            foreach (var p in be) extra[p.Number] = p.Value;
+        foreach (var cell in row.Cells)
         {
-            int slot = S.FirstParameterSlot + n - 1;
-            if (row.Cells[slot].Definition is null) continue;
-            double v = Value(slot).Number;
-            if (v != 0 || parameters.ContainsKey(n)) parameters[n] = v;
+            if (cell.Definition is not { } d || SavedSurfaces.ParameterNumber(d.Key) is not int n || !cell.Value.IsNumber) continue;
+            var target = registered && n >= SurfaceTypes.FirstExtraData ? extra : parameters;
+            double v = cell.Value.Number;
+            if (v != 0 || target.ContainsKey(n)) target[n] = v;
         }
+        static List<OpticsSurfaceParameterSettings>? List(SortedDictionary<int, double> d) =>
+            d.Count > 0 ? d.Select(p => new OpticsSurfaceParameterSettings { Number = p.Key, Value = p.Value }).ToList() : null;
+        s = s with { Parameters = List(parameters), ExtraData = List(extra) };
+
+        // Tilts and decenters, and a coordinate break's return: kept exactly as the file had them
+        // while the flyout shows the same values.
+        var before = ReadTilt(row, after: false);
+        var after = ReadTilt(row, after: true);
+        var coordinateReturn = ReadReturn(row);
         s = s with
         {
-            Parameters = parameters.Count > 0 ? parameters.Select(p => new OpticsSurfaceParameterSettings { Number = p.Key, Value = p.Value }).ToList() : null,
-            ExtraData = sameType ? b.ExtraData : null,
+            TiltBefore = sameType && Equals(Normalised(b.TiltBefore, after: false), before) ? b.TiltBefore : before,
+            TiltAfter = sameType && Equals(Normalised(b.TiltAfter, after: true), after) ? b.TiltAfter : after,
+            CoordinateReturn = sameType && Equals(NormalisedReturn(b.CoordinateReturn), coordinateReturn) ? b.CoordinateReturn : coordinateReturn,
         };
 
         // Flags: the sheet's, and the base's on columns this row type has no cell for.
@@ -316,6 +390,84 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
         if (sameType && b.Flags is { } bf)
             flags.AddRange(bf.Where(f => !row.Type.Columns.Any(c => c is not null && c.Key == f.Column)));
         return s with { Flags = flags.Count > 0 ? flags : null };
+    }
+
+    // ---- Tilt/decenter and coordinate return (TC-6): flyout text <-> saved names.
+
+    private static readonly (string Display, TiltAfterKind Kind)[] AfterModes =
+    {
+        (S.AfterExplicit, TiltAfterKind.Explicit), (S.AfterPickUpThis, TiltAfterKind.PickUpThisSurface),
+        (S.AfterReverseThis, TiltAfterKind.ReverseThisSurface), (S.AfterPickUp, TiltAfterKind.PickUpSurface),
+        (S.AfterReverse, TiltAfterKind.ReverseSurface),
+    };
+
+    private static readonly (string Display, CoordinateReturnMode Mode)[] ReturnModes =
+    {
+        (S.ReturnNone, CoordinateReturnMode.None), (S.ReturnOrientation, CoordinateReturnMode.OrientationOnly),
+        (S.ReturnXY, CoordinateReturnMode.OrientationXY), (S.ReturnXYZ, CoordinateReturnMode.OrientationXYZ),
+    };
+
+    private static string OrderDisplay(string? saved) =>
+        saved == SavedSurfaces.OrderName(TiltDecenterOrder.TiltThenDecenter) ? S.TiltThenDecenter : S.DecenterThenTilt;
+
+    private static string ModeDisplay(string? saved) =>
+        AfterModes.FirstOrDefault(m => SavedSurfaces.AfterModeName(m.Kind) == saved).Display ?? S.AfterExplicit;
+
+    private static string ReturnDisplay(string? saved) =>
+        ReturnModes.FirstOrDefault(m => SavedSurfaces.ReturnModeName(m.Mode) == saved).Display ?? S.ReturnNone;
+
+    /// <summary>The saved tilt the flyout's values give: null for a "before" (or an explicit
+    /// "after") of zeros; the pick-up and reverse modes keep only their mode and surface.</summary>
+    private static OpticsTiltDecenterSettings? TiltFrom(double dx, double dy, double tx, double ty, double tz, string order,
+        string mode, int surface, bool after)
+    {
+        var kind = after ? AfterModes.FirstOrDefault(m => m.Display == mode).Kind : TiltAfterKind.Explicit;
+        if (kind == TiltAfterKind.Explicit)
+        {
+            if (dx == 0 && dy == 0 && tx == 0 && ty == 0 && tz == 0) return null;
+            return new OpticsTiltDecenterSettings
+            {
+                DecenterX = dx, DecenterY = dy, TiltX = tx, TiltY = ty, TiltZ = tz,
+                Order = order == S.TiltThenDecenter ? SavedSurfaces.OrderName(TiltDecenterOrder.TiltThenDecenter) : null,
+            };
+        }
+        return new OpticsTiltDecenterSettings
+        {
+            Mode = SavedSurfaces.AfterModeName(kind),
+            Surface = kind is TiltAfterKind.PickUpSurface or TiltAfterKind.ReverseSurface ? surface : 0,
+        };
+    }
+
+    private static OpticsTiltDecenterSettings? Normalised(OpticsTiltDecenterSettings? t, bool after) => t is null ? null
+        : TiltFrom(t.DecenterX, t.DecenterY, t.TiltX, t.TiltY, t.TiltZ, OrderDisplay(t.Order), ModeDisplay(t.Mode), t.Surface, after);
+
+    private static OpticsTiltDecenterSettings? ReadTilt(SheetRow row, bool after)
+    {
+        if (row.Type.FindProperty(S.BeforeDecenterXProperty) is null) return null;
+        double N(string key) => row.Properties.TryGetValue(key, out var v) && v.IsNumber ? v.Number : 0;
+        string T(string key) => row.Properties.TryGetValue(key, out var v) ? v.Text : "";
+        return after
+            ? TiltFrom(N(S.AfterDecenterXProperty), N(S.AfterDecenterYProperty), N(S.AfterTiltXProperty), N(S.AfterTiltYProperty), N(S.AfterTiltZProperty),
+                T(S.AfterOrderProperty), T(S.AfterModeProperty), (int)N(S.AfterSurfaceProperty), after: true)
+            : TiltFrom(N(S.BeforeDecenterXProperty), N(S.BeforeDecenterYProperty), N(S.BeforeTiltXProperty), N(S.BeforeTiltYProperty), N(S.BeforeTiltZProperty),
+                T(S.BeforeOrderProperty), S.AfterExplicit, 0, after: false);
+    }
+
+    private static OpticsCoordinateReturnSettings? ReturnFrom(string mode, int surface)
+    {
+        var m = ReturnModes.FirstOrDefault(r => r.Display == mode).Mode;
+        return m == CoordinateReturnMode.None ? null : new OpticsCoordinateReturnSettings { Mode = SavedSurfaces.ReturnModeName(m), Surface = surface };
+    }
+
+    private static OpticsCoordinateReturnSettings? NormalisedReturn(OpticsCoordinateReturnSettings? r) =>
+        r is null ? null : ReturnFrom(ReturnDisplay(r.Mode), r.Surface);
+
+    private static OpticsCoordinateReturnSettings? ReadReturn(SheetRow row)
+    {
+        if (row.Type.FindProperty(S.ReturnModeProperty) is null) return null;
+        string mode = row.Properties.TryGetValue(S.ReturnModeProperty, out var v) ? v.Text : S.ReturnNone;
+        int surface = row.Properties.TryGetValue(S.ReturnSurfaceProperty, out var n) && n.IsNumber ? (int)n.Number : 0;
+        return ReturnFrom(mode, surface);
     }
 
     private static OpticsSurfaceApertureSettings? ReadAperture(SheetRow row, OpticsSurfaceApertureSettings? old)
@@ -394,8 +546,9 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
         Set(S.MechanicalSlot, CellValue.Of(s.MechanicalSemiDiameter ?? 0));
         Set(S.ConicSlot, CellValue.Of(s.Conic));
         Set(S.TceSlot, CellValue.Of(s.Tce));
-        for (int n = 1; n <= S.ParameterCount; n++)
-            Set(S.FirstParameterSlot + n - 1, CellValue.Of(SavedSurfaces.Parameter(s, n)));
+        for (int slot = S.FirstParameterSlot; slot < row.Cells.Count; slot++)
+            if (row.Cells[slot].Definition is { } d && SavedSurfaces.ParameterNumber(d.Key) is int n)
+                Set(slot, CellValue.Of(SavedSurfaces.Value(s, n)));
         // Set made every written cell Fixed; the semi-diameters' automatic flag is a value, not a
         // stored flag, so it is restored here (the other flags come in WriteFlags).
         if (s.SemiDiameter is null) Check(doc.SetFlag(index, S.SemiDiameterSlot + 1, S.Automatic));
@@ -403,6 +556,7 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
 
         void Prop(string key, string text)
         {
+            if (row.Type.FindProperty(key) is null) return;   // a coordinate break has no stop, aperture or tilt
             var result = doc.SetProperty(index, key, text);
             if (!result.Succeeded) notes.Add($"{where}: {result.Message}");
         }
@@ -432,6 +586,25 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
         Prop(S.ApertureDecenterXProperty, Num(ap.DecenterX));
         Prop(S.ApertureDecenterYProperty, Num(ap.DecenterY));
         Prop(S.VerticesProperty, FormatVertices(ap.Vertices));
+        var tb = s.TiltBefore ?? new OpticsTiltDecenterSettings();
+        Prop(S.BeforeDecenterXProperty, Num(tb.DecenterX));
+        Prop(S.BeforeDecenterYProperty, Num(tb.DecenterY));
+        Prop(S.BeforeTiltXProperty, Num(tb.TiltX));
+        Prop(S.BeforeTiltYProperty, Num(tb.TiltY));
+        Prop(S.BeforeTiltZProperty, Num(tb.TiltZ));
+        Prop(S.BeforeOrderProperty, OrderDisplay(tb.Order));
+        var ta = s.TiltAfter ?? new OpticsTiltDecenterSettings();
+        Prop(S.AfterModeProperty, ModeDisplay(ta.Mode));
+        Prop(S.AfterSurfaceProperty, ta.Surface.ToString(CultureInfo.InvariantCulture));
+        Prop(S.AfterDecenterXProperty, Num(ta.DecenterX));
+        Prop(S.AfterDecenterYProperty, Num(ta.DecenterY));
+        Prop(S.AfterTiltXProperty, Num(ta.TiltX));
+        Prop(S.AfterTiltYProperty, Num(ta.TiltY));
+        Prop(S.AfterTiltZProperty, Num(ta.TiltZ));
+        Prop(S.AfterOrderProperty, OrderDisplay(ta.Order));
+        var cr = s.CoordinateReturn ?? new OpticsCoordinateReturnSettings();
+        Prop(S.ReturnModeProperty, ReturnDisplay(cr.Mode));
+        Prop(S.ReturnSurfaceProperty, cr.Surface.ToString(CultureInfo.InvariantCulture));
         if (row.Tint != s.RowColor) doc.SetTint(index, s.RowColor is >= 0 ? s.RowColor : null);
     }
 

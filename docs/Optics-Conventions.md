@@ -561,8 +561,12 @@ single place in the code, so a correction is one line and its test.
     different media" read as a different material entry, MIRROR included; the object distance
     left out), Scale Lens leaving the system data unscaled, Convert to Maximum Apertures sizing
     one configuration, the inserted surface being Standard (the help says "OFF", an ignored
-    surface), and System Check's list of checks (the help does not list OpticStudio's). Check:
-    each tool on one small lens in both programs, compared with OpticStudio's prescription.
+    surface), and System Check's list of checks (the help does not list OpticStudio's). TC-6's
+    readings are not compared either: parameters 13 on saved as extra data, the maximum term
+    numbers of the Q-type and the Superconic, the units of the ABCD matrix, a type change
+    resetting the parameters, and pickups converted between columns of different units.
+    Check: each tool on one small lens in both programs, compared with OpticStudio's
+    prescription, and one lens of each surface type saved by OpticStudio and read back.
 
 17. **Polarization ray trace choices** (OP-51). Section 21's rules are derived or read from
     OpticStudio's help, but none is compared with its output. Check each with a coated singlet
@@ -834,7 +838,7 @@ Section 10, item 11, lists what is not yet compared with OpticStudio's output.
   `TiltBefore` (a `TiltDecenter`) and `TiltAfter` (a `SurfaceTiltAfter`: explicit values, this
   surface's "before" picked up or reversed, or a prior surface's "before" picked up or
   reversed). "Reversed" is `TiltDecenter.Reversed`: the other order, every value negated, which
-  undoes the original exactly. These fields are not saved in the project yet (OP-31).
+  undoes the original exactly. Saved lenses hold them (section 20, TC-6).
 - **Global frame.** Object space's axes, origin at surface 1's vertex before surface 1's own
   tilt and decenter. Rays are launched in it, and "global" in every result means it.
 - **Placement.** For j ≥ 1, with frame(0 → 1) the identity:
@@ -914,8 +918,7 @@ Section 10, item 11, lists what is not yet compared with OpticStudio's output.
   from the common centre being zero at every mirror (S1 = 0 per surface, and so S3 = 0 by the
   stop-shift relations); the higher-order coefficients are not derived, so the ratio is
   allowed 14 to 18.5.
-- **Not built:** saving the new surface fields (OP-31); editing them in the lens data editor;
-  pick-ups of break values and multi-configuration control; OpticStudio's solve-removal modes
+- **Not built:** multi-configuration control; OpticStudio's solve-removal modes
   and colours/comments options of the tools; hiding the trailing dummy; tilting the object
   surface; layouts drawing tilted surfaces; paraxial data, ray aiming and the launcher for
   non-axial systems.
@@ -1016,7 +1019,7 @@ scheme was not read; nothing is taken from it.
   OpticStudio's enhanced ray aiming, the ray-aiming cache switch and wizard, automatic pupil
   shifts, aiming to a decentered stop aperture's centre (the aim is the stop's vertex), real
   image height in afocal image space, and Set Vignetting and Replace Vignetting buttons in the
-  app (they are library functions until surfaces are saved, OP-31). Section 10, item 12 lists
+  app (they are library functions). Section 10, item 12 lists
   the checks against OpticStudio.
 
 ## 17. Aspheres
@@ -1185,7 +1188,8 @@ Formulas not on a page are derived in the class comments and in `IdealSurfaceTes
   Sinclair, NAO Technical Note 63, neither of which is on this machine; the Starlink PAL routine
   `palRefro`, saved in `plans/sources/optics/pal-refro/`, implements Hohenkerk and Sinclair with
   its own refractivity changes and is LGPL, so it was not ported without the owner's decision);
-  Paraxial OPD modes 0 and 1; saving these surfaces (OP-31).
+  Paraxial OPD modes 0 and 1. Saved lenses and the lens data editor hold these surfaces
+  (section 20), except the Lenslet Array, whose help page lists no parameters.
 
 ## 19. Solves
 
@@ -1243,8 +1247,9 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
 - **Semi-diameters.** The automatic solve sets the cell to automatic. The maximum solve writes
   the automatic value of the single configuration, because multiple configurations (OP-30) are
   not built.
-- **Parameters** are read through `IParameterizedShape`, which a surface shape implements to
-  join parameter pickups. **TCE** is `SequentialSurface.ThermalExpansion` (10⁻⁶/K), which is
+- **Parameters** are read through `IParameterizedShape` when a shape implements it, and
+  otherwise through the registry of saved surface types (`SurfaceTypes`, section 20): a
+  registered shape's parameter columns and a coordinate break's six values (TC-6). **TCE** is `SequentialSurface.ThermalExpansion` (10⁻⁶/K), which is
   data only.
 - **Re-application and the optimizer.** `Apply` is a pure function of the lens as entered, the
   system data and the solves. A solved cell is recomputed whatever it holds, so applying the
@@ -1259,11 +1264,10 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
   cell.
 - **Not built.**
   - The ZPL macro solve, which needs the macro interpreter (OP-99).
-  - The parameter chief ray solve, which needs coordinate breaks (OP-21). Its record exists, and
-    the engine reports it as not built.
+  - The parameter chief ray solve. Its record exists, the editor offers it on a coordinate
+    break's first four parameters, and the engine reports it as not built.
   - Extra data columns.
   - Solves on the non-sequential editor.
-  - The solve column in the lens data editor (OP-31).
   - Variables and the optimizer.
 
 ## 20. Lens data and saved surfaces
@@ -1271,7 +1275,8 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
 The sequential surfaces (OP-31) are saved in the optics record as `OpticsSettings.Surfaces`
 (`OpenSim.Core/Model/OpticsSurfaceSettings.cs`), a list from the object (surface 0) to the
 image. The project format version is unchanged (5); a file without the list is a system with
-no surfaces.
+no surfaces. TC-6 added surface types, tilts, coordinate breaks and solve evaluation as
+nullable fields and new readers, without a format change.
 
 - **Units and signs.** Lengths are in the system data's lens unit, as the editor shows them, so
   a typed value reloads digit for digit. Signs are section 3's. A plane is written without a
@@ -1283,17 +1288,87 @@ no surfaces.
   editor's material cell reads `N-BK7`, `MIRROR`, `1.5` and `1.6, 40` or `1.6, 40, 0.01`.
 - **Generic data.** The surface type is a name (null is Standard); its numeric data is a
   numbered parameter list (OpticStudio's Par columns) and an extra-data list; the per-cell
-  flags are kept as given: `Variable`, `Solve` with its code and parameters, `Pickup` with the
+  flags are kept as given: `Variable`, `Solve` with its name and parameters, `Pickup` with the
   source surface (0-based), source column, scale and offset. Column names are
   `SavedSurfaces`' (`Radius`, `Thickness`, `Material`, `SemiDiameter`, `Conic`, `Par3`, …).
-  Solves and pickups are stored, never evaluated here (OP-29): the value in the cell is traced.
+- **Surface types** (`OpenSim.Optics/Sequential/SurfaceTypes.cs`). A registry gives each type
+  its OpticStudio parameter columns: number, name, unit as a power of length (a value v in lens
+  units is v·u^p in SI, u meters per lens unit), integer columns and their ranges. Each layout
+  is copied from the type's OpticStudio 2025 R2 help page, cited on the layout: Even Asphere,
+  Odd Asphere, Alternate Even, Alternate Odd, Extended Asphere, Extended Odd Asphere, Q-Type
+  Asphere, Superconic, Periodic (`plans/sources/optics/aspheres/`); Fresnel, Extended Fresnel,
+  Cylinder Fresnel, Generalized Fresnel, ABCD, Conjugate, Paraxial, Paraxial XY, Retro Reflect
+  (`plans/sources/optics/ansyshelp-op27/`); Coordinate Break (`plans/sources/optics/tc6-coordbreak/`).
+  The registry builds the shape from SI parameters and reads them back exactly. Readings:
+  - Parameters 13 and above are saved in the extra-data list with the same number. The help
+    pages number these columns as parameters and call them extra data.
+  - A "maximum term number" N uses the first N coefficients and ignores the rest ("terms
+    beyond this number are ignored", Extended Asphere). Q-Type: A0 … A(N − 1). Superconic: a
+    term is one U or one V value, so N = 3 is U1, V1, U2. A shape read back writes N as the
+    number of coefficients it holds.
+  - Units: an Even Asphere's αᵢ on r²ⁱ is in lens units^(1 − 2i), an Odd Asphere's βᵢ in
+    lens units^(1 − i), a Superconic's Uᵢ in lens units^(−2i) and Vᵢ in lens units^(−2i − 1),
+    Periodic α and β and Paraxial XY powers in inverse lens units, ABCD B in lens units and C
+    in inverse lens units, the Fresnel curvatures in inverse lens units, normalization radii
+    and the Extended, Q-type and Generalized Fresnel coefficients in lens units.
+  - Paraxial, Paraxial XY, ABCD, Retro Reflect, Conjugate and the coordinate break have no
+    radius or conic; a value there is refused rather than ignored.
+  - Paraxial OPD mode 2 is infinite conjugates and mode 3 takes its conjugates from the solved
+    lens (`ParaxialShape.ResolveConjugates`, run by `ProjectLens`); modes 0 and 1 are refused.
+  - Coordinate break order: 0 is decenter then tilt; any other value tilt then decenter
+    ("any other value (such as unity)"), written back as 1.
+  A type that is not registered is saved and shown by parameter number and refused when the
+  lens is converted, naming the surface and the type.
+- **Tilts and returns.** `TiltBefore` and `TiltAfter` (`OpticsTiltDecenterSettings`: decenters
+  in lens units, tilts in degrees, order `DecenterThenTilt` or `TiltThenDecenter`; the after
+  record's `Mode` is `Explicit`, `PickUpThisSurface`, `ReverseThisSurface`, `PickUpSurface` or
+  `ReverseSurface`, with `Surface` for the last two) follow OpticStudio's Surface Properties ›
+  Tilt/Decenter page and map onto `SequentialSurface.TiltBefore` and `TiltAfter` (section 15).
+  A coordinate break's `CoordinateReturn` (`None`, `OrientationOnly`, `OrientationXY`,
+  `OrientationXYZ`, and the prior surface) becomes `CoordinateBreak.Return` and
+  `ReturnToSurface`, with the entered values kept, so orientation only keeps the break's
+  decenters.
 - **Conversion** (`OpenSim.Optics/Sequential/SavedSurfaces.cs`). `ToLens` gives the
   `SequentialLens` in meters (radius × meters per lens unit, curvature by
-  `OpticsConventions.CurvatureFromRadius`). Only the Standard surface converts in this build; a
-  lens holding another type is refused with every problem named, one line per surface, never
-  traced as something else. A Standard surface with a non-zero parameter is refused too.
-  `FromLens` writes a lens built in code back. The analyses read the project's lens through
-  `ProjectLens` (System data and paraxial rays, Single ray trace, Paraxial Gaussian beam).
+  `OpticsConventions.CurvatureFromRadius`, each parameter by its column's power), with every
+  problem named, one line per surface, never traced as something else: a parameter the type
+  does not have, a value the shape refuses, a radius on a type without one, a material on a
+  coordinate break, an unknown tilt order or mode. `FromLens` writes a lens built in code
+  back; a shape whose type is not registered is refused. In meters every factor is 1, so a
+  lens round-trips bit for bit (`SavedSurfaceTypesTests`).
+- **Solves** (`SavedSolves.cs`, `Analysis/ProjectLens.cs`). `ProjectLens.Solve` converts the
+  saved lens, translates the flags into section 19's `SurfaceSolve` records, and runs
+  `SolveEngine.Apply` with the project's system data and active catalogs. The analyses read the
+  solved lens through `ProjectLens`; a failing solve throws an `ArgumentException` whose lines
+  name the surface, the cell and the solve. A lens without flags is converted as before,
+  without reading the system data.
+  - Solve names are the editor's, which are OpticStudio's "Summary of Solves" names, with
+    that table's parameters in lens units: heights, edge thicknesses, radial heights,
+    lengths and sums × u; element power ÷ u; angles, F/#, pupil zones and waves as they are;
+    surface numbers must be whole.
+  - Columns map to `SolveColumn`: Radius → curvature, Thickness, Material, SemiDiameter,
+    Conic, Tce, and `Par n` → parameter n for n ≤ 12 (OpticStudio's pickup column codes reach
+    "Parameter 0 through 12"). Parameter pickups read and write shape parameters through the
+    registry, and a coordinate break's six values (decenters in meters, tilts in degrees).
+  - A pickup T = O + S·V given in lens units becomes O·f_t + (S·f_t/f_s)·V in SI, f_t and f_s
+    the SI factors of the target and source columns (a parameter's from its type). A
+    curvature picks up a curvature with the scale unchanged.
+  - Kept, not evaluated: variables (the optimizer is not built); the semi-diameters'
+    "Automatic", which stays the sizing of section 13; chip-zone and mechanical
+    semi-diameter pickups, which have no column in OpticStudio's Summary of Solves (System
+    Check warns).
+  - Refused, naming the cell: an unknown solve name or flag kind, a pickup from a surface that
+    does not exist or from a column a pickup cannot read, a solve or pickup on extra data, and
+    the parameter chief ray solve (not built).
+- **Editor** (`OpticsLensEditorViewModel`, `OpticsLensEditorSchema`). Every registered type is
+  a row type with its parameters after the shared columns, named from the help page and
+  explained (with the unit) in the tooltip; the first 32 are shown and the rest kept. A
+  coordinate break has comment, thickness and its six parameters; its flyout has the
+  coordinate return. Other types' flyouts have the tilt and decenter before and after. After
+  every edit the editor shows each solved value in its cell (no undo step) and puts a failing
+  solve's message on its cell (badge "!", tooltip); the lens check lists the failures.
+  Changing a row's type keeps the shared columns and resets the parameters: this program's
+  reading, since OpticStudio's "Type (surface properties)" page does not say.
 - **Editing tools** (`OpenSim.Optics/Sequential/LensEditing/`), each read from OpticStudio
   2025 R2's help (the files are in `plans/sources/optics/ansyshelp-op31/`):
   - *Reverse Elements* (first to last surface): surface first + i becomes old surface last − i
@@ -1301,17 +1376,23 @@ no surfaces.
     last − 1 − i, and after the new last surface those after the old last, so the gaps before
     and after the group stay. Solves and pickups on the reversed radius, thickness and material
     cells are removed (the help: solves on affected data are removed); variables move with
-    their values. Mirrors and other surface types in the group are refused.
+    their values. Mirrors, surface tilts and every type but Standard in the group are refused
+    by name.
   - *Scale Lens* (factor, first to last surface): lengths × factor (radius, finite thickness,
-    semi-diameters, chip zone, aperture sizes and decenters, pickup offsets on length cells);
-    not the conic, TCE, wavelengths, solve parameters or the system data. Other surface types
-    are refused. *Make Focal* scales every surface by target / current paraxial effective
-    focal length at the primary wavelength; a sign change and an afocal lens are refused.
+    semi-diameters, chip zone, aperture sizes and decenters, tilt decenters), each parameter of
+    a registered type × factor^p of its column ("Scale Lens": units that change from term to
+    term are accounted for), and pickup offsets by the target column's unit; not the conic,
+    TCE, tilts, integer parameters, wavelengths, solve parameters or the system data. A type
+    that is not registered is refused by name. The lens-unit change converts the same way and
+    leaves an unregistered type's parameters with a note. *Make Focal* scales every surface by
+    target / current paraxial effective focal length at the primary wavelength; a sign change
+    and an afocal lens are refused.
   - *Make Double Pass* (reflect at surface k): k becomes a mirror with thickness −t(k−1); copies
     of surfaces k−1 … 1 follow with the same radius and conic, thickness −t(j−1) and the
     material that was before surface j, picking radius, conic and thickness (scale −1) up from
     the originals; the image follows at −t0, on the object surface; with the object at
-    infinity it is placed at thickness 0. All solves are removed. A mirror before k is refused.
+    infinity it is placed at thickness 0. All solves are removed. A mirror before k, a surface
+    tilt, or a type but Standard is refused.
   - *Remove All Apertures*; *Convert Semi-Diameters to Circular / Floating / Maximum
     Apertures* on surfaces 1 to the image without an aperture (circular: a fixed semi-diameter
     and a circular aperture of that radius, also on a floating aperture with a picked-up
@@ -1320,15 +1401,20 @@ no surfaces.
   - *Remove All Variables* (variables only); *Set All Radii Variable* (Standard, curved, the
     material differs from the one before); *Set All Thickness Variable* (surfaces 1 to the last,
     finite and non-zero). Cells with a solve or pickup are left.
-  - *System Check*: errors (system data, conversion) and warnings (unknown coating, stored
-    solves, pickups that do not hold their value, glasses not covering a wavelength, chief and
-    marginal rays that fail). *File Comparator*: every field of the system data and of each
-    surface, by default only where they differ.
-- **Not built.** Evaluating solves and pickups (OP-29), surface types other than Standard
-  (OP-21, OP-23, OP-27), tilts and decenters (OP-21), configurations (OP-30), Create Error Ray
-  (non-sequential sources), the surface properties' scattering, physical optics and import
-  tabs, coating layer multipliers on a surface, and the drawing options (hide rays, do not
-  draw) in the layouts. Section 10, item 16, lists what is to compare with OpticStudio.
+  - *System Check*: errors (system data, conversion, solves that fail or cannot be evaluated)
+    and warnings (unknown coating, pickups kept but not evaluated, a pickup from a surface
+    that does not exist, glasses not covering a wavelength, chief and marginal rays that
+    fail). *File Comparator*: every field of the system data and of each surface, by default
+    only where they differ.
+- **Not built.** Odd Cosine (its help page lists parameters 31–54 as "the A, P, B, and C
+  terms" without their order) and Lenslet Array (a user-defined DLL whose parameters the page
+  does not list) are not registered; Paraxial OPD modes 0 and 1; solves and pickups on extra
+  data, the parameter chief ray solve, chip-zone and mechanical semi-diameter pickups;
+  Reverse Elements and Make Double Pass on other types and tilted surfaces; the optimizer that
+  would use variables; configurations (OP-30); Create Error Ray (non-sequential sources); the
+  surface properties' scattering, physical optics and import tabs; coating layer multipliers on
+  a surface; and the drawing options (hide rays, do not draw) in the layouts. Section 10,
+  item 16, lists what is to compare with OpticStudio.
 
 ## 21. Polarization ray trace
 

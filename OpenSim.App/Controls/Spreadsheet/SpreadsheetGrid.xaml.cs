@@ -496,7 +496,8 @@ public partial class SpreadsheetGrid : UserControl
             if (!row.IsAttached || type.SelectedItem is not SheetRowType chosen || ReferenceEquals(chosen, row.Type)) return;
             var result = doc.SetRowType(row.Index, chosen);
             Report(result);
-            ShowError(RowError, result.Succeeded ? null : result.Message);
+            if (result.Succeeded) BuildRowForm(row);   // the new type's properties
+            else ShowError(RowError, result.Message);
         };
         AddField(RowForm, doc.Schema.TypeHeader, type);
 

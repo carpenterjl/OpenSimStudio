@@ -52,14 +52,22 @@ public sealed class SheetCell : INotifyPropertyChanged
     /// <summary>The value as edited and copied (exact round trip).</summary>
     public string EditText => Definition is null ? "" : CellText.Format(Definition, Value);
 
-    /// <summary>The flag's mark beside the value: V, P, a solve's badge, or nothing.</summary>
-    public string Badge => Flag.Kind switch
+    /// <summary>A note the owning editor attaches to the cell (a solve's failure, TC-6), shown
+    /// in the tooltip; null for none. Not part of the content: no undo step, not copied.</summary>
+    public string? Note { get; private set; }
+
+    /// <summary>True when <see cref="Note"/> reports a failure; the badge then ends in "!".</summary>
+    public bool NoteIsError { get; private set; }
+
+    /// <summary>The flag's mark beside the value: V, P, a solve's badge, or nothing; followed by
+    /// "!" when an error note is attached.</summary>
+    public string Badge => (Flag.Kind switch
     {
         CellFlagKind.Variable => "V",
         CellFlagKind.Pickup => "P",
         CellFlagKind.Solve => Definition?.FindSolveCode(Flag.SolveCode)?.Badge ?? "S",
         _ => "",
-    };
+    }) + (NoteIsError ? "!" : "");
 
     /// <summary>The tooltip: what the column is, then what decides the value.</summary>
     public string? ToolTip
@@ -76,7 +84,8 @@ public sealed class SheetCell : INotifyPropertyChanged
             };
             string? head = Definition.ToolTip;
             if (Definition.IsReadOnly) head = head is null ? "Computed." : head + " Computed.";
-            return head is null ? flag : flag is null ? head : head + "\n" + flag;
+            string? text = head is null ? flag : flag is null ? head : head + "\n" + flag;
+            return Note is null ? text : text is null ? Note : text + "\n" + Note;
         }
     }
 
@@ -91,6 +100,14 @@ public sealed class SheetCell : INotifyPropertyChanged
     }
 
     internal void Raise() => PropertyChanged?.Invoke(this, AllChanged);
+
+    internal void SetNote(string? note, bool isError)
+    {
+        if (Note == note && NoteIsError == (note is not null && isError)) return;
+        Note = note;
+        NoteIsError = note is not null && isError;
+        Raise();
+    }
 
     private string SolveText()
     {

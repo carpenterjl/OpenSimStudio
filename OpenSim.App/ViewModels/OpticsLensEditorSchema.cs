@@ -7,29 +7,37 @@ namespace OpenSim.App.ViewModels;
 /// The Lens Data Editor's sheet (OP-31) on OP-10's spreadsheet control: the columns of
 /// OpticStudio's editor (comment, radius, thickness, material, coating, clear semi-diameter,
 /// chip zone, mechanical semi-diameter, conic, TCE, then the parameter columns) and the
-/// properties flyout (stop, ignore, aperture, tilt/decenter placeholder, drawing flags).
+/// properties flyout (stop, ignore, aperture, tilt/decenter before and after, drawing flags).
 /// Column keys are <see cref="SavedSurfaces"/>' saved column names, so a flag in the sheet and
 /// a flag in the file name the same cell.
 /// <para>
 /// The solve codes offered are OpticStudio's names from its "Summary of Solves" table
 /// (OpticStudio 2025 R2 help, Lens Data Editor › Solve Types › Summary of Solves,
 /// plans/sources/optics/solves/Summary_of_Solves.html), with their parameter names and code
-/// letters as badges; ZPL macro solves are left out. The editor stores them and does not
-/// evaluate them (OP-29 builds the solve engine). The clear and mechanical semi-diameters start
-/// as the "Automatic" solve, as in OpticStudio; its badge "A" is this program's (OpticStudio
-/// shows none, and "U" on a fixed value).
+/// letters as badges; ZPL macro solves are left out. <see cref="SavedSolves"/> evaluates them
+/// (TC-6). The clear and mechanical semi-diameters start as the "Automatic" solve, as in
+/// OpticStudio; its badge "A" is this program's (OpticStudio shows none, and "U" on a fixed
+/// value).
 /// </para>
 /// <para>
-/// Only the Standard surface can be chosen. A surface of another type read from a file gets a
-/// row type of its own name with generic "Par n" columns (<see cref="Build"/>), so it is shown,
-/// edited and saved without being understood; OP-23, OP-27 and OP-21 add their types' own
-/// columns.
+/// Row types (TC-6): Standard; one for each registered surface type of
+/// <see cref="SurfaceTypes"/>, whose parameter columns follow the shared columns in the type's
+/// own order, named from its help page, with the unit in the tooltip; and a generic row type
+/// with "Par n" columns for a type read from a file that is not registered, so it is shown,
+/// edited and saved without being understood. A type's parameters past the last slot
+/// (<see cref="ParameterSlots"/>) are kept with the row and written back, not shown. Parameter
+/// columns reset when the row's type changes (<see cref="SheetColumn.ResetOnRetype"/>), the
+/// shared columns carry over: this program's reading, since OpticStudio's "Type (surface
+/// properties)" page does not say what a type change keeps.
 /// </para>
 /// </summary>
 public static class OpticsLensEditorSchema
 {
-    /// <summary>The number of parameter columns ("Par 1" …).</summary>
-    public const int ParameterCount = 16;
+    /// <summary>The number of parameter slots after the shared columns.</summary>
+    public const int ParameterSlots = 32;
+
+    /// <summary>The number of "Par n" columns of the generic row type.</summary>
+    public const int ParameterCount = ParameterSlots;
 
     /// <summary>The slot of each fixed column.</summary>
     public const int CommentSlot = 0, RadiusSlot = 1, ThicknessSlot = 2, MaterialSlot = 3, CoatingSlot = 4,
@@ -49,17 +57,50 @@ public static class OpticsLensEditorSchema
     public const string ApertureDecenterXProperty = "ApertureDecenterX";
     public const string ApertureDecenterYProperty = "ApertureDecenterY";
     public const string VerticesProperty = "Vertices";
-    public const string TiltProperty = "TiltDecenter";
     public const string SkipRaysProperty = "SkipRaysTo";
     public const string HideRaysProperty = "HideRaysTo";
     public const string DoNotDrawProperty = "DoNotDraw";
 
+    // Tilt/decenter before and after (OpticStudio's Surface Properties › Tilt/Decenter).
+    public const string BeforeDecenterXProperty = "BeforeDecenterX";
+    public const string BeforeDecenterYProperty = "BeforeDecenterY";
+    public const string BeforeTiltXProperty = "BeforeTiltX";
+    public const string BeforeTiltYProperty = "BeforeTiltY";
+    public const string BeforeTiltZProperty = "BeforeTiltZ";
+    public const string BeforeOrderProperty = "BeforeOrder";
+    public const string AfterModeProperty = "AfterMode";
+    public const string AfterSurfaceProperty = "AfterSurface";
+    public const string AfterDecenterXProperty = "AfterDecenterX";
+    public const string AfterDecenterYProperty = "AfterDecenterY";
+    public const string AfterTiltXProperty = "AfterTiltX";
+    public const string AfterTiltYProperty = "AfterTiltY";
+    public const string AfterTiltZProperty = "AfterTiltZ";
+    public const string AfterOrderProperty = "AfterOrder";
+
+    // A coordinate break's Coordinate Return.
+    public const string ReturnModeProperty = "CoordinateReturn";
+    public const string ReturnSurfaceProperty = "ReturnToSurface";
+
     public const string Yes = "Yes", No = "No", NoAperture = "None";
+
+    /// <summary>The order choices, as the Tilt/Decenter page words them.</summary>
+    public const string DecenterThenTilt = "Decenter then tilt", TiltThenDecenter = "Tilt then decenter";
+
+    /// <summary>The after-surface choices, the page's options a) to e).</summary>
+    public const string AfterExplicit = "Explicit", AfterPickUpThis = "Pick up this surface", AfterReverseThis = "Reverse this surface",
+        AfterPickUp = "Pick up surface", AfterReverse = "Reverse surface";
+
+    /// <summary>The coordinate return choices, the Tilt/Decenter page's names.</summary>
+    public const string ReturnNone = "None", ReturnOrientation = "Orientation Only", ReturnXY = "Orientation XY", ReturnXYZ = "Orientation XYZ";
+
+    public static IReadOnlyList<string> OrderChoices { get; } = new[] { DecenterThenTilt, TiltThenDecenter };
+    public static IReadOnlyList<string> AfterChoices { get; } = new[] { AfterExplicit, AfterPickUpThis, AfterReverseThis, AfterPickUp, AfterReverse };
+    public static IReadOnlyList<string> ReturnChoices { get; } = new[] { ReturnNone, ReturnOrientation, ReturnXY, ReturnXYZ };
 
     /// <summary>The aperture choices of the flyout, "None" first, then the saved names.</summary>
     public static IReadOnlyList<string> ApertureChoices { get; } = new[] { NoAperture }.Concat(SavedSurfaces.ApertureTypes).ToArray();
 
-    public const string AutomaticSolve = "Automatic";
+    public const string AutomaticSolve = SavedSolves.Automatic;
 
     /// <summary>The flag a clear or mechanical semi-diameter starts with.</summary>
     public static CellFlag Automatic { get; } = CellFlag.Solve(AutomaticSolve);
@@ -100,30 +141,34 @@ public static class OpticsLensEditorSchema
     private static readonly SheetSolveCode[] SemiDiameterSolves =
     {
         Solve(AutomaticSolve, "A"),
-        Solve(OpenSim.Optics.Sequential.LensEditing.ApertureTools.MaximumSolve, "M"),
+        Solve(SavedSolves.Maximum, "M"),
     };
 
     private static readonly SheetSolveCode[] MechanicalSolves = { Solve(AutomaticSolve, "A") };
 
-    // Summary of Solves: parameter solves.
-    private static readonly SheetSolveCode[] ParameterSolves = { Solve("Chief ray", "C", "Field", "Wavelength") };
+    // Summary of Solves: parameter solves. "The Chief Ray solve works only on coordinate break
+    // surfaces, and only on the first four parameters" ("Parameter Solves").
+    private static readonly SheetSolveCode[] ChiefRaySolves = { Solve("Chief ray", "C", "Field", "Wavelength") };
 
     private static SheetColumn Length(string key, string header) => new(key, header) { NumberFormat = "G8" };
 
-    /// <summary>The columns every surface type shares, slots 0 to 9.</summary>
-    private static SheetColumn?[] CommonColumns() => new SheetColumn?[]
+    private static SheetColumn ThicknessColumn() => Length(SavedSurfaces.ThicknessColumn, "Thickness") with
+    {
+        AllowsInfinity = true, Flags = CellFlagSupport.All, SolveCodes = ThicknessSolves,
+        ToolTip = "Distance to the next vertex in lens units; negative after an odd number of mirrors. Infinity only on the object."
+    };
+
+    /// <summary>The columns every surface type shares, slots 0 to 9; a type that ignores the
+    /// radius and conic has no cell for them.</summary>
+    private static SheetColumn?[] CommonColumns(bool radiusAndConic = true) => new SheetColumn?[]
     {
         new(SavedSurfaces.CommentColumn, "Comment") { Kind = CellKind.Text },
-        Length(SavedSurfaces.RadiusColumn, "Radius") with
+        radiusAndConic ? Length(SavedSurfaces.RadiusColumn, "Radius") with
         {
             AllowsInfinity = true, Default = CellValue.Of(double.PositiveInfinity), Flags = CellFlagSupport.All, SolveCodes = RadiusSolves,
             ToolTip = "Vertex radius in lens units; positive when the centre of curvature is toward +z. Infinity is a plane."
-        },
-        Length(SavedSurfaces.ThicknessColumn, "Thickness") with
-        {
-            AllowsInfinity = true, Flags = CellFlagSupport.All, SolveCodes = ThicknessSolves,
-            ToolTip = "Distance to the next vertex in lens units; negative after an odd number of mirrors. Infinity only on the object."
-        },
+        } : null,
+        ThicknessColumn(),
         new(SavedSurfaces.MaterialColumn, "Material")
         {
             Kind = CellKind.Text, Flags = CellFlagSupport.Pickup,
@@ -135,28 +180,58 @@ public static class OpticsLensEditorSchema
             Minimum = 0, Flags = CellFlagSupport.Solve | CellFlagSupport.Pickup, SolveCodes = SemiDiameterSolves, DefaultFlag = Automatic,
             ToolTip = "Clear semi-diameter in lens units. A: automatic (sized from the rays); typing a value fixes it."
         },
-        Length(SavedSurfaces.ChipZoneColumn, "Chip Zone") with { Minimum = 0, Flags = CellFlagSupport.Pickup },
+        Length(SavedSurfaces.ChipZoneColumn, "Chip Zone") with { Minimum = 0, Flags = CellFlagSupport.Pickup, ToolTip = "Chip zone in lens units. A pickup here is stored but not evaluated (OpticStudio's Summary of Solves has no solve for this column)." },
         Length(SavedSurfaces.MechanicalSemiDiameterColumn, "Mech Semi-Dia") with
         {
             Minimum = 0, Flags = CellFlagSupport.Solve | CellFlagSupport.Pickup, SolveCodes = MechanicalSolves, DefaultFlag = Automatic,
-            ToolTip = "Mechanical semi-diameter in lens units. A: automatic (the clear one plus the chip zone)."
+            ToolTip = "Mechanical semi-diameter in lens units. A: automatic (the clear one plus the chip zone). A pickup here is stored but not evaluated."
         },
-        new(SavedSurfaces.ConicColumn, "Conic") { Flags = CellFlagSupport.Variable | CellFlagSupport.Pickup },
+        radiusAndConic ? new(SavedSurfaces.ConicColumn, "Conic") { Flags = CellFlagSupport.Variable | CellFlagSupport.Pickup } : null,
         new(SavedSurfaces.TceColumn, "TCE x 1E-6") { Flags = CellFlagSupport.Variable | CellFlagSupport.Pickup, ToolTip = "Thermal coefficient of expansion; kept for thermal analysis, which is not built." },
     };
 
-    private static SheetColumn ParameterColumn(int number) =>
+    /// <summary>A generic "Par n" column of a type that is not registered.</summary>
+    private static SheetColumn GenericParameterColumn(int number) =>
         new(SavedSurfaces.ParameterColumn(number), $"Par {number}")
         {
-            Flags = CellFlagSupport.Variable | CellFlagSupport.Solve | CellFlagSupport.Pickup, SolveCodes = ParameterSolves
+            Flags = number < SurfaceTypes.FirstExtraData ? CellFlagSupport.Variable | CellFlagSupport.Pickup : CellFlagSupport.Variable,
+            ResetOnRetype = true,
         };
+
+    /// <summary>A registered type's parameter column: named and explained from its help page,
+    /// in lens units scaled by the column's power (<see cref="SurfaceParameterInfo.UnitText"/>).
+    /// Parameters 1–12 take variables and pickups; extra data (13 on) variables only, since
+    /// OpticStudio's pickup columns reach parameter 12; integer columns take no flag.</summary>
+    private static SheetColumn ParameterColumn(SurfaceTypeLayout layout, SurfaceParameterInfo p)
+    {
+        bool chiefRay = layout.IsCoordinateBreak && p.Number <= 4;
+        return new(SavedSurfaces.ParameterColumn(p.Number), p.Name)
+        {
+            Kind = p.IsInteger ? CellKind.Integer : CellKind.Number,
+            Minimum = p.Range?.Min,
+            Maximum = p.Range?.Max,
+            Flags = p.IsInteger ? CellFlagSupport.None
+                : p.IsExtraData ? CellFlagSupport.Variable
+                : CellFlagSupport.Variable | CellFlagSupport.Pickup | (chiefRay ? CellFlagSupport.Solve : CellFlagSupport.None),
+            SolveCodes = chiefRay ? ChiefRaySolves : Array.Empty<SheetSolveCode>(),
+            ResetOnRetype = true,
+            ToolTip = $"{layout.Name}, parameter {p.Number}: {p.Description ?? p.Name} ({p.UnitText}).",
+        };
+    }
 
     private static SheetColumn YesNoProperty(string key, string header, string? tip = null) =>
         new(key, header) { Kind = CellKind.Choice, Choices = YesNo, ToolTip = tip };
 
-    private static SheetColumn LengthProperty(string key, string header) => new(key, header) { NumberFormat = "G8" };
+    private static SheetColumn LengthProperty(string key, string header, string? tip = null) => new(key, header) { NumberFormat = "G8", ToolTip = tip };
 
-    /// <summary>The properties flyout, the same for every type.</summary>
+    private static SheetColumn DrawProperty(string key) => key switch
+    {
+        SkipRaysProperty => YesNoProperty(SkipRaysProperty, "Skip rays to this surface", "Layouts draw rays past this surface; the trace is unchanged."),
+        HideRaysProperty => YesNoProperty(HideRaysProperty, "Hide rays to this surface", "Kept for the layouts; not drawn differently yet."),
+        _ => YesNoProperty(DoNotDrawProperty, "Do not draw this surface", "Kept for the layouts; not drawn differently yet."),
+    };
+
+    /// <summary>The properties flyout of every type but the coordinate break.</summary>
     private static IReadOnlyList<SheetColumn> Properties() => new[]
     {
         YesNoProperty(StopProperty, "Make surface stop", "The aperture stop; exactly one surface between the object and the image is."),
@@ -172,10 +247,42 @@ public static class OpticsLensEditorSchema
         LengthProperty(ApertureDecenterXProperty, "Aperture x-decenter"),
         LengthProperty(ApertureDecenterYProperty, "Aperture y-decenter"),
         new SheetColumn(VerticesProperty, "User-defined vertices") { Kind = CellKind.Text, ToolTip = "x y pairs in lens units separated by semicolons: 0 0; 1 0; 0 1" },
-        new SheetColumn(TiltProperty, "Tilt/decenter") { Kind = CellKind.Choice, Choices = new[] { "None (not built, OP-21)" } },
-        YesNoProperty(SkipRaysProperty, "Skip rays to this surface", "Layouts draw rays past this surface; the trace is unchanged."),
-        YesNoProperty(HideRaysProperty, "Hide rays to this surface", "Kept for the layouts; not drawn differently yet."),
-        YesNoProperty(DoNotDrawProperty, "Do not draw this surface", "Kept for the layouts; not drawn differently yet."),
+        // Tilt/Decenter (OpticStudio 2025 R2 help, Surface Properties › Tilt/Decenter).
+        LengthProperty(BeforeDecenterXProperty, "Before: decenter X", "Lens units, applied before the surface."),
+        LengthProperty(BeforeDecenterYProperty, "Before: decenter Y", "Lens units, applied before the surface."),
+        LengthProperty(BeforeTiltXProperty, "Before: tilt X", "Degrees, right-handed about +x."),
+        LengthProperty(BeforeTiltYProperty, "Before: tilt Y", "Degrees, right-handed about the new +y."),
+        LengthProperty(BeforeTiltZProperty, "Before: tilt Z", "Degrees, right-handed about the new +z."),
+        new SheetColumn(BeforeOrderProperty, "Before: order") { Kind = CellKind.Choice, Choices = OrderChoices },
+        new SheetColumn(AfterModeProperty, "After: values")
+        {
+            Kind = CellKind.Choice, Choices = AfterChoices,
+            ToolTip = "Explicit values below; this surface's before values picked up or reversed; or a prior surface's before values picked up or reversed."
+        },
+        new SheetColumn(AfterSurfaceProperty, "After: prior surface") { Kind = CellKind.Integer, Minimum = 0, ToolTip = "The prior surface whose before values are picked up or reversed." },
+        LengthProperty(AfterDecenterXProperty, "After: decenter X", "Lens units, applied after the surface (explicit values)."),
+        LengthProperty(AfterDecenterYProperty, "After: decenter Y", "Lens units, applied after the surface (explicit values)."),
+        LengthProperty(AfterTiltXProperty, "After: tilt X", "Degrees (explicit values)."),
+        LengthProperty(AfterTiltYProperty, "After: tilt Y", "Degrees (explicit values)."),
+        LengthProperty(AfterTiltZProperty, "After: tilt Z", "Degrees (explicit values)."),
+        new SheetColumn(AfterOrderProperty, "After: order") { Kind = CellKind.Choice, Choices = OrderChoices },
+        DrawProperty(SkipRaysProperty),
+        DrawProperty(HideRaysProperty),
+        DrawProperty(DoNotDrawProperty),
+    };
+
+    /// <summary>The coordinate break's flyout: its Coordinate Return and the drawing flags.</summary>
+    private static IReadOnlyList<SheetColumn> BreakProperties() => new[]
+    {
+        new SheetColumn(ReturnModeProperty, "Coordinate return")
+        {
+            Kind = CellKind.Choice, Choices = ReturnChoices,
+            ToolTip = "Solve the break's tilts (and decenters, and thickness) so the coordinate system returns to that of the prior surface below."
+        },
+        new SheetColumn(ReturnSurfaceProperty, "Return to surface") { Kind = CellKind.Integer, Minimum = 0 },
+        DrawProperty(SkipRaysProperty),
+        DrawProperty(HideRaysProperty),
+        DrawProperty(DoNotDrawProperty),
     };
 
     /// <summary>The Standard surface's row type.</summary>
@@ -186,26 +293,52 @@ public static class OpticsLensEditorSchema
             Properties = properties,
         };
 
-    /// <summary>A row type for a surface type this build does not trace: the common columns and
+    /// <summary>A registered type's row: the shared columns (without radius and conic where
+    /// the type ignores them; comment and thickness only for a coordinate break), then its
+    /// parameters in number order, the first <see cref="ParameterSlots"/> of them.</summary>
+    public static SheetRowType Registered(SurfaceTypeLayout layout, IReadOnlyList<SheetColumn> properties, IReadOnlyList<SheetColumn> breakProperties)
+    {
+        SheetColumn?[] common;
+        if (layout.IsCoordinateBreak)
+        {
+            common = new SheetColumn?[FirstParameterSlot];
+            common[CommentSlot] = new(SavedSurfaces.CommentColumn, "Comment") { Kind = CellKind.Text };
+            common[ThicknessSlot] = ThicknessColumn() with { ToolTip = "Distance to the next vertex along the new z, lens units, applied after the break's decenters and tilts." };
+        }
+        else common = CommonColumns(layout.UsesRadiusAndConic);
+        var shown = layout.Parameters.Take(ParameterSlots).ToArray();
+        string more = layout.Parameters.Count > ParameterSlots
+            ? $" The sheet shows parameters {shown[0].Number} to {shown[^1].Number}; further ones are kept and saved."
+            : "";
+        return new SheetRowType(layout.Name, common.Concat(shown.Select(p => ParameterColumn(layout, p))).ToArray())
+        {
+            Description = $"OpticStudio's {layout.Name} surface; parameters from {layout.Source}.{more}",
+            Properties = layout.IsCoordinateBreak ? breakProperties : properties,
+        };
+    }
+
+    /// <summary>A row type for a surface type that is not registered: the shared columns and
     /// every parameter column, shown by number.</summary>
     public static SheetRowType Generic(string name, IReadOnlyList<SheetColumn> properties) =>
-        new(name, CommonColumns().Concat(Enumerable.Range(1, ParameterCount).Select(ParameterColumn)).ToArray())
+        new(name, CommonColumns().Concat(Enumerable.Range(1, ParameterCount).Select(GenericParameterColumn)).ToArray())
         {
             Description = $"'{name}' is saved with the lens; this build shows its parameters by number and does not trace it.",
             Properties = properties,
         };
 
-    /// <summary>The schema: Standard first (the type new rows get), then a generic row type for
-    /// each other type name.</summary>
+    /// <summary>The schema: Standard first (the type new rows get), the registered types, then a
+    /// generic row type for each other type name.</summary>
     public static SheetSchema Build(IEnumerable<string> otherTypes)
     {
         var properties = Properties();
+        var breakProperties = BreakProperties();
         var types = new List<SheetRowType> { Standard(properties) };
-        foreach (var name in otherTypes.Where(n => !string.Equals(n, SavedSurfaces.StandardType, StringComparison.OrdinalIgnoreCase))
+        types.AddRange(SurfaceTypes.All.Select(l => Registered(l, properties, breakProperties)));
+        foreach (var name in otherTypes.Where(n => !string.Equals(n, SavedSurfaces.StandardType, StringComparison.OrdinalIgnoreCase) && SurfaceTypes.Find(n) is null)
                      .Distinct(StringComparer.OrdinalIgnoreCase))
             types.Add(Generic(name, properties));
         var slotHeaders = new[] { "Comment", "Radius", "Thickness", "Material", "Coating", "Clear Semi-Dia", "Chip Zone", "Mech Semi-Dia", "Conic", "TCE x 1E-6" }
-            .Concat(Enumerable.Range(1, ParameterCount).Select(n => $"Par {n}")).ToArray();
+            .Concat(Enumerable.Range(1, ParameterSlots).Select(n => $"Par {n}")).ToArray();
         return new SheetSchema("Surface type", slotHeaders, types) { FirstRowNumber = 0 };
     }
 }

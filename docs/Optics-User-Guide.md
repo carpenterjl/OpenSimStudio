@@ -329,12 +329,11 @@ The real ray trace places surfaces with coordinate breaks and surface tilts and 
   the paraxial analyses and the ray launcher, with the surface named. The real trace itself
   has no such limit.
 
-Like the other ray analyses, Global vertex says there are no surfaces until the lens data
-editor (OP-31) supplies them. The rules, the readings of OpticStudio's help and the points not
+Breaks, tilts and returns are edited and saved in the lens data editor (see Lens Data Editor).
+The rules, the readings of OpticStudio's help and the points not
 yet compared with OpticStudio are in `docs/Optics-Conventions.md` §15 and §10 item 11.
 
-Not built: saving or editing the new surface fields (OP-31), pick-ups of break values and
-multi-configuration control, tilting the object surface, layouts drawing tilted surfaces, and
+Not built: multi-configuration control, the tools in the editor, tilting the object surface, layouts drawing tilted surfaces, and
 paraxial data, ray aiming and ray launching for non-axial systems (OP-22).
 
 ## Ray aiming and vignetting
@@ -360,14 +359,13 @@ The **vignetting factors** of each field (VDX, VDY, VCX, VCY, TAN) move, shrink 
 pupil that field's rays are launched into, by OpticStudio's equations; with aiming on, the
 remapped point is on the stop. Between defined fields they are interpolated along y.
 **Set Vignetting**, **Clear Vignetting** and **Replace Vignetting With Apertures** exist in the
-library (`VignettingTools`) but have no buttons yet, because there are no saved surfaces until
-the lens data editor (OP-31).
+library (`VignettingTools`) but have no buttons yet.
 
 The analysis **Vignetting plot** (Rays) shows the fraction of rays that reach the image against
 field along +y, at the primary wavelength, from a (2n + 1) × (2n + 1) grid per field (ray
 density n, at least 5) at the chosen number of fields. By default the fields' vignetting factors
-are first replaced by surface apertures. Like the other ray analyses it says the system has no
-surfaces until OP-31. Details, the closed-form checks and what is this program's own reading
+are first replaced by surface apertures. Like the other ray analyses it reads the lens data
+editor's surfaces. Details, the closed-form checks and what is this program's own reading
 are in `docs/Optics-Conventions.md` §16 and §10 item 12.
 
 Not built: a 180° fisheye (fields must stay below 90°), aiming in systems with tilted mirrors
@@ -420,8 +418,8 @@ The real ray trace also takes these OpticStudio surface types (OP-27), each as i
 - **Lenslet Array:** an odd number of rectangular even-asphere lenslets in x and y.
 
 The paraxial data take each surface's first-order effect (the y section of an anamorphic one).
-These surfaces are built and used from code and tests; the lens data editor (OP-31) will
-expose and save them. The equations and the points not yet compared with OpticStudio are in
+The lens data editor edits and saves them, except the Lenslet Array, whose help page gives no
+parameter layout. The equations and the points not yet compared with OpticStudio are in
 `docs/Optics-Conventions.md` §18 and §10 item 14.
 
 Not built: the Slide, Filter, Data and Atmospheric surfaces (the help pages do not define
@@ -452,8 +450,8 @@ ray height solve cannot sit before the stop. Both rules are OpticStudio's.
 A solve that cannot be met leaves its cell as it was and says why, naming the surface, column
 and solve. For example, a marginal ray angle on a surface with the same index on both sides.
 
-There is no solve column in the editor yet. The library is used from code and tests until the
-lens data editor (OP-31) offers it. The definitions, formulas and the readings not yet compared
+The lens data editor stores solves and pickups on its cells and evaluates them after every
+edit; the analyses trace the solved lens (see Lens Data Editor). The definitions, formulas and the readings not yet compared
 with OpticStudio are in `docs/Optics-Conventions.md` §19 and §10 item 15.
 
 Notes on specific solves:
@@ -467,7 +465,8 @@ Notes on specific solves:
 Not built:
 
 - the ZPL macro solve (needs the macro interpreter);
-- the chief ray solve on coordinate-break parameters (needs coordinate breaks, OP-21);
+- the chief ray solve on coordinate-break parameters (offered in the editor, refused when
+  evaluated);
 - solves on extra data;
 - the optimizer that would use solves in its derivatives.
 
@@ -477,29 +476,50 @@ Not built:
 (`OpenSim.App/Views/LensDataEditorWindow.xaml`, `OpenSim.App/ViewModels/OpticsLensEditorViewModel.cs`).
 The panel shows the number of surfaces and whether the lens can be traced. The surfaces save
 with the project and the lens file; a new project starts with an object at infinity, a stop
-and an image surface. The analyses System data and paraxial rays, Single ray trace and
-Paraxial Gaussian beam read these surfaces.
+and an image surface. The analyses read these surfaces with their solves evaluated.
 
 - **The table.** One row per surface, 0 the object and the last the image; neither can be
   deleted, and no surface can be inserted before the object or after the image. Columns:
   comment, radius (Infinity is a plane), thickness, material, coating, clear semi-diameter,
-  chip zone, mechanical semi-diameter, conic, TCE and, for other surface types, Par 1 to 16.
-  Lengths are in the lens unit; changing the lens unit converts the surfaces so the lens keeps
-  its size (and clears the undo history). The material is a glass of the active catalogs
-  (`catalog:glass` picks one), `MIRROR`, an index such as `1.5`, a model glass `nd, Vd` or
-  `nd, Vd, ΔPgF`, or empty for air.
+  chip zone, mechanical semi-diameter, conic, TCE, then the surface type's parameters.
+  Lengths are in the lens unit; changing the lens unit converts the surfaces, parameters
+  included, so the lens keeps its size (and clears the undo history). The material is a glass
+  of the active catalogs (`catalog:glass` picks one), `MIRROR`, an index such as `1.5`, a model
+  glass `nd, Vd` or `nd, Vd, ΔPgF`, or empty for air.
+- **Surface types.** The type column (or Surface properties…) offers Standard and every type
+  the ray trace has: Even Asphere, Odd Asphere, Alternate Even, Alternate Odd, Extended Asphere,
+  Extended Odd Asphere, Q-Type Asphere, Superconic, Periodic, Fresnel, Extended Fresnel,
+  Cylinder Fresnel, Generalized Fresnel, ABCD, Conjugate, Paraxial, Paraxial XY, Retro Reflect
+  and Coordinate Break. Each type's parameter columns are OpticStudio's, named from its help
+  page; the tooltip gives the parameter number and the unit (for example lens units^-3 for an
+  Even Asphere's α2). Paraxial, Paraxial XY, ABCD, Retro Reflect, Conjugate and Coordinate
+  Break have no radius or conic column. A type with more than 32 parameters (Extended Asphere,
+  Q-Type, Superconic, Generalized Fresnel) shows its first 32; the rest are kept and saved.
+  Changing a row's type keeps the shared columns and clears the parameters. The Paraxial
+  surface needs OPD mode 2 (infinite conjugates) or 3 (paraxial conjugates).
+- **Coordinate breaks and tilts.** A Coordinate Break row has comment, thickness, decenter X
+  and Y, tilt about X, Y and Z (degrees) and order (0 decenter then tilt, 1 tilt then
+  decenter); its properties hold the coordinate return (none, orientation only, orientation
+  XY, orientation XYZ) and the surface to return to. Every other surface's properties hold the
+  tilt and decenter before it (decenters, tilts, order) and after it: explicit values, this
+  surface's before values picked up or reversed, or a prior surface's picked up or reversed.
 - **Semi-diameters.** A clear or mechanical semi-diameter marked **A** is automatic and shows
   the size the program computed; typing a value fixes it.
 - **Flags.** Cells can be made variable (V), given a solve (OpticStudio's solve names, with
   their parameters) or picked up from another cell (P), with the grid's context menu,
-  Ctrl+Shift+V (variable) or Ctrl+Shift+F (the flag editor). Solves and pickups are **stored, not evaluated** in this build: the value in the
-  cell is what is traced, and System Check names every stored solve and every pickup whose
-  value does not match.
+  Ctrl+Shift+V (variable) or Ctrl+Shift+F (the flag editor). Solves and pickups are evaluated
+  after every edit: the cell shows the solved value. A solve that cannot be met keeps the
+  cell's value, adds "!" to its badge and puts the reason in its tooltip, and the lens check
+  lists it; the analyses then refuse the lens with the same message. Variables are stored for
+  the optimizer, which is not built. Chip-zone and mechanical semi-diameter pickups are stored
+  but not evaluated (OpticStudio has no solve for those columns), and System Check says so.
+  Parameter columns 13 and above take variables only.
 - **Surface properties…** (or the row's context menu) opens the surface's properties: type,
   row colour, make surface stop, ignore this surface, aperture type and its sizes and decenters
   (circular, rectangular, elliptical, spider, user-defined vertices as `x y; x y`, floating),
-  obscuration, tilt/decenter (not built yet) and the drawing options (skip rays to this
-  surface; hide rays and do not draw are kept for the layouts but not drawn differently yet).
+  obscuration, the tilt and decenter before and after, and the drawing options (skip rays to
+  this surface; hide rays and do not draw are kept for the layouts but not drawn differently
+  yet). A coordinate break's properties are its coordinate return and the drawing options.
 - **Commands.** Insert surface, Insert after, Delete surface, Undo, Redo (every edit and every
   tool is one undo step; the grid's own keys work too), Make stop, Go to surface (a number, or
   part of a type or comment).
@@ -508,18 +528,20 @@ Paraxial Gaussian beam read these surfaces.
   all apertures, Semi-diameters to circular / floating / maximum apertures, Remove all
   variables, Set all radii variable, Set all thicknesses variable, System check and Compare with
   file… (the File Comparator, against a lens file or a project; Differences only is on by
-  default). What each does, and where it reads OpticStudio's help differently, is in
+  default). Scale lens scales each parameter by its unit (a decenter by the factor, an Even
+  Asphere's α2 by the factor⁻³, a tilt not at all). Reverse elements and Make double pass
+  refuse surfaces of other types than Standard and tilted surfaces, naming them. What each
+  tool does, and where it reads OpticStudio's help differently, is in
   `docs/Optics-Conventions.md` §20.
 - A surface type this build does not trace (from a file of a later build) is shown with its
   parameters by number, saved back unchanged, and the lens check names it; the analyses then
   refuse the lens.
 
-Not built: editing and saving surface types other than Standard and tilts, decenters and
-coordinate breaks (the ray trace has them: see Coordinate breaks and tilts, Aspheres,
-Idealised and special surfaces), solves and pickups evaluated in the editor (the solve library
-is built: see Solves), configurations (OP-30), Create Error Ray, the surface
-properties' scattering, physical optics and import tabs, and per-surface coating layer
-multipliers.
+Not built: the Odd Cosine and Lenslet Array surfaces in the editor (their help pages do not
+give the parameter layout), Paraxial OPD modes 0 and 1, solves on parameters 13 and above, the
+chief ray solve on coordinate-break parameters, the optimizer, configurations (OP-30), Create
+Error Ray, the surface properties' scattering, physical optics and import tabs, and
+per-surface coating layer multipliers.
 
 ## Polarization
 
@@ -563,8 +585,7 @@ from the system polarization.
 - **Transmission fan:** transmission along the tangential and sagittal fans for each field and
   wavelength.
 
-Like the other ray analyses they say the system has no surfaces until the lens data editor
-(OP-31) supplies them. The equations are in `docs/Optics-Conventions.md` §21; the choices not
+Like the other ray analyses they read the lens data editor's surfaces. The equations are in `docs/Optics-Conventions.md` §21; the choices not
 yet compared with OpticStudio are in §10 item 17.
 
 Not built: real transmission in the other analyses (the call `PolarizationTracer.Transmission`

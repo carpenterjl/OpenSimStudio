@@ -20,7 +20,8 @@ internal sealed record RowSnapshot(
 
     /// <summary>
     /// This row retyped to <paramref name="type"/>: a value and its flag carry to the new type's
-    /// slot with the same key and kind (wherever that slot is), a flag the new column does not
+    /// slot with the same key and kind (wherever that slot is) unless the new column resets on a
+    /// type change (<see cref="SheetColumn.ResetOnRetype"/>), a flag the new column does not
     /// accept becomes Fixed, and everything else takes the new column's default. Properties carry
     /// over the same way. The tint is kept.
     /// </summary>
@@ -32,7 +33,7 @@ internal sealed record RowSnapshot(
             var definition = type.ColumnAt(i);
             if (definition is null) { cells[i] = new CellState(CellValue.Empty, CellFlag.Fixed); continue; }
             int from = -1;
-            for (int j = 0; j < Cells.Length; j++)
+            for (int j = 0; j < Cells.Length && !definition.ResetOnRetype; j++)
                 if (Type.ColumnAt(j) is { } d && d.Key == definition.Key && d.Kind == definition.Kind) { from = j; break; }
             if (from < 0 || CellText.Validate(definition, Cells[from].Value) is not null)
             {

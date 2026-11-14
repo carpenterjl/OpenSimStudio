@@ -5,6 +5,7 @@ using OpenSim.App.Tests.Support;
 using OpenSim.App.ViewModels;
 using OpenSim.Core.Model;
 using OpenSim.Optics;
+using OpenSim.Optics.Analysis;
 using OpenSim.Optics.Materials;
 using OpenSim.Optics.Sequential;
 using OpenSim.Optics.Sequential.LensEditing;
@@ -116,8 +117,8 @@ public sealed class OpticsLensEditorTests : IDisposable
     }
 
     /// <summary>The saved-surface round trip through the editor: every field the sheet shows,
-    /// flags of each kind, and a type this build does not trace with its parameters past the
-    /// last column and its extra data.</summary>
+    /// flags of each kind, and a type that is not registered with its parameters past the last
+    /// column and its extra data.</summary>
     [Fact]
     public void SavedSurfaces_RoundTripThroughTheEditor()
     {
@@ -142,8 +143,8 @@ public sealed class OpticsLensEditorTests : IDisposable
             },
             new()
             {
-                Type = "Even Asphere", Radius = 100, Thickness = 5, Material = "N-BK7", SemiDiameter = 4, IsIgnored = false,
-                Parameters = new() { new() { Number = 1, Value = 1e-5 }, new() { Number = 20, Value = 3 } },
+                Type = "Zernike Standard Sag", Radius = 100, Thickness = 5, Material = "N-BK7", SemiDiameter = 4, IsIgnored = false,
+                Parameters = new() { new() { Number = 1, Value = 1e-5 }, new() { Number = 40, Value = 3 } },
                 ExtraData = new() { new() { Number = 1, Value = 2 } },
                 Flags = new()
                 {
@@ -161,9 +162,9 @@ public sealed class OpticsLensEditorTests : IDisposable
 
         var editor = Loaded(surfaces);
         Assert.Equal(5, editor.Document.RowCount);
-        Assert.Equal("Even Asphere", editor.Document.Rows[3].TypeName);
+        Assert.Equal("Zernike Standard Sag", editor.Document.Rows[3].TypeName);
         Assert.Equal(Json(expected), Json(editor.ToSettings()));
-        Assert.Contains(editor.Problems, p => p.Contains("Even Asphere"));
+        Assert.Contains(editor.Problems, p => p.Contains("Zernike Standard Sag"));
         Assert.Equal(0, editor.Document.History.UndoCount);
 
         // Through the project's optics record and back.
@@ -290,5 +291,146 @@ public sealed class OpticsLensEditorTests : IDisposable
         editor.GoToText = "nothing like it";
         editor.GoToSurfaceCommand.Execute(null);
         Assert.Contains("No surface", editor.Status);
+    }
+
+    // ---- TC-6: surface types, tilts, coordinate breaks and evaluated solves ----
+
+    private static int Slot(SheetRow row, string key) =>
+        Enumerable.Range(0, row.Cells.Count).Single(i => row.Cells[i].Definition?.Key == key);
+
+    [Fact]
+    public void EveryRegisteredType_IsOffered_WithItsOwnParameterColumns()
+    {
+        var doc = Optics.LensEditor.Document;
+        foreach (var layout in SurfaceTypes.All)
+            Assert.NotNull(doc.Schema.FindRowType(layout.Name));
+        var even = doc.Schema.FindRowType("Even Asphere")!;
+        Assert.Equal("α1", even.ColumnAt(S.FirstParameterSlot)!.Header);
+        Assert.Equal(SavedSurfaces.ParameterColumn(1), even.ColumnAt(S.FirstParameterSlot)!.Key);
+        Assert.Contains("lens units^-3", even.ColumnAt(S.FirstParameterSlot + 1)!.ToolTip);
+        var q = doc.Schema.FindRowType("Q-Type Asphere")!;
+        Assert.Equal(SavedSurfaces.ParameterColumn(13), q.ColumnAt(S.FirstParameterSlot)!.Key);   // the type's first column
+        Assert.Equal(CellKind.Integer, q.ColumnAt(S.FirstParameterSlot)!.Kind);
+        var paraxial = doc.Schema.FindRowType("Paraxial")!;
+        Assert.Null(paraxial.ColumnAt(S.RadiusSlot));                    // a Paraxial surface has no radius
+        var cb = doc.Schema.FindRowType(SurfaceTypes.CoordinateBreak)!;
+        Assert.Null(cb.ColumnAt(S.MaterialSlot));
+        Assert.Equal("Decenter X", cb.ColumnAt(S.FirstParameterSlot)!.Header);
+        Assert.NotNull(cb.ColumnAt(S.FirstParameterSlot)!.FindSolveCode("Chief ray"));
+        Assert.NotNull(cb.FindProperty(S.ReturnModeProperty));
+        Assert.Null(cb.FindProperty(S.BeforeTiltXProperty));
+    }
+
+    [Fact]
+    public void PickingATypeAndEditingAParameter_ReachesTheSavedFile_AndATypeChangeResetsTheParameters()
+    {
+        var editor = Loaded(Singlet());
+        var doc = editor.Document;
+        Assert.True(doc.SetText(2, 0, "Even Asphere").Succeeded);
+        Assert.Equal(-120, editor.ToSettings()[2].Radius);                 // shared columns carry over
+        int par2 = Slot(doc.Rows[2], "Par2");
+        Assert.True(doc.SetText(2, par2 + 1, "1e-6").Succeeded);
+        var saved = editor.ToSettings()[2];
+        Assert.Equal("Even Asphere", saved.Type);
+        Assert.Equal(1e-6, SavedSurfaces.Value(saved, 2));
+        Assert.Empty(editor.Problems);
+        Assert.Equal(Json(editor.ToSettings()), Json(Optics.ToSettings().Surfaces!));
+
+        // The traced lens holds the asphere in SI: 1e-6 mm^-3 is 1e-6 / (1e-3)^3 m^-3.
+        var context = new LensEditContext(Optics.ToSettings().SystemData, Array.Empty<OpticalCatalog>());
+        var shape = Assert.IsType<OpenSim.Optics.Sequential.Aspheres.EvenAsphere>(context.ToLens(editor.ToSettings()).Surfaces[2].Shape);
+        double alpha2 = 1e-6 / (1e-3 * 1e-3 * 1e-3);
+        Assert.True(Math.Abs(shape.Alpha[1] - alpha2) <= 1e-15 * alpha2, $"{shape.Alpha[1]:R}");
+
+        // Another type: the radius stays, the parameters reset, as one undo step.
+        Assert.True(doc.SetText(2, 0, "Odd Asphere").Succeeded);
+        Assert.Equal(-120, editor.ToSettings()[2].Radius);
+        Assert.Null(editor.ToSettings()[2].Parameters);
+        editor.UndoCommand.Execute(null);
+        Assert.Equal(1e-6, SavedSurfaces.Value(editor.ToSettings()[2], 2));
+
+        // An extra-data column of a Q-type is saved as extra data.
+        Assert.True(doc.SetText(2, 0, "Q-Type Asphere").Succeeded);
+        Assert.True(doc.SetText(2, Slot(doc.Rows[2], "Par15") + 1, "6").Succeeded);
+        Assert.Equal(6, editor.ToSettings()[2].ExtraData!.Single(p => p.Number == 15).Value);
+        Assert.Null(editor.ToSettings()[2].Parameters);
+    }
+
+    [Fact]
+    public void TiltsAndCoordinateBreaks_AreEditedAndSaved()
+    {
+        var editor = Loaded(Singlet());
+        var doc = editor.Document;
+        Assert.True(doc.SetProperty(2, S.BeforeDecenterYProperty, "0.5").Succeeded);
+        Assert.True(doc.SetProperty(2, S.BeforeTiltXProperty, "2").Succeeded);
+        Assert.True(doc.SetProperty(2, S.BeforeOrderProperty, S.TiltThenDecenter).Succeeded);
+        Assert.True(doc.SetProperty(2, S.AfterModeProperty, S.AfterReverseThis).Succeeded);
+        var saved = editor.ToSettings()[2];
+        Assert.Equal((0.5, 2.0, "TiltThenDecenter"), (saved.TiltBefore!.DecenterY, saved.TiltBefore.TiltX, saved.TiltBefore.Order!));
+        Assert.Equal("ReverseThisSurface", saved.TiltAfter!.Mode);
+        // The traced lens has them, decenters in meters.
+        var context = new LensEditContext(Optics.ToSettings().SystemData, Array.Empty<OpticalCatalog>());
+        var lens = context.Solve(editor.ToSettings()).Entered;
+        Assert.Equal(new TiltDecenter(0, 0.5e-3, 2, 0, 0, TiltDecenterOrder.TiltThenDecenter), lens.Surfaces[2].TiltBefore);
+        Assert.Equal(TiltAfterKind.ReverseThisSurface, lens.Surfaces[2].TiltAfter!.Kind);
+
+        // A coordinate break with its own columns and a return.
+        editor.CurrentRow = 2;
+        editor.InsertSurfaceCommand.Execute(null);
+        Assert.True(doc.SetText(2, 0, SurfaceTypes.CoordinateBreak).Succeeded);
+        Assert.True(doc.SetText(2, Slot(doc.Rows[2], "Par3") + 1, "5").Succeeded);
+        Assert.True(doc.SetProperty(2, S.ReturnModeProperty, S.ReturnXYZ).Succeeded);
+        Assert.True(doc.SetProperty(2, S.ReturnSurfaceProperty, "1").Succeeded);
+        var cb = editor.ToSettings()[2];
+        Assert.Equal(SurfaceTypes.CoordinateBreak, cb.Type);
+        Assert.Equal(5, SavedSurfaces.Value(cb, 3));
+        Assert.Equal(("OrientationXYZ", 1), (cb.CoordinateReturn!.Mode!, cb.CoordinateReturn.Surface));
+        Assert.Null(cb.TiltBefore);
+        var traced = context.Solve(editor.ToSettings()).Entered.Surfaces[2].CoordinateBreak!;
+        Assert.Equal((5.0, CoordinateReturnMode.OrientationXYZ, 1), (traced.Values.TiltXDegrees, traced.Return, traced.ReturnToSurface));
+
+        // Reloading the saved surfaces shows the same values.
+        var all = editor.ToSettings();
+        Assert.Equal(Json(all), Json(Loaded(all).ToSettings()));
+    }
+
+    [Fact]
+    public void ASolve_ShowsItsSolvedValue_AndAFailureOnItsCell()
+    {
+        var editor = Loaded(Singlet());
+        var doc = editor.Document;
+        // F/# 4 on the back radius: the cell shows the solved radius, the value ProjectLens gives.
+        Assert.True(doc.SetFlag(2, S.RadiusSlot + 1, CellFlag.Solve("F/#", 4)).Succeeded);
+        var project = Optics.ToSettings();
+        var solution = ProjectLens.Solve(project, Array.Empty<OpticalCatalog>())!;
+        Assert.True(solution.Succeeded, string.Join(" ", solution.Errors));
+        double solvedRadius = 1 / solution.Lens.Surfaces[2].Curvature / 1e-3;
+        Assert.Equal(solvedRadius, doc.Rows[2].Cells[S.RadiusSlot].Value.Number);
+        Assert.NotEqual(-120, solvedRadius);
+        Assert.Equal("F", doc.Rows[2].Cells[S.RadiusSlot].Badge);
+        Assert.Empty(editor.Problems);
+        // The saved file keeps the solve with its parameter, and the solved value.
+        var flag = project.Surfaces![2].Flags!.Single();
+        Assert.Equal((SavedSurfaces.SolveFlag, "F/#", 4.0), (flag.Kind!, flag.Solve!, flag.SolveParameters!.Single()));
+        Assert.Equal(solvedRadius, project.Surfaces[2].Radius);
+        // The marginal ray leaves at -1/(2F), so the solved lens works at F/4: EFL / EPD = 4.
+        var system = new LensEditContext(project.SystemData, Array.Empty<OpticalCatalog>());
+        double efl = MakeFocal.EffectiveFocalLength(editor.ToSettings(), system);
+        Assert.True(Math.Abs(efl / project.SystemData!.ApertureValue - 4) <= 1e-9, $"F/# {efl / project.SystemData.ApertureValue:R}");
+
+        // A pickup shows its value too: 10 x 6 + 2.
+        Assert.True(doc.SetFlag(2, S.ThicknessSlot + 1, CellFlag.PickupFrom(doc.Rows[1], S.ThicknessSlot + 1, 10, 2)).Succeeded);
+        Assert.True(Math.Abs(doc.Rows[2].Cells[S.ThicknessSlot].Value.Number - 62) <= 1e-12);
+
+        // F/# 0 cannot be met: the cell keeps its value and carries the message.
+        Assert.True(doc.SetFlag(2, S.RadiusSlot + 1, CellFlag.Solve("F/#", 0)).Succeeded);
+        var cell = doc.Rows[2].Cells[S.RadiusSlot];
+        Assert.Equal("F!", cell.Badge);
+        Assert.Contains("Surface 2, curvature, f/# solve", cell.ToolTip);
+        Assert.Contains(editor.Problems, p => p.StartsWith("Surface 2, curvature"));
+        // Fixing it clears the note.
+        Assert.True(doc.SetFlag(2, S.RadiusSlot + 1, CellFlag.Fixed).Succeeded);
+        Assert.Null(doc.Rows[2].Cells[S.RadiusSlot].Note);
+        Assert.Empty(editor.Problems);
     }
 }
