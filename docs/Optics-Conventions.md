@@ -8,7 +8,7 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; the cross-checks against other programs (section 22) in
 `OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
@@ -431,6 +431,28 @@ single place in the code, so a correction is one line and its test.
     Paraxial Gaussian Beam help was not read. Check: one singlet and one concave mirror with a
     beam of known waist and M² = 2, compared with OpticStudio's Paraxial Gaussian Beam listing.
 
+15. **Solves** (OP-29). Each solve follows the wording of OpticStudio's help (section 19); none
+    is compared with OpticStudio's numbers. The readings that the help leaves open:
+    - *Edge thickness at radial height 0* uses the mechanical semi-diameter, as "Thickness
+      Solves" says; the solve summary table says the clear semi-diameter.
+    - *Aplanatic* is u′/n′ = u/n of the paraxial marginal ray. The help says only "aplanatic
+      with respect to the paraxial marginal ray".
+    - *Concentric with surface* puts the centre of curvature on the other surface's vertex.
+    - *F/#* sets the exit slope to −1/(2F) literally, with no index and whatever the number of
+      mirrors.
+    - *Pupil position* uses the paraxial chief ray. The help traces real differential rays, and
+      the two agree on a lens with no tilts.
+    - *Optical path difference* uses a reference sphere centred on the chief ray's image-surface
+      intercept and passing through the paraxial exit pupil, and ignores apertures.
+    - *Real marginal ray height* ignores apertures.
+    - *Element power* and *ignored* cases are refused with a message where OpticStudio
+      ignores the solve.
+    - *Pickups* between curvature and length columns are refused, because the help does not
+      say how one becomes the other.
+    - *Material pickup* copies the MIRROR flag with the medium.
+    Check: one lens with one solve of each kind, compared with the values OpticStudio's
+    lens data editor shows.
+
 18. **Cross-checks are against open programs, not OpticStudio** (OP-102). Section 22's
     reference files come from Optiland, RayOptics and tmm. They check the real ray trace, the
     paraxial data and the thin-film engine against independently written code using the same
@@ -666,6 +688,85 @@ q = z + i·z_R and 1/q = 1/R − i·λ/(π·w²) in the comments of `GaussianBea
   needs the real ray trace (OP-20) and Arnaud's ray representation; tilted, decentered and
   anamorphic (toroidal, cylindrical) surfaces; Gaussian beam operands; apertures clipping the
   beam. Section 10, item 10, lists the check against OpticStudio.
+
+## 19. Solves
+
+Solves (OP-29, `OpenSim.Optics/Sequential/Solves`) compute a cell of the lens data from a
+condition. The definitions come from OpticStudio's 2025 R2 help on ansyshelp.ansys.com, read
+2026-11-14 and saved in plans/sources/optics/solves/. The pages are "Summary of Solves",
+"Curvature Solves", "Thickness Solves", "Edge Thickness", "Material Solves", "Clear
+Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter Solves",
+"Restrictions" and "Integer Codes for Column Numbers". A solve is a record (`SurfaceSolve`), and
+`SolveEngine.Apply` returns a new lens with a status for each solve.
+
+- **Units.** Lengths are meters and curvatures 1/m. Paraxial angles are slopes u = dy/dz in the
+  system frame (section 11). Paraxial solves use the primary wavelength and the signed indices
+  of section 11, so they work through mirrors.
+- **Order.** Solves run from surface 0 to the image. On each surface the order is curvature,
+  thickness, material, clear semi-diameter, conic, parameters (by number), then TCE
+  ("Restrictions"). Each solve sees the lens with every earlier solve already applied.
+- **Iteration.** With `SolveOptions.Iterate` (the default) the engine repeats the pass until a
+  whole pass leaves every solved cell unchanged. Numbers count as unchanged within a relative
+  1e-12 plus 1e-15 absolute. The default limit is 50 passes; past it the engine reports the
+  cells that are still changing. Solves that read a later surface need this, for example a
+  position solve whose reference surface follows it.
+- **Pickups.** The target takes O + S·V. The source must be an earlier surface, or an earlier
+  column on the same surface ("Restrictions"). Thickness and parameter pickups take an offset.
+  Curvature, semi-diameter and conic pickups take only a scale. The curvature scale applies to
+  the curvature, not the radius. Material and TCE pickups copy the value. An automatic source
+  semi-diameter is read from the sizing of section 13.
+- **Paraxial rays.** The marginal ray is the aperture-sized one. The chief ray is that of the
+  full field, and a solve that needs it fails when every field is on the axis. The closed forms
+  are written out in `SolveEngine.cs`:
+  - marginal or chief ray angle, and F/#: c = (ν − n′u′)/(y(n′ − n));
+  - normal to a ray: c = −u/y;
+  - aplanatic: c = −u(n + n′)/(n·y);
+  - element power: c₂ = (φ − φ₁)/((n₃ − n₂)(1 − φ₁t₂/n₂));
+  - marginal or chief ray height: t = (h − y)/u;
+  - pupil position: t = −ȳ/ū of the unit paraxial chief ray.
+- **Real rays.** The real marginal-ray-height solve (pupil zone not 0) traces the on-axis ray at
+  Py = zone with apertures ignored. It sets t so that the ray's height on the next vertex plane
+  is the target. The optical path difference solve finds the thickness by a bracket search and
+  Brent's method. `SolveEngine.OnAxisOpdWaves` gives its OPD: the on-axis ray and chief ray run
+  to the reference sphere described in section 10, item 15. OPD = chief path − ray path
+  (section 6), in primary waves of the system's air.
+- **Geometry.** Positions are sums of thicknesses along z. That holds while there are no tilts
+  (OP-21), and OpticStudio states the same assumption for the position solve.
+  - Edge thickness: E = Z(next) − Z(this) + T, both sags at this surface's radial height ("Edge
+    Thickness").
+  - Center of curvature: t = R(p) − Σ t.
+  - Concentric with surface: R = −Σ t.
+  - Concentric with radius: R = R(p) − Σ t.
+- **Materials.** The model glass solve uses this program's model-glass stand-in (section 10,
+  item 7), from a fit passed in `SolveOptions.ModelGlass`. The offset solve applies
+  `GlassOffsets` to the glass as entered, so applying it twice does not double it.
+  The substitute solve leaves the glass unchanged; it is a flag for global optimization, which
+  is not built.
+- **Semi-diameters.** The automatic solve sets the cell to automatic. The maximum solve writes
+  the automatic value of the single configuration, because multiple configurations (OP-30) are
+  not built.
+- **Parameters** are read through `IParameterizedShape`, which a surface shape implements to
+  join parameter pickups. **TCE** is `SequentialSurface.ThermalExpansion` (10⁻⁶/K), which is
+  data only.
+- **Re-application and the optimizer.** `Apply` is a pure function of the lens as entered, the
+  system data and the solves. A solved cell is recomputed whatever it holds, so applying the
+  solves to a solved lens returns the same lens in one pass. An optimizer changes a variable,
+  re-applies the solves, and evaluates the solved lens, so the solves follow every variable in
+  its derivatives. `SolveEngine.SolvedCells` lists the cells that must not be variables.
+- **Failures.** A solve that cannot be met leaves its cell unchanged and reports why, naming
+  the surface, column and solve. Examples are equal indices, a ray crossing the axis or leaving
+  parallel to it, a sag beyond the hemisphere, a failed real ray, an OPD with no bracket, and
+  no convergence. Solve sets that break the help's restrictions are refused before any pass:
+  a pickup from a later cell, a marginal ray height solve before the stop, or two solves on one
+  cell.
+- **Not built.**
+  - The ZPL macro solve, which needs the macro interpreter (OP-99).
+  - The parameter chief ray solve, which needs coordinate breaks (OP-21). Its record exists, and
+    the engine reports it as not built.
+  - Extra data columns.
+  - Solves on the non-sequential editor.
+  - The solve column in the lens data editor (OP-31).
+  - Variables and the optimizer.
 
 ## 22. Cross-checks against independent programs
 

@@ -309,6 +309,48 @@ amplitudes in OpticStudio's convention; retardance φp − φs (transmission) an
 yet), coatings applied to traced rays, per-layer multipliers and offsets in the plots' settings
 (the library takes them), incoherent thick layers, and coating design or optimisation.
 
+## Solves
+
+A solve computes one cell of the lens data from a condition. It is recomputed each time the
+solves are applied. The solve library (`OpenSim.Optics/Sequential/Solves`) has OpticStudio's
+solves:
+
+- **Curvature:** marginal ray angle, chief ray angle, pickup, marginal ray normal, chief ray
+  normal, aplanatic, element power, concentric with surface, concentric with radius, F/#.
+- **Thickness:** marginal ray height (paraxial, or a real ray at a pupil zone), chief ray
+  height, edge thickness, pickup, optical path difference, position, compensator, center of
+  curvature, pupil position.
+- **Material:** model glass, pickup, substitute, offset.
+- **Clear semi-diameter:** automatic, pickup, maximum.
+- **Conic, parameters and TCE:** pickup.
+
+Solves run in surface order, and on each surface in column order. By default the engine repeats
+the pass until nothing changes, so a solve that depends on a later surface still settles. A
+pickup can only read an earlier surface, or an earlier column of the same surface. A marginal
+ray height solve cannot sit before the stop. Both rules are OpticStudio's.
+
+A solve that cannot be met leaves its cell as it was and says why, naming the surface, column
+and solve. For example, a marginal ray angle on a surface with the same index on both sides.
+
+There is no solve column in the editor yet. The library is used from code and tests until the
+lens data editor (OP-31) offers it. The definitions, formulas and the readings not yet compared
+with OpticStudio are in `docs/Optics-Conventions.md` §19 and §10 item 15.
+
+Notes on specific solves:
+
+- The maximum semi-diameter is the automatic value of the one configuration, because
+  configurations are not built.
+- The model glass is this program's stand-in, not OpticStudio's formula (see "Glass tools and
+  material plots").
+- The substitute flag leaves the glass unchanged.
+
+Not built:
+
+- the ZPL macro solve (needs the macro interpreter);
+- the chief ray solve on coordinate-break parameters (needs coordinate breaks, OP-21);
+- solves on extra data;
+- the optimizer that would use solves in its derivatives.
+
 ## Cross-checks against other programs
 
 The real ray trace, the paraxial data and the thin-film engine are checked against stored
@@ -330,6 +372,7 @@ Not built yet, and not to be relied on until they appear in this guide:
 - system data (aperture, fields, wavelengths);
 - layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
   the rest);
+- the solve column of the sequential surface editor (the solve library is built; see Solves);
 - optimization and tolerancing of a lens;
 - lens-file import;
 - reference results from OpticStudio itself (the cross-checks use open programs only).

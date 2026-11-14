@@ -79,6 +79,13 @@ public sealed record SequentialSurface
     /// <summary>The surface's comment, shown in reports.</summary>
     public string Comment { get; init; } = "";
 
+    // OP-29
+    /// <summary>OpticStudio's TCE column: the thermal coefficient of expansion of the surface's
+    /// mount, in 10⁻⁶/K as the lens data editor and AGF files give it. Data only: no analysis
+    /// reads it yet (thermal modelling of surfaces is not built); a TCE pickup solve copies it
+    /// (<see cref="Solves.PickupSolve"/>).</summary>
+    public double ThermalExpansion { get; init; }
+
     /// <summary>The vertex radius, meters; +infinity for a plane.</summary>
     public double Radius => OpticsConventions.RadiusFromCurvature(Curvature);
 }
