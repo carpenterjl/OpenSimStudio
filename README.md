@@ -27,6 +27,7 @@ fully testable.
 | **PCB** | Gerber RS-274X + Excellon + IPC-2581 import, per-net copper meshing, pad-to-pad trace resistance, 3D partial-inductance chain composition (DC, finite-section parallel bars: self, mutual, coupling k, plane-return loops), lumped R + jωL trace estimates, frequency-dependent R(f) and L(f) by a filament (PEEC) solve — skin and proximity effect, via barrels as filament rings, plane returns on graded meshes through the copper's thickness, real end connections, and a compressed iterative solve (low-rank far field + conjugate iterations) past ~3 200 unknowns — net-to-net capacitance matrices with layer-to-layer, crossing, pad and via-barrel terms, and export as SPICE subcircuits (one frequency, or wideband by rational fit realized as R/L/C branches) and Touchstone |
 | **Magnetics** | 2D finite-element magnetics, planar and axisymmetric, on a graded grid or a constrained Delaunay mesh for polygonal regions: nonlinear B–H magnetostatics (damped Newton), time-harmonic eddy currents — skin and proximity effect in solid conductors, an energy-equivalent effective permeability for B–H cores — planar windings cut from the board layout (the spiral's pitch averaged around the revolution, lead-outs as PEEC series terms, pot/ER core equivalents with a planar check of an ER core's square legs, gaps), winding impedance and coupling matrices at frequency, strand-level litz loss homogenised from the local field, Steinmetz and iGSE core loss, and forces by the Maxwell stress tensor |
 | **RF** | First-party method-of-moments antenna solvers: thin-wire EFIE (dipoles, loops, monopoles, board trace chains) and RWG surface MoM for PEC sheets (plates, patches, PCB copper islands), both with optional infinite PEC ground by image theory; **microstrip substrates** (single- and multi-layer grounded stackups) via a rigorous layered-media Green's function (direct Sommerfeld integration; surface-wave poles found from a pole-free dispersion function with mode counting, and extracted into the power ledger); **coaxial probe feeds** through the slab with a classical 1/ρ attachment mode; input impedance, far-field patterns, directivity, surface-wave power, and near-field E maps in free space, over ground, and inside/above the substrate |
+| **Optics** | In progress, and nothing can be traced yet. What exists: the Optics workspace, with a sequential / non-sequential mode that saves with the project and no system editor ([docs/Optics-User-Guide.md](docs/Optics-User-Guide.md)); the written optics convention ([docs/Optics-Conventions.md](docs/Optics-Conventions.md)) with the ray record and the tilt/decenter transform it describes (`OpenSim.Optics`); and the first-party numerics the toolbox will build on (`OpenSim.Core/Numerics`): a random stream per work item and Sobol points, Gauss–Legendre quadrature, Bessel functions, cubic and bicubic splines, Brent's root finder, a real SVD, Cholesky, the 2-D FFT and the matrix Fourier transform, and the optimizer kernel (damped least squares, Nelder–Mead, Powell, Brent's line minimiser). Ray tracing, the system editors, the analyses and lens optimization are not built |
 
 ## What it can import
 
@@ -45,7 +46,8 @@ solve → color-mapped results in a Helix 3D viewport, with contour lines, secti
 multi-frame scrubbing (time steps / mode shapes / frequency points), and `.ossproj`
 project save/load. The app opens on a home screen with seven workspaces:
 **Structural**, **Thermal**, **Electrical**, **RF & antenna**, **Signal integrity**, **Flow** and
-**Optics** (a shell so far: it opens and saves its mode, with no system editor yet).
+**Optics** (a shell so far: it opens and saves its mode, with no system editor yet; see
+[docs/Optics-User-Guide.md](docs/Optics-User-Guide.md)).
 
 ## Getting started
 
@@ -55,6 +57,7 @@ Requirements: Windows, [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet
 dotnet build OpenSimStudio.sln          # build everything
 dotnet test  OpenSim.Tests              # run the test + regression-benchmark suite (minus the slow gates)
 dotnet test  OpenSim.Tests -c Release --settings OpenSim.Tests/slow.runsettings   # the slow reference gates
+dotnet test  OpenSim.App.Tests          # the view-model tests (a separate project; see OpenSim.App.Tests/README.md)
 dotnet run   --project OpenSim.App      # launch the app
 ```
 
@@ -107,25 +110,36 @@ A slower correct answer always beats a faster wrong one. Concretely:
 
 ## Architecture
 
-Eight projects with strictly downward dependencies. Everything below the app layer
-targets plain `net8.0` (no WPF), which mechanically enforces the UI/simulation split:
+Ten projects and two test projects, with strictly downward dependencies. Everything below
+the app layer targets plain `net8.0` (no WPF), which mechanically enforces the UI/simulation
+split:
 
 ```
-OpenSim.App       WPF shell, per-concern MVVM viewmodels, Helix 3D rendering, DI root
-OpenSim.Rf        thin-wire + RWG surface MoM, layered-media (microstrip) kernels,
-                  probe feeds, far/near fields, trace-chain adapter
-OpenSim.Pcb       Gerber/Excellon/IPC-2581 import, 2.5D PCB meshing, partial inductance
-OpenSim.Solvers   TET4/TET10 assembly; static, modal, thermal, DC/AC electrical, Joule
-OpenSim.Meshing   Bowyer–Watson Delaunay tet mesher, quality metrics, refinement
-OpenSim.Geometry  STL + first-party STEP import, primitives, face detection
-OpenSim.Core      math/numerics, domain model, result fields, interfaces, persistence
-OpenSim.Tests     xUnit: unit tests + analytical regression benchmarks (650+ green)
+OpenSim.App        WPF shell, per-concern MVVM viewmodels, Helix 3D rendering, DI root
+OpenSim.Cli        the `opensim` command line: solve, sweep, calculators, reports
+OpenSim.Optics     optics conventions, the ray, tilt and decenter (the toolbox is being built)
+OpenSim.Rf         thin-wire + RWG surface MoM, layered-media (microstrip) kernels,
+                   probe feeds, far/near fields, signal integrity, PDN, EMI
+OpenSim.Cfd        laminar voxel CFD and conjugate heat flow
+OpenSim.Pcb        Gerber/Excellon/IPC-2581 import, 2.5D PCB meshing, partial inductance,
+                   planar magnetics, rail analysis
+OpenSim.Solvers    TET4/TET10 assembly; static, modal, thermal, DC/AC electrical, Joule
+OpenSim.Meshing    Bowyer–Watson Delaunay tet mesher, quality metrics, refinement
+OpenSim.Geometry   STL + first-party STEP import, primitives, face detection
+OpenSim.Core       math/numerics, domain model, result fields, interfaces, persistence
+OpenSim.Tests      xUnit: library tests + analytical regression benchmarks (net8.0)
+OpenSim.App.Tests  xUnit: view-model tests, headless (net8.0-windows)
 ```
 
-Every replaceable piece is an interface in `OpenSim.Core/Interfaces`
-(`IGeometryImporter`, `IMeshGenerator`, `ISolver`) registered through DI — new solvers
-and importers plug into the shared `FeMesh`/`IResultField` contracts without touching
-the rest of the platform.
+The view-model tests are a separate project so that a focused solver-test run never has to
+rebuild the WPF app (`OpenSim.App.Tests/README.md` gives the measurements).
+
+Every replaceable piece of the finite-element path is an interface in
+`OpenSim.Core/Interfaces` (`IGeometryImporter`, `IMeshGenerator`, `ISolver`) registered
+through DI — new FE solvers and importers plug into the shared `FeMesh`/`IResultField`
+contracts without touching the rest of the platform. The RF, signal-integrity, PDN and
+optics studies are not finite elements on a tet mesh and keep their own result records
+(see [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Project status
 

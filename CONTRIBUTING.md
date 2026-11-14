@@ -10,6 +10,7 @@ Requirements: Windows, .NET 8 SDK. No native dependencies, no submodules.
 ```
 dotnet build OpenSimStudio.sln          # build everything
 dotnet test  OpenSim.Tests              # must be green before and after your change
+dotnet test  OpenSim.App.Tests          # the view-model tests, when you touched OpenSim.App
 dotnet run   --project OpenSim.App      # launch the WPF app
 ```
 
@@ -56,11 +57,19 @@ App (WPF/Helix) → ViewModels → Core interfaces → Geometry / Meshing / Solv
   rule.
 - **Rendering never knows about physics and vice versa.** The only place simulation data
   meets the rendering stack is `OpenSim.App/Rendering/SceneBuilder`.
-- **All solvers share the same contracts.** New solvers consume the same `FeMesh` and
-  produce the same `IResultField` types — do not invent a parallel mesh or result model.
-- **Extend through the interface seams.** New importers/meshers/solvers implement
+- **Finite-element solvers share the same contracts.** A new FE solver consumes the same
+  `FeMesh` and produces the same `IResultField` types — do not invent a parallel mesh or
+  result model for it. Studies that are not finite elements on a tet mesh do not go through
+  this path: the antenna MoM, signal-integrity and PDN studies keep their own result records
+  (`MomSolution`, `SurfaceMomSolution`, `RlgcResult`, `PdnResult`, …), and Optics will do the
+  same (`AnalysisType.Optics`, `OpenSim.App/ViewModels/AnalysisOption.cs`). A study that
+  writes a report uses the shared `StudyReport` (`OpenSim.Core/PostProcessing/StudyReport.cs`):
+  the FE solves (`StudyReport.FromSolve`), the EMI and planar-magnetics studies and the CLI
+  commands do; the antenna and PDN panels do not write one yet.
+- **Extend through the interface seams.** New FE importers/meshers/solvers implement
   `IGeometryImporter` / `IMeshGenerator` / `ISolver` from `OpenSim.Core/Interfaces` and
-  register through DI in `App.xaml.cs`.
+  register through DI in `OpenSim.App/Services/CompositionRoot.cs` (which `App.xaml.cs`
+  calls).
 - **No new dependencies without discussion.** The dependency bar is high and offline-first
   is a requirement: pure managed code, permissive license, source available. The only
   simulation-side NuGet package today is Clipper2, wrapped behind `IPolygonOps` so its
@@ -108,7 +117,8 @@ App (WPF/Helix) → ViewModels → Core interfaces → Geometry / Meshing / Solv
 
 ## Things that look wrong but are deliberate
 
-Before "fixing" one of these, read the rationale in `CLAUDE.md` — each was hard-won:
+Before "fixing" one of these, read its rationale below — each was hard-won. (`CLAUDE.md`,
+the short guide for AI agents, points back to this list.)
 
 - The tet mesher uses a **symbolic infinite vertex**, not a finite super-tetrahedron,
   and applies **deterministic jitter** to every inserted point (including Steiner
