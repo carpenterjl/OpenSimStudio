@@ -1,7 +1,8 @@
 <UserControl x:Class="OpenSim.App.Views.Panels.OpticsPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:controls="clr-namespace:OpenSim.App.Controls">
+             xmlns:controls="clr-namespace:OpenSim.App.Controls"
+             xmlns:panels="clr-namespace:OpenSim.App.Views.Panels">
     <!-- The Optics workspace's one panel so far: the mode switch. The system editors join
          it as they are built. -->
     <GroupBox Header="Optical system">
@@ -15,8 +16,10 @@
             </controls:FormGrid>
             <TextBlock Text="{Binding Optics.ModeDescription}" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFaintBrush}" Margin="0,4,0,0"/>
-            <TextBlock Text="There is no system editor yet, so there is nothing to trace. The mode is saved with the project."
+            <TextBlock Text="There are no surfaces yet, so there is nothing to trace. The mode is saved with the project."
                        TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,8,0,0"/>
+            <!-- OP-18: the system data. -->
+            <panels:OpticsSystemDataPanel/>
         </StackPanel>
     </GroupBox>
 </UserControl>

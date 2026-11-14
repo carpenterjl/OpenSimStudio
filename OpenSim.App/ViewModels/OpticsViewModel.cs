@@ -61,6 +61,10 @@ public partial class OpticsViewModel : ObservableObject
         return notes;
     }
 
-    /// <summary>A new project starts in the default mode.</summary>
-    public void Reset() => SelectedMode = OpticsModeOption.All[0];
+    /// <summary>A new project starts in the default mode, with the default system data.</summary>
+    public void Reset()
+    {
+        SelectedMode = OpticsModeOption.All[0];
+        ResetSystemData();
+    }
 }

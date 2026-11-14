@@ -1,0 +1,202 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.OpticsSystemDataPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
+    <!-- OP-18: the system data (OpticStudio's System Explorer). Bindings go through the shell
+         DataContext, as the rest of the Optics panel's do. -->
+    <StackPanel>
+        <TextBlock Text="Aperture" FontWeight="Bold" Margin="0,6,0,2"/>
+        <controls:FormGrid>
+            <Label Content="Aperture type"/>
+            <ComboBox x:Name="OpticsApertureTypeCombo" ItemsSource="{Binding Optics.ApertureTypeChoices}"
+                      SelectedItem="{Binding Optics.SelectedApertureType}" DisplayMemberPath="Label"
+                      AutomationProperties.AutomationId="OpticsApertureTypeCombo"/>
+            <Label Content="{Binding Optics.ApertureValueLabel}"/>
+            <TextBox Text="{Binding Optics.ApertureValue}" IsEnabled="{Binding Optics.ApertureTakesValue}"
+                     AutomationProperties.AutomationId="OpticsApertureValueBox"/>
+            <Label Content="Apodization"/>
+            <ComboBox ItemsSource="{Binding Optics.ApodizationChoices}" SelectedItem="{Binding Optics.SelectedApodization}"
+                      DisplayMemberPath="Label"/>
+            <Label Content="Apodization factor"/>
+            <TextBox Text="{Binding Optics.ApodizationFactor}" IsEnabled="{Binding Optics.ApodizationTakesFactor}"
+                     ToolTip="The Gaussian apodization's fall-off; the other apodizations take no factor."/>
+            <Label Content="{Binding Optics.LengthUnitSymbol}" ContentStringFormat="Clear semi-diameter margin [{0}]"/>
+            <TextBox Text="{Binding Optics.SemiDiameterMargin}"
+                     ToolTip="Added to every clear semi-diameter the program sizes automatically."/>
+            <Label Content="Clear semi-diameter margin [%]"/>
+            <TextBox Text="{Binding Optics.SemiDiameterMarginPercent}"/>
+        </controls:FormGrid>
+        <CheckBox Content="Telecentric object space" IsChecked="{Binding Optics.TelecentricObjectSpace}" Margin="2,2,0,0"
+                  ToolTip="The entrance pupil is at infinity: chief rays in object space are parallel to the axis."/>
+        <CheckBox Content="Afocal image space" IsChecked="{Binding Optics.AfocalImageSpace}" Margin="2,2,0,0"
+                  ToolTip="The image is at infinity: image-space results are angles, not positions."/>
+
+        <TextBlock Text="Fields" FontWeight="Bold" Margin="0,8,0,2"/>
+        <controls:FormGrid>
+            <Label Content="Field type"/>
+            <ComboBox x:Name="OpticsFieldTypeCombo" ItemsSource="{Binding Optics.FieldTypeChoices}"
+                      SelectedItem="{Binding Optics.SelectedFieldType}" DisplayMemberPath="Label"
+                      AutomationProperties.AutomationId="OpticsFieldTypeCombo"/>
+            <Label Content="Normalization"/>
+            <ComboBox ItemsSource="{Binding Optics.FieldNormalizationChoices}"
+                      SelectedItem="{Binding Optics.SelectedFieldNormalization}" DisplayMemberPath="Label"/>
+        </controls:FormGrid>
+        <!-- Two lines a field: eight numbers do not fit the pane on one. -->
+        <ItemsControl x:Name="OpticsFieldList" ItemsSource="{Binding Optics.Fields}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0" Margin="0,2,0,0" Padding="0,3,0,0">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="28"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="24"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding Number}" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextFaintBrush}"
+                                               Text="{Binding DataContext.Optics.FieldUnitLabel, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat=X [{0}]}"/>
+                                    <TextBox Text="{Binding X}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Margin="2,0,0,0">
+                                    <TextBlock FontSize="11" Foreground="{DynamicResource TextFaintBrush}"
+                                               Text="{Binding DataContext.Optics.FieldUnitLabel, RelativeSource={RelativeSource AncestorType=UserControl}, StringFormat=Y [{0}]}"/>
+                                    <TextBox Text="{Binding Y}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="3" Margin="2,0,0,0">
+                                    <TextBlock Text="Weight" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                    <TextBox Text="{Binding Weight}"/>
+                                </StackPanel>
+                                <Button Grid.Column="4" Content="×" Padding="0" Margin="2,2,0,2" VerticalAlignment="Bottom" ToolTip="Remove this field"
+                                        Command="{Binding DataContext.Optics.RemoveFieldCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"/>
+                            </Grid>
+                            <UniformGrid Columns="5" Margin="28,2,24,0"
+                                         ToolTip="Vignetting factors: the pupil's decenter (VDX, VDY) and compression (VCX, VCY) as fractions of its radius, and the angle it is turned by (TAN, degrees). All zero for an unvignetted field.">
+                                <StackPanel>
+                                    <TextBlock Text="VDX" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                    <TextBox Text="{Binding DecenterX}"/>
+                                </StackPanel>
+                                <StackPanel Margin="2,0,0,0">
+                                    <TextBlock Text="VDY" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                    <TextBox Text="{Binding DecenterY}"/>
+                                </StackPanel>
+                                <StackPanel Margin="2,0,0,0">
+                                    <TextBlock Text="VCX" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                    <TextBox Text="{Binding CompressionX}"/>
+                                </StackPanel>
+                                <StackPanel Margin="2,0,0,0">
+                                    <TextBlock Text="VCY" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                    <TextBox Text="{Binding CompressionY}"/>
+                                </StackPanel>
+                                <StackPanel Margin="2,0,0,0">
+                                    <TextBlock Text="TAN [°]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                                    <TextBox Text="{Binding TiltDegrees}"/>
+                                </StackPanel>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Content="Add a field" Command="{Binding Optics.AddFieldCommand}" Margin="0,2,0,0" HorizontalAlignment="Left"/>
+        <controls:FormGrid Margin="0,4,0,0">
+            <Label Content="{Binding Optics.FieldUnitLabel}" ContentStringFormat="Wizard: largest y field [{0}]"/>
+            <TextBox Text="{Binding Optics.WizardMaxField}"/>
+            <Label Content="Wizard: number of fields"/>
+            <TextBox Text="{Binding Optics.WizardFieldCount}"/>
+        </controls:FormGrid>
+        <CheckBox Content="Equal-area spacing" IsChecked="{Binding Optics.WizardEqualArea}" Margin="2,2,0,0"
+                  ToolTip="On: each ring between neighbouring fields covers the same area of the field. Off: evenly spaced."/>
+        <Button Content="Replace the fields with the wizard's" Command="{Binding Optics.ApplyFieldWizardCommand}" Margin="0,2,0,0" HorizontalAlignment="Left"/>
+
+        <TextBlock Text="Wavelengths" FontWeight="Bold" Margin="0,8,0,2"/>
+        <ItemsControl x:Name="OpticsWavelengthList" ItemsSource="{Binding Optics.Wavelengths}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,2,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="28"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="24"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding Number}" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Wavelength [µm]" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                            <TextBox Text="{Binding Micrometers}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Margin="2,0,0,0">
+                            <TextBlock Text="Weight" FontSize="11" Foreground="{DynamicResource TextFaintBrush}"/>
+                            <TextBox Text="{Binding Weight}"/>
+                        </StackPanel>
+                        <Button Grid.Column="3" Content="×" Padding="0" Margin="2,2,0,2" VerticalAlignment="Bottom" ToolTip="Remove this wavelength"
+                                Command="{Binding DataContext.Optics.RemoveWavelengthCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"/>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Content="Add a wavelength" Command="{Binding Optics.AddWavelengthCommand}" Margin="0,2,0,0" HorizontalAlignment="Left"/>
+        <controls:FormGrid Margin="0,4,0,0">
+            <Label Content="Primary wavelength (number)"/>
+            <TextBox Text="{Binding Optics.PrimaryWavelength}" AutomationProperties.AutomationId="OpticsPrimaryWavelengthBox"/>
+            <Label Content="Preset"/>
+            <ComboBox ItemsSource="{Binding Optics.WavelengthPresets}" SelectedItem="{Binding Optics.SelectedWavelengthPreset}"
+                      DisplayMemberPath="Name"
+                      ToolTip="Spectral-line wavelengths from SCHOTT TIE-29, Table 2.3-1 (in air)."/>
+        </controls:FormGrid>
+        <Button Content="Replace the wavelengths with the preset" Command="{Binding Optics.ApplyWavelengthPresetCommand}" Margin="0,2,0,0" HorizontalAlignment="Left"/>
+        <controls:FormGrid Margin="0,4,0,0">
+            <Label Content="Quadrature band from / to [µm]"/>
+            <UniformGrid Columns="2">
+                <TextBox Text="{Binding Optics.QuadratureMinMicrometers}" Margin="0,0,2,0"/>
+                <TextBox Text="{Binding Optics.QuadratureMaxMicrometers}" Margin="2,0,0,0"/>
+            </UniformGrid>
+            <Label Content="Quadrature wavelengths"/>
+            <TextBox Text="{Binding Optics.QuadratureCount}"/>
+        </controls:FormGrid>
+        <Button Content="Replace the wavelengths with Gaussian quadrature" Command="{Binding Optics.ApplyWavelengthQuadratureCommand}" Margin="0,2,0,0" HorizontalAlignment="Left"
+                ToolTip="Gauss–Legendre wavelengths and weights over the band: exact for a result that varies as a polynomial of degree up to 2n−1 across a flat spectrum."/>
+
+        <TextBlock Text="Environment" FontWeight="Bold" Margin="0,8,0,2"/>
+        <controls:FormGrid>
+            <Label Content="Temperature [°C]"/>
+            <TextBox Text="{Binding Optics.TemperatureCelsius}"/>
+            <Label Content="Pressure [atm]"/>
+            <TextBox Text="{Binding Optics.PressureAtmospheres}" ToolTip="Zero is a vacuum."/>
+        </controls:FormGrid>
+        <CheckBox Content="Adjust indices to the environment" IsChecked="{Binding Optics.AdjustIndexToEnvironment}" Margin="2,2,0,0"
+                  ToolTip="Held and saved now; the thermal and pressure index model that uses it is a later item."/>
+
+        <TextBlock Text="Units" FontWeight="Bold" Margin="0,8,0,2"/>
+        <controls:FormGrid>
+            <Label Content="Lens units"/>
+            <ComboBox x:Name="OpticsLensUnitCombo" ItemsSource="{Binding Optics.LensUnitChoices}"
+                      SelectedItem="{Binding Optics.SelectedLensUnit}" DisplayMemberPath="Label"
+                      AutomationProperties.AutomationId="OpticsLensUnitCombo"
+                      ToolTip="Lengths keep their size: 10 mm becomes 1 cm."/>
+            <Label Content="Source units"/>
+            <ComboBox ItemsSource="{Binding Optics.SourceUnitChoices}" SelectedItem="{Binding Optics.SelectedSourceUnit}" DisplayMemberPath="Label"/>
+            <Label Content="Analysis area unit"/>
+            <ComboBox ItemsSource="{Binding Optics.LensUnitChoices}" SelectedItem="{Binding Optics.SelectedAnalysisAreaUnit}" DisplayMemberPath="Label"
+                      ToolTip="Irradiance and illuminance are reported per square of this length."/>
+            <Label Content="MTF units"/>
+            <ComboBox ItemsSource="{Binding Optics.MtfUnitChoices}" SelectedItem="{Binding Optics.SelectedMtfUnit}" DisplayMemberPath="Label"/>
+        </controls:FormGrid>
+
+        <TextBlock Text="Title and notes" FontWeight="Bold" Margin="0,8,0,2"/>
+        <controls:FormGrid>
+            <Label Content="Title"/>
+            <TextBox Text="{Binding Optics.SystemTitle}"/>
+        </controls:FormGrid>
+        <TextBox Text="{Binding Optics.SystemNotes}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" Margin="0,2,0,0"
+                 ToolTip="Notes kept with the system."/>
+
+        <TextBlock x:Name="OpticsSystemCheck" Text="{Binding Optics.SystemCheck}" TextWrapping="Wrap" Margin="0,8,0,0"
+                   Foreground="{DynamicResource TextFaintBrush}" AutomationProperties.AutomationId="OpticsSystemCheck"/>
+    </StackPanel>
+</UserControl>
