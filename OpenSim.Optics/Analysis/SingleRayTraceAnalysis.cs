@@ -30,7 +30,7 @@ public sealed record SingleRayTraceSettings
     public int Wavelength { get; init; }
 
     [DisplayName("Global coordinates")]
-    [Description("List positions in surface 1's frame instead of each surface's own.")]
+    [Description("List positions in the launch frame (object-space axes at surface 1's untilted vertex) instead of each surface's own.")]
     public bool GlobalCoordinates { get; init; }
 }
 
@@ -129,7 +129,7 @@ public sealed class SingleRayTraceAnalysis : OpticsAnalysis<SingleRayTraceSettin
                 TableRows = rows,
                 Lines = new[]
                 {
-                    (settings.GlobalCoordinates ? "Positions and direction cosines in surface 1's frame." : "Positions and direction cosines in each surface's local frame.")
+                    (settings.GlobalCoordinates ? "Positions and direction cosines in the launch frame (object-space axes, origin at surface 1's vertex before its own tilt)." : "Positions and direction cosines in each surface's local frame.")
                     + " Direction cosines are after the surface; path length is from the previous surface; optical path is from the launch point.",
                     lens.ObjectAtInfinity ? "Object at infinity: the OBJ row is the launch point on the plane through surface 1's vertex at right angles to the ray." : "The OBJ row is the object point.",
                 }

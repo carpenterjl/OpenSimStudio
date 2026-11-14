@@ -5,7 +5,8 @@ namespace OpenSim.Optics.Sequential;
 /// <summary>
 /// One ray at one surface, as the Single Ray Trace lists it. Lengths are meters; positions and
 /// directions are in the surface's local frame (vertex at the origin) unless named global, and
-/// global means the frame of surface 1's vertex (docs/Optics-Conventions.md §13).
+/// global means the frame rays are launched in: object space's axes, origin at surface 1's
+/// vertex before surface 1's own tilt (docs/Optics-Conventions.md §13, §15).
 /// </summary>
 public sealed record SurfaceHit
 {
@@ -15,7 +16,7 @@ public sealed record SurfaceHit
     /// launch point (in surface 1's frame when the object is at infinity).</summary>
     public Vector3D Position { get; init; }
 
-    /// <summary>The same point in surface 1's frame.</summary>
+    /// <summary>The same point in the global frame.</summary>
     public Vector3D GlobalPosition { get; init; }
 
     /// <summary>The unit direction arriving at the surface, local frame.</summary>

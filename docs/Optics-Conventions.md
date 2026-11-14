@@ -8,7 +8,7 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; those of the polarization ray trace (section 21) in `OpenSim.Tests/Optics/PolarizationTraceTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of coordinate breaks and tilts (section 15) in `OpenSim.Tests/Optics/CoordinateBreakTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; those of the polarization ray trace (section 21) in `OpenSim.Tests/Optics/PolarizationTraceTests.cs`; the cross-checks against other programs (section 22) in
 `OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
@@ -200,7 +200,7 @@ is taken about the axis as the earlier tilts left it.
 
 A surface's tilt and decenter acts as a coordinate break before the surface and another after
 it. The "after" values may be given, or picked up from, or the reverse of, this or an earlier
-surface's "before" values. Those rules are built with the coordinate-break item (OP-21).
+surface's "before" values. Section 15 gives how the tracer applies them (OP-21).
 
 ## 5. The ray
 
@@ -300,6 +300,7 @@ OpticStudio help, which has the same wording.
 | Partial dispersion P_g,F and the normal line ΔP_g,F = P_g,F − (0.6438 − 0.001682·Vd) | ZemaxGlass user manual (zemaxglass_manual.txt, nomenclature, "P" and "dPgF"); AGFFileReader.jl `src/runtime.jl` line 77, crediting SCHOTT TIE-29 (TIE-29 itself not on this machine) |
 | Thermo-optical constant G of the athermal glass map | SCHOTT TIE-19 equation (10) and Table 2 (p. 9) |
 | Internal transmittance at another thickness | AGFFileReader.jl `src/utilities.jl`, `absorption` (absorption −ln(t)/τ per mm) |
+| Coordinate break (six parameters, order flag, thickness applied last, dummy surface, not a mirror or the object, medium of the surface before); surface tilt/decenter before and after with the five after-surface options; coordinate return (none, orientation only, orientation XY, orientation XYZ, "To Surf"); Tilt/Decenter Elements; Local To Global; Global To Local; Add Fold Mirror; Delete Fold Mirror | OpticStudio 2025 R2 help (ansyshelp.ansys.com, pages "Coordinate Break", "Tilt/Decenter", "Tilt/Decenter Elements", "Local To Global", "Global To Local", "Add Fold Mirror", "Delete Fold Mirror"), read 2026-11-14; not saved (the site serves a browser check to plain downloads) |
 | Coating file layout (MATE, TAPR, COAT, loops, I.xx, IDEAL, IDEAL2, TABLE, comments), relative thickness d = λ0 T / n0, taper formulas, layer order on surfaces, uncoated mirror 0.7 − 7.0i, coating multiplier limit 10 | OpticStudio 2025 R2 help (ansyshelp.ansys.com, "Defining Coatings" and the pages it links; "Specifying Coatings on Surfaces"; "Properties of Uncoated Surfaces"; "Optimizing Coatings"), saved 2026-11-14 under `plans/sources/optics/coatingfile/` |
 | Index sign n − ik, propagation factor e^(−2πiτ/λ), definitions of R, T, A, diattenuation, phase and retardance | OpticStudio 2025 R2 help, "Defining Coatings" and "Definition of Polarization Terms" (same folder) |
 | Thin-film amplitude convention and the cross-check values | tmm 0.2.0 (S. Byrnes, MIT), `tmm_core.py`: `interface_r`, `interface_t`, `coh_tmm`, `T_from_t`, `power_entering_from_r` (`plans/sources/optics/tmm/`) |
@@ -430,6 +431,46 @@ single place in the code, so a correction is one line and its test.
     and its "Gouy phase accumulated from surface 1" are this program's choices; OpticStudio's
     Paraxial Gaussian Beam help was not read. Check: one singlet and one concave mirror with a
     beam of known waist and M² = 2, compared with OpticStudio's Paraxial Gaussian Beam listing.
+
+11. **Coordinate breaks, tilts and returns** (OP-21). Section 15 follows the help pages'
+    wording; no lens file exported by OpticStudio and no OpticStudio Global Vertex listing was
+    available, so none is compared with the program's numbers. Check: one coordinate break with
+    three unequal tilts and decenters in each order, one surface with before and after tilts
+    using each after-option, one return of each kind, and Add Fold Mirror with a reflect angle
+    of 60°, compared with OpticStudio's Global Vertex listing and Single Ray Trace.
+    - *Tilt signs (item 1).* Read as the help says: right-handed about the positive axes, each
+      about the axis as the earlier tilts left it. So a positive tilt about x turns +y toward
+      +z, and the vertex a thickness t after a break of +90° about x is at (0, −t, 0); about y it
+      is at (t, 0, 0) (`CoordinateBreakTests.TiltSigns_PlaceTheNextVertexAsTheRightHandRuleSays`).
+      RayOptics' negation of the x and y tilts on import remains the one contrary reading.
+    - *Coordinate return, Orientation XY.* The help says the x and y decenters are solved "to
+      restore the X and Y vertex offset". Read here as: the break's vertex lies on the target
+      surface's z axis (zero offset along the target's own x and y, which the break's axes then
+      are). With Orientation only the entered decenters and thickness are kept; with
+      Orientation XY the entered thickness is kept.
+    - *The return target's frame* is the target surface's own frame, after its own "before"
+      tilt. A return to the object surface is refused.
+    - *Reflect angle* of Add Fold Mirror ("the angle between the incident and reflected beam")
+      is read as the angle between the two beams at the mirror, so each break tilts by half of
+      it and 90° makes a right-angle fold; a positive angle turns the beam toward +y (about x)
+      or −x (about y). OpticStudio's second break is a pick-up of the first; here it is a copy.
+    - *Reversing later surfaces* after Add or Delete Fold Mirror changes thickness and curvature
+      (as the help says) and also the x and y tilts of later breaks and surface tilts (the help
+      is silent; it is what keeps the rays on the same path). Delete Fold Mirror removes the
+      mirror itself as well as its breaks and adds the thicknesses to the surface before.
+    - *Tilt/Decenter Elements* inserts a dummy at the group's start, the pivot and tilt breaks,
+      then after the group a return (orientation XYZ) to the dummy and one break that restores
+      the original step to the next surface. The help names the surfaces it inserts but not
+      their values, so the layout is this program's; the pivot is taken in the frame before the
+      first surface's own tilt.
+    - *Local To Global* gives each group a return to the reference, a position break and a
+      rotation break (the help's three); *Global To Local* keeps the thickness of the surface
+      before a run of breaks and puts the rest of the step in the one break that replaces it.
+    - *Paraxial data of a tilted system.* `SequentialLens.ToParaxialLens` unfolds a lens whose
+      tilts only fold the axis with plane mirrors and refuses any other tilted or decentered
+      lens. What OpticStudio's paraxial data do for a non-axial system was not read.
+    - *A ray parallel to a break's plane* is left where it is; OpticStudio's behaviour there was
+      not read.
 
 13. **Asphere readings** (OP-23). Section 17's forms follow the OpticStudio 2025 R2 help pages
     where they give an equation; these points are this program's reading and are not compared
@@ -647,10 +688,12 @@ apertures do not enter first-order optics; an ignored surface becomes a plane wi
 before it). Spencer and Murty (JOSA 52, 1962) and Welford were not on hand; every formula below
 is derived in `ConicIntersection.cs` and the gate tests, not copied.
 
-- **Frames.** A launched ray is written in surface 1's local frame. Surface j's frame is
-  placed in surface j − 1's by one transform, today the previous thickness along z
-  (`SequentialTrace.SurfaceStep`); coordinate breaks and surface tilts (OP-21) will replace that
-  transform and nothing else. Global positions are in surface 1's frame. Signs are those of
+- **Frames.** A launched ray is written in the global frame: object space's axes, origin at
+  surface 1's vertex before surface 1's own tilt (surface 1's local frame when it has none).
+  Surface j's frame is placed in surface j − 1's by one transform
+  (`SequentialTrace.SurfaceStep`, built by `SurfacePlacement`, section 15): the previous
+  surface's "after" tilt, its thickness along z, then this surface's "before" tilt or
+  coordinate break. Global positions are in the global frame. Signs are those of
   section 3: the frame's z never turns round at a mirror, thicknesses after an odd number of
   mirrors are negative, and a ray's direction carries the sense of travel (N < 0 after one
   mirror).
@@ -738,6 +781,104 @@ q = z + i·z_R and 1/q = 1/R − i·λ/(π·w²) in the comments of `GaussianBea
   needs the real ray trace (OP-20) and Arnaud's ray representation; tilted, decentered and
   anamorphic (toroidal, cylindrical) surfaces; Gaussian beam operands; apertures clipping the
   beam. Section 10, item 10, lists the check against OpticStudio.
+
+## 15. Coordinate breaks, tilts and global coordinates
+
+OP-21, `OpenSim.Optics/Sequential/SurfacePlacement.cs`, `CoordinateBreak.cs` and
+`CoordinateBreakTools.cs`. The rules are read from the OpticStudio 2025 R2 help pages listed in
+section 9; the formulas below are derived in the code comments and the tests, not copied.
+Section 10, item 11, lists what is not yet compared with OpticStudio's output.
+
+- **Data.** A `SequentialSurface` is a coordinate break when `CoordinateBreak` is set: a
+  `TiltDecenter` (section 4) and an optional coordinate return. Any other surface may have
+  `TiltBefore` (a `TiltDecenter`) and `TiltAfter` (a `SurfaceTiltAfter`: explicit values, this
+  surface's "before" picked up or reversed, or a prior surface's "before" picked up or
+  reversed). "Reversed" is `TiltDecenter.Reversed`: the other order, every value negated, which
+  undoes the original exactly. These fields are not saved in the project yet (OP-31).
+- **Global frame.** Object space's axes, origin at surface 1's vertex before surface 1's own
+  tilt and decenter. Rays are launched in it, and "global" in every result means it.
+- **Placement.** For j ≥ 1, with frame(0 → 1) the identity:
+  frame(j) = frame(j − 1) · After(j − 1) · Translate(0, 0, t(j − 1)) · Before(j), where Before
+  is the break's transform for a break and `TiltBefore` otherwise, and After is the resolved
+  `TiltAfter` (the identity for a break). So a thickness is measured along z after all the
+  surface's tilts and decenters, and a break's thickness is applied last, in either order.
+  `SurfacePlacement.Global(j)` is frame(j); `SequentialTrace.SurfaceStep(j)` is the step from
+  frame(j − 1). Without tilts the step is exactly the translation by the previous thickness, so
+  untilted lenses trace bit for bit as before.
+- **Coordinate break in the trace.** A dummy plane: the ray is moved to the plane z = 0 of the
+  break's frame (a virtual step back if it lies behind) and goes on with the same direction and
+  medium; a ray parallel to that plane (|N| < 10⁻¹² in its frame) stays where it is. A break has no curvature, conic,
+  shape, aperture, mirror flag, ignore flag or surface tilt, and cannot be the object or the
+  image (each refused by `SequentialLens.Validate`).
+- **Coordinate return** (`CoordinateReturnMode`), to a prior surface k ≥ 1, solved against
+  frame(k). With P the frame the break starts from and Q = P⁻¹·frame(k) (rotation R, translation
+  q, R's third column r₃): the break's rotation is R in every mode. *Orientation only* keeps the
+  entered decenters and thickness. *Orientation XY* puts the break's vertex on k's z axis: in
+  the order decenter then tilt (dx, dy, 0) = q + s·r₃ with s = −q_z/r₃z; in the order tilt then
+  decenter (dx, dy) = the x and y of Rᵀ·q. *Orientation XYZ* also sets the break's thickness so
+  the next surface lands on k's vertex: −s, or the z of Rᵀ·q. Decenter then tilt needs r₃z ≠ 0
+  and otherwise fails, naming the break and advising the other order. The trace uses the exact
+  solved transform; `SurfacePlacement.ResolvedBefore` reports its degrees read back from it.
+- **Restrictions read from the help:** no "before" tilt on surface 1 with the object at
+  infinity; no tilt on a break. Also refused here: a tilt of the object surface, an "after"
+  tilt on the object or image, a pick-up from a break, a return to a later surface or to the
+  object.
+- **Global vertex.** `SurfacePlacement.RelativeTo(j, reference)` is frame(reference)⁻¹·frame(j);
+  its translation is the vertex and its columns the local axes (global = vertex + R·local, as
+  section 4). `LocalToGlobal` and `GlobalToLocal` convert points. The analysis **Global vertex**
+  (`GlobalVertexAnalysis`) lists every surface's vertex, the tilts that reproduce its rotation
+  as a break in the order decenter then tilt, the rotation matrix, and each break with returns
+  solved, relative to a chosen reference surface (0 for the global frame).
+- **Paraxial model.** `SequentialLens.ToParaxialLens` copies the thicknesses of a lens without
+  tilts or breaks. With some, it follows the ray from the global origin along +z through the
+  surfaces and uses its signed lengths as thicknesses (negative after an odd number of
+  mirrors), breaks becoming planes in the medium before them. That is exact when the tilts only
+  fold the axis with plane mirrors and move dummy planes. A surface with power or a shape that
+  the axis meets off its vertex or obliquely, a local z pointing the wrong way for the mirror
+  count, or a refracting plane met obliquely makes the lens non-axial, and the method throws
+  `InvalidOperationException` naming the surface; `SequentialLens.IsAxial` reports the same
+  without throwing. The ray launcher and the paraxial analyses therefore refuse a non-axial
+  lens (ray aiming for such systems is OP-22); the real trace itself does not.
+- **Lens tools** (`CoordinateBreakTools`). Each returns a new lens, renumbers the surfaces that
+  returns and pick-ups name, refuses what it cannot rewrite exactly, and moves no surface.
+  - *TiltDecenterElements*: a dummy at the group's start, a break to the pivot (if not the
+    origin), the tilt break, a break back from the pivot, the group, a return (orientation XYZ,
+    order tilt then decenter) to the dummy, and a break holding the original step to the next
+    surface. The pivot is in the frame before the first surface's own tilt, or global.
+  - *AddFoldMirror*: the fold surface must be a plane dummy in one medium. A break of half the
+    reflect angle about x or y (thickness 0), the surface as a mirror (thickness 0), the same
+    break carrying the fold surface's thickness negated; every later surface reversed. A plane
+    mirror between breaks of θ/2 reflects the space after it by Rx(θ)·diag(1, 1, −1), so
+    "reversed" means thickness, curvature, and the x and y tilts of later breaks and tilts
+    change sign, decenters and z tilts do not. Later surfaces with a shape, and returns or
+    pick-ups across the fold, are refused.
+  - *DeleteFoldMirror*: removes a zero-thickness break before the plane mirror, the mirror, and
+    the break after it when the mirror has zero thickness; adds the removed thicknesses (signs
+    restored) to the surface before; reverses every later surface.
+  - *LocalToGlobal*: groups start at the first surface and after every break in the range; the
+    breaks are removed and each group gets a return (orientation XYZ) to the reference, a break
+    with the group's x, y (decenters) and z (thickness) in the reference's frame, and a break
+    with its tilts.
+  - *GlobalToLocal*: each run of breaks becomes one explicit break in the chosen order; the
+    surface before keeps its thickness. `CoordinateBreakTools.Decompose` writes a transform
+    m = Break·Translate(0, 0, t): tilt then decenter (dx, dy, t) = Rᵀ·q; decenter then tilt
+    t = q_z/R₃₃, dx = q_x − R₁₃·t, dy = q_y − R₂₃·t (refused when R₃₃ = 0).
+- **Gates** (`CoordinateBreakTests`, closed forms derived in the tests): a plate of index n
+  tilted by a displaces a ray by t·sin(a − b)/cos b with sin a = n·sin b, built with breaks and
+  with surface tilts, in both orders; a pair of 90° and −90° fold mirrors returns the axis,
+  displaced by the fold separation, and images exactly as the unfolded lens; an Offner relay
+  (concentric mirrors of radius R and R/2, object at the centre plane) built with breaks
+  traces as the same relay without them, images its centre onto itself, and its
+  tangential-minus-sagittal focus separation grows sixteen-fold when the field doubles (fifth
+  order, not third). Third-order anastigmatism follows from the incidence of the marginal ray
+  from the common centre being zero at every mirror (S1 = 0 per surface, and so S3 = 0 by the
+  stop-shift relations); the higher-order coefficients are not derived, so the ratio is
+  allowed 14 to 18.5.
+- **Not built:** saving the new surface fields (OP-31); editing them in the lens data editor;
+  pick-ups of break values and multi-configuration control; OpticStudio's solve-removal modes
+  and colours/comments options of the tools; hiding the trailing dummy; tilting the object
+  surface; layouts drawing tilted surfaces; paraxial data, ray aiming and the launcher for
+  non-axial systems.
 
 ## 17. Aspheres
 

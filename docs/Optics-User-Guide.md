@@ -239,8 +239,7 @@ status. Like the paraxial report, it says the system has no surfaces until the l
 (OP-31) supplies them; the trace is used from code and tests until then. The equations and the
 points not yet compared with OpticStudio are in `docs/Optics-Conventions.md` §13 and §10 item 9.
 
-Not built: the lens data editor and saving surfaces (OP-31), tilts, decenters and coordinate
-breaks (OP-21), ray aiming and vignetting factors (OP-22), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, OPD
+Not built: the lens data editor and saving surfaces (OP-31), ray aiming and vignetting factors (OP-22), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, OPD
 against the reference sphere (OP-35), and layouts drawing traced rays.
 
 ## Gaussian beams
@@ -307,6 +306,39 @@ amplitudes in OpticStudio's convention; retardance φp − φs (transmission) an
 `docs/Optics-Conventions.md` §12. Coatings on surfaces and their effect on traced rays are
 the polarization ray trace's (see Polarization). Not built: per-layer multipliers and offsets in the plots' settings
 (the library takes them), incoherent thick layers, and coating design or optimisation.
+
+## Coordinate breaks and tilts
+
+The real ray trace places surfaces with coordinate breaks and surface tilts and decenters
+(`OpenSim.Optics/Sequential/SurfacePlacement.cs`, `CoordinateBreak.cs`):
+
+- **Coordinate break:** a dummy surface with x and y decenters, tilts about x, y and z in
+  degrees, and the order flag (decenter then tilt, or tilt then decenter). Its thickness is
+  applied last, along the new z. A break can return to a prior surface's coordinate system:
+  orientation only, orientation and x, y, or orientation and x, y, z (the thickness is then
+  solved as well).
+- **Surface tilt and decenter:** any other surface can be tilted and decentered before itself,
+  and after itself with explicit values, its own "before" values picked up or reversed, or a
+  prior surface's picked up or reversed. Not before surface 1 when the object is at infinity.
+- **Global coordinates:** "global" means object space's axes with the origin at surface 1's
+  vertex before its own tilt. The analysis **Global vertex** (Reports) lists every surface's
+  vertex, tilts and rotation matrix relative to a reference surface you choose, and the values
+  of every break with returns solved.
+- **Tools** (library functions in `CoordinateBreakTools`, no menu yet): Tilt/Decenter Elements
+  (tilt a group about a pivot and put everything after it back where it was), Add Fold Mirror
+  and Delete Fold Mirror, Local To Global and Global To Local. None moves a surface.
+- **Paraxial data** of a tilted lens: a lens whose tilts only fold the axis with plane mirrors
+  is unfolded and gives its first-order data; any other tilted or decentered lens is refused by
+  the paraxial analyses and the ray launcher, with the surface named. The real trace itself
+  has no such limit.
+
+Like the other ray analyses, Global vertex says there are no surfaces until the lens data
+editor (OP-31) supplies them. The rules, the readings of OpticStudio's help and the points not
+yet compared with OpticStudio are in `docs/Optics-Conventions.md` §15 and §10 item 11.
+
+Not built: saving or editing the new surface fields (OP-31), pick-ups of break values and
+multi-configuration control, tilting the object surface, layouts drawing tilted surfaces, and
+paraxial data, ray aiming and ray launching for non-axial systems (OP-22).
 
 ## Aspheres
 

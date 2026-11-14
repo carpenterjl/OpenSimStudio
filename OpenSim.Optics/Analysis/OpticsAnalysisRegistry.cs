@@ -53,6 +53,8 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new ParaxialDataAnalysis());
         // OP-20: the real ray trace (no saved surfaces until OP-31).
         registry.Register(new SingleRayTraceAnalysis());
+        // OP-21: global vertices and coordinate breaks (no saved surfaces until OP-31).
+        registry.Register(new GlobalVertexAnalysis());
         // Materials (OP-14).
         registry.Register(new GlassMapAnalysis());
         registry.Register(new AthermalGlassMapAnalysis());

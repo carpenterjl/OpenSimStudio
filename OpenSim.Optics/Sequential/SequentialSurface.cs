@@ -15,9 +15,9 @@ namespace OpenSim.Optics.Sequential;
 /// curvature 1/m.
 /// </para>
 /// <para>
-/// Tilts, decenters and coordinate breaks are OP-21: the tracer places every surface through
-/// one transform per surface (<see cref="SequentialTrace"/>), which is a translation along z
-/// until they arrive.
+/// Tilts, decenters and coordinate breaks (OP-21) are <see cref="CoordinateBreak"/>,
+/// <see cref="TiltBefore"/> and <see cref="TiltAfter"/>; <see cref="SurfacePlacement"/> turns
+/// them into one transform per surface, which the tracer applies (<see cref="SequentialTrace"/>).
 /// </para>
 /// </summary>
 public sealed record SequentialSurface
@@ -91,6 +91,25 @@ public sealed record SequentialSurface
     /// reads it yet (thermal modelling of surfaces is not built); a TCE pickup solve copies it
     /// (<see cref="Solves.PickupSolve"/>).</summary>
     public double ThermalExpansion { get; init; }
+
+    // OP-21: coordinate breaks and surface tilts and decenters (docs/Optics-Conventions.md §15).
+
+    /// <summary>Non-null when this surface is a coordinate break: a dummy plane that places the
+    /// coordinate system of the surfaces after it. Its curvature, shape, aperture, medium and
+    /// mirror flag are not used (and must be left at their defaults).</summary>
+    public CoordinateBreak? CoordinateBreak { get; init; }
+
+    /// <summary>The surface's own tilt and decenter before it (a coordinate break before the
+    /// surface), or null for none. Not on a coordinate break or the object surface, nor on
+    /// surface 1 when the object is at infinity.</summary>
+    public TiltDecenter? TiltBefore { get; init; }
+
+    /// <summary>The surface's tilt and decenter after it (applied before its thickness), or null
+    /// for none. Not on a coordinate break, the object or the image surface.</summary>
+    public SurfaceTiltAfter? TiltAfter { get; init; }
+
+    /// <summary>True for a coordinate-break surface.</summary>
+    public bool IsCoordinateBreak => CoordinateBreak is not null;
 
     /// <summary>The vertex radius, meters; +infinity for a plane.</summary>
     public double Radius => OpticsConventions.RadiusFromCurvature(Curvature);

@@ -17,11 +17,18 @@ public readonly record struct TraceOptions
 /// (docs/Optics-Conventions.md §13). Built once per lens, system and wavelength by
 /// <see cref="Create"/>; immutable and safe to share between threads.
 /// <para>
-/// <b>Frames.</b> A launched ray is written in surface 1's local frame (vertex at the origin,
-/// +z the direction light starts in). Each surface j has its own local frame, placed in the
-/// frame of surface j − 1 by <see cref="SurfaceStep"/>; today that is a translation by the
-/// previous thickness along z (negative after an odd number of mirrors), and the coordinate
-/// breaks and tilts of OP-21 replace it with their transform, with no change to the loop.
+/// <b>Frames.</b> A launched ray is written in the global frame: object space's axes, origin at
+/// surface 1's vertex before surface 1's own tilt and decenter (surface 1's local frame when it
+/// has none). Each surface j has its own local frame, placed in the frame of surface j − 1 by
+/// <see cref="SurfaceStep"/> (<see cref="SurfacePlacement"/>, OP-21): the previous surface's
+/// "after" tilt, its thickness along z (negative after an odd number of mirrors), and this
+/// surface's "before" tilt or coordinate break.
+/// </para>
+/// <para>
+/// <b>Coordinate breaks</b> are dummy planes: the ray is moved to the break's plane (a virtual
+/// step back when the plane lies behind it) with no change of direction or medium. When the
+/// ray runs parallel to the plane (|N| &lt; 10⁻¹²) it stays where it is, and the whole straight segment is
+/// counted at the next surface; the optical path is the same either way.
 /// </para>
 /// <para>
 /// <b>Failures.</b> A ray that misses a surface, is totally internally reflected, or is
@@ -35,6 +42,13 @@ public sealed class SequentialTrace
     private readonly RigidTransform[] _step;
     private readonly RigidTransform[] _global;
     private readonly double[] _semiDiameter;
+
+    /// <summary>A ray whose local z direction cosine is below this in magnitude is taken as
+    /// parallel to a coordinate break's plane.</summary>
+    internal const double ParallelToBreak = 1e-12;
+
+    /// <summary>Where every surface sits (OP-21).</summary>
+    public SurfacePlacement Placement { get; }
 
     public SequentialLens Lens { get; }
     public OpticalSystemData System { get; }
@@ -69,7 +83,7 @@ public sealed class SequentialTrace
         _index = new double[count];
         for (int j = 0; j < image; j++)
         {
-            if (j > 0 && (lens.Surfaces[j].IsMirror || lens.Surfaces[j].IsIgnored))
+            if (j > 0 && (lens.Surfaces[j].IsMirror || lens.Surfaces[j].IsIgnored || lens.Surfaces[j].IsCoordinateBreak))
             {
                 _index[j] = _index[j - 1];
                 continue;
@@ -82,19 +96,14 @@ public sealed class SequentialTrace
         }
         _index[image] = _index[image - 1];
 
+        Placement = SurfacePlacement.ComputeValidated(lens);
         _step = new RigidTransform[count];
         _global = new RigidTransform[count];
-        _step[1] = RigidTransform.Identity;
-        _global[1] = RigidTransform.Identity;
-        for (int j = 2; j < count; j++)
+        for (int j = 0; j < count; j++)
         {
-            _step[j] = SurfaceStep(j);
-            _global[j] = RigidTransform.Compose(_global[j - 1], _step[j]);
+            _step[j] = Placement.Step(j);
+            _global[j] = Placement.Global(j);
         }
-        _global[0] = lens.ObjectAtInfinity
-            ? RigidTransform.Identity
-            : RigidTransform.FromTranslation(new Vector3D(0, 0, -lens.Surfaces[0].Thickness));
-        _step[0] = _global[0];
 
         _semiDiameter = new double[count];
         for (int j = 0; j < count; j++)
@@ -125,21 +134,20 @@ public sealed class SequentialTrace
     }
 
     /// <summary>
-    /// Where surface <paramref name="j"/>'s local frame sits in surface j − 1's (j ≥ 2): the
-    /// previous thickness along z. This is the one place OP-21's coordinate breaks and surface
-    /// tilts and decenters will enter.
+    /// Where surface <paramref name="j"/>'s local frame sits in surface j − 1's (for surface 1,
+    /// in the global frame): previous surface's "after" tilt, its thickness, this surface's
+    /// "before" tilt or coordinate break (<see cref="SurfacePlacement.Step"/>).
     /// </summary>
-    private RigidTransform SurfaceStep(int j) =>
-        RigidTransform.FromTranslation(new Vector3D(0, 0, Lens.Surfaces[j - 1].Thickness));
+    public RigidTransform SurfaceStep(int j) => _step[j];
 
-    /// <summary>The placement of surface <paramref name="j"/>'s local frame in surface 1's
+    /// <summary>The placement of surface <paramref name="j"/>'s local frame in the global frame
     /// (for the object surface at a finite distance, its plane at z = −distance).</summary>
     public RigidTransform GlobalPlacement(int j) => _global[j];
 
-    /// <summary>A new ray of this trace's wavelength in surface 1's frame.</summary>
+    /// <summary>A new ray of this trace's wavelength in the global frame.</summary>
     public Ray NewRay(Vector3D position, Vector3D direction) => new(position, direction, VacuumWavelength);
 
-    /// <summary>Traces a ray given in surface 1's frame to the image surface. The result is in
+    /// <summary>Traces a ray given in the global frame to the image surface. The result is in
     /// the image surface's frame, or in the frame of the surface it failed at.</summary>
     public Ray Trace(Ray launch, TraceOptions options = default) => Run(launch, options, null, null);
 
@@ -154,7 +162,7 @@ public sealed class SequentialTrace
         return Run(launch, options, null, segments);
     }
 
-    /// <summary>Traces a ray given in surface 1's frame and records every surface it meets.</summary>
+    /// <summary>Traces a ray given in the global frame and records every surface it meets.</summary>
     public RayPath TracePath(Ray launch, TraceOptions options = default)
     {
         var hits = new List<SurfaceHit>(Lens.Surfaces.Count);
@@ -183,23 +191,37 @@ public sealed class SequentialTrace
         double path = ray.OpticalPath;
         for (int j = 1; j <= image; j++)
         {
-            if (j > 1) ray = ray.ToLocal(_step[j]);
+            ray = ray.ToLocal(_step[j]);
             var s = surfaces[j];
             var p = ray.Position;
             var d = ray.Direction;
             double nBefore = _index[j - 1], nAfter = _index[j];
+            bool dummy = s.IsIgnored || s.IsCoordinateBreak;
 
             // Transfer to the vertex plane z = 0 (a negative distance is a virtual step back).
-            if (d.Z == 0) return ray.Failed(RayStatus.MissedSurface, j);
-            double s0 = -p.Z / d.Z;
+            // A coordinate break the ray runs parallel to (|N| below 1e-12, where the step to its
+            // plane would be a long virtual detour that only loses digits) leaves the ray where it is.
+            bool parallel = s.IsCoordinateBreak ? Math.Abs(d.Z) < ParallelToBreak : d.Z == 0;
+            if (parallel && !s.IsCoordinateBreak) return ray.Failed(RayStatus.MissedSurface, j);
+            double s0 = parallel ? 0 : -p.Z / d.Z;
             double x = p.X + s0 * d.X, y = p.Y + s0 * d.Y;
-            double c = s.IsIgnored ? 0 : s.Curvature;
-            var shape = s.IsIgnored ? null : s.Shape;
+            double c = dummy ? 0 : s.Curvature;
+            var shape = dummy ? null : s.Shape;
             Vector3D point;
             double delta;
-            bool met = shape is null
-                ? ConicIntersection.Intersect(x, y, d, c, s.Conic, out point, out delta)
-                : shape.Intersect(x, y, d, s, out point, out delta);
+            bool met;
+            if (parallel)
+            {
+                point = p;
+                delta = 0;
+                met = true;
+            }
+            else
+            {
+                met = shape is null
+                    ? ConicIntersection.Intersect(x, y, d, c, s.Conic, out point, out delta)
+                    : shape.Intersect(x, y, d, s, out point, out delta);
+            }
             if (!met || !double.IsFinite(s0) || !double.IsFinite(delta))
                 return ray.Failed(RayStatus.MissedSurface, j);
             double length = s0 + delta;
@@ -210,7 +232,7 @@ public sealed class SequentialTrace
             var normal = shape is null ? ConicIntersection.Normal(point, c, s.Conic) : shape.Normal(point, s);
 
             // Aperture.
-            if (!options.IgnoreApertures && !s.IsIgnored && s.Aperture is { } aperture
+            if (!options.IgnoreApertures && !dummy && s.Aperture is { } aperture
                 && !aperture.Passes(point.X, point.Y, _semiDiameter[j]))
             {
                 Record(hits, j, ray, d, d, normal, nBefore, nBefore, length, segment, RayStatus.Vignetted);
@@ -237,7 +259,7 @@ public sealed class SequentialTrace
                 if (segments is not null) segments[j] = segment;
                 ray = ray with { OpticalPath = path };
             }
-            else if (j < image && !s.IsIgnored)
+            else if (j < image && !dummy)
             {
                 if (s.IsMirror)
                 {
