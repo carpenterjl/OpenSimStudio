@@ -17,3 +17,14 @@ public sealed record LinePlot(string Title, string XLabel, string YLabel, IReadO
     public bool LogX { get; init; }
     public bool LogY { get; init; }
 }
+
+/// <summary>One labelled point of an <see cref="AnalysisScatterPlot"/> (a glass on a glass map).</summary>
+public sealed record AnalysisPoint(double X, double Y, string Label);
+
+/// <summary>One series of an <see cref="AnalysisScatterPlot"/>: points drawn with one marker and colour.</summary>
+public sealed record AnalysisScatterSeries(string Name, IReadOnlyList<AnalysisPoint> Points);
+
+/// <summary>Labelled points against two axes at independent scales (the glass maps, OP-14).
+/// The window draws it with the scatter plot control of OP-7.</summary>
+public sealed record AnalysisScatterPlot(string Title, string XLabel, string YLabel, IReadOnlyList<AnalysisScatterSeries> Series)
+    : AnalysisPlot(Title);

@@ -8,8 +8,9 @@ namespace OpenSim.App.Controls.Plotting;
 /// <summary>One series of a <see cref="ScatterPlot"/>: points drawn with one marker and colour
 /// (a spot diagram draws one series per wavelength).</summary>
 /// <param name="Size">Marker half-size in pixels.</param>
+/// <param name="Labels">A name per point for the readout (a glass on a glass map), or null.</param>
 public sealed record ScatterSeries(string Name, IReadOnlyList<Point2> Points, Color Color,
-    PlotMarker Marker = PlotMarker.Dot, double Size = 2.5);
+    PlotMarker Marker = PlotMarker.Dot, double Size = 2.5, IReadOnlyList<string>? Labels = null);
 
 /// <summary>A reference circle drawn over a scatter plot, in data units (the Airy disc of a spot
 /// diagram, a field stop).</summary>
@@ -135,7 +136,8 @@ public sealed class ScatterPlot : InteractivePlot
             var s = Series[hit.Series];
             var p = s.Points[hit.Index];
             var q = pixels[hit.Series][hit.Index];
-            string head = s.Name.Length > 0 ? $"{s.Name}, point {hit.Index + 1}\n" : $"point {hit.Index + 1}\n";
+            string point = s.Labels is { } labels && hit.Index < labels.Count ? labels[hit.Index] : $"point {hit.Index + 1}";
+            string head = s.Name.Length > 0 ? $"{s.Name}, {point}\n" : $"{point}\n";
             return new PlotReadout(new Point(q.X, q.Y),
                 $"{head}{AxisName(XLabel, "x")} = {AxisTicks.Readout(p.X)}{unit}\n{AxisName(YLabel, "y")} = {AxisTicks.Readout(p.Y)}{unit}");
         }

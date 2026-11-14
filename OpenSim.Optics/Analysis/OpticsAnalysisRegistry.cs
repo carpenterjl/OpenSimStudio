@@ -51,6 +51,14 @@ public sealed class OpticsAnalysisRegistry
         var registry = new OpticsAnalysisRegistry();
         registry.Register(new SystemSummaryAnalysis());
         registry.Register(new ParaxialDataAnalysis());
+        // Materials (OP-14).
+        registry.Register(new GlassMapAnalysis());
+        registry.Register(new AthermalGlassMapAnalysis());
+        registry.Register(new DispersionCurveAnalysis());
+        registry.Register(new TransmittanceCurveAnalysis());
+        registry.Register(new GlassCompareAnalysis());
+        registry.Register(new ModelGlassAnalysis());
+        registry.Register(new GlassFitAnalysis());
         return registry;
     }
 }

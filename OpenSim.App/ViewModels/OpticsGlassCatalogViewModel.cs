@@ -242,6 +242,7 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
             SelectedCatalog = Catalogs.FirstOrDefault(r => r.Name == catalog.Name);
             Status = $"{(replacing ? "Replaced" : "Imported")} catalog '{catalog.Name}': {catalog.Materials.Count} glasses. " + CatalogSummary +
                      (catalog.Notes.Count > 0 ? $" {catalog.Notes.Count} reader notes below." : "");
+            _activeCatalogsChanged();
         }
         catch (Exception e) when (e is IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -294,6 +295,8 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
         RebuildRows(CurrentActiveNamesOrNull());
         SelectedCatalog = Catalogs.FirstOrDefault(r => r.Name == selected) ?? Catalogs.FirstOrDefault();
         Status = what + (_library.LoadWarnings.Count > 0 ? " " + string.Join(" ", _library.LoadWarnings) : "");
+        // The catalogs' content changed: the material analyses (OP-14) recompute from the new set.
+        _activeCatalogsChanged();
     }
 
     /// <summary>Problems from the library's load, for the log at startup.</summary>

@@ -7,6 +7,7 @@ using OpenSim.Core.Model;
 using OpenSim.Core.PostProcessing;
 using OpenSim.Optics;
 using OpenSim.Optics.Analysis;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.App.ViewModels;
 
@@ -25,6 +26,7 @@ public sealed partial class OpticsAnalysesViewModel : ObservableObject
     private readonly ProjectSession _session;
     private readonly ILogService _log;
     private readonly OpticsAnalysisRegistry _registry;
+    private readonly GlassCatalogLibrary? _catalogs;
 
     /// <summary>Settings each analysis was last used with, by id, for the next window opened.</summary>
     private readonly Dictionary<string, object> _lastSettings = new(StringComparer.Ordinal);
@@ -38,11 +40,15 @@ public sealed partial class OpticsAnalysesViewModel : ObservableObject
 
     private TimeSpan _debounce = TimeSpan.FromMilliseconds(250);
 
-    public OpticsAnalysesViewModel(ProjectSession session, ILogService log, OpticsAnalysisRegistry registry)
+    /// <param name="catalogs">The glass catalogs the material analyses (OP-14) read, filtered to
+    /// the lens's active ones at each snapshot; null gives them none.</param>
+    public OpticsAnalysesViewModel(ProjectSession session, ILogService log, OpticsAnalysisRegistry registry,
+        GlassCatalogLibrary? catalogs = null)
     {
         _session = session;
         _log = log;
         _registry = registry;
+        _catalogs = catalogs;
         _selectedToOpen = registry.All.FirstOrDefault();
         Layout.Changed += (_, _) => OnPropertyChanged(nameof(HasWindows));
         session.OpticsChanged += (_, _) => OnSystemChanged();
@@ -81,8 +87,16 @@ public sealed partial class OpticsAnalysesViewModel : ObservableObject
     internal void Log(string message) => _log.Append(message);
 
     /// <summary>The snapshot a compute starts from, taken on the UI thread.</summary>
-    internal OpticsAnalysisContext Snapshot() =>
-        new(_session.Project.Name, (_session.OpticsSystem ?? new OpticsSettings()) with { Analyses = null });
+    internal OpticsAnalysisContext Snapshot()
+    {
+        var system = (_session.OpticsSystem ?? new OpticsSettings()) with { Analyses = null };
+        return new OpticsAnalysisContext(_session.Project.Name, system)
+        {
+            // A copy of the list: the library's own list is rebuilt when it reloads.
+            Catalogs = _catalogs is null ? Array.Empty<OpticalCatalog>()
+                : GlassLookup.ActiveCatalogs(_catalogs.Catalogs, system.Materials?.ActiveCatalogs),
+        };
+    }
 
     /// <summary>Opens the analysis chosen in the panel's picker.</summary>
     [RelayCommand]

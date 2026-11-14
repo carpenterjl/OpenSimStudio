@@ -7,7 +7,7 @@
          settings form when open, then the plots and the text listing. DataContext is an
          AnalysisWindowViewModel. -->
     <UserControl.Resources>
-        <analyses:AnalysisPlotImageConverter x:Key="PlotImage"/>
+        <analyses:AnalysisPlotViewConverter x:Key="PlotView"/>
     </UserControl.Resources>
     <DockPanel Background="{DynamicResource PanelBgBrush}">
         <Border DockPanel.Dock="Top" Padding="4,2" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,0,0,1">
@@ -70,8 +70,8 @@
                               Visibility="{Binding HasPlots, Converter={StaticResource BoolToVis}}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Image Source="{Binding Converter={StaticResource PlotImage}}" Stretch="Uniform"
-                                   MaxHeight="320" Margin="4" HorizontalAlignment="Left" ToolTip="{Binding Title}"/>
+                            <ContentControl Content="{Binding Converter={StaticResource PlotView}}" Focusable="False"
+                                            Margin="4" HorizontalAlignment="Left"/>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

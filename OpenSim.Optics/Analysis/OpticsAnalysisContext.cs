@@ -1,4 +1,5 @@
 using OpenSim.Core.Model;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.Optics.Analysis;
 
@@ -10,6 +11,11 @@ namespace OpenSim.Optics.Analysis;
 /// </summary>
 public sealed record OpticsAnalysisContext(string ProjectName, OpticsSettings System)
 {
+    /// <summary>The active glass catalogs at the snapshot, in search order (OP-14's material
+    /// analyses read them); empty when the caller supplies none. Catalogs are immutable records,
+    /// so the list is safe to read on the compute thread.</summary>
+    public IReadOnlyList<OpticalCatalog> Catalogs { get; init; } = Array.Empty<OpticalCatalog>();
+
     /// <summary>The mode the snapshot is in; an unknown saved name reads as the default.</summary>
     public OpticsMode Mode =>
         OpticsModes.TryParseSavedName(System.Mode, out var mode) ? mode : OpticsModes.All[0];

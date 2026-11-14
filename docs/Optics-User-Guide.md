@@ -102,6 +102,52 @@ lists the glass catalogs the program has loaded and which of them the lens uses.
   air.
 - The data are shown, not edited, and no surface uses a glass yet.
 
+## Glass tools and material plots
+
+Seven analyses in the **Materials** group of the analysis windows (OP-14,
+`OpenSim.Optics/Analysis/MaterialAnalyses.cs`) work on the active glass catalogs, so any catalog
+you import or tick appears in them; ticking, importing or reloading recomputes open windows.
+Their settings are edited in the window's settings form and save with the project.
+
+- **Glass map.** nd against Vd, or P_g,F against Vd (the partial dispersion diagram), one
+  colour and marker per catalog; hovering a point names the glass. Every glass is placed at the
+  nd, Vd and P_g,F computed from its coefficients, not at the printed values; glasses that
+  cannot be placed (no valid range over F, d and C, placeholder entries, no g line for P_g,F)
+  are listed with the reason. Vd increases to the right (printed maps usually reverse it).
+- **Athermal glass map.** Thermal expansion α (the catalog's ED value for −30…+70 °C) against
+  the thermo-optical constant G = α·(n_rel − 1) + dn_rel/dT of SCHOTT TIE-19 equation (10), or
+  against dn_rel/dT alone. dn_rel/dT is the mean over a temperature interval (default +20/+40
+  °C at the e line, as TIE-19's Table 2), from the TIE-19 dn/dT model and the glass's TD
+  constants, with the TIE-19 air by default. Glasses without TD constants or an expansion
+  coefficient are left out and listed.
+- **Dispersion vs wavelength.** Index against wavelength for glasses you name ("N-BK7, F2";
+  "catalog:glass" picks a catalog), each drawn only over its valid range.
+- **Internal transmittance vs wavelength.** The catalog's IT table scaled to a chosen
+  thickness (t^(d/τ) per point), drawn at the table's own wavelengths with nothing
+  extrapolated; points without a sample thickness are left out and counted.
+- **Glass compare.** Named glasses side by side: computed and printed nd, Vd, ΔP_g,F, ne, Ve,
+  nF − nC, P_g,F, the index at the system's wavelengths (or a list you give), and the thermal,
+  cost and resistance data as printed.
+- **Model glass.** A glass from nd, Vd and ΔP_g,F (P_g,F measured from the normal line
+  0.6438 − 0.001682·Vd). **This is OpenSim's own stand-in, not OpticStudio's model glass**,
+  whose formula is not published: the relative partial dispersion is fitted as a linear
+  function of P_g,F over the active catalogs' glasses, with constraints that make the requested
+  nd, Vd and P_g,F come out exactly, and the result is an ordinary Herzberger (formula 3) glass
+  valid from 0.4047 to 1.014 µm. Away from the d line its indices will differ from OpticStudio's,
+  and a different set of active catalogs gives a different model; the window reports how well
+  the model reproduces the training glasses (trained on the SCHOTT catalog: RMS 8e-5 in index,
+  worst 1.3e-3).
+- **Glass fitting.** Fits any dispersion formula except Sellmeier 2 to a text file of
+  "wavelength(µm) index" pairs, and lists the coefficients with standard errors, the residuals
+  (plotted) and the condition number, and the NM, CD and LD lines of an AGF entry to paste into
+  a catalog. Sellmeier-type formulas start from a grid search over resonance positions and are
+  refined by damped least squares.
+
+Glass index and Abbe offsets exist in the library (`GlassOffsets`): they move nd and Vd by
+given amounts and keep every relative partial dispersion; this is this program's rule, not
+OpticStudio's, whose formula has not been read. No window applies them yet, because no surface
+uses a glass.
+
 ## Environment and the index of air
 
 The **Environment** group of the system data (`OpenSim.App/Views/Panels/OpticsSystemDataPanel.xaml`)

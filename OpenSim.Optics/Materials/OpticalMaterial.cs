@@ -97,6 +97,11 @@ public sealed record OpticalMaterial
     public double? AlkaliResistance { get; init; }
     public double? PhosphateResistance { get; init; }
 
+    /// <summary>An index and Abbe offset applied on top of the catalog data (OP-14), or null.
+    /// Made by <see cref="GlassOffsets.Apply"/>, which computes its scale and shift from this
+    /// glass's own nd, nF and nC; <see cref="RelativeIndex"/> applies it to every index.</summary>
+    public IndexOffset? Offset { get; init; }
+
     /// <summary>IT: internal transmittance against wavelength, in file order.</summary>
     public IReadOnlyList<TransmittancePoint> Transmittance { get; init; } = Array.Empty<TransmittancePoint>();
 
@@ -124,7 +129,7 @@ public sealed record OpticalMaterial
     public double RelativeIndex(double micrometers)
     {
         CheckRange(micrometers);
-        if (Tabulated is { } table) return table.Interpolate(micrometers).N;
+        if (Tabulated is { } table) return Offset is { } tableOffset ? tableOffset.Apply(table.Interpolate(micrometers).N) : table.Interpolate(micrometers).N;
         var formula = RequireFormula();
         double n;
         try
@@ -138,7 +143,7 @@ public sealed record OpticalMaterial
         if (!double.IsFinite(n) || n <= 0)
             throw new InvalidOperationException(
                 $"{Who}: dispersion formula {DispersionFormulas.NameOf((int)formula)} gives no real positive index at {Format(micrometers)} µm (it gives {n}); the coefficients are not usable there.");
-        return n;
+        return Offset is { } offset ? offset.Apply(n) : n;
     }
 
     /// <summary>The extinction coefficient k of a tabulated material at <paramref name="micrometers"/>,

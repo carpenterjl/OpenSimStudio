@@ -235,6 +235,9 @@ OpticStudio help, which has the same wording.
 | AGF catalog layout, dispersion formula numbers and expressions, glass status numbers | AGFFileReader.jl (MIT): `src/GlassDownload.jl`, `src/utilities.jl` lines 133–183, `src/constants.jl`; ZemaxGlass.py (MIT): `parse_glass_input`, `get_dispersion` lines 845–888, and its user manual's AGF layout and nomenclature. Not read from Ansys's own page |
 | Glass dn/dT, absolute and relative index, TIE-19 air formula | SCHOTT TIE-19, "Temperature Coefficient of the Refractive Index", Version August 2023: equations (2)–(10), P0 = 0.101325·10⁶ Pa (p. 3), catalog values at 0.10133·10⁶ Pa (p. 2), Table 1 (pp. 3–5) |
 | Ciddor and modified Edlén air, vapour pressure, humidity, ranges | J. A. Stone and J. H. Zimmerman, NIST Engineering Metrology Toolbox, "Refractive Index of Air", Documentation (emtoolbox.nist.gov/Wavelength/Documentation.asp): Appendix A equations A1–A49 and Table A1; Section IV (ranges, CO2 450 µmol/mol); Section VII (Table 1, Table 2, Ciddor–Edlén agreement). Ciddor's own paper (Appl. Opt. 35, 1566 (1996)) was not read |
+| Partial dispersion P_g,F and the normal line ΔP_g,F = P_g,F − (0.6438 − 0.001682·Vd) | ZemaxGlass user manual (zemaxglass_manual.txt, nomenclature, "P" and "dPgF"); AGFFileReader.jl `src/runtime.jl` line 77, crediting SCHOTT TIE-29 (TIE-29 itself not on this machine) |
+| Thermo-optical constant G of the athermal glass map | SCHOTT TIE-19 equation (10) and Table 2 (p. 9) |
+| Internal transmittance at another thickness | AGFFileReader.jl `src/utilities.jl`, `absorption` (absorption −ln(t)/τ per mm) |
 | What OpticStudio-compatible readers do with TD data | AGFFileReader.jl `src/utilities.jl` (`index`, `absairindex`); ZemaxGlass.py `get_dispersion` (lines ~780–917) |
 
 The manual gives the tilt rules in words and has no matrices. The written-out matrix in section
@@ -303,6 +306,14 @@ single place in the code, so a correction is one line and its test.
    for a mirror system, where it measures cardinal points from, and its theodolite-angle
    formula, have not been read at a source. Check: a single concave mirror and a field of
    azimuth 3°, elevation 4°, compared with OpticStudio's System Data and Paraxial Ray Data.
+
+7. **Model glasses and glass offsets** (OP-14). OpticStudio's model-glass formula and its glass
+   offset rule are not published or not read. The model glass here
+   (`OpenSim.Optics/Materials/Tools/ModelGlassFit.cs`) is a constrained fit over the active
+   catalogs that reproduces the requested nd, Vd and ΔP_g,F exactly; the offset
+   (`GlassOffsets.cs`) is an affine map of the index that moves nd and Vd and keeps every
+   relative partial dispersion. Both are this program's choices. Check: a model glass and an
+   offset glass compared with OpticStudio's indices at the F, d, C and g lines and at 1 µm.
 
 ## 11. Paraxial optics
 
