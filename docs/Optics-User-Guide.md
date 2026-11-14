@@ -609,6 +609,37 @@ not need Python. How each program's conventions map onto this program's is in
 the workspace. Not built: checks with catalog glasses, tilts, aspheres or ray aiming, and any
 comparison with OpticStudio, which was not available.
 
+## Surface shape analyses
+
+The analysis menu's **Surface** group (OP-43) shows the shape of any surface of the lens, as a
+fabricator or an asphere designer reads it. Every analysis takes the **Surface** number (1 to the
+image surface; a coordinate break is refused) and works over that surface's clear semi-diameter.
+
+- **Sag table**: the sag along +y from the vertex with its best-fit sphere (BFS). Settings:
+  **Step size** (0 chooses one), **Best fit sphere criterion** (minimum volume, minimum RMS with
+  no offset, minimum RMS with offset), **Reverse direction** (take the other side of the surface
+  as the air side), **Minimum radius** and **Maximum radius** of the fit (both 0: the whole
+  clear semi-diameter). The listing gives the BFS radius and vertex offset, the depth and volume
+  of material to remove (minimum volume), the slope deviations, and the eight columns Y-coord,
+  Sag, BFS sag, Deviation, Remove, Slope, BFS slope and Slope delta, with a plot of the sag and
+  the sphere.
+- **Surface sag**, **Surface slope**, **Surface curvature**: false-colour or contour maps
+  (**Show as**, **Contour format**: blank, one interval, or a list of levels) on an n × n grid
+  (**Sampling**, odd, default 65), blank outside the clear aperture. Slope and curvature take a
+  **Data** choice: tangential, sagittal, x, y or modulus. Sag is in lens units, slope
+  dimensionless, curvature in 1/lens unit.
+- **Surface sag/slope/curvature cross section**: the same quantities along a line through the
+  vertex at **Angle** degrees from the local x axis, across the clear diameter.
+- **Remove** (maps and cross-sections): nothing, the sphere of the vertex radius, or the
+  best-fit sphere (with its criterion and Reverse direction).
+
+Each result lists what it assumed: the clear semi-diameter and where it came from, how the
+curvatures were computed (analytic for a Standard surface, differenced for other types), which
+side was taken as air, and the sphere removed. Definitions and the readings of OpticStudio's
+help are in `docs/Optics-Conventions.md` §28. Not built: Surface Phase and Phase Slope (no
+surface type carries a phase yet), off-axis coordinates, the Base Sag and Composite Sag removal
+options, and the 3-D surface plot and grey-scale display.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

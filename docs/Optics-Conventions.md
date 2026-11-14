@@ -596,6 +596,27 @@ single place in the code, so a correction is one line and its test.
     `OpenSim.Tests/References/OP-102/lenses.py` in OpticStudio (Single Ray Trace and System
     Data), stored beside the others as OpticStudio reference files when access exists.
 
+24. **Surface shape analyses** (OP-43). Section 28's readings of OpticStudio's help are not
+    compared with its output. Check each on one Even Asphere in both programs (Sag Table,
+    Surface Sag, Surface Curvature, Surface Slope and their cross-sections):
+    - *RMS criteria:* the RMS is area-weighted (2πr dr) over the annulus; the help does not say
+      how OpticStudio weights it.
+    - *BFS Sag and Deviation:* BFS Sag is the sphere's sag from its own vertex and Deviation is
+      BFS Sag − Sag, both without the vertex offset; Remove includes the offset. The help says
+      Deviation ignores the offset but not whether BFS Sag does.
+    - *Air side and Reverse Direction:* the lower-index side is air (the side the light arrives
+      from on a mirror); Reverse Direction takes the other side, as the Sag Table page says. The
+      Surface Sag page says instead that it "changes the sign on the radius of curvature of the
+      best-fit sphere"; the two were not reconciled.
+    - *Curvature modulus:* read as the larger magnitude of the two principal curvatures; the help
+      says only "the maximum length of the curvature vector".
+    - *Tangential and sagittal:* read as the normal curvatures and slopes along the radial and
+      azimuthal directions from the vertex; the help names them without a formula.
+    - *Remove on slope and curvature maps:* the removed sphere's own slope or curvature at the
+      same point is subtracted; the help says the base radius is "subtracted from the current
+      curvature" (or slope) without a formula.
+    - *Automatic step* of the Sag Table and the default sampling of 65: OpenSim's choices.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -1569,3 +1590,77 @@ surface, a paraboloid mirror, and a paraboloid–hyperboloid two-mirror lens. 24
 **Not built.** Catalog glasses in the cross-checks, tilts and decenters, aspheres, ray aiming,
 OPD against a reference sphere, diffraction (prysm and POPPY, later items), and any OpticStudio
 reference file.
+
+## 28. Surface shape analyses
+
+`OpenSim.Optics/Analysis/SurfaceAnalyses/` (OP-43) holds OpticStudio's Sag Table, Surface Sag,
+Surface Curvature, Surface Slope and the three cross-sections, registered under the category
+"Surface". Their settings and the meaning of each column are read from OpticStudio's 2025 R2
+help pages "Sag Table" (Tolerance tab, Manufacturing Drawings and Data), "Surface Sag",
+"Surface Curvature", "Surface Slope", "Surface Sag Cross Section", "Surface Curvature Cross
+Section", "Surface Slope Cross Section" and the operand page "Best Fit Sphere Data", saved under
+`plans/sources/optics/op-43-help/`.
+
+- **Frame.** Every quantity is in the surface's local frame (§3): vertex at the origin, +z along
+  the local axis, curvature positive when the surface bends toward +z. The maps cover the clear
+  semi-diameter round the vertex on an n × n grid (n odd, 5 to 1025, default 65), blank (NaN)
+  outside it and where the surface's aperture blocks; the cross-sections run along a line through
+  the vertex at an angle from the local x axis, across the full clear diameter. An automatic
+  clear semi-diameter is sized from rays (§13).
+- **Sag and slopes** (`SurfaceProbe`). The Standard surface's sag and slopes are the conic's
+  (`ConicSag`, §13); an asphere's are its own analytic sag and slopes (§17); any other shape's
+  sag is `SurfaceShape.Sag` and its slopes are −nx/nz and −ny/nz from `SurfaceShape.Normal`, the
+  slope the trace refracts with. Slopes are dimensionless dz along a direction of the vertex
+  plane: tangential is radial from the vertex, sagittal at right angles to it (both +x on the
+  axis), x and y the axes, and the modulus |∇z| ("the maximum length of the slope vector").
+- **Curvatures.** The normal curvature of the surface in the direction of the vertex plane
+  (u, v): κ = (Lu² + 2Muv + Nv²)/(Eu² + 2Fuv + Gv²), with E = 1 + zx², F = zx·zy, G = 1 + zy²
+  and L, M, N = zxx, zxy, zyy divided by W = √(1 + zx² + zy²). For a surface of revolution this
+  is z″/(1 + z′²)^(3/2) tangentially and z′/(r·√(1 + z′²)) sagittally, so a sphere's is 1/R
+  everywhere. The modulus is the larger magnitude of the principal curvatures, the eigenvalues
+  of the Weingarten matrix I⁻¹·II (from its entries, so the root keeps its digits on a sphere).
+  The Standard conic's second derivatives are analytic (d²z/dr² = c/φ³, (dz/dr)/r = c/φ,
+  φ = √(1 − (1 + k)c²r²)); every other shape's are central differences of its analytic slopes,
+  Richardson-extrapolated from h and h/2 with h = 10⁻³ of the clear semi-diameter: truncation
+  error −h⁴/480 times the sag's sixth derivative, rounding about ε·|slope|/h, together below
+  10⁻¹² of the curvature for a 50 mm sphere at a 10 mm semi-diameter. Where a stencil point
+  falls outside the sag's domain the sample is blank and the count is reported.
+- **Best-fit sphere** (`BestFitSphere`). As the Sag Table help says, "only the Y-coordinate of
+  the surface is considered": the fit reads the profile z(0, y) over [minimum, maximum radius]
+  (both 0: 0 to the clear semi-diameter), sampled at 2001 equal steps, with integrals by
+  Simpson's rule and the area weight 2πr. Sphere sag s(r) = c·r²/(1 + √(1 − c²r²)).
+  *Minimum RMS, no offset:* c minimises the area-weighted RMS of z − s. *Minimum RMS, with
+  offset:* the offset is the weighted mean of z − s, and c minimises the RMS of what is left.
+  *Minimum volume:* the sphere is moved along z until it touches the surface from the air side,
+  so every depth to remove is ≥ 0, and c minimises the volume ∫ depth·2πr dr. c is found by
+  scanning 400 values over |c| < 1/r_max (and the vertex curvature), refining with Brent's
+  method (10⁻¹⁰ relative), and for the RMS criteria Gauss–Newton steps on c with
+  ∂s/∂c = r²/(φ(1 + φ)) (derived), kept only while they lower the RMS.
+- **Air side.** The side with the lower index at the primary wavelength is air; on a mirror the
+  side the light arrives from. The light travels +z after an even number of mirrors and −z after
+  an odd number (§3). With equal indices the side cannot be told: +z is taken to go from air to
+  glass (as OpticStudio's listing words it) and the result says so. Reverse Direction takes the
+  other side.
+- **Sag Table columns** (the help's eight): Y-coord; Sag; BFS Sag, the sphere's sag from its own
+  vertex; Deviation = BFS Sag − Sag, "ignoring any vertex offset"; Remove, the depth from the
+  sphere placed at its vertex offset to the surface, measured into the material (positive =
+  material to remove); Slope, BFS Slope and Slope Delta = Slope − BFS Slope (dz/dr along +y).
+  Figures: BFS radius and vertex offset; for minimum volume the maximum and RMS depth to remove
+  and the volume to remove; for the RMS criteria the RMS difference (OpenSim's addition); the
+  maximum and RMS slope deviation over the help's "1000 equally spaced Y-points". Rows run from
+  the vertex in steps of the step size (0: the maximum radius over 50 rounded down to 1, 2 or
+  5 × 10ⁿ, OpenSim's rule) to the maximum radius.
+- **Remove** (maps and cross-sections). None; Base Radius, the sphere of the vertex radius
+  (conic 0, no offset); Best Fit Sphere by the chosen criterion, fitted over 0 to the clear
+  semi-diameter. The removed sphere's own value at the same point (its sag plus its vertex
+  offset, its slope, or its curvature) is subtracted.
+- **Contour format** (Surface Sag help, "The Contour Format String"): blank for the default; one
+  value for the interval (more than 100 contours fall back to the default, with a note); several
+  values for only those contours; in the map's units.
+
+**Not built.** Surface Phase, Phase Slope and their cross-sections (no surface type carries a
+phase: there are no diffractive surfaces yet); Off-Axis Coordinates; Remove "Base Sag" and
+"Composite Sag" (no STAR data or composite surfaces); Show As surface plot and grey scale; the
+BFSD operand (a merit-function item); a best-fit sphere of a surface that is not rotationally
+symmetric beyond its y profile. The readings in §10 item 24 are not compared with OpticStudio's
+output.

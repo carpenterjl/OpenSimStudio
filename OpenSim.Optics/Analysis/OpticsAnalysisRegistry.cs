@@ -75,6 +75,14 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new PolarizationTransmissionAnalysis());
         registry.Register(new PolarizationPhaseAberrationAnalysis());
         registry.Register(new PolarizationTransmissionFanAnalysis());
+        // OP-43: surface shape analyses (Surface Phase and Phase Slope not built: no surface carries a phase).
+        registry.Register(new SagTableAnalysis());
+        registry.Register(new SurfaceSagAnalysis());
+        registry.Register(new SurfaceCurvatureAnalysis());
+        registry.Register(new SurfaceSlopeAnalysis());
+        registry.Register(new SurfaceSagCrossSectionAnalysis());
+        registry.Register(new SurfaceCurvatureCrossSectionAnalysis());
+        registry.Register(new SurfaceSlopeCrossSectionAnalysis());
         return registry;
     }
 }
