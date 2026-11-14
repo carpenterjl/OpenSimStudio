@@ -753,6 +753,38 @@ compared with OpticStudio are in `docs/Optics-Conventions.md` §23 and §10 item
 Not built: importing Zernike coefficients from a file into the Toroidal surface, a separate
 "Cylinder" type name, and any comparison with OpticStudio's output.
 
+## Reports
+
+Six analyses in the Reports group follow OpticStudio's Reports group (details and formulas in
+`docs/Optics-Conventions.md` §29). They read the project's surfaces with solves evaluated, list
+lengths in the system's lens unit, and give the same text on every run.
+
+- **System data**: the system summary, the aperture, fields and wavelengths as entered, and the
+  paraxial system data with focal data by wavelength.
+- **Prescription data**: the full prescription in OpticStudio's section order: general data,
+  surface data, surface detail (parameters, tilts and decenters, apertures), edge thickness,
+  solves and variables, indices at every wavelength, global vertices and centres of curvature
+  (in the frame of the "Global reference surface" setting), element volume and mass, cardinal
+  points and the glass catalog files used. Each optional section has a checkbox. Element mass
+  needs a catalog glass with a density; a constant index has none.
+- **Surface data**: one surface's shape, sag and edge thickness, surface and element powers and
+  focal lengths, indices before and after, and its element's volume.
+- **Cardinal points**: focal, principal, anti-principal, nodal and anti-nodal planes of a range
+  of surfaces at one wavelength.
+- **System summary graphic**: the handful of first-order numbers a report page shows, as text.
+- **Report graphic**: 4, 6 or 9 analyses on one page. Type each position's analysis id (for
+  example `SingleRayTrace`, `CardinalPoints`, `ParaxialGaussianBeam`); each runs with the
+  settings it was last used with. The window lists the plots of all positions in order.
+
+The prescription's text reads back: `PrescriptionReader.Read` (OpenSim.Optics) turns the Text
+tab of a prescription into the saved surfaces of the same lens, tilts, aspheres, apertures and
+comments included; solve and variable flags are not carried.
+
+Not built: Multi-Config Data, OpticStudio's real working F/# per field and wavelength, POP
+settings, the XZ orientation of Cardinal points, the best fit glass of a model glass, a drawn
+system summary graphic, and the report graphic's page arrangement and saved report files.
+Element volumes take circular edges at the clear semi-diameters; surface apertures do not enter.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -768,3 +800,5 @@ Not built yet, and not to be relied on until they appear in this guide:
 - optimization and tolerancing of a lens;
 - lens-file import;
 - reference results from OpticStudio itself (the cross-checks use open programs only).
+- the parts of OpticStudio's reports listed as not built under Reports (multi-configuration
+  data, real F/# per field, POP settings, the report graphic's page arrangement).

@@ -666,6 +666,16 @@ single place in the code, so a correction is one line and its test.
     Check: one lens per type traced in both programs (ray positions and directions), and the
     paraxial data of a lens holding a Zernike defocus term.
 
+25. **Report readings** (OP-44). Section 29's report layouts are this program's (the help lists
+    the sections, not their columns), and these readings of OpticStudio are not compared with
+    its output: the edge thickness taken at the surface's own clear semi-diameter; a cemented
+    doublet listed as two elements; the clear (not mechanical) semi-diameter used for element
+    volumes; non-rotational faces squared up rather than tapered; the cardinal-plane signs
+    (positions along z from the first and last vertex, as §11); the surface focal lengths n′/φ
+    and −n/φ and the element focal length 1/φ in Surface Data; and Index Data's TCE column as
+    the glass's catalog value. Check: Prescription Data, Surface Data and Cardinal Points of a
+    singlet, a cemented doublet and an immersed-image lens in both programs.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -1941,3 +1951,100 @@ comments and in `AnamorphicSurfaceTests`. All four use the asphere intersection 
 - **Not built:** OpticStudio's import of Zernike coefficients into the Toroidal surface (they
   are typed in the editor); the Cylinder as a separate type name (it is the Toroidal surface);
   any comparison with OpticStudio's output.
+
+## 29. Reports
+
+`OpenSim.Optics/Analysis/ReportAnalyses/` (OP-44) builds OpticStudio's Reports group as text
+analyses on `StudyReport` sections (`OpticsAnalysisResult.FromSections`), all in the menu group
+"Reports". Contents and section order are read from OpticStudio's 2025 R2 help, pages "Reports
+Group", "System Data", "Prescription Data (reports group, the analyze tab, sequential ui mode)",
+"Surface Data", "Cardinal Points (Reports group, the Analyze tab, sequential ui mode)", "Report
+Graphic" and "System Summary Graphic", saved under `plans/sources/optics/op-44-help/`. The help
+lists the sections but not their layout, so the tables are this program's. Every report is
+written in the invariant culture and carries no timestamp, so a report of the same system is the
+same bytes on every run.
+
+- **System Data** (`SystemDataAnalysis`). The help: "pupil positions and sizes, magnification,
+  F/#, etc." Assembled from the analyses that already compute them: `SystemSummaryAnalysis`
+  (project, mode, environment; in the system's lens unit, conventions left out), the system
+  inputs (lens unit, aperture, fields, wavelengths), and `ParaxialDataAnalysis` without its ray
+  table and cardinal points (system data, ABCD matrix, focal data by wavelength).
+- **Prescription Data** (`PrescriptionDataAnalysis`). The help's sections in its order, where
+  OpenSim has the data: General Data (system inputs and the paraxial system data), Surface Data
+  (type, radius, thickness, material, semi-diameter, conic, comment), Surface Detail (surface
+  parameters, coordinate return, mechanical semi-diameter, chip zone, TCE, coating, ignore and
+  skip flags, then the tables Tilts and decenters and Apertures), Edge Thickness,
+  Solves/Variables (the saved flags; the listed values are the solved ones), Index Data (index
+  relative to the system's air at every wavelength, the glass's catalog TCE and the surface's
+  TCE column), Global Vertex (the sections of `GlobalVertexAnalysis`, §15, reused), Center Of
+  Curvature, Element Volume, Cardinal Points and Files Used (glass catalogs by file name, so the
+  report does not depend on the machine's paths, and coating names). Not built: Multi-Config
+  Data (OP-30), F/ Numbers (OpticStudio's real working F/# per field and wavelength), POP
+  Settings, and NSC group data; the report lists them under "Not in this report".
+- **Surface Data** (`SurfaceDataAnalysis`). For one surface: shape, curvature, thickness, the
+  media on either side, clear semi-diameter, sag at (a, 0) and (0, a), edge thickness, global
+  vertex, surface power φ = c·(n′ − n) with signed indices (or a special surface's paraxial
+  equivalent), the surface focal lengths n′/φ and −n/φ, and for a surface followed by glass the
+  element's power (−C of the two surfaces' matrix with the media on either side) and focal
+  length 1/φ, all at the primary wavelength; the index before and after at every wavelength;
+  the volume of the element it fronts. Not built: the "best fit glass" OpticStudio lists for a
+  model glass.
+- **Cardinal Points** (`CardinalPointsAnalysis`, `CardinalPlanes`). Settings First Surface, Last
+  Surface (0 for the last surface) and Wavelength, as the help names them. With M = [[A, B],
+  [C, D]] the range's matrix on (y, n·u) and n, n′ the signed indices before the first and after
+  the last surface, an object plane at z from the first vertex and its image at z′ from the last
+  are conjugate with lateral magnification m when z′ = n′(m − A)/C and z = n(D − 1/m)/C
+  (derived: T(z′/n′)·M·T(−z/n) has B = 0, A = m and D = 1/m). Principal m = +1, anti-principal
+  m = −1, nodal m = n/n′, anti-nodal m = −n/n′ (angular magnification n/(n′m) = ±1), focal
+  planes z′ = −n′A/C and z = nD/C. Positions are along z, positive toward +z, negative after an
+  odd number of mirrors, as §11. For the whole lens they reproduce `ParaxialSystem`'s focal,
+  principal and nodal positions. The help's Orientation setting (XZ or YZ) is not built: the
+  paraxial engine traces the y meridian. A lens whose tilts do more than fold the axis is
+  refused (§15).
+- **System Summary Graphic** (`SystemSummaryGraphicAnalysis`). The few first-order numbers a
+  report page shows (focal lengths, F/#, pupil, track, field, wavelengths), as text: the graphic
+  panel is not drawn.
+- **Report Graphic** (`ReportGraphicAnalysis`). Layout 2x2, 2x3 or 3x3 (4, 6 or 9 positions)
+  and the saved id of the analysis at each position (blank for none; the report graphic itself
+  is refused, an unknown id fails naming the position). Each position's analysis is computed
+  with the settings it was last used with in the project (`OpticsAnalysesSettings.LastSettings`),
+  or its defaults; its plots and sections are gathered in position order, titled "n. Name: …",
+  after a Positions table. A failing analysis shows "Failed: message" at its position and in
+  the assumptions. The default positions (System summary graphic, Paraxial Gaussian beam,
+  Cardinal points, Single ray trace) are this program's choice. Not built: the page arrangement
+  (OpticStudio's Top Left, Centered and Clustered layout modes; the window lists the plots in
+  order), per-position settings inside the report, and saved report files (.22, .23, .33).
+
+**Semi-diameters, edge thickness and elements.** Semi-diameters are the clear ones as entered,
+or sized by `SemiDiameterSizing` (§13) when automatic; the image surface's alone does not start
+a sizing trace. The edge thickness of surface j is the axial distance to surface j + 1 plus that
+surface's sag minus surface j's, at (a, 0) for X and (0, a) for Y, a surface j's clear
+semi-diameter; it is given only when surface j + 1's frame is surface j's moved along its z (no
+relative tilt or lateral decenter, to 10⁻¹²). An element is every space between surfaces j and
+j + 1 whose medium is not the system's air, so a cemented doublet is two elements; a mirror,
+coordinate break or ignored surface as a face, faces that are not coaxial, and unsized
+semi-diameters are listed as not computed with the reason.
+
+**Element volume** (`ElementVolume`). Each face has a circular edge at its clear semi-diameter
+and the smaller face is "squared up" to the larger, as the help states for spherical and plane
+faces: beyond its edge it continues as a plane at its edge sag. With R the larger
+semi-diameter, V = π R² t + W(back) − W(front), W the integral of the clamped sag over the disc
+of radius R. Standard faces (plane, sphere, conic) are exact: the conic sag obeys
+r² = 2ρs − (1 + k)s² (ρ = 1/c), so ∫₀^a 2πr s dr = π s_a²(ρ − 2(1 + k)s_a/3) (derived in
+`ElementVolume`). Other shapes are numerical: a rotationally symmetric sag with a 64-node
+Gauss–Legendre rule in r, any other sag with the same rule times a 128-point trapezoidal rule
+in θ. The help says OpticStudio "tapers" non-rotational faces instead and reaches "about 0.1%"
+numerically; here every face is squared up. Faces that cross (local thickness not positive on 65
+radii in four directions) fail with the element named. Surface apertures (rectangular,
+elliptical, decentered) do not enter. Mass is the volume in cc times the catalog density
+(`OpticalMaterial.Density`, g/cc); a constant index has none. OpticStudio's 3.6 g/cc for
+gradient-index surfaces is not used (no gradient-index surface is built).
+
+**Reading the prescription back** (`PrescriptionReader`). The four surface sections write every
+value the trace uses in round-trip precision ("R" format; "Infinity"), the comment as a quoted,
+escaped string in the last column, and the stop as the row label STO. `PrescriptionReader.Read`
+takes the report's plain text (the Text tab) and returns the lens unit (from the "Radius (unit)"
+header) and the saved surfaces; `SavedSurfaces.ToLens` with the same catalogs gives the lens
+back. It reads only this program's report, not OpticStudio files. Not carried: variable, solve
+and pickup flags (the read-back lens holds the solved values), the drawing options (hide rays,
+do not draw, row colour), and model glasses, which `SavedSurfaces.FromLens` writes by name.

@@ -75,6 +75,14 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new PolarizationTransmissionAnalysis());
         registry.Register(new PolarizationPhaseAberrationAnalysis());
         registry.Register(new PolarizationTransmissionFanAnalysis());
+        // OP-44: reports.
+        registry.Register(new SystemDataAnalysis());
+        registry.Register(new PrescriptionDataAnalysis());
+        registry.Register(new SurfaceDataAnalysis());
+        registry.Register(new CardinalPointsAnalysis());
+        registry.Register(new SystemSummaryGraphicAnalysis());
+        registry.Register(new ReportGraphicAnalysis(id => registry.TryGet(id, out var found) ? found : null));
+
         // OP-34: ray fans, spot diagrams and footprints.
         registry.Register(new RayAberrationAnalysis());
         registry.Register(new StandardSpotAnalysis());
