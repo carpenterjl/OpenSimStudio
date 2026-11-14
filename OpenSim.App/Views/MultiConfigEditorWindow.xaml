@@ -41,6 +41,47 @@
             </WrapPanel>
         </DockPanel>
 
+        <!-- OP-91: Make Thermal (OpticStudio help, "Make Thermal") and the glass-to-material links (OQ-12). -->
+        <Expander DockPanel.Dock="Top" Header="Thermal" Margin="0,0,0,4">
+            <WrapPanel Margin="0,4,0,0">
+                <StackPanel Width="300" Margin="0,0,12,0">
+                    <controls:FormGrid>
+                        <Label Content="New configurations"/>
+                        <TextBox Text="{Binding ThermalConfigurations, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="Configurations spanning the range in equal steps, per nominal configuration."/>
+                        <Label Content="Minimum temperature (°C)"/>
+                        <TextBox Text="{Binding ThermalMinimum, UpdateSourceTrigger=LostFocus}"/>
+                        <Label Content="Maximum temperature (°C)"/>
+                        <TextBox Text="{Binding ThermalMaximum, UpdateSourceTrigger=LostFocus}"/>
+                        <Label Content="Pressure (atm)"/>
+                        <TextBox Text="{Binding ThermalPressure, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="The new configurations' air pressure; empty keeps the nominal pressure (OpticStudio's rule)."/>
+                        <Label Content="Use existing configurations as nominal"/>
+                        <CheckBox IsChecked="{Binding ThermalKeepExisting}" VerticalAlignment="Center"
+                                  ToolTip="Off: the table is replaced by one nominal configuration (the current one) and the new ones."/>
+                        <Label Content="Sort by surface"/>
+                        <CheckBox IsChecked="{Binding ThermalSortBySurface}" VerticalAlignment="Center"/>
+                    </controls:FormGrid>
+                    <Button Content="Make thermal" Command="{Binding MakeThermalCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                            ToolTip="Add configurations at each temperature, with thermal pickups on the radii, thicknesses and semi-diameters."/>
+                </StackPanel>
+                <StackPanel Width="320">
+                    <controls:FormGrid>
+                        <Label Content="Glass"/>
+                        <ComboBox IsEditable="True" ItemsSource="{Binding GlassNames}" Text="{Binding LinkGlass, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Label Content="Mechanical material"/>
+                        <ComboBox ItemsSource="{Binding MaterialNames}" SelectedItem="{Binding LinkMaterial}"
+                                  ToolTip="The glass expands with this material's thermal expansion coefficient instead of its catalog TCE."/>
+                    </controls:FormGrid>
+                    <WrapPanel Margin="0,4,0,0">
+                        <Button Content="Link" Command="{Binding LinkGlassToMaterialCommand}" Margin="0,0,4,4"/>
+                        <Button Content="Unlink" Command="{Binding UnlinkGlassCommand}" Margin="0,0,4,4"/>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding GlassLinksText}" TextWrapping="Wrap" Style="{StaticResource FaintText}"/>
+                </StackPanel>
+            </WrapPanel>
+        </Expander>
+
         <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Margin="0,2,0,0">

@@ -674,8 +674,7 @@ lens without one is a single configuration, and files from before this feature o
   as entered, not the current configuration.
 - **Cell flags.** A cell can be variable, pick up another cell (scale and offset; from an
   earlier configuration, or an earlier row of the same configuration), or carry a thermal
-  pickup. Thermal pickups are saved but not evaluated yet: a configuration that uses one is
-  refused with a message.
+  pickup (see Thermal analysis below).
 - **Configurations.** Insert configuration (a copy of the column at the cursor), Insert with
   pickups (every cell picks up configuration 1), Delete configuration (the column at the
   cursor; pickups from it become fixed and the status line says which), Previous and Next.
@@ -687,9 +686,8 @@ lens without one is a single configuration, and files from before this feature o
 - **Problems.** The line under the table lists, per configuration, every row that cannot be
   applied (a missing surface, an unsupported operand, a pickup from a later cell), and the
   failing cell carries the message.
-- **Not built.** Make Thermal and thermal pickups (thermal analysis is a later item), Make
-  Conjugate, ZPL-macro solves, and showing or editing the current configuration's values in
-  the Lens Data Editor.
+- **Not built.** Make Conjugate, ZPL-macro solves, and showing or editing the current
+  configuration's values in the Lens Data Editor.
 
 ## Ray fans, spot diagrams and footprints
 
@@ -996,6 +994,35 @@ Definitions are in docs/Optics-Conventions.md §34.
 Not built: Strehl ratio (it will come with the PSF analyses), Plot Scale, Use Polarization,
 the field map at intermediate surfaces, and afocal systems (refused).
 
+## Thermal analysis
+
+The **Thermal** section of the Multi-Configuration Editor sets a lens up at several temperatures,
+as OpticStudio's Make Thermal does.
+
+- **Make thermal.** Enter the number of new configurations and the minimum and maximum
+  temperature (°C); the new configurations span the range in equal steps. Off, "Use existing
+  configurations as nominal" replaces the table by one nominal configuration (the current one)
+  plus the new ones; on, each existing configuration gets its own set after the originals.
+  Pressure (atm) is the new configurations' air pressure; empty keeps the nominal's. The tool
+  adds TEMP and PRES rows and, for each radius, thickness and fixed semi-diameter, a row whose
+  new cells are thermal pickups of the nominal. The status line lists what got no row (a value
+  under a Lens Data Editor solve, for instance).
+- **Thermal pickups** (badge "T"): the reference configuration's value at this configuration's
+  temperature. Glass radii, thicknesses and semi-diameters grow with the glass's catalog TCE;
+  the air spaces grow with the TCE column of the surface before them (the mount), measured along
+  the lens edges at the mechanical semi-diameters, so a change of radius moves the spacing too.
+  A surface that is not a catalog glass (a constant index, a model glass) uses its TCE column.
+  Other operands copy the reference value. Docs/Optics-Conventions.md section 37 gives the rules.
+- **Indices.** Turn on "Adjust index to environment" in the system data for the glass indices to
+  follow each configuration's temperature and pressure; Make Thermal reminds you when it is off.
+- **Glass and mechanical material.** Link a glass to a material of the material library (Glass,
+  Mechanical material, Link): that glass then expands with the material's thermal expansion
+  coefficient instead of its catalog TCE. The link saves with the lens. The material library's
+  materials have no expansion coefficient yet; a linked material without one is refused by name.
+- **Not built.** Thermal pickups of parameters, several temperatures within one configuration,
+  thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
+  thermal table at a changed temperature.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1012,6 +1039,11 @@ Not built yet, and not to be relied on until they appear in this guide:
   function wizard are not);
 - thermal configurations (Make Thermal, thermal pickups) and Make Conjugate in the
   Multi-Configuration Editor;
+
+- optimization and tolerancing of a lens (the merit function and its editor are built; the
+  full operand catalogue, the default merit function wizard and the optimizer are not);
+- Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
+  temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration
   data, real F/# per field, POP settings, the report graphic's page arrangement);
 - lens-file import;

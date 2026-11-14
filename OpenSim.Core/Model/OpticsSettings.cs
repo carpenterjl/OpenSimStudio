@@ -56,4 +56,10 @@ public sealed record OpticsSettings
     /// <summary>The multi-configuration table (OP-30). Null — every file written before OP-30,
     /// and every single-configuration lens — is one configuration: the system as entered.</summary>
     public OpticsMultiConfigSettings? MultiConfiguration { get; init; }
+
+    // OP-91
+    /// <summary>The thermal analysis's own data: which glasses name a mechanical material for
+    /// their expansion (OP-91, owner decision OQ-12). Null — every file written before OP-91 —
+    /// links none, so every glass expands with its catalog TCE.</summary>
+    public OpticsThermalSettings? Thermal { get; init; }
 }

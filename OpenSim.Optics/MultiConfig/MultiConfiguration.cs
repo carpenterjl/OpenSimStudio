@@ -24,7 +24,8 @@ public readonly record struct MultiConfigCell(int Operand, int Configuration);
 /// evaluated first: a pickup is target × scale + offset from a cell whose configuration and
 /// operand numbers are each no greater than its own (help: Solve Types); a PUCN row makes the
 /// fixed and variable cells below it, up to the next PUCN row, copy a previous configuration;
-/// a thermal pickup is stored but not evaluated (OP-91) and fails by name. Every problem —
+/// a thermal pickup (OP-91) expands the reference configuration's value to this configuration's
+/// temperature (<see cref="LensThermalModel"/>), after the configuration's other cells. Every problem —
 /// an unknown or unsupported operand, a missing surface, field or wavelength, a bad value —
 /// is collected and thrown as one <see cref="ArgumentException"/>, one line each naming the
 /// operand row, its code and the configuration.
@@ -54,9 +55,11 @@ public static class MultiConfiguration
     /// <summary>
     /// The optics record of configuration <paramref name="configuration"/> (1-based), with the
     /// table removed. Without a table only configuration 1 exists and the record is returned as
-    /// it is. Throws <see cref="ArgumentException"/> listing every problem.
+    /// it is. Throws <see cref="ArgumentException"/> listing every problem. Thermal pickups
+    /// (OP-91) read the glasses' expansion from <paramref name="catalogs"/> (the active
+    /// catalogs); without them a thermal pickup of a length at a changed temperature fails by name.
     /// </summary>
-    public static OpticsSettings SettingsFor(OpticsSettings settings, int configuration)
+    public static OpticsSettings SettingsFor(OpticsSettings settings, int configuration, IReadOnlyList<OpticalCatalog>? catalogs = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var table = settings.MultiConfiguration;
@@ -71,8 +74,19 @@ public static class MultiConfiguration
         if (problems.Count > 0) throw new ArgumentException(string.Join(Environment.NewLine, problems));
 
         var operands = table.Operands ?? new List<OpticsConfigOperandSettings>();
-        var evaluated = Evaluate(table, configuration);
         var system = settings with { MultiConfiguration = null };
+        var evaluated = Evaluate(table, configuration, new ThermalInputs(system, catalogs));   // OP-91: thermal pickups read the lens
+        system = Apply(system, operands, evaluated, configuration, problems);
+        if (problems.Count > 0) throw new ArgumentException(string.Join(Environment.NewLine, problems));
+        return system;
+    }
+
+    /// <summary>The rows of configuration <paramref name="configuration"/> written into
+    /// <paramref name="system"/> (the record without its table), each problem added to
+    /// <paramref name="problems"/>.</summary>
+    private static OpticsSettings Apply(OpticsSettings system, List<OpticsConfigOperandSettings> operands, Evaluated evaluated,
+        int configuration, List<string> problems)
+    {
         for (int i = 0; i < operands.Count; i++)
         {
             var row = operands[i] ?? new OpticsConfigOperandSettings();
@@ -96,23 +110,23 @@ public static class MultiConfiguration
             try { system = op.Set(system, row.Number1, row.Number2, row.Number3, evaluated.Values[i, configuration - 1]); }
             catch (ArgumentException ex) { problems.Add($"{where}: {ex.Message}"); }
         }
-        if (problems.Count > 0) throw new ArgumentException(string.Join(Environment.NewLine, problems));
         return system;
     }
 
     /// <summary>The record of the current configuration (<see cref="CurrentConfiguration"/>).</summary>
-    public static OpticsSettings CurrentSettings(OpticsSettings settings) => SettingsFor(settings, CurrentConfiguration(settings));
+    public static OpticsSettings CurrentSettings(OpticsSettings settings, IReadOnlyList<OpticalCatalog>? catalogs = null) =>
+        SettingsFor(settings, CurrentConfiguration(settings), catalogs);
 
     /// <summary>The lens of configuration <paramref name="configuration"/> as entered and solved
     /// (<see cref="ProjectLens.Solve"/>), or null when the record has no surfaces.</summary>
     public static ProjectLensSolution? SolveFor(OpticsSettings settings, int configuration, IReadOnlyList<OpticalCatalog> catalogs) =>
-        ProjectLens.Solve(SettingsFor(settings, configuration), catalogs);
+        ProjectLens.Solve(SettingsFor(settings, configuration, catalogs), catalogs);
 
     /// <summary>The solved lens of configuration <paramref name="configuration"/>
     /// (<see cref="ProjectLens.From"/>), or null when the record has no surfaces; throws
     /// <see cref="ArgumentException"/> listing every problem.</summary>
     public static SequentialLens? LensFor(OpticsSettings settings, int configuration, IReadOnlyList<OpticalCatalog> catalogs) =>
-        ProjectLens.From(SettingsFor(settings, configuration), catalogs);
+        ProjectLens.From(SettingsFor(settings, configuration, catalogs), catalogs);
 
     /// <summary>
     /// The analysis context of the current configuration: what every analysis computes from
@@ -124,7 +138,7 @@ public static class MultiConfiguration
     public static OpticsAnalysisContext ForCurrentConfiguration(OpticsAnalysisContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return context.System.MultiConfiguration is null ? context : context with { System = CurrentSettings(context.System) };
+        return context.System.MultiConfiguration is null ? context : context with { System = CurrentSettings(context.System, context.Catalogs) };
     }
 
     /// <summary>The weight of configuration <paramref name="configuration"/>: the value of the
@@ -141,7 +155,7 @@ public static class MultiConfiguration
         if (configuration < 1 || configuration > table.ConfigurationCount)
             problems.Add($"There is no configuration {configuration}; the table has configurations 1 to {table.ConfigurationCount}.");
         if (problems.Count > 0) throw new ArgumentException(string.Join(Environment.NewLine, problems));
-        var evaluated = Evaluate(table, configuration);
+        var evaluated = Evaluate(table, configuration, new ThermalInputs(settings with { MultiConfiguration = null }, null));
         string where = $"{Where(row, operands[row])}, configuration {configuration}";
         if (evaluated.Errors[row, configuration - 1] is { } error) throw new ArgumentException($"{where}: {error}");
         double w = evaluated.Values[row, configuration - 1].Number;
@@ -149,14 +163,29 @@ public static class MultiConfiguration
     }
 
     /// <summary>The evaluated value of every row in configuration <paramref name="configuration"/>
-    /// (pickups and PUCN applied), with each failing cell's message instead of a value.</summary>
-    public static IReadOnlyList<(MultiConfigValue Value, string? Error)> ValuesIn(OpticsMultiConfigSettings table, int configuration)
+    /// (pickups and PUCN applied), with each failing cell's message instead of a value. Without
+    /// the lens a thermal pickup cannot be evaluated and shows a message; the overload with the
+    /// optics record evaluates it.</summary>
+    public static IReadOnlyList<(MultiConfigValue Value, string? Error)> ValuesIn(OpticsMultiConfigSettings table, int configuration) =>
+        ValuesIn(table, configuration, null);
+
+    // OP-91
+    /// <summary>As <see cref="ValuesIn(OpticsMultiConfigSettings, int)"/>, for the record's
+    /// table, with thermal pickups evaluated against its lens and <paramref name="catalogs"/>.</summary>
+    public static IReadOnlyList<(MultiConfigValue Value, string? Error)> ValuesIn(OpticsSettings settings, int configuration, IReadOnlyList<OpticalCatalog>? catalogs)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var table = settings.MultiConfiguration ?? throw new ArgumentException("The system has no multi-configuration table.");
+        return ValuesIn(table, configuration, new ThermalInputs(settings with { MultiConfiguration = null }, catalogs));
+    }
+
+    private static IReadOnlyList<(MultiConfigValue Value, string? Error)> ValuesIn(OpticsMultiConfigSettings table, int configuration, ThermalInputs? thermal)
     {
         ArgumentNullException.ThrowIfNull(table);
         if (Validate(table) is { Count: > 0 } problems) throw new ArgumentException(string.Join(Environment.NewLine, problems));
         if (configuration < 1 || configuration > table.ConfigurationCount)
             throw new ArgumentException($"There is no configuration {configuration}; the table has configurations 1 to {table.ConfigurationCount}.");
-        var e = Evaluate(table, configuration);
+        var e = Evaluate(table, configuration, thermal);
         int rows = table.Operands?.Count ?? 0;
         return Enumerable.Range(0, rows).Select(i => (e.Values[i, configuration - 1], e.Errors[i, configuration - 1])).ToArray();
     }
@@ -243,18 +272,41 @@ public static class MultiConfiguration
 
     private sealed record Evaluated(MultiConfigValue[,] Values, string?[,] Errors);
 
+    // OP-91
+    /// <summary>What a thermal pickup reads besides the table: the record without its table (its
+    /// surfaces, system temperature and glass links) and the active catalogs (null: none given).</summary>
+    private sealed record ThermalInputs(OpticsSettings System, IReadOnlyList<OpticalCatalog>? Catalogs);
+
+    // OP-91: marks a thermal pickup of the configuration being evaluated, resolved after its other
+    // cells; compared by reference.
+    private static readonly string PendingThermal = new("(thermal pickup, evaluated after the other cells)".ToCharArray());
+
+    // OP-91: the operands whose thermal pickup expands a length (help: "Defining Which Parameters
+    // Consider Thermal Effects" and its pages; semi-diameters from "Make Thermal"). Every other
+    // operand's thermal pickup copies the reference value (help: All Other Values).
+    private static readonly HashSet<string> ThermalLengths = new(StringComparer.OrdinalIgnoreCase) { "CRVT", "THIC", "SDIA", "MCSD" };
+
+    private static bool IsParameterCode(string code) =>
+        string.Equals(code, "PRAM", StringComparison.OrdinalIgnoreCase)
+        || (code.Length == 4 && code.StartsWith("PAR", StringComparison.OrdinalIgnoreCase) && char.IsDigit(code[3]));
+
     /// <summary>Every cell of configurations 1 to <paramref name="through"/>, configuration by
     /// configuration and row by row: the order the pickup rule (no later configuration, no later
-    /// row) makes sufficient.</summary>
-    private static Evaluated Evaluate(OpticsMultiConfigSettings table, int through)
+    /// row) makes sufficient. Thermal pickups (OP-91) are resolved after the other cells of their
+    /// configuration: first those that copy their reference value, then the lengths, which read
+    /// the configuration's temperature.</summary>
+    private static Evaluated Evaluate(OpticsMultiConfigSettings table, int through, ThermalInputs? thermal)
     {
         var operands = table.Operands ?? new List<OpticsConfigOperandSettings>();
         int rows = operands.Count, configs = table.ConfigurationCount;
         var values = new MultiConfigValue[rows, configs];
         var errors = new string?[rows, configs];
+        var references = new Dictionary<int, OpticsSettings>();
+        var lensCaches = new Dictionary<int, ThermalLensCache>();
         for (int k = 1; k <= through; k++)
         {
             int pucn = 0;
+            var pending = new List<int>();
             for (int i = 0; i < rows; i++)
             {
                 var row = operands[i] ?? new OpticsConfigOperandSettings();
@@ -284,7 +336,18 @@ public static class MultiConfiguration
                         else v = MultiConfigValue.Of(source.Number * cell.PickupScale + cell.PickupOffset);
                     }
                     else if (solve == ThermalPickup)
-                        throw new ArgumentException("thermal pickups are stored but not evaluated: thermal analysis is plan item OP-91, not built.");
+                    {
+                        // OP-91: "compute a new value ... based up on the temperature and pressure of the
+                        // new configuration as compared to the 'reference' configuration" (help: Solve Types).
+                        if (isPucn) throw new ArgumentException("PUCN takes a configuration number; it cannot be a thermal pickup.");
+                        int c = cell.PickupConfiguration;
+                        if (c < 1 || c >= k)
+                            throw new ArgumentException($"the thermal pickup names reference configuration {c}; the reference is an earlier configuration (1 to {k - 1}).");
+                        pending.Add(i);
+                        errors[i, k - 1] = PendingThermal;
+                        values[i, k - 1] = MultiConfigValue.Of(double.NaN);
+                        continue;
+                    }
                     else
                         throw new ArgumentException($"the cell's solve '{cell.Solve}' is not one this version knows (fixed, {Variable}, {Pickup}, {ThermalPickup}).");
                     values[i, k - 1] = v;
@@ -307,11 +370,95 @@ public static class MultiConfiguration
                 }
 
                 MultiConfigValue Source(int r, int c) =>
-                    errors[r - 1, c - 1] is null ? values[r - 1, c - 1]
+                    ReferenceEquals(errors[r - 1, c - 1], PendingThermal)
+                        ? throw new ArgumentException($"it reads operand {r} in configuration {c}, a thermal pickup; thermal pickups are evaluated after the other cells of their configuration, so no cell of that configuration can read one.")
+                    : errors[r - 1, c - 1] is null ? values[r - 1, c - 1]
                     : throw new ArgumentException($"it takes its value from operand {r} in configuration {c}, which failed: {errors[r - 1, c - 1]}");
+            }
+
+            // OP-91: the thermal pickups of configuration k, copies first, then lengths.
+            foreach (int i in pending.OrderBy(i => IsLength(operands[i]) ? 1 : 0).ThenBy(i => i))
+            {
+                var row = operands[i]!;
+                var cell = row.Values![k - 1]!;
+                int c = cell.PickupConfiguration;
+                try
+                {
+                    if (errors[i, c - 1] is { } failed) throw new ArgumentException($"its reference, configuration {c}, failed: {failed}");
+                    var reference = values[i, c - 1];
+                    values[i, k - 1] = IsLength(row) ? ThermalLength(row, reference, k, c) : reference;
+                    errors[i, k - 1] = null;
+                }
+                catch (ArgumentException ex)
+                {
+                    errors[i, k - 1] = ex.Message;
+                    values[i, k - 1] = MultiConfigValue.Of(double.NaN);
+                }
             }
         }
         return new Evaluated(values, errors);
+
+        bool IsLength(OpticsConfigOperandSettings? row)
+        {
+            string code = row?.Type?.Trim() ?? "";
+            return ThermalLengths.Contains(code) || IsParameterCode(code);
+        }
+
+        // A length at configuration k's temperature from its value at reference configuration c.
+        MultiConfigValue ThermalLength(OpticsConfigOperandSettings row, MultiConfigValue reference, int k, int c)
+        {
+            string code = row.Type!.Trim().ToUpperInvariant();
+            if (IsParameterCode(code))
+                throw new ArgumentException("a thermal pickup of a parameter scales by the parameter's units (help: Thermal Parameter Values), which this program's surface types do not declare; it is not built. Use a pickup, or a fixed value per configuration.");
+            if (reference.IsText) throw new ArgumentException($"{code} holds a number, not the text '{reference.Text}'.");
+            if (thermal is null)
+                throw new ArgumentException("a thermal pickup of a length needs the lens it expands; it is evaluated with the optics record (SettingsFor), not from the table alone.");
+            double deltaT = Temperature(k) - Temperature(c);
+            if (deltaT == 0 || double.IsPositiveInfinity(reference.Number)) return reference;
+            var catalogs = thermal.Catalogs
+                ?? throw new ArgumentException($"a thermal pickup of {code} at a changed temperature reads the glasses' expansion from the active catalogs, and none were given here.");
+            var system = ReferenceSystem(c);
+            int n = row.Number1;
+            string where = $"surface {n}";
+            double v = code switch
+            {
+                "CRVT" => reference.Number / LensThermalModel.Scale(LensThermalModel.SurfaceExpansion(system, n, catalogs), deltaT, where),
+                "SDIA" or "MCSD" => reference.Number * LensThermalModel.Scale(LensThermalModel.SurfaceExpansion(system, n, catalogs), deltaT, where),
+                _ => LensThermalModel.Thickness(system, n, reference.Number, deltaT, catalogs, LensCache(c, system, catalogs)),
+            };
+            return MultiConfigValue.Of(v);
+        }
+
+        // The temperature of a configuration: its TEMP row's value, or the system's without one.
+        double Temperature(int config)
+        {
+            var temps = Enumerable.Range(0, rows).Where(r => string.Equals(operands[r]?.Type?.Trim(), "TEMP", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (temps.Count > 1)
+                throw new ArgumentException($"the table has {temps.Count} TEMP rows (operands {string.Join(", ", temps.Select(t => t + 1))}): several environments in one configuration (help: Defining Multiple Environments within a Single Configuration) are not built, so a thermal pickup has no single temperature.");
+            if (temps.Count == 0) return (thermal!.System.SystemData ?? new OpticsSystemSettings()).TemperatureCelsius;
+            int t = temps[0];
+            if (errors[t, config - 1] is { } failed) throw new ArgumentException($"the temperature of configuration {config} (operand {t + 1}, TEMP) failed: {failed}");
+            double celsius = values[t, config - 1].Number;
+            return double.IsFinite(celsius) ? celsius : throw new ArgumentException($"the temperature of configuration {config} (operand {t + 1}, TEMP) is not a number.");
+        }
+
+        // Configuration c applied to the record: what the reference lens is.
+        OpticsSettings ReferenceSystem(int c)
+        {
+            if (references.TryGetValue(c, out var done)) return done;
+            var problems = new List<string>();
+            var system = Apply(thermal!.System, operands, new Evaluated(values, errors), c, problems);
+            if (problems.Count > 0)
+                throw new ArgumentException($"its reference configuration {c} cannot be applied: {string.Join(" ", problems)}");
+            references[c] = system;
+            return system;
+        }
+
+        ThermalLensCache LensCache(int c, OpticsSettings system, IReadOnlyList<OpticalCatalog> catalogs)
+        {
+            if (!lensCaches.TryGetValue(c, out var cache)) lensCaches[c] = cache = new ThermalLensCache(system, catalogs);
+            return cache;
+        }
     }
 
     private static MultiConfigValue Raw(OpticsConfigValueSettings cell, bool text) =>

@@ -44,7 +44,7 @@ public sealed record OpticsConfigOperandSettings
 /// One cell of the table: a number or a text (by the operand), and how it is decided — fixed
 /// (null), "Variable", "Pickup" (from another cell: <see cref="PickupConfiguration"/>,
 /// <see cref="PickupOperand"/>, value × scale + offset) or "ThermalPickup" (from the reference
-/// configuration <see cref="PickupConfiguration"/>; stored, evaluated by OP-91).
+/// configuration <see cref="PickupConfiguration"/>, expanded to this configuration's temperature, OP-91).
 /// </summary>
 public sealed record OpticsConfigValueSettings
 {

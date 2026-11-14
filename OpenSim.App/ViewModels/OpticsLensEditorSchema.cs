@@ -187,7 +187,7 @@ public static class OpticsLensEditorSchema
             ToolTip = "Mechanical semi-diameter in lens units. A: automatic (the clear one plus the chip zone). A pickup here is stored but not evaluated."
         },
         radiusAndConic ? new(SavedSurfaces.ConicColumn, "Conic") { Flags = CellFlagSupport.Variable | CellFlagSupport.Pickup } : null,
-        new(SavedSurfaces.TceColumn, "TCE x 1E-6") { Flags = CellFlagSupport.Variable | CellFlagSupport.Pickup, ToolTip = "Thermal coefficient of expansion; kept for thermal analysis, which is not built." },
+        new(SavedSurfaces.TceColumn, "TCE x 1E-6") { Flags = CellFlagSupport.Variable | CellFlagSupport.Pickup, ToolTip = "Thermal coefficient of expansion: the expansion of this surface's mount or of a material that is not a catalog glass, read by thermal pickups (Multi-Configuration Editor, Make Thermal)." },
     };
 
     /// <summary>A generic "Par n" column of a type that is not registered.</summary>

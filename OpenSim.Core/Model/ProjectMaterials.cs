@@ -33,6 +33,7 @@ public static class MaterialDivergence
         Compare("density", project.Density, library.Density, " kg/m³");
         Compare("thermal conductivity", project.ThermalConductivity, library.ThermalConductivity, " W/(m·K)");
         Compare("specific heat", project.SpecificHeat, library.SpecificHeat, " J/(kg·K)");
+        Compare("thermal expansion coefficient", project.ThermalExpansionCoefficient, library.ThermalExpansionCoefficient, " 1/K");   // OP-91
         Compare("electrical conductivity", project.ElectricalConductivity, library.ElectricalConductivity, " S/m");
         Compare("resistivity temperature coefficient", project.ResistivityTemperatureCoefficient,
             library.ResistivityTemperatureCoefficient, " 1/K");

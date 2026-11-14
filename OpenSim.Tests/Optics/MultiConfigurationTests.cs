@@ -160,14 +160,15 @@ public sealed class MultiConfigurationTests : IDisposable
     }
 
     [Fact]
-    public void AThermalPickup_IsStored_ButFailsByName()
+    public void AThermalPickup_AtTheSameTemperature_PicksUpItsReference()
     {
+        // OP-91 evaluates thermal pickups (ThermalAnalysisTests); with no TEMP row both
+        // configurations are at the system temperature, so the cell is its reference's value.
         var t = ZoomTable();
         var operands = t.MultiConfiguration!.Operands!;
         operands[0] = operands[0] with { Values = new() { V(10), new() { Solve = MultiConfiguration.ThermalPickup, PickupConfiguration = 1 } } };
         Assert.Equal(10, MultiConfiguration.SettingsFor(t, 1).Surfaces![2].Thickness);
-        var ex = Assert.Throws<ArgumentException>(() => MultiConfiguration.SettingsFor(t, 2));
-        Assert.Contains("OP-91", ex.Message);
+        Assert.Equal(10, MultiConfiguration.SettingsFor(t, 2).Surfaces![2].Thickness);
     }
 
     [Theory]

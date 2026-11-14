@@ -25,7 +25,8 @@ public partial class OpticsViewModel : ObservableObject
     private readonly GlassCatalogLibrary _glassLibrary;
     private readonly Services.ILogService _log;
 
-    public OpticsViewModel(Services.ProjectSession session, GlassCatalogLibrary glassCatalogs, Services.ILogService log)
+    public OpticsViewModel(Services.ProjectSession session, GlassCatalogLibrary glassCatalogs, Services.ILogService log,
+        OpenSim.Core.Persistence.MaterialLibrary? materials = null)   // OP-91: glasses may name a mechanical material
     {
         // The materials panel first: publishing reads its active catalogs.
         GlassCatalogs = new OpticsGlassCatalogViewModel(glassCatalogs, PublishSystem, () => BuildSystemData().Environment);
@@ -39,7 +40,8 @@ public partial class OpticsViewModel : ObservableObject
         MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
             () => new OpenSim.Optics.Merit.ProjectMeritConfigurations(ToSettings(), BuildLensEditContext().Catalogs));
         // OP-30: the multi-configuration editor, applied to the entered system.
-        MultiConfig = new OpticsMultiConfigEditorViewModel(PublishFromMultiConfig, () => BuildSettings(withTable: false), ReplaceSystem);
+        MultiConfig = new OpticsMultiConfigEditorViewModel(PublishFromMultiConfig, () => BuildSettings(withTable: false), ReplaceSystem,
+            () => BuildLensEditContext().Catalogs, materials is null ? null : () => materials.Materials);   // OP-91: catalogs and materials for thermal pickups
         _log = log;
         _session = session;
         PublishSystem();
@@ -166,7 +168,8 @@ public partial class OpticsViewModel : ObservableObject
         Coatings = Coatings?.ToSettings(),
         Surfaces = LensEditor?.ToSettings(),
         MeritFunction = MeritEditor?.ToSettings(),   // OP-54
-        MultiConfiguration = withTable ? MultiConfig?.ToSettings() : null
+        MultiConfiguration = withTable ? MultiConfig?.ToSettings() : null,
+        Thermal = MultiConfig?.ToThermalSettings(),   // OP-91
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -190,6 +193,7 @@ public partial class OpticsViewModel : ObservableObject
         LensEditor.LoadSettings(saved.Surfaces, notes);
         MeritEditor.LoadSettings(saved.MeritFunction, notes);   // OP-54
 
+        MultiConfig.LoadThermalSettings(saved.Thermal);   // OP-91: before the table, whose thermal pickups read it
         MultiConfig.LoadSettings(saved.MultiConfiguration, notes);   // OP-30: null is one configuration
         PublishSystem();
         return notes;
@@ -205,6 +209,7 @@ public partial class OpticsViewModel : ObservableObject
         LensEditor.Reset();
         MeritEditor.Reset();   // OP-54
 
+        MultiConfig.LoadThermalSettings(null);   // OP-91
         MultiConfig.Reset();
         PublishSystem();
     }

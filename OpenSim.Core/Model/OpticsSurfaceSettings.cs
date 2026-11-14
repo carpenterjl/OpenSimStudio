@@ -62,8 +62,9 @@ public sealed record OpticsSurfaceSettings
     /// <summary>The conic constant.</summary>
     public double Conic { get; init; }
 
-    /// <summary>The thermal coefficient of expansion column, 1e-6 per °C, kept for thermal
-    /// analysis (not built; not read by the trace).</summary>
+    /// <summary>The thermal coefficient of expansion column, 1e-6 per °C: the mount's or a
+    /// non-catalog material's expansion, read by the multi-configuration thermal pickups (OP-91);
+    /// not read by the trace.</summary>
     public double Tce { get; init; }
 
     /// <summary>The aperture stop.</summary>

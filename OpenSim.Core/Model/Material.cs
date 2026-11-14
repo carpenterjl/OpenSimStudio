@@ -24,6 +24,14 @@ public sealed record Material
     /// <summary>Specific heat capacity c_p [J/(kg·K)].</summary>
     public double? SpecificHeat { get; init; }
 
+    /// <summary>
+    /// Linear coefficient of thermal expansion α [1/K]: a length L becomes L·(1 + α·ΔT). Null
+    /// means "not characterised". Read by the optics thermal analysis (OP-91) when a glass is
+    /// linked to this material (owner decision OQ-12, <see cref="OpticsThermalSettings"/>); no
+    /// built-in material carries a value yet.
+    /// </summary>
+    public double? ThermalExpansionCoefficient { get; init; }
+
     /// <summary>Electrical conductivity σ [S/m], at
     /// <see cref="ResistivityReferenceTemperature"/> when a temperature coefficient is set.</summary>
     public double? ElectricalConductivity { get; init; }

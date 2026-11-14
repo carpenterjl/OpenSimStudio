@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Controls.Spreadsheet;
 using OpenSim.Core.Model;
+using OpenSim.Optics.Materials;
 using OpenSim.Optics.MultiConfig;
 
 namespace OpenSim.App.ViewModels;
@@ -13,7 +14,9 @@ namespace OpenSim.App.ViewModels;
 /// three columns after the type and one column per configuration, saved as
 /// <see cref="OpticsMultiConfigSettings"/> with the project and the lens file. Cells may be
 /// fixed, variable, a pickup from another cell (the sheet's pickup; scale and offset) or a
-/// thermal pickup (stored, evaluated by OP-91). After every change the table is applied to each
+/// thermal pickup (OP-91: the reference configuration's value at this configuration's
+/// temperature). Make Thermal (OP-91) builds a thermal table from the form's temperatures, and
+/// the glass links (OQ-12) name a mechanical material for a glass's expansion. After every change the table is applied to each
 /// configuration (<see cref="MultiConfiguration.SettingsFor"/>) and every problem listed; a
 /// pickup cell shows its evaluated value.
 /// <para>
@@ -36,14 +39,22 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
     private readonly Action _publish;
     private readonly Func<OpticsSettings> _system;
     private readonly Action<OpticsSettings> _replaceSystem;
+    private readonly Func<IReadOnlyList<OpticalCatalog>>? _catalogs;   // OP-91
+    private readonly Func<IReadOnlyList<Material>>? _materials;        // OP-91
     private bool _applying;
 
     /// <param name="publish">Called after every change, to publish the system.</param>
     /// <param name="system">The optics record as entered (surfaces and system data, without the
     /// table) the configurations are applied to.</param>
     /// <param name="replaceSystem">Replaces the whole optics record (Make Single Configuration).</param>
-    public OpticsMultiConfigEditorViewModel(Action publish, Func<OpticsSettings> system, Action<OpticsSettings> replaceSystem)
+    /// <param name="catalogs">The active glass catalogs, which thermal pickups read (OP-91); null
+    /// leaves a thermal pickup of a length at a changed temperature unevaluated, with its message.</param>
+    /// <param name="materials">The mechanical material library a glass can be linked to (OP-91, OQ-12).</param>
+    public OpticsMultiConfigEditorViewModel(Action publish, Func<OpticsSettings> system, Action<OpticsSettings> replaceSystem,
+        Func<IReadOnlyList<OpticalCatalog>>? catalogs = null, Func<IReadOnlyList<Material>>? materials = null)
     {
+        _catalogs = catalogs;
+        _materials = materials;
         _publish = publish ?? throw new ArgumentNullException(nameof(publish));
         _system = system ?? throw new ArgumentNullException(nameof(system));
         _replaceSystem = replaceSystem ?? throw new ArgumentNullException(nameof(replaceSystem));
@@ -113,6 +124,130 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
         AfterChange(publish: true);
     }
 
+    // ------------------------------------------------------------------ OP-91: Make Thermal and glass links
+
+    /// <summary>Make Thermal: the number of new configurations (per nominal configuration).</summary>
+    [ObservableProperty] private int _thermalConfigurations = 3;
+
+    /// <summary>Make Thermal: the lowest new temperature, °C.</summary>
+    [ObservableProperty] private double _thermalMinimum;
+
+    /// <summary>Make Thermal: the highest new temperature, °C.</summary>
+    [ObservableProperty] private double _thermalMaximum = 40;
+
+    /// <summary>Make Thermal: the new configurations' pressure in atmospheres; empty keeps the
+    /// nominal pressure, as the help says.</summary>
+    [ObservableProperty] private string _thermalPressure = "";
+
+    /// <summary>Make Thermal: "Use existing n configurations as nominal" (else the existing data
+    /// are deleted).</summary>
+    [ObservableProperty] private bool _thermalKeepExisting;
+
+    /// <summary>Make Thermal: sort the new rows by surface rather than by operand type.</summary>
+    [ObservableProperty] private bool _thermalSortBySurface;
+
+    /// <summary>The glass a link names (as the material column does).</summary>
+    [ObservableProperty] private string _linkGlass = "";
+
+    /// <summary>The mechanical material a link names.</summary>
+    [ObservableProperty] private string? _linkMaterial;
+
+    private List<OpticsGlassMaterialSettings> _glassLinks = new();
+
+    /// <summary>The library's materials by name, for the link picker.</summary>
+    public IReadOnlyList<string> MaterialNames => _materials?.Invoke().Select(m => m.Name).ToArray() ?? Array.Empty<string>();
+
+    /// <summary>The glasses of the entered lens, for the link picker.</summary>
+    public IReadOnlyList<string> GlassNames => (_system().Surfaces ?? new())
+        .Select(x => x?.Material?.Trim() ?? "")
+        .Where(m => m.Length > 0 && !string.Equals(m, "MIRROR", StringComparison.OrdinalIgnoreCase))
+        .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    /// <summary>"N-BK7 → Aluminium 6061 (23.6e-6/K)", one line per link.</summary>
+    public string GlassLinksText => _glassLinks.Count == 0
+        ? "No glass is linked: every glass expands with its catalog TCE."
+        : string.Join(Environment.NewLine, _glassLinks.Select(l =>
+            $"{l.Glass} → {l.Material?.Name} ({(l.Material?.ThermalExpansionCoefficient is double a ? a.ToString("G4", CultureInfo.InvariantCulture) + "/K" : "no expansion coefficient")})"));
+
+    /// <summary>The thermal data as the files store it; null without links.</summary>
+    public OpticsThermalSettings? ToThermalSettings() =>
+        _glassLinks.Count == 0 ? null : new OpticsThermalSettings { GlassMaterials = _glassLinks.ToList() };
+
+    /// <summary>Loads a file's thermal data; null (every file before OP-91) is no links.</summary>
+    public void LoadThermalSettings(OpticsThermalSettings? saved)
+    {
+        _glassLinks = (saved?.GlassMaterials ?? new()).Where(l => l is not null).ToList();
+        OnPropertyChanged(nameof(GlassLinksText));
+    }
+
+    /// <summary>Links <see cref="LinkGlass"/> to <see cref="LinkMaterial"/> (replacing an
+    /// earlier link of that glass).</summary>
+    [RelayCommand]
+    private void LinkGlassToMaterial()
+    {
+        string glass = LinkGlass?.Trim() ?? "";
+        if (glass.Length == 0) { Status = "Name the glass to link."; return; }
+        var material = _materials?.Invoke().FirstOrDefault(m => string.Equals(m.Name, LinkMaterial, StringComparison.OrdinalIgnoreCase));
+        if (material is null) { Status = "Choose a material from the library to link the glass to."; return; }
+        _glassLinks.RemoveAll(l => string.Equals(l.Glass?.Trim(), glass, StringComparison.OrdinalIgnoreCase));
+        _glassLinks.Add(new OpticsGlassMaterialSettings { Glass = glass, Material = material });
+        OnPropertyChanged(nameof(GlassLinksText));
+        AfterChange(publish: true);
+        Status = material.ThermalExpansionCoefficient is null
+            ? $"Linked {glass} to '{material.Name}', which has no thermal expansion coefficient: thermal pickups of that glass will fail until the material has one."
+            : $"Linked {glass} to '{material.Name}': its thermal pickups use the material's expansion instead of the catalog TCE.";
+    }
+
+    /// <summary>Removes the link of <see cref="LinkGlass"/>.</summary>
+    [RelayCommand]
+    private void UnlinkGlass()
+    {
+        string glass = LinkGlass?.Trim() ?? "";
+        int removed = _glassLinks.RemoveAll(l => string.Equals(l.Glass?.Trim(), glass, StringComparison.OrdinalIgnoreCase));
+        if (removed == 0) { Status = $"The glass '{glass}' is not linked."; return; }
+        OnPropertyChanged(nameof(GlassLinksText));
+        AfterChange(publish: true);
+        Status = $"Removed the link of {glass}: it expands with its catalog TCE again.";
+    }
+
+    /// <summary>Make Thermal (OpticStudio help: Make Thermal) with the form's values; the whole
+    /// record is replaced when the existing data are deleted (the nominal is the current
+    /// configuration), else the table.</summary>
+    [RelayCommand]
+    private void MakeThermal()
+    {
+        double? pressure = null;
+        if (!string.IsNullOrWhiteSpace(ThermalPressure))
+        {
+            if (!double.TryParse(ThermalPressure, NumberStyles.Float, CultureInfo.CurrentCulture, out double p)
+                && !double.TryParse(ThermalPressure, NumberStyles.Float, CultureInfo.InvariantCulture, out p))
+            { Status = $"Make Thermal: the pressure '{ThermalPressure}' is not a number (leave it empty for the nominal pressure)."; return; }
+            pressure = p;
+        }
+        var options = new MakeThermalOptions
+        {
+            Configurations = ThermalConfigurations, MinimumTemperature = ThermalMinimum, MaximumTemperature = ThermalMaximum,
+            Pressure = pressure, KeepExisting = ThermalKeepExisting, SortBySurface = ThermalSortBySurface,
+        };
+        MultiConfigEditResult result;
+        try { result = MultiConfigTools.MakeThermal(_system() with { MultiConfiguration = ReadTable() }, options, _catalogs?.Invoke()); }
+        catch (ArgumentException ex) { Status = ex.Message; return; }
+        var table = result.Settings.MultiConfiguration!;
+        if (options.KeepExisting)
+        {
+            Rebuild(table, new List<string>());
+            AfterChange(publish: true);
+        }
+        else
+        {
+            // The nominal is the current configuration's system: the entered lens becomes it.
+            Rebuild(new OpticsMultiConfigSettings(), new List<string>());
+            _replaceSystem(result.Settings);
+        }
+        Status = $"Made {table.ConfigurationCount} configurations at {string.Join(", ", MultiConfigTools.ThermalTemperatures(options).Select(t => t.ToString("G6", CultureInfo.InvariantCulture)))} °C. "
+            + "(The undo history was cleared: the columns changed.)" + (result.Notes.Count > 0 ? " " + string.Join(" ", result.Notes) : "");
+    }
+
     // ------------------------------------------------------------------ files
 
     /// <summary>The table as the files store it; null for one configuration without rows (a
@@ -146,7 +281,12 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
 
     /// <summary>Re-checks the configurations after a change of the entered system, without
     /// publishing (the caller publishes).</summary>
-    public void Refresh() => AfterChange(publish: false);
+    public void Refresh()
+    {
+        AfterChange(publish: false);
+        OnPropertyChanged(nameof(GlassNames));      // OP-91: the link pickers follow the lens and the library
+        OnPropertyChanged(nameof(MaterialNames));
+    }
 
     // ------------------------------------------------------------------ commands
 
@@ -202,7 +342,7 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
         try
         {
             var before = ReadTable();
-            var added = MultiConfigTools.AddAllData(_system() with { MultiConfiguration = before }, AddAllDataCode).MultiConfiguration!;
+            var added = MultiConfigTools.AddAllData(_system() with { MultiConfiguration = before }, AddAllDataCode, _catalogs?.Invoke()).MultiConfiguration!;
             int count = (added.Operands?.Count ?? 0) - (before.Operands?.Count ?? 0);
             Rebuild(added, new List<string>());
             AfterChange(publish: true);
@@ -217,7 +357,7 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
     private void MakeSingleConfiguration()
     {
         OpticsSettings single;
-        try { single = MultiConfigTools.MakeSingleConfiguration(_system() with { MultiConfiguration = ReadTable() }); }
+        try { single = MultiConfigTools.MakeSingleConfiguration(_system() with { MultiConfiguration = ReadTable() }, _catalogs?.Invoke()); }
         catch (ArgumentException ex) { Status = ex.Message; return; }
         int was = CurrentConfiguration;
         Rebuild(new OpticsMultiConfigSettings(), new List<string>());
@@ -285,8 +425,8 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
         return columns;
     }
 
-    /// <summary>The thermal pickup (help: Solve Types): from a reference configuration; stored,
-    /// evaluated by OP-91. Its badge "T" is this program's.</summary>
+    /// <summary>The thermal pickup (help: Solve Types): the reference configuration's value at this
+    /// configuration's temperature (OP-91). Its badge "T" is this program's.</summary>
     private static readonly SheetSolveCode[] ThermalSolves =
     {
         new(ThermalPickupCode, "Thermal pickup", "T") { ParameterNames = new[] { "Reference configuration" } },
@@ -444,23 +584,24 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
                 if (cell.Note is not null) doc.SetNote(row.Index, cell.Column, null);
         if (table.ConfigurationCount > 1 || (table.Operands?.Count ?? 0) > 0)
         {
-            var system = _system() with { MultiConfiguration = table };
+            var system = _system() with { MultiConfiguration = table, Thermal = ToThermalSettings() };
+            var catalogs = _catalogs?.Invoke();   // OP-91: thermal pickups read the glasses
             for (int k = 1; k <= table.ConfigurationCount; k++)
             {
-                try { MultiConfiguration.SettingsFor(system, k); }
+                try { MultiConfiguration.SettingsFor(system, k, catalogs); }
                 catch (ArgumentException ex) { problems.AddRange(ex.Message.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)); }
-                ShowValues(table, k);
+                ShowValues(system, k, catalogs);
             }
         }
         Problems = problems;
         if (publish) _publish();
     }
 
-    private void ShowValues(OpticsMultiConfigSettings table, int k)
+    private void ShowValues(OpticsSettings system, int k, IReadOnlyList<OpticalCatalog>? catalogs)
     {
         var doc = Document;
         IReadOnlyList<(MultiConfigValue Value, string? Error)> values;
-        try { values = MultiConfiguration.ValuesIn(table, k); }
+        try { values = MultiConfiguration.ValuesIn(system, k, catalogs); }
         catch (ArgumentException) { return; }   // a table-shape problem, already listed by SettingsFor
         for (int i = 0; i < values.Count && i < doc.RowCount; i++)
         {
@@ -468,7 +609,8 @@ public sealed partial class OpticsMultiConfigEditorViewModel : ObservableObject
             var cell = doc.Rows[i].Cells[column - 1];
             var (value, error) = values[i];
             if (error is not null) { doc.SetNote(i, column, error, isError: true); continue; }
-            if (cell.Flag.Kind != CellFlagKind.Pickup) continue;
+            bool thermal = cell.Flag.Kind == CellFlagKind.Solve && cell.Flag.SolveCode == ThermalPickupCode;   // OP-91: shows its value too
+            if (cell.Flag.Kind != CellFlagKind.Pickup && !thermal) continue;
             var shown = value.IsText ? CellValue.Of(value.Text!) : CellValue.Of(value.Number);
             if (cell.Value != shown && cell.Definition is { } d && CellText.Validate(d, shown) is null) doc.SetComputed(i, column, shown);
         }

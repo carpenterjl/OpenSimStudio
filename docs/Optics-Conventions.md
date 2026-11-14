@@ -774,6 +774,28 @@ single place in the code, so a correction is one line and its test.
     - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
     Check: a merit function with one row of each operand, saved by OpticStudio with its values,
     evaluated here on the same lens.
+33. **Thermal analysis readings** (OP-91). Section 37 follows OpticStudio's help pages, but
+    nothing is compared with OpticStudio's output, and these are this program's readings where
+    the help is short:
+    - *The mount's edge model.* The help ("Thickness (THIC) Values") describes the edge
+      thickness at the mechanical semi-diameters, the mount's radial growth and the two contact
+      cases in words and a figure; the formula T' = E(1 + α_mΔT) + Z'_n(h'_n) − Z'_{n+1}(h'_{n+1}),
+      with each surface's sag scaled by its own expansion and h' = min(h(1 + α_mΔT), h(1 + α_jΔT)),
+      is this program's reading of them. The help's linked Knowledgebase article was not read.
+    - *Semi-diameters.* Make Thermal's page says it adds thermal pickups for "clear
+      semi-diameter or semi-diameters"; the "Defining Which Parameters" pages do not say how they
+      scale. Here SDIA and MCSD scale with the radius rule's expansion; CHZN (chip zone) is a
+      straight pickup, as "All Other Values" says.
+    - *Make Thermal's choices.* The nominal of "Delete existing configuration data" is the current
+      configuration; with existing configurations kept, nominal c's new configurations follow the
+      originals c by c, new rows go after the existing ones, and existing non-length rows pick up
+      their nominal. Surface 0 and the image get no rows; a value under a Lens Data Editor solve
+      or pickup gets none (a row would replace the solve). One new configuration takes the
+      minimum temperature. The optional pressure is this program's addition.
+    - *Several TEMP rows* ("Defining Multiple Environments within a Single Configuration") are not
+      built: a thermal pickup of a length in such a table fails.
+    Check: a lens made thermal by OpticStudio, its thermal pickups' values read from its
+    Multi-Configuration Editor and compared with this program's for the same lens and catalog.
 
 30. **RMS against field, wavelength and focus** (OP-40, section 34). Read from the help pages'
     wording; no OpticStudio number was compared:
@@ -1862,9 +1884,9 @@ the pages under "Multiple Configuration Editor", saved in `plans/sources/optics/
 - **Cells.** Fixed, `Variable` (listed by `MultiConfiguration.Variables` for the optimizer,
   written back by `WithValue`), `Pickup` (target × scale + offset from a cell whose
   configuration and operand numbers are each no greater than its own and which is not itself,
-  help: "Solve Types"; a text cell copies the text) or `ThermalPickup` (from a reference
-  configuration; stored but not evaluated: thermal analysis is OP-91, and a configuration that
-  reaches one fails by name). PUCN with value c in configuration k makes the fixed and variable
+  help: "Solve Types"; a text cell copies the text) or `ThermalPickup` (the value of an earlier
+  reference configuration expanded to this configuration's temperature, evaluated after the
+  configuration's other cells; section 37). PUCN with value c in configuration k makes the fixed and variable
   cells of the rows below it, up to the next PUCN row, take configuration c's value; c must be
   less than k (help); 0 ends the range; a negative PUCN ("a negative pickup") is not defined
   further by the help and is refused.
@@ -1901,14 +1923,14 @@ the pages under "Multiple Configuration Editor", saved in `plans/sources/optics/
   configuration. Add All Data adds, for one chosen operand, a row for each target the system
   holds such data for (every thickness, every field's y value, each surface with a tilt …) that
   the table does not already control, each cell fixed at the value the target has in that
-  configuration, so no configuration changes. Next and Previous stop at the ends.
+  configuration, so no configuration changes. Next and Previous stop at the ends. Make Thermal
+  is section 37's.
 - **Current configuration.** Every analysis computes on the current configuration:
   `OpticsAnalysis<T>.Compute` passes its context through
   `MultiConfiguration.ForCurrentConfiguration` (help: "The program will use the current
   configuration for all calculations and graphics", "Changing Configurations"). The Lens Data
   Editor keeps the entered lens; it does not show the current configuration's values.
-- **Not built.** Make Thermal and the evaluation of thermal pickups (OP-91: the TCE the editor
-  saves is not enough without the thermal expansion model and the mount data); Make Conjugate
+- **Not built.** Make Conjugate
   (the help names its assumptions but not how the subset's object thickness and "other data as
   appropriate" are formed); ZPL-macro and substitute solves; Add Hologram Variables; showing
   the current configuration's values in the Lens Data Editor and writing Lens Data Editor
@@ -2598,3 +2620,74 @@ cancellation keeps the best design so far.
 or automatic derivatives (finite differences only; the kernel accepts an analytic Jacobian);
 OpticStudio's own Orthogonal Descent (unpublished); the window's per-kind scale and increment
 settings and saving its settings; Auto Update of analysis windows during a run.
+
+## 37. Thermal analysis
+
+OP-91 adds OpticStudio's thermal configurations: the thermal pickup solve of the
+Multi-Configuration Editor and the Make Thermal tool. Sources: OpticStudio 2025 R2 help, System
+Explorer › Environment and its pages ("Thermal Analysis of Optical Systems", "Defining Multiple
+Temperature and Pressure Values", "Defining Which Parameters Consider Thermal Effects",
+"Radius of Curvature (CRVT) Values", "Thickness (THIC) Values", "Thermal Parameter Values",
+"All Other Values", "Adding TCE data", "Modeling Gases and Liquids", "Index of Refraction
+Computation", "Limitations of Thermal Analysis", "Edge Thickness", "TCE"), and the
+Multi-Configuration pages "Make Thermal" and "Solve Types"; copies in
+`plans/sources/optics/op-91-help/` and `op-30-help/` (not in the repository). Code:
+`OpenSim.Optics/MultiConfig/LensThermalModel.cs` (the expansion rules),
+`MultiConfiguration.cs` (evaluation), `MultiConfigTools.MakeThermal`.
+
+- **Expansion.** A length L at a temperature ΔT from its reference becomes L(1 + αΔT)
+  ("Defining Multiple Temperature and Pressure Values"); a curvature c becomes c/(1 + αΔT).
+  TCEs, in the catalogs' ED line and in the Lens Data Editor's TCE column, are in 10⁻⁶/K
+  (help: TCE; ZemaxGlass manual). The catalog value is the −30…+70 °C one, used at any
+  temperature, as OpticStudio does (help: TCE).
+- **Which α.** Radii, and here also clear and mechanical semi-diameters: the surface's catalog
+  glass; for an air or MIRROR surface the previous surface's catalog glass, else its own TCE
+  column; for any other medium (constant index, model glass) the TCE column ("Radius of
+  Curvature (CRVT) Values", "Adding TCE data"). A glass whose catalog sets "ignore thermal
+  expansion" is not a solid and uses the TCE column ("Modeling Gases and Liquids").
+  Thicknesses: a solid catalog glass scales with its TCE; any other space is a mount.
+- **The mount.** The space after surface n is a spacer of length E = T − Z_n(h_n) + Z_{n+1}(h_{n+1})
+  (help: Edge Thickness), the sags Z taken at each surface's mechanical semi-diameter h of the
+  reference configuration (fixed values as entered, automatic ones sized by rays, section 13).
+  It expands with surface n's TCE column α_m: E' = E(1 + α_mΔT). Each bounding surface j grows
+  by s_j = 1 + α_jΔT (the radius rule), so its sag becomes s_j·Z_j(r/s_j); the contact moves
+  to h'_j = min(h_j(1 + α_mΔT), h_j s_j), never past the lens's expanded edge (the help's two
+  cases). T' = E' + Z'_n(h'_n) − Z'_{n+1}(h'_{n+1}). With every α equal this is T(1 + αΔT);
+  with α_m = 0 the thickness still changes when the radii do, as the help says.
+- **Glass and material (OQ-12).** `OpticsSettings.Thermal` (`OpticsThermalSettings`) may link a
+  glass ("N-BK7" or "CATALOG:N-BK7") to a mechanical `Material`, stored whole; its
+  `ThermalExpansionCoefficient` (1/K, a new nullable field of the material record) then
+  replaces the catalog TCE everywhere that glass's TCE is read. A linked material without a
+  coefficient, or an unlinked glass without a catalog TCE, fails by name. No built-in material
+  has a coefficient yet.
+- **The thermal pickup.** A cell of configuration k with reference configuration c (1 ≤ c < k)
+  takes the value of its row in c, changed for ΔT = T_k − T_c, where T is the configuration's
+  TEMP value (the system temperature without a TEMP row). CRVT, THIC, SDIA and MCSD expand as
+  above, read on configuration c's lens; every other operand copies c's value ("All Other
+  Values"); PRAM and PAR1–8 fail (scaling by the parameter's units, "Thermal Parameter Values",
+  needs units the surface types do not declare). ΔT = 0 returns c's value exactly. Thermal
+  pickups are evaluated after the configuration's other cells, so a pickup in the same
+  configuration cannot read one. The glasses come from the active catalogs, which
+  `SettingsFor`, `ValuesIn`, `SolveFor`, `LensFor` and `ForCurrentConfiguration` take; without
+  them a length's thermal pickup at a changed temperature fails by name.
+- **Indices.** Each configuration's TEMP and PRES set the system environment; with "Adjust index
+  to environment" on, the glass indices follow section 2's temperature and pressure model (OP-13, `ThermalIndex`). Make Thermal
+  says so when the setting is off.
+- **Make Thermal.** "Delete existing configuration data": one nominal configuration (the
+  current one, at its temperature and pressure) and N more at temperatures from the minimum to
+  the maximum in equal steps (N = 1: the minimum). "Use existing n configurations as nominal":
+  n + n·N configurations, nominal c's N following the originals in order; existing rows' new
+  cells pick up nominal c (a thermal pickup for CRVT, THIC, SDIA, MCSD), TEMP takes the new
+  temperatures. Rows TEMP and PRES (when missing) and CRVT, THIC, SDIA, MCSD for surfaces 1 to
+  the one before the image are added where the table lacks them and the value is fixed
+  (planes, infinite thicknesses and automatic semi-diameters have none; a Lens Data Editor
+  solve or pickup is kept and the notes name it), sorted by operand or by surface. The pressure
+  of the new configurations is the nominal's (help) unless given. The table is limited to 160
+  configurations.
+- **Not built.** Thermal pickups of parameters and extra data; several environments in one
+  configuration (several TEMP or PRES rows); thermal pickups of glasses beyond a copy; TCE and
+  thermal merit operands (OP-55) and athermalisation by optimization (OP-57); the merit function
+  over a thermal table needs the catalogs passed to `ProjectMeritConfigurations`'s `SettingsFor`
+  (a one-line change in `OpenSim.Optics/Merit/MeritConfigurations.cs`, not made here), until
+  then its thermal configurations at a changed temperature fail by name; the prescription
+  report's thermal listing; coupling to OpenSim's own thermal and structural solvers (OP-92).
