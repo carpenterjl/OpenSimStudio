@@ -196,6 +196,16 @@
         <TextBox Text="{Binding Optics.SystemNotes}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" Margin="0,2,0,0"
                  ToolTip="Notes kept with the system."/>
 
+        <!-- OP-10: the lens on its own, outside a project. -->
+        <UniformGrid Columns="2" Margin="0,8,0,0">
+            <Button x:Name="OpticsSaveLensButton" Content="Save the lens…" Command="{Binding Optics.SaveLensCommand}" Margin="0,0,2,0"
+                    ToolTip="Writes the optical system on its own (.osslens), to open in another project."/>
+            <Button x:Name="OpticsOpenLensButton" Content="Open a lens…" Command="{Binding Optics.OpenLensCommand}" Margin="2,0,0,0"
+                    ToolTip="Replaces this workspace's optical system with a saved lens."/>
+        </UniformGrid>
+        <TextBlock Text="{Binding Optics.LensFileStatus}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   Foreground="{DynamicResource TextFaintBrush}"/>
+
         <TextBlock x:Name="OpticsSystemCheck" Text="{Binding Optics.SystemCheck}" TextWrapping="Wrap" Margin="0,8,0,0"
                    Foreground="{DynamicResource TextFaintBrush}" AutomationProperties.AutomationId="OpticsSystemCheck"/>
     </StackPanel>

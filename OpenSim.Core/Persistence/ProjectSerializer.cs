@@ -13,10 +13,13 @@ public sealed class ProjectSerializer
 
     /// <summary>The format this build writes: 1 = the original schema (unversioned files
     /// read as 0), 2 = the solver settings and this number (FU-46), 3 = the antenna and
-    /// signal-integrity panels' settings (D23), 4 = the Optics workspace's settings (OP-1).</summary>
-    public const int CurrentFormatVersion = 4;
+    /// signal-integrity panels' settings (D23), 4 = the Optics workspace's settings (OP-1),
+    /// 5 = the optical system's data inside them (OP-10).</summary>
+    public const int CurrentFormatVersion = 5;
 
-    private static readonly JsonSerializerOptions Options = new()
+    /// <summary>The JSON form every OpenSim file of this kind shares (camel case, indented, nulls
+    /// left out); the standalone lens file uses it too.</summary>
+    internal static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

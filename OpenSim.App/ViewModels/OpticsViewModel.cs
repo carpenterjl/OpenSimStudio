@@ -44,20 +44,29 @@ public partial class OpticsViewModel : ObservableObject
         _ => ""
     };
 
-    /// <summary>The workspace's inputs as the project file stores them.</summary>
-    public OpticsSettings ToSettings() => new() { Mode = OpticsModes.SavedName(Mode) };
+    /// <summary>The workspace's inputs as the project file (and a lens file) stores them.</summary>
+    public OpticsSettings ToSettings() => new()
+    {
+        Mode = OpticsModes.SavedName(Mode),
+        SystemData = SystemDataToSettings()
+    };
 
-    /// <summary>Restores the workspace from a project file; null (every older file) leaves it
-    /// as it is. Returns notes for the log: a mode this build does not know is kept out and
-    /// named, never opened as another mode without a word.</summary>
+    /// <summary>Restores the workspace from a project or lens file; null (every older file)
+    /// leaves it as it is, as does each part a file does not carry. Returns notes for the log: a
+    /// mode or choice this build does not know is kept out and named, never opened as another
+    /// without a word.</summary>
     public IReadOnlyList<string> LoadSettings(OpticsSettings? saved)
     {
         var notes = new List<string>();
-        if (saved?.Mode is not { } name) return notes;
-        if (OpticsModes.TryParseSavedName(name, out var mode))
-            SelectedMode = OpticsModeOption.All.First(o => o.Mode == mode);
-        else
-            notes.Add($"Optics mode '{name}' is not one this version knows; kept '{SelectedMode.Label}'.");
+        if (saved is null) return notes;
+        if (saved.Mode is { } name)
+        {
+            if (OpticsModes.TryParseSavedName(name, out var mode))
+                SelectedMode = OpticsModeOption.All.First(o => o.Mode == mode);
+            else
+                notes.Add($"Optics mode '{name}' is not one this version knows; kept '{SelectedMode.Label}'.");
+        }
+        LoadSystemDataSettings(saved.SystemData, notes);
         return notes;
     }
 

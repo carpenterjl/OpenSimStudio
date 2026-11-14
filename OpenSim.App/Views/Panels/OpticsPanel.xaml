@@ -16,9 +16,9 @@
             </controls:FormGrid>
             <TextBlock Text="{Binding Optics.ModeDescription}" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFaintBrush}" Margin="0,4,0,0"/>
-            <TextBlock Text="There are no surfaces yet, so there is nothing to trace. The mode is saved with the project."
+            <TextBlock Text="There are no surfaces yet, so there is nothing to trace. The mode and the system data are saved with the project, or as a lens of their own."
                        TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,8,0,0"/>
-            <!-- OP-18: the system data. -->
+            <!-- OP-18: the system data; OP-10: the lens on its own. -->
             <panels:OpticsSystemDataPanel/>
         </StackPanel>
     </GroupBox>
