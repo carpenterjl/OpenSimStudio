@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using OpenSim.Core.Model;
 using OpenSim.Optics;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.App.ViewModels;
 
@@ -21,11 +22,20 @@ public partial class OpticsViewModel : ObservableObject
 {
     private readonly Services.ProjectSession _session;
 
-    public OpticsViewModel(Services.ProjectSession session)
+    public OpticsViewModel(Services.ProjectSession session, GlassCatalogLibrary glassCatalogs, Services.ILogService log)
     {
+        // The materials panel first: publishing reads its active catalogs.
+        GlassCatalogs = new OpticsGlassCatalogViewModel(glassCatalogs, PublishSystem);
+        foreach (var warning in GlassCatalogs.LoadWarnings)
+            log.Append($"Glass catalogs: {warning}");
         _session = session;
         PublishSystem();
     }
+
+    /// <summary>The glass catalogs and the active ones (OP-11). Its own property changes do not
+    /// reach this view model's, so browsing a catalog publishes nothing; changing which catalogs
+    /// are active does.</summary>
+    public OpticsGlassCatalogViewModel GlassCatalogs { get; }
 
     /// <summary>Hands the session a snapshot of the system after an edit, so the analysis
     /// windows recompute (OP-9). Field initialisers raise property changes before the constructor has set the session,
@@ -66,7 +76,8 @@ public partial class OpticsViewModel : ObservableObject
     public OpticsSettings ToSettings() => new()
     {
         Mode = OpticsModes.SavedName(Mode),
-        SystemData = SystemDataToSettings()
+        SystemData = SystemDataToSettings(),
+        Materials = GlassCatalogs?.ToSettings()
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -85,6 +96,8 @@ public partial class OpticsViewModel : ObservableObject
                 notes.Add($"Optics mode '{name}' is not one this version knows; kept '{SelectedMode.Label}'.");
         }
         LoadSystemDataSettings(saved.SystemData, notes);
+        GlassCatalogs.LoadSettings(saved.Materials, notes);
+        PublishSystem();
         return notes;
     }
 
@@ -93,5 +106,7 @@ public partial class OpticsViewModel : ObservableObject
     {
         SelectedMode = OpticsModeOption.All[0];
         ResetSystemData();
+        GlassCatalogs.Reset();
+        PublishSystem();
     }
 }

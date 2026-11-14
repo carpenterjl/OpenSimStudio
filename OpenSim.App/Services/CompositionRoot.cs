@@ -61,6 +61,8 @@ public static class CompositionRoot
         services.AddSingleton<SignalIntegrityViewModel>();
         services.AddSingleton<MagneticsViewModel>();
         services.AddSingleton<EmiViewModel>();
+        // The glass catalogs (OP-11): built-ins plus the user's AGF folder, per user.
+        services.AddSingleton<OpenSim.Optics.Materials.GlassCatalogLibrary>();
         services.AddSingleton<OpticsViewModel>();
         // The optics analyses on offer (OP-9); the analysis items register in CreateDefault.
         services.AddSingleton(_ => OpenSim.Optics.Analysis.OpticsAnalysisRegistry.CreateDefault());

@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <None Include="Pcb\Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Optics\Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

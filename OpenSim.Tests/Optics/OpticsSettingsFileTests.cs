@@ -24,6 +24,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         var optics = (OpticsSettings)Filled(typeof(OpticsSettings), ref counter);
         Assert.NotNull(optics.SystemData);
         Assert.Equal(2, optics.SystemData!.Fields!.Count);
+        Assert.Equal(2, optics.Materials!.ActiveCatalogs!.Count);
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 
@@ -195,7 +196,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
     /// <summary>An instance of a settings record with every public property unlike its default:
     /// numbers from a running counter (an int past 1000, a double whose shortest decimal form is
     /// long, so the JSON must carry every digit), booleans flipped, strings "label n", lists of two
-    /// filled rows, nested records filled.</summary>
+    /// filled rows (two strings for a list of names), nested records filled.</summary>
     private static object Filled(Type type, ref int counter)
     {
         var instance = Activator.CreateInstance(type)!;
@@ -212,6 +213,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
             else if (t == typeof(Dictionary<string, JsonElement>))
                 value = new Dictionary<string, JsonElement> { [$"key {counter}"] = JsonFor(counter), [$"key {counter + 1}"] = JsonFor(counter + 1) };
             else if (t == typeof(string)) value = $"label {counter}";
+            // The active glass catalogs (OP-11) are a list of names.
+            else if (t == typeof(List<string>)) value = new List<string> { $"label {counter}", $"label {counter + 1}" };
             else if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>))
             {
                 var list = (System.Collections.IList)Activator.CreateInstance(t)!;

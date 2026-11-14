@@ -20,6 +20,8 @@
                        TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,8,0,0"/>
             <!-- OP-18: the system data; OP-10: the lens on its own. -->
             <panels:OpticsSystemDataPanel/>
+            <!-- OP-11: the glass catalogs. -->
+            <panels:OpticsMaterialsPanel/>
         </StackPanel>
     </GroupBox>
 </UserControl>

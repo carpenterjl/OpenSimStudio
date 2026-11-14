@@ -1,0 +1,87 @@
+<UserControl x:Class="OpenSim.App.Views.Panels.OpticsMaterialsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:OpenSim.App.Controls">
+    <!-- OP-11: the glass catalogs, which ones the lens uses, and one glass's catalog data with
+         the catalog's self-check. Bindings go through the shell DataContext, as the rest of the
+         Optics panel's do. -->
+    <StackPanel>
+        <TextBlock Text="Glass catalogs" FontWeight="Bold" Margin="0,8,0,2"/>
+        <TextBlock Text="{Binding Optics.GlassCatalogs.CatalogFolder, StringFormat=User catalogs are read from {0}}" TextWrapping="Wrap"
+                   Style="{StaticResource FaintText}"/>
+        <UniformGrid Columns="3" Margin="0,4,0,0">
+            <Button x:Name="OpticsImportAgfButton" Content="Import AGF…" Command="{Binding Optics.GlassCatalogs.ImportAgfCommand}" Margin="0,0,2,0"
+                    ToolTip="Copies an OpticStudio AGF glass catalog into the catalog folder and loads it."/>
+            <Button Content="Folder…" Command="{Binding Optics.GlassCatalogs.ChooseCatalogFolderCommand}" Margin="2,0,2,0"
+                    ToolTip="Reads the user catalogs from another folder; the choice is kept for next time."/>
+            <Button Content="Reload" Command="{Binding Optics.GlassCatalogs.ReloadCatalogsCommand}" Margin="2,0,0,0"/>
+        </UniformGrid>
+        <TextBlock Text="{Binding Optics.GlassCatalogs.Status}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   Foreground="{DynamicResource TextFaintBrush}"/>
+        <TextBlock Text="Tick the catalogs the lens draws its glasses from; a glass is looked up in them from the top."
+                   TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,4,0,2"/>
+        <ListBox x:Name="OpticsCatalogList" ItemsSource="{Binding Optics.GlassCatalogs.Catalogs}"
+                 SelectedItem="{Binding Optics.GlassCatalogs.SelectedCatalog}" MaxHeight="140"
+                 AutomationProperties.AutomationId="OpticsCatalogList">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <CheckBox IsChecked="{Binding IsActive}" Content="{Binding Description}"/>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Text="{Binding Optics.GlassCatalogs.CatalogSummary}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   AutomationProperties.AutomationId="OpticsCatalogSummary"/>
+        <TextBlock Text="{Binding Optics.GlassCatalogs.CatalogNotes}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   Foreground="{DynamicResource TextFaintBrush}"/>
+
+        <controls:FormGrid Margin="0,4,0,0">
+            <Label Content="Find a glass"/>
+            <TextBox Text="{Binding Optics.GlassCatalogs.GlassFilter, UpdateSourceTrigger=PropertyChanged}"/>
+        </controls:FormGrid>
+        <ListBox x:Name="OpticsGlassList" ItemsSource="{Binding Optics.GlassCatalogs.Glasses}" DisplayMemberPath="Name"
+                 SelectedItem="{Binding Optics.GlassCatalogs.SelectedGlass}" MaxHeight="160" Margin="0,2,0,0"
+                 AutomationProperties.AutomationId="OpticsGlassList"/>
+
+        <TextBlock Text="{Binding Optics.GlassCatalogs.SelectedGlass.Name}" FontWeight="Bold" Margin="0,6,0,2"/>
+        <controls:FormGrid>
+            <Label Content="Dispersion formula"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassFormula}" TextWrapping="Wrap"/>
+            <Label Content="Coefficients"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassCoefficients}" TextWrapping="Wrap"/>
+            <Label Content="Valid range [µm]"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassRange}"/>
+            <Label Content="Printed nd / Vd"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassNdVd}"/>
+            <Label Content="Computed nd / Vd"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassComputedNdVd}"/>
+            <Label Content="Self-check"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassCheckResult}" TextWrapping="Wrap"
+                       AutomationProperties.AutomationId="OpticsGlassCheck"/>
+            <Label Content="Glass code"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassCode}"/>
+            <Label Content="Status"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassStatusText}" TextWrapping="Wrap"/>
+            <Label Content="Reference temperature [°C]"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassReferenceTemperature}"/>
+            <Label Content="dn/dT constants"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassThermal}" TextWrapping="Wrap"
+                       ToolTip="The TD line, held for the thermal index model (a later item); indices here are at the reference temperature."/>
+            <Label Content="Thermal expansion [10⁻⁶]"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassExpansion}" TextWrapping="Wrap"/>
+            <Label Content="Density [g/cm³]"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassDensity}"/>
+            <Label Content="ΔPgF"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassDeltaPgF}"/>
+            <Label Content="Cost and resistance"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassCostAndResistance}" TextWrapping="Wrap"/>
+            <Label Content="Internal transmittance"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassTransmittance}"/>
+            <Label Content="Comment"/>
+            <TextBlock Text="{Binding Optics.GlassCatalogs.GlassComment}" TextWrapping="Wrap"/>
+            <Label Content="Index at wavelength [µm]"/>
+            <TextBox Text="{Binding Optics.GlassCatalogs.ProbeMicrometers}" IsEnabled="{Binding Optics.GlassCatalogs.HasSelectedGlass}"/>
+        </controls:FormGrid>
+        <TextBlock Text="{Binding Optics.GlassCatalogs.ProbeResult}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   AutomationProperties.AutomationId="OpticsGlassProbe"/>
+    </StackPanel>
+</UserControl>

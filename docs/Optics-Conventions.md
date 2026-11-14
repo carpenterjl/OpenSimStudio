@@ -12,7 +12,7 @@ Two rules decide everything below:
   differ, the most accurate model is the default, an OpticStudio-compatible setting is
   selectable, and the result line names the model in use.
 
-Section 9 lists where each OpticStudio rule was read, and section 10 lists the three points that
+Section 9 lists where each OpticStudio rule was read, and section 10 lists the four points that
 still need a check against OpticStudio's own output.
 
 ## 1. Units
@@ -41,6 +41,17 @@ still need a check against OpticStudio's own output.
 - So a wavelength read from a `.zmx` file is multiplied by the index of air at the file's
   temperature and pressure to give the vacuum wavelength. The air index model belongs to the
   thermal and pressure item (OP-13); until it exists, no file wavelength is converted.
+- **Catalog indices** (OP-11, `OpenSim.Optics/Materials`). A glass's dispersion formula takes
+  the wavelength in micrometers in the catalog's air and gives the index relative to that air,
+  at the catalog's reference temperature (the TD line's last number) and pressure.
+  `OpticalMaterial.RelativeIndex` returns exactly that and nothing else; turning it into an
+  absolute index and moving it to the system's temperature and pressure is OP-13's, which
+  builds on this method. The TD constants are read and kept for it.
+- A wavelength outside a material's valid range (the catalog's LD line, or the ends of a
+  tabulated material's table) is refused with an error naming the glass, the catalog, the
+  wavelength and the range. Nothing is extrapolated.
+- Tabulated materials interpolate n and k linearly between rows (`TabulatedIndex`); that
+  choice is ours, not read from OpticStudio.
 
 ## 3. Axes, radius, thickness and mirrors
 
@@ -184,6 +195,7 @@ OpticStudio help, which has the same wording.
 | Coordinate break, order flag, right-handed tilts in degrees | manual pp. 293–294 |
 | Non-sequential object placement | manual pp. 350, 354 |
 | Ray-trace error and vignetting codes | manual pp. 334, 712, 763–764 |
+| AGF catalog layout, dispersion formula numbers and expressions, glass status numbers | AGFFileReader.jl (MIT): `src/GlassDownload.jl`, `src/utilities.jl` lines 133–183, `src/constants.jl`; ZemaxGlass.py (MIT): `parse_glass_input`, `get_dispersion` lines 845–888, and its user manual's AGF layout and nomenclature. Not read from Ansys's own page |
 
 The manual gives the tilt rules in words and has no matrices. The written-out matrix in section
 4 follows from those words, and agrees with two independent write-ups of what the program
@@ -208,3 +220,8 @@ single place in the code, so a correction is one line and its test.
    spherical aberration. Planned with OP-35 and OP-102.
 3. **Error codes of the current scripting interface.** The positive/negative surface-number
    rule is documented for the older interfaces only. Planned with OP-98.
+4. **Dispersion formula 4 (Sellmeier 2).** The two readers above disagree on its second term:
+   AGFFileReader has C4 λ²/(λ² − C5²), ZemaxGlass C4/(λ² − C5²). The code uses AGFFileReader's
+   form (`DispersionFormulas.Evaluate`, marked unverified), and the AGF reader names every glass
+   that uses formula 4 in a note. No glass in the 23 catalogs read for OP-11 uses it. Check: one
+   glass with formula 4 and C4 ≠ 0, its index compared with OpticStudio's.
