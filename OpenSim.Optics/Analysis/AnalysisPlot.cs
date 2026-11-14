@@ -28,3 +28,33 @@ public sealed record AnalysisScatterSeries(string Name, IReadOnlyList<AnalysisPo
 /// The window draws it with the scatter plot control of OP-7.</summary>
 public sealed record AnalysisScatterPlot(string Title, string XLabel, string YLabel, IReadOnlyList<AnalysisScatterSeries> Series)
     : AnalysisPlot(Title);
+
+/// <summary>How the window draws an <see cref="AnalysisMapPlot"/>.</summary>
+public enum AnalysisMapStyle
+{
+    /// <summary>False-colour image with a movable cross-section (OP-7's image plot).</summary>
+    Image,
+    /// <summary>Filled contours with lines (OP-7's contour plot).</summary>
+    Contour,
+}
+
+/// <summary>
+/// A scalar sampled on a regular grid, drawn as a false-colour image or as contours: wavefront
+/// and OPD maps, sag and curvature maps, footprints, interferograms. Non-finite samples mean "no
+/// data" (outside the pupil or the clear aperture) and are left blank. The grid follows
+/// <see cref="OpenSim.Core.Plotting.GridField"/>'s node convention (samples on the corners).
+/// </summary>
+/// <param name="Field">The samples and their extent, in the units of the axis labels.</param>
+/// <param name="ValueUnit">The unit of the samples ("waves", "mm", "1/mm"), shown on the colour bar.</param>
+public sealed record AnalysisMapPlot(string Title, string XLabel, string YLabel,
+    OpenSim.Core.Plotting.GridField Field, string ValueUnit) : AnalysisPlot(Title)
+{
+    public AnalysisMapStyle Style { get; init; } = AnalysisMapStyle.Image;
+
+    /// <summary>The bottom and top of the colour scale; NaN for the smallest or largest sample.</summary>
+    public double Minimum { get; init; } = double.NaN;
+    public double Maximum { get; init; } = double.NaN;
+
+    /// <summary>Contour levels for <see cref="AnalysisMapStyle.Contour"/>, or null for evenly spaced ones.</summary>
+    public IReadOnlyList<double>? Levels { get; init; }
+}

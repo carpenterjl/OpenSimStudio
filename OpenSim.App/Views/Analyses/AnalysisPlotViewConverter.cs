@@ -12,7 +12,8 @@ namespace OpenSim.App.Views.Analyses;
 /// <summary>
 /// The element an analysis window shows for one plot: a line plot as the
 /// <see cref="AnalysisPlotImageConverter"/>'s image, a scatter plot (the glass maps, OP-14) as
-/// the interactive <see cref="ScatterPlot"/> of OP-7, whose readout names the point. Other kinds
+/// the interactive <see cref="ScatterPlot"/> of OP-7, whose readout names the point, a map as
+/// OP-7's <see cref="ImagePlot"/> or <see cref="ContourPlot"/>. Other kinds
 /// show nothing until they get an arm here.
 /// </summary>
 public sealed class AnalysisPlotViewConverter : IValueConverter
@@ -31,6 +32,7 @@ public sealed class AnalysisPlotViewConverter : IValueConverter
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture) => value switch
     {
         AnalysisScatterPlot scatter => Scatter(scatter),
+        AnalysisMapPlot map => Map(map),
         AnalysisPlot plot when _images.Convert(plot, typeof(ImageSource), parameter, culture) is ImageSource image =>
             new Image { Source = image, Stretch = Stretch.Uniform, MaxHeight = 320, ToolTip = plot.Title },
         _ => null
@@ -51,6 +53,19 @@ public sealed class AnalysisPlotViewConverter : IValueConverter
             s.Points.Select(p => new Point2(p.X, p.Y)).ToArray(), Palette[i % Palette.Length],
             Markers[(i / Palette.Length) % Markers.Length], 3, s.Points.Select(p => p.Label).ToArray())).ToArray(),
     };
+
+    /// <summary>The image or contour control for <paramref name="plot"/>.</summary>
+    internal static FrameworkElement Map(AnalysisMapPlot plot) => plot.Style == AnalysisMapStyle.Contour
+        ? new ContourPlot
+        {
+            Title = plot.Title, XLabel = plot.XLabel, YLabel = plot.YLabel, Field = plot.Field,
+            ValueUnit = plot.ValueUnit, Levels = plot.Levels, Width = 480, Height = 400,
+        }
+        : new ImagePlot
+        {
+            Title = plot.Title, XLabel = plot.XLabel, YLabel = plot.YLabel, Field = plot.Field,
+            ValueUnit = plot.ValueUnit, Minimum = plot.Minimum, Maximum = plot.Maximum, Width = 480, Height = 480,
+        };
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
