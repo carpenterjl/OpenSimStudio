@@ -50,6 +50,14 @@ public sealed class OpticsSettingsTests : IDisposable
         optics.SelectedAirModel = optics.AirModelChoices.Single(c => c.Value == AirIndexModel.ModifiedEdlen);   // OP-13
         optics.CarbonDioxideMicromolesPerMole = 1000.0 / 3;
         optics.RelativeHumidityPercent = 45;
+        // OP-51: the system polarization.
+        optics.Unpolarized = true;
+        optics.PolarizationJx = 0.6;
+        optics.PolarizationJy = 1.0 / 3;
+        optics.PolarizationXPhaseDegrees = 15;
+        optics.PolarizationYPhaseDegrees = -40;
+        optics.SelectedPolarizationReference = optics.PolarizationReferenceChoices.Single(c => c.Value == PolarizationReference.YAxis);
+        optics.ConvertThinFilmPhase = false;
         optics.SelectedMode = optics.Modes.Single(m => m.Mode == OpticsMode.NonSequential);
         // OP-15: a coating catalog with a material, a layer coating and an ideal coating.
         optics.Coatings.AddMaterialCommand.Execute(null);

@@ -122,6 +122,11 @@ public sealed class OpticsSettingsFileTests : IDisposable
             {
                 TemperatureCelsius = -10.5, PressureAtmospheres = 0, AdjustIndexToEnvironment = true,
                 AirModel = AirIndexModel.ModifiedEdlen, CarbonDioxideMicromolesPerMole = 512.5, RelativeHumidityPercent = 37.5
+            },
+            Polarization = new SystemPolarization   // OP-51
+            {
+                Unpolarized = true, Jx = 0.5, Jy = 0.75, XPhaseDegrees = 30, YPhaseDegrees = -45.5,
+                Reference = PolarizationReference.YAxis, ConvertThinFilmPhase = false
             }
         };
         var notes = new List<string>();
@@ -135,6 +140,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.Empty(notes);
         Assert.Equal(data.Units, back.Units);
         Assert.Equal(data.Environment, back.Environment);
+        Assert.Equal(data.Polarization, back.Polarization);              // OP-51
         Assert.Equal(data.Title, back.Title);
         Assert.Equal(data.Notes, back.Notes);
         Assert.Equal(data.Wavelengths.Wavelengths, back.Wavelengths.Wavelengths);   // micrometers, unscaled

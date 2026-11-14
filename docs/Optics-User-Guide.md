@@ -240,7 +240,7 @@ status. Like the paraxial report, it says the system has no surfaces until the l
 points not yet compared with OpticStudio are in `docs/Optics-Conventions.md` §13 and §10 item 9.
 
 Not built: the lens data editor and saving surfaces (OP-31), tilts, decenters and coordinate
-breaks (OP-21), ray aiming and vignetting factors (OP-22), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, coatings applied to rays, OPD
+breaks (OP-21), ray aiming and vignetting factors (OP-22), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, OPD
 against the reference sphere (OP-35), and layouts drawing traced rays.
 
 ## Gaussian beams
@@ -304,8 +304,8 @@ What the plots show: s, p and their average for R, T and A; diattenuation |s −
 for reflection and transmission; the phases of the s and p reflected and transmitted
 amplitudes in OpticStudio's convention; retardance φp − φs (transmission) and
 φp − φs + 180° (reflection). The equations and how they compare with other tools are in
-`docs/Optics-Conventions.md` §12. Not built: coatings on surfaces (there are no surfaces
-yet), coatings applied to traced rays, per-layer multipliers and offsets in the plots' settings
+`docs/Optics-Conventions.md` §12. Coatings on surfaces and their effect on traced rays are
+the polarization ray trace's (see Polarization). Not built: per-layer multipliers and offsets in the plots' settings
 (the library takes them), incoherent thick layers, and coating design or optimisation.
 
 ## Aspheres
@@ -398,6 +398,59 @@ Not built:
 - solves on extra data;
 - the optimizer that would use solves in its derivatives.
 
+## Polarization
+
+The polarization ray trace (`OpenSim.Optics/Polarization`, OP-51) carries the electric field
+along each real ray: the Fresnel or coating amplitudes in each surface's s and p frame, the
+reflectance of mirrors, and the bulk absorption of the glasses. The field is scaled so that its
+squared magnitude is the ray's power relative to launch, so the trace gives each ray's
+transmission as well as its polarization.
+
+- **System polarization** (system data panel, group **Polarization**): **Unpolarized** (each
+  ray traced with (Jx, Jy) = (1, 0) and (0, 1), intensities averaged), or the Jones vector Jx,
+  Jy with the X-phase and Y-phase in degrees (OpticStudio's sign convention); **Method**, the
+  rule that turns the Jones vector into a field (X, Y or Z axis reference, as OpticStudio
+  defines them; X is the default); **Convert thin-film phase to ray equivalent** (on by
+  default). These save with the project and the lens file.
+- **Coatings on surfaces.** A sequential surface names a coating of the catalog
+  (`SequentialSurface.Coating`); blank is an uncoated surface. An uncoated mirror is aluminium
+  0.7 − 7.0i. From glass to air the layers are reversed, as in the coating plots. A name the
+  catalog lacks stops the trace with a message naming the surface.
+- **Bulk absorption** comes from a glass's internal transmittance (IT) table, interpolated in
+  wavelength; a wavelength outside the table is refused, not extrapolated. A material with an
+  extinction coefficient k instead uses it. Each analysis has a **Bulk absorption** switch.
+
+The **Polarization** group of the analysis picker has five analyses. Each takes its own Jones
+vector (and **Unpolarized** where OpticStudio has it); the method and the phase conversion come
+from the system polarization.
+
+- **Polarization ray trace:** one ray (field, pupil, wavelength), surface by surface: angle of
+  incidence, the bulk internal transmittance of the segment, the coating's intensity
+  transmittance (reflectance on a mirror), the s and p amplitude coefficients applied, the field
+  after the surface (local or global frame), and the relative and total transmission; then the
+  system's 3 × 3 polarization matrix and its diattenuation.
+- **Polarization pupil map:** the polarization ellipse at each point of a square pupil grid, at
+  a chosen surface, drawn at the pupil point; a table of |Ex|, |Ey|, the phase of Ey minus that
+  of Ex, and the orientation of the ellipse; and the mean transmission over the grid.
+- **Transmission:** for every field and wavelength, the mean transmission of a pupil grid (rays
+  stopped by apertures count zero), and the chief ray's relative and total transmission at
+  each surface.
+- **Phase aberration:** the phase of the image-space Ex and Ey along the tangential and
+  sagittal fans, minus the chief ray's, in waves.
+- **Transmission fan:** transmission along the tangential and sagittal fans for each field and
+  wavelength.
+
+Like the other ray analyses they say the system has no surfaces until the lens data editor
+(OP-31) supplies them. The equations are in `docs/Optics-Conventions.md` §21; the choices not
+yet compared with OpticStudio are in §10 item 17.
+
+Not built: real transmission in the other analyses (the call `PolarizationTracer.Transmission`
+exists for them, but spot diagrams, MTF, PSF and the rest do not use it yet); pupil
+apodization and vignetting factors in the transmission (OP-22); diattenuation and retardance
+maps, Jones and Mueller matrix surfaces (OP-52) and birefringent media (OP-53); polarization of
+non-sequential rays; the Polarization pupil map's interference between configurations; the
+system's retardance (only its diattenuation is listed).
+
 ## Cross-checks against other programs
 
 The real ray trace, the paraxial data and the thin-film engine are checked against stored
@@ -420,6 +473,8 @@ Not built yet, and not to be relied on until they appear in this guide:
 - layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
   the rest);
 - the solve column of the sequential surface editor (the solve library is built; see Solves);
+- real transmission and polarization in the image-quality analyses (the polarization trace of
+  OP-51 is built, but nothing but its own five analyses uses it yet);
 - optimization and tolerancing of a lens;
 - lens-file import;
 - reference results from OpticStudio itself (the cross-checks use open programs only).

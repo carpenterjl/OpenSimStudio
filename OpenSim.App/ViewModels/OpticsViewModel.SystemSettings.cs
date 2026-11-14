@@ -49,7 +49,8 @@ public partial class OpticsViewModel
         AdjustIndexToEnvironment = AdjustIndexToEnvironment,
         AirIndexModel = AirIndexModels.Names.SavedName(SelectedAirModel.Value),
         CarbonDioxideMicromolesPerMole = CarbonDioxideMicromolesPerMole,
-        RelativeHumidityPercent = RelativeHumidityPercent
+        RelativeHumidityPercent = RelativeHumidityPercent,
+        Polarization = PolarizationToSettings()   // OP-51
     };
 
     /// <summary>Sets the panel from a file's system data; null (a file from before OP-10) leaves
@@ -99,6 +100,7 @@ public partial class OpticsViewModel
                 : Pick(AirModelChoices, AirIndexModels.Names, saved.AirIndexModel, SelectedAirModel, "Air index model", notes);
             CarbonDioxideMicromolesPerMole = saved.CarbonDioxideMicromolesPerMole ?? AirConditions.DefaultCarbonDioxide;
             RelativeHumidityPercent = saved.RelativeHumidityPercent ?? 0;
+            LoadPolarizationSettings(saved.Polarization, notes);   // OP-51
         }
         finally
         {

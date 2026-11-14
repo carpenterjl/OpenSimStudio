@@ -23,6 +23,34 @@ public sealed class OpticsSystemDataTests : IDisposable
         Assert.Equal("Entrance pupil diameter [mm]", Optics.ApertureValueLabel);
     }
 
+    /// <summary>OP-51: the system polarization. The Jones fields show only when the light is
+    /// polarized; a zero Jones vector is a system problem unless the light is unpolarized; the
+    /// panel's choices reach the record the engines take.</summary>
+    [Fact]
+    public void ThePolarization_IsEdited_Shown_AndChecked()
+    {
+        var optics = Optics;
+        Assert.Equal(SystemPolarization.Default, optics.BuildSystemData().Polarization);
+        Assert.True(optics.PolarizationTakesJones);
+        Assert.Equal(3, optics.PolarizationReferenceChoices.Count);
+
+        optics.PolarizationJx = 0;
+        Assert.True(optics.HasSystemProblems);
+        Assert.Contains("Jx and Jy are both zero", optics.SystemCheck);
+        optics.Unpolarized = true;
+        Assert.False(optics.PolarizationTakesJones);
+        Assert.False(optics.HasSystemProblems);
+
+        optics.PolarizationJy = 0.5;
+        optics.PolarizationYPhaseDegrees = 90;
+        optics.SelectedPolarizationReference = optics.PolarizationReferenceChoices.Single(c => c.Value == PolarizationReference.ZAxis);
+        optics.ConvertThinFilmPhase = false;
+        Assert.Equal(new SystemPolarization
+        {
+            Unpolarized = true, Jx = 0, Jy = 0.5, YPhaseDegrees = 90, Reference = PolarizationReference.ZAxis, ConvertThinFilmPhase = false,
+        }, optics.BuildSystemData().Polarization);
+    }
+
     /// <summary>OP-13: the air model picker. Ciddor is the default (owner decision OQ-10); the
     /// CO2 and humidity fields show only for the models that read them; the line under the
     /// group names the model in use; a range the model refuses is a system problem.</summary>

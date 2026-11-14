@@ -183,6 +183,30 @@
         <CheckBox Content="Adjust indices to the environment" IsChecked="{Binding Optics.AdjustIndexToEnvironment}" Margin="2,2,0,0"
                   ToolTip="On: glass indices follow SCHOTT TIE-19's dn/dT model and the air at this temperature and pressure. Off: catalog indices at each catalog's reference conditions. The wavelengths are converted to vacuum with the air model either way."/>
 
+        <!-- OP-51: the system polarization. -->
+        <TextBlock Text="Polarization" FontWeight="Bold" Margin="0,8,0,2"/>
+        <CheckBox Content="Unpolarized" IsChecked="{Binding Optics.Unpolarized}" Margin="2,0,0,2"
+                  AutomationProperties.AutomationId="OpticsUnpolarizedCheck"
+                  ToolTip="Trace each ray with (Jx, Jy) = (1, 0) and (0, 1) and average the intensities."/>
+        <controls:FormGrid>
+            <Label Content="Jx / Jy" Visibility="{Binding Optics.PolarizationTakesJones, Converter={StaticResource BoolToVis}}"/>
+            <UniformGrid Columns="2" Visibility="{Binding Optics.PolarizationTakesJones, Converter={StaticResource BoolToVis}}">
+                <TextBox Text="{Binding Optics.PolarizationJx}" Margin="0,0,2,0" ToolTip="Field magnitude along S; normalised with Jy."/>
+                <TextBox Text="{Binding Optics.PolarizationJy}" Margin="2,0,0,0" ToolTip="Field magnitude along P."/>
+            </UniformGrid>
+            <Label Content="X-phase / Y-phase [°]" Visibility="{Binding Optics.PolarizationTakesJones, Converter={StaticResource BoolToVis}}"/>
+            <UniformGrid Columns="2" Visibility="{Binding Optics.PolarizationTakesJones, Converter={StaticResource BoolToVis}}">
+                <TextBox Text="{Binding Optics.PolarizationXPhaseDegrees}" Margin="0,0,2,0"/>
+                <TextBox Text="{Binding Optics.PolarizationYPhaseDegrees}" Margin="2,0,0,0"/>
+            </UniformGrid>
+            <Label Content="Method"/>
+            <ComboBox ItemsSource="{Binding Optics.PolarizationReferenceChoices}" SelectedItem="{Binding Optics.SelectedPolarizationReference}" DisplayMemberPath="Label"
+                      AutomationProperties.AutomationId="OpticsPolarizationReferenceCombo"
+                      ToolTip="How S and P follow the ray direction: X axis P = K × X, S = P × K; Y axis S = Y × K, P = K × S; Z axis S = K × Z, P = K × S."/>
+        </controls:FormGrid>
+        <CheckBox Content="Convert thin-film phase to ray equivalent" IsChecked="{Binding Optics.ConvertThinFilmPhase}" Margin="2,2,0,0"
+                  ToolTip="Measure a layer coating's phase along the ray from where the coating begins, instead of along the normal across the stack."/>
+
         <TextBlock Text="Units" FontWeight="Bold" Margin="0,8,0,2"/>
         <controls:FormGrid>
             <Label Content="Lens units"/>

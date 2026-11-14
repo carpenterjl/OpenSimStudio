@@ -65,6 +65,12 @@ public sealed class OpticsAnalysisRegistry
         foreach (var coating in CoatingAnalyses.All()) registry.Register(coating);
         // OP-48: Gaussian beams.
         registry.Register(new GaussianBeamAnalysis());
+        // OP-51: polarization (no saved surfaces until OP-31).
+        registry.Register(new PolarizationRayTraceAnalysis());
+        registry.Register(new PolarizationPupilMapAnalysis());
+        registry.Register(new PolarizationTransmissionAnalysis());
+        registry.Register(new PolarizationPhaseAberrationAnalysis());
+        registry.Register(new PolarizationTransmissionFanAnalysis());
         return registry;
     }
 }

@@ -191,7 +191,8 @@ public partial class OpticsViewModel
                 AirModel = SelectedAirModel.Value,
                 CarbonDioxideMicromolesPerMole = CarbonDioxideMicromolesPerMole,
                 RelativeHumidityPercent = RelativeHumidityPercent
-            }
+            },
+            Polarization = BuildPolarization()   // OP-51
         };
     }
 
@@ -321,6 +322,7 @@ public partial class OpticsViewModel
             SelectedAirModel = Choice(AirModelChoices, data.Environment.AirModel);
             CarbonDioxideMicromolesPerMole = data.Environment.CarbonDioxideMicromolesPerMole;
             RelativeHumidityPercent = data.Environment.RelativeHumidityPercent;
+            LoadPolarization(data.Polarization);   // OP-51
         }
         finally
         {

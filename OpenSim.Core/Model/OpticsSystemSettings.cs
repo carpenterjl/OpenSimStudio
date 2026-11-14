@@ -51,6 +51,9 @@ public sealed record OpticsSystemSettings
     public string? AirIndexModel { get; init; }
     public double? CarbonDioxideMicromolesPerMole { get; init; }
     public double? RelativeHumidityPercent { get; init; }
+
+    // OP-51: the system polarization. Null — every file written before OP-51 — is the default.
+    public OpticsPolarizationSettings? Polarization { get; init; }
 }
 
 /// <summary>One field point: x and y in the field type's unit, the weight and the vignetting

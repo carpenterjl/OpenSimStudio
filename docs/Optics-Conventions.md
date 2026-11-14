@@ -8,7 +8,7 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; those of the polarization ray trace (section 21) in `OpenSim.Tests/Optics/PolarizationTraceTests.cs`; the cross-checks against other programs (section 22) in
 `OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
@@ -484,6 +484,26 @@ single place in the code, so a correction is one line and its test.
     Check: one lens with one solve of each kind, compared with the values OpticStudio's
     lens data editor shows.
 
+17. **Polarization ray trace choices** (OP-51). Section 21's rules are derived or read from
+    OpticStudio's help, but none is compared with its output. Check each with a coated singlet
+    and a fold mirror traced in both programs (Polarization Ray Trace listing):
+    - *Power-normalised amplitudes:* the field carries √T and √R, so |E|² is the ray's power;
+      OpticStudio lists "field" and "ray" amplitude coefficients whose normalisation was not
+      read.
+    - *Ray-equivalent phase:* t·e^(−iψ) and r·e^(−2iψ), ψ = 2π·n0·D·cos θ0/λ, derived from the
+      help's description, not from a formula it states.
+    - *Default Jones vector* (1, 0), polarized: OpticStudio's default was not read.
+    - *IT interpolation:* α linear in wavelength between IT points, refused outside them;
+      OpticStudio's interpolation and its behaviour outside the table were not read.
+    - *Launch segment of an object at infinity:* no bulk absorption (the launch plane is
+      arbitrary).
+    - *Image surface and ignored surfaces:* no interface, so no coating is applied there.
+    - *IDEAL coatings on mirrors:* their equal s and p reflection phases give a reflection
+      retardance of 180° in the frame where a bare interface has r_p = −r_s (as the coating
+      plots already report); whether OpticStudio applies them so was not read.
+    - *Phase difference* in the pupil map is Ey's phase minus Ex's; the help's wording does not
+      fix the order.
+
 18. **Cross-checks are against open programs, not OpticStudio** (OP-102). Section 22's
     reference files come from Optiland, RayOptics and tmm. They check the real ray trace, the
     paraxial data and the thin-film engine against independently written code using the same
@@ -614,9 +634,8 @@ give indices relative to air; a relative index with the air wavelength gives the
 thickness as the absolute index with the vacuum wavelength, so no conversion is made. The
 coating plots use catalog indices as they are; they do not adjust them to the environment.
 
-**Not built.** Coatings are not applied to traced rays (`Ray.Field` is carried, but nothing
-applies a coating to it yet); there are no surfaces to carry a coating; incoherent thick
-layers; coating design or optimisation (OpticStudio has none either).
+**Not built.** Incoherent thick layers; coating design or optimisation (OpticStudio has none
+either). Coatings on surfaces and on traced rays are section 21's.
 
 ## 13. Real ray trace
 
@@ -926,6 +945,92 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
   - Solves on the non-sequential editor.
   - The solve column in the lens data editor (OP-31).
   - Variables and the optimizer.
+
+## 21. Polarization ray trace
+
+`OpenSim.Optics/Polarization` (OP-51) carries the electric field along a real ray of section 13.
+`PolarizationTracer` reads the surface-by-surface record of `SequentialTrace.TracePath`
+(normals, directions, indices, segment lengths) and does not change the trace loop. Yun,
+Crabtree and Chipman, "Three-dimensional polarization ray-tracing calculus I and II",
+Appl. Opt. 50 (2011) 2855 and 2866, were not read (no free copy was found); the construction
+below is derived in `PolarizationMatrix.cs` and the comments of `PolarizationTraceTests`.
+OpticStudio's help pages on polarization (System Explorer "Polarization", "Defining the Initial
+Polarization", "Convert Thin Film Phase to Ray Equivalent", "Unpolarized", "Bulk Absorption and
+Transmission", and the five analyses) are saved under `plans/sources/optics/ansyshelp-op51/`.
+
+- **Frame and convention.** Fields are three complex components in surface 1's frame (the
+  global frame of section 13), in this program's convention of section 12: a wave
+  e^(i(k·r − ωt)), index n + ik. Phases shown to the user, and entered as the Jones X-phase and
+  Y-phase, are OpticStudio's: φ = −arg. `Ray.Field` of the final ray is in the image surface's
+  frame, and `Ray.Intensity` is |E|² there.
+- **Launch.** A Jones vector (Jx, Jy), normalised to unit intensity, is the field
+  Jx·Ŝ + Jy·P̂ with K the ray direction and, by the method chosen (OpticStudio's three rules):
+  X axis P = K × X̂, S = P × K; Y axis S = Ŷ × K, P = K × S; Z axis S = K × Ẑ, P = K × S. Where a
+  rule is undefined (K along its axis), S is the part of x̂ (ŷ when K lies along x) at right
+  angles to K and P = K × S. `JonesVector.LaunchBasis`.
+- **Power normalisation.** |E|² is the ray's power relative to launch at every point. An
+  amplitude coefficient is a = √T·e^(i arg t) in transmission and √R·e^(i arg r) in reflection,
+  T and R the coating engine's power fractions (section 12, which carry the n·cos θ factors)
+  and arg the phase of its amplitude. The propagation phase 2π·OPL/λ is not in the field (it
+  is the ray's optical path), so a component's phase is the polarization phase alone.
+- **Interface matrix.** ŝ = k̂_in × η̂/|…| (η̂ the normal), p̂_in = k̂_in × ŝ,
+  p̂_out = k̂_out × ŝ, and P = a_s ŝŝᵀ + a_p p̂_out p̂_inᵀ + k̂_out k̂_inᵀ: an orthogonal change
+  into the local s, p, k frame, a diagonal action, and the change back into the exit frame.
+  In this frame a bare interface has r_p = (n2 cos θi − n1 cos θt)/(n2 cos θi + n1 cos θt), so
+  r_p = −r_s at normal incidence, which is the sign of section 12's p amplitudes. At normal
+  incidence ŝ is any transverse unit vector (P does not depend on it). For a surface that turns
+  the ray out of its plane of incidence (a redirecting shape), ŝ_out is the part of ŝ at right
+  angles to k̂_out, which keeps the field transverse; OpticStudio's help says such surfaces do
+  not have valid polarization data, and neither do they here.
+- **Coefficients.** `CoatingEvaluator` at the angle of incidence, the incident and substrate
+  indices of the trace (relative to the system's air, like the coating file), the trace's air
+  wavelength, the primary wavelength for relative thicknesses, and the hit point and radius in
+  lens units for tapers. Uncoated: the bare Fresnel interface; uncoated mirror: aluminium.
+  Layers are reversed from glass to air, glass being any medium but index-1 air. Mirrors use
+  R; refracting surfaces T.
+- **Ray-equivalent phase** (on by default, as in OpticStudio). A layer coating's amplitude
+  relates the field at its outer face to the field at the substrate; the trace goes straight
+  to the substrate with the coating grown into the space before it. Between the planes z = −D
+  and z = 0 a plane wave of the incident medium gains ψ = 2π·n0·D·cos θ0/λ at a fixed
+  transverse point, D the coating's physical thickness (on a mirror without the substrate
+  layer), so the coefficients applied are t·e^(−iψ) and r·e^(−2iψ). An index-matched layer then
+  gives the bare coefficients exactly (a gate test). Ideal and table coatings have no
+  thickness and are not converted.
+- **Bulk absorption.** The segment ending on surface j attenuates the field by e^(−ατ/2), τ its
+  signed geometric length and α the intensity coefficient of the space after surface j − 1
+  (`BulkAbsorption`): from a glass's IT table, α_i = −ln(t_i)/τ_i per mm, linear in wavelength
+  between points and refused outside them; else α = 4πk/λ from the extinction coefficient;
+  else zero. The launch segment of an object at infinity is not attenuated.
+- **Unpolarized** light is the mean of the transmissions of (1, 0) and (0, 1) (OpticStudio help,
+  "Unpolarized"); any orthonormal pair gives the same mean, since |PE|² is a Hermitian form.
+- **Per surface** (`PolarizedSurface`): the relative transmission is |E|² after the surface over
+  |E|² after the previous one (the bulk transmittance of the material before times the
+  surface's transmission, OpticStudio's "Rel. Tran"); the total is |E|² after it.
+- **System matrix.** The product of the interface matrices and bulk factors; its diattenuation
+  (T_max − T_min)/(T_max + T_min) comes from the eigenvalues of the 2 × 2 Gram matrix of its
+  action on the transverse plane at launch.
+- **Analyses** (Polarization group): Polarization ray trace; Polarization pupil map (ellipse of
+  Re(E e^(−iωt)) of the local Ex, Ey; orientation ½·atan2(2 Re(Ex Ey*), |Ex|² − |Ey|²);
+  transmission the mean of |E|², Ez included, over the grid); Transmission (mean over a square
+  pupil grid, failed rays zero; chief ray per surface); Phase aberration (phase of the image
+  Ex, Ey minus the chief ray's, in waves, wrapped to (−½, ½]; a chief component below 10⁻²⁴ of
+  the ray's power takes the phase of the two nearest fan rays); Transmission fan.
+- **System polarization** (`SystemPolarization` on `OpticalSystemData`, saved as the nullable
+  `OpticsSystemSettings.Polarization`): unpolarized or a Jones vector, the method, and the
+  phase conversion. The five analyses take their own Jones vector, as OpticStudio's do.
+- **API for other analyses.** `PolarizationTracer.Transmission(RayPath, SystemPolarization)`
+  gives the power a traced ray carries to the image for the system polarization.
+- **Gates** (`PolarizationTraceTests`): Fresnel amplitudes against the derived closed forms and
+  R + T = 1 at bare and dielectric-coated interfaces; zero p reflection at Brewster's angle
+  tan θ = n2/n1; normal-incidence transmission of an uncoated lens (1 − R)², times the internal
+  transmittance for an absorbing glass; unpolarized transmission the mean of any orthogonal
+  pair; the field transverse to the ray at every surface; normal incidence on a mirror scaling
+  the whole field by r_s; the index-matched layer above.
+- **Not built.** Real transmission in the other analyses (the API exists; nothing else calls
+  it yet); pupil apodization and vignetting factors (OP-22); retardance of the system; Jones
+  and Mueller matrix surfaces (OP-52); birefringent media (OP-53); gradient-index polarization;
+  non-sequential polarization; interference between configurations in the pupil map. The
+  points not compared with OpticStudio are section 10, item 17.
 
 ## 22. Cross-checks against independent programs
 

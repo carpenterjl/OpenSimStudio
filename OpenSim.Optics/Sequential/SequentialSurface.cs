@@ -76,6 +76,12 @@ public sealed record SequentialSurface
     /// surfaces OP-27), or null for the Standard surface.</summary>
     public SurfaceShape? Shape { get; init; }
 
+    // OP-51
+    /// <summary>The coating's name in the coating catalog (OP-15), or null for an uncoated
+    /// surface. Read by the polarization ray trace (<see cref="Polarization.PolarizationTracer"/>);
+    /// the geometric trace ignores it.</summary>
+    public string? Coating { get; init; }
+
     /// <summary>The surface's comment, shown in reports.</summary>
     public string Comment { get; init; } = "";
 

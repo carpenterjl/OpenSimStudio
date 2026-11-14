@@ -49,7 +49,31 @@ public static class SystemDataSettings
             AdjustIndexToEnvironment = data.Environment.AdjustIndexToEnvironment,
             AirIndexModel = AirIndexModels.Names.SavedName(data.Environment.AirModel),
             CarbonDioxideMicromolesPerMole = data.Environment.CarbonDioxideMicromolesPerMole,
-            RelativeHumidityPercent = data.Environment.RelativeHumidityPercent
+            RelativeHumidityPercent = data.Environment.RelativeHumidityPercent,
+            Polarization = PolarizationToSettings(data.Polarization)
+        };
+    }
+
+    // OP-51
+    /// <summary>The system polarization in its file form.</summary>
+    public static OpticsPolarizationSettings PolarizationToSettings(SystemPolarization p) => new()
+    {
+        Unpolarized = p.Unpolarized, Jx = p.Jx, Jy = p.Jy, XPhaseDegrees = p.XPhaseDegrees, YPhaseDegrees = p.YPhaseDegrees,
+        Reference = PolarizationReferences.Names.SavedName(p.Reference), ConvertThinFilmPhase = p.ConvertThinFilmPhase
+    };
+
+    /// <summary>The system polarization a file holds; null (a file from before OP-51) is the
+    /// default. An unknown reference name keeps the X axis reference and is named in a note.</summary>
+    public static SystemPolarization PolarizationFromSettings(OpticsPolarizationSettings? saved, ICollection<string> notes)
+    {
+        var d = SystemPolarization.Default;
+        if (saved is null) return d;
+        return new SystemPolarization
+        {
+            Unpolarized = saved.Unpolarized, Jx = saved.Jx, Jy = saved.Jy,
+            XPhaseDegrees = saved.XPhaseDegrees, YPhaseDegrees = saved.YPhaseDegrees,
+            Reference = Pick(PolarizationReferences.Names, saved.Reference, d.Reference, "Polarization reference", notes),
+            ConvertThinFilmPhase = saved.ConvertThinFilmPhase
         };
     }
 
@@ -113,7 +137,8 @@ public static class SystemDataSettings
                 AirModel = Pick(AirIndexModels.Names, saved.AirIndexModel, d.Environment.AirModel, "Air index model", notes),
                 CarbonDioxideMicromolesPerMole = saved.CarbonDioxideMicromolesPerMole ?? d.Environment.CarbonDioxideMicromolesPerMole,
                 RelativeHumidityPercent = saved.RelativeHumidityPercent ?? d.Environment.RelativeHumidityPercent
-            }
+            },
+            Polarization = PolarizationFromSettings(saved.Polarization, notes)
         };
     }
 
