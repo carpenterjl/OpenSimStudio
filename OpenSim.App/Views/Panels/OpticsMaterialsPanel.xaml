@@ -83,5 +83,8 @@
         </controls:FormGrid>
         <TextBlock Text="{Binding Optics.GlassCatalogs.ProbeResult}" TextWrapping="Wrap" Margin="0,2,0,0"
                    AutomationProperties.AutomationId="OpticsGlassProbe"/>
+        <TextBlock Text="{Binding Optics.GlassCatalogs.ProbeEnvironmentResult}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   AutomationProperties.AutomationId="OpticsGlassProbeEnvironment"
+                   ToolTip="Shown when 'Adjust indices to the environment' is on: the wavelength is taken as measured in the system's air."/>
     </StackPanel>
 </UserControl>

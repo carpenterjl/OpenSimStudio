@@ -22,7 +22,7 @@ namespace OpenSim.Optics.Materials;
 /// and pressure, at a wavelength measured in that air. AGFFileReader takes that pressure as
 /// 1 atm (<c>src/constants.jl</c>, <c>PRESSURE_REF = 1.0</c>). No temperature or pressure
 /// correction is applied here: converting to the absolute index, shifting it by the TD model and
-/// referring it to the system's air is the thermal and pressure item's (OP-13), which builds on
+/// referring it to the system's air is <see cref="ThermalIndex"/>'s (OP-13), which builds on
 /// this method. A material without a TD line has no stated reference temperature.
 /// </para>
 /// </summary>

@@ -1,4 +1,5 @@
 using OpenSim.Core.Model;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.Optics;
 
@@ -45,7 +46,10 @@ public static class SystemDataSettings
             PrimaryWavelength = data.Wavelengths.PrimaryIndex + 1,
             TemperatureCelsius = data.Environment.TemperatureCelsius,
             PressureAtmospheres = data.Environment.PressureAtmospheres,
-            AdjustIndexToEnvironment = data.Environment.AdjustIndexToEnvironment
+            AdjustIndexToEnvironment = data.Environment.AdjustIndexToEnvironment,
+            AirIndexModel = AirIndexModels.Names.SavedName(data.Environment.AirModel),
+            CarbonDioxideMicromolesPerMole = data.Environment.CarbonDioxideMicromolesPerMole,
+            RelativeHumidityPercent = data.Environment.RelativeHumidityPercent
         };
     }
 
@@ -105,7 +109,10 @@ public static class SystemDataSettings
             {
                 TemperatureCelsius = saved.TemperatureCelsius,
                 PressureAtmospheres = saved.PressureAtmospheres,
-                AdjustIndexToEnvironment = saved.AdjustIndexToEnvironment
+                AdjustIndexToEnvironment = saved.AdjustIndexToEnvironment,
+                AirModel = Pick(AirIndexModels.Names, saved.AirIndexModel, d.Environment.AirModel, "Air index model", notes),
+                CarbonDioxideMicromolesPerMole = saved.CarbonDioxideMicromolesPerMole ?? d.Environment.CarbonDioxideMicromolesPerMole,
+                RelativeHumidityPercent = saved.RelativeHumidityPercent ?? d.Environment.RelativeHumidityPercent
             }
         };
     }

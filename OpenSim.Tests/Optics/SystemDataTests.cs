@@ -1,4 +1,5 @@
 using OpenSim.Optics;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.Tests.Optics;
 
@@ -174,7 +175,41 @@ public sealed class SystemDataTests
         Assert.Empty(Check(new OpticsEnvironment { PressureAtmospheres = 0 }));            // a vacuum
         Assert.NotEmpty(Check(new OpticsEnvironment { PressureAtmospheres = -0.1 }));
         Assert.NotEmpty(Check(new OpticsEnvironment { TemperatureCelsius = -273.15 }));
-        Assert.Empty(Check(new OpticsEnvironment { TemperatureCelsius = -273.0 }));
+
+        // OP-13: the air model's own range. Ciddor (the default) is stated for −40 to +100 °C,
+        // 10–140 kPa and 0.3–1.7 µm (NIST EMToolbox documentation, Section IV); TIE-19's formula
+        // states no range and fails only at its pole, 15 − 1/3.4785e-3 = −272.48 °C, so the
+        // −273.0 °C this test once accepted is now refused by both.
+        Assert.Empty(Check(new OpticsEnvironment { TemperatureCelsius = -40 }));
+        Assert.NotEmpty(Check(new OpticsEnvironment { TemperatureCelsius = -41 }));
+        Assert.NotEmpty(Check(new OpticsEnvironment { PressureAtmospheres = 0.05 }));
+        Assert.NotEmpty(Check(new OpticsEnvironment { RelativeHumidityPercent = 120 }));
+        var schott = new OpticsEnvironment { AirModel = AirIndexModel.Schott };
+        Assert.Empty(Check(schott with { TemperatureCelsius = -272.0, PressureAtmospheres = 0.05 }));
+        Assert.NotEmpty(Check(schott with { TemperatureCelsius = -273.0 }));
+        Assert.Empty(Check(new OpticsEnvironment { TemperatureCelsius = -273.0, PressureAtmospheres = 0 }));   // a vacuum has no air to model
+    }
+
+    /// <summary>OP-13: every table wavelength must be one the air model converts to vacuum.</summary>
+    [Fact]
+    public void Wavelengths_AreCheckedAgainstTheAirModel()
+    {
+        var infrared = new WavelengthSet { Wavelengths = new[] { new Wavelength { Micrometers = 10.6 } } };
+        var problems = new OpticalSystemData { Wavelengths = infrared }.Validate();
+        Assert.Contains(problems, p => p.Contains("0.3–1.7 µm"));
+        Assert.Empty(new OpticalSystemData { Wavelengths = infrared, Environment = new OpticsEnvironment { AirModel = AirIndexModel.Schott } }.Validate());
+        Assert.Empty(new OpticalSystemData { Wavelengths = infrared, Environment = new OpticsEnvironment { PressureAtmospheres = 0 } }.Validate());
+    }
+
+    /// <summary>The table's wavelengths are in the system's air; the vacuum wavelength is n·λ.</summary>
+    [Fact]
+    public void AWavelength_ConvertsToVacuumInTheSystemsAir()
+    {
+        var environment = new OpticsEnvironment();
+        var d = new Wavelength { Micrometers = SpectralLines.LowerD.Micrometers };
+        double vacuum = d.VacuumMicrometers(environment);
+        Assert.Equal(d.Micrometers * environment.AirIndexAt(vacuum), vacuum, 1e-15);
+        Assert.Equal(d.Micrometers, d.VacuumMicrometers(environment with { PressureAtmospheres = 0 }));
     }
 
     /// <summary>The presets carry SCHOTT TIE-29 Table 2.3-1's digits exactly (see SpectralLines).</summary>

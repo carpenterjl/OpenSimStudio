@@ -1,6 +1,7 @@
 using OpenSim.App.Tests.Support;
 using OpenSim.App.ViewModels;
 using OpenSim.Optics;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.App.Tests.ViewModels;
 
@@ -20,6 +21,41 @@ public sealed class OpticsSystemDataTests : IDisposable
             System.Text.Json.JsonSerializer.Serialize(Optics.BuildSystemData()));
         Assert.False(Optics.HasSystemProblems);
         Assert.Equal("Entrance pupil diameter [mm]", Optics.ApertureValueLabel);
+    }
+
+    /// <summary>OP-13: the air model picker. Ciddor is the default (owner decision OQ-10); the
+    /// CO2 and humidity fields show only for the models that read them; the line under the
+    /// group names the model in use; a range the model refuses is a system problem.</summary>
+    [Fact]
+    public void TheAirModel_IsPicked_Shown_AndChecked()
+    {
+        var optics = Optics;
+        Assert.Equal(AirIndexModel.Ciddor, optics.SelectedAirModel.Value);
+        Assert.Equal(3, optics.AirModelChoices.Count);
+        Assert.True(optics.AirModelUsesCarbonDioxide);
+        Assert.True(optics.AirModelUsesHumidity);
+        Assert.Contains("Ciddor", optics.AirModelDescription);
+        Assert.Contains("450 µmol/mol", optics.AirModelDescription);
+
+        var raised = new List<string?>();
+        optics.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        optics.RelativeHumidityPercent = 40;
+        Assert.Contains(nameof(OpticsViewModel.AirModelDescription), raised);
+        Assert.Contains("40 %", optics.AirModelDescription);
+        Assert.Equal(40, optics.BuildSystemData().Environment.RelativeHumidityPercent);
+
+        optics.SelectedAirModel = optics.AirModelChoices.Single(c => c.Value == AirIndexModel.Schott);
+        Assert.False(optics.AirModelUsesCarbonDioxide);
+        Assert.False(optics.AirModelUsesHumidity);
+        Assert.Contains("OpticStudio-compatible", optics.AirModelDescription);
+        Assert.Equal(AirIndexModel.Schott, optics.BuildSystemData().Environment.AirModel);
+
+        // An infrared wavelength is outside Ciddor's range but not the TIE-19 formula's.
+        optics.Wavelengths[0].Micrometers = 10.6;
+        Assert.False(optics.HasSystemProblems);
+        optics.SelectedAirModel = optics.AirModelChoices.Single(c => c.Value == AirIndexModel.Ciddor);
+        Assert.True(optics.HasSystemProblems);
+        Assert.Contains("0.3–1.7 µm", optics.SystemCheck);
     }
 
     [Fact]

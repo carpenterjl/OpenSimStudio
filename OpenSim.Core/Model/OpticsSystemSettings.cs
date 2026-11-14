@@ -5,7 +5,7 @@ namespace OpenSim.Core.Model;
 /// and notes; plan items OP-18, OP-10) as project and lens files store it. Lengths are in the
 /// file's lens unit (<see cref="LensUnit"/>), as an OpticStudio lens file stores them and as the
 /// editor shows them, so a value reads back digit for digit; angles are degrees, wavelengths
-/// micrometers, temperature °C, pressure atmospheres. Every choice is the saved name
+/// micrometers, temperature °C, pressure atmospheres, CO2 µmol/mol, humidity %. Every choice is the saved name
 /// OpenSim.Optics defines for it, null meaning the default; a name this build does not know is
 /// reported on load and the default kept. The defaults are those of the default system.
 /// OpenSim.Optics' <c>SystemDataSettings</c> converts to and from its record in meters.
@@ -45,6 +45,12 @@ public sealed record OpticsSystemSettings
     public double TemperatureCelsius { get; init; } = 20;
     public double PressureAtmospheres { get; init; } = 1;
     public bool AdjustIndexToEnvironment { get; init; }
+
+    // The air index (OP-13). Null — every file written before OP-13 — is the default: the
+    // Ciddor model, 450 µmol/mol CO2, dry air. The model is by saved name, as the other choices.
+    public string? AirIndexModel { get; init; }
+    public double? CarbonDioxideMicromolesPerMole { get; init; }
+    public double? RelativeHumidityPercent { get; init; }
 }
 
 /// <summary>One field point: x and y in the field type's unit, the weight and the vignetting

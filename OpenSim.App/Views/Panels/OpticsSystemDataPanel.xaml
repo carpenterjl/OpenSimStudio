@@ -167,10 +167,21 @@
             <Label Content="Temperature [°C]"/>
             <TextBox Text="{Binding Optics.TemperatureCelsius}"/>
             <Label Content="Pressure [atm]"/>
-            <TextBox Text="{Binding Optics.PressureAtmospheres}" ToolTip="Zero is a vacuum."/>
+            <TextBox Text="{Binding Optics.PressureAtmospheres}" ToolTip="Zero is a vacuum. One atmosphere is 101325 Pa."/>
+            <Label Content="Air index model"/>
+            <ComboBox ItemsSource="{Binding Optics.AirModelChoices}" SelectedItem="{Binding Optics.SelectedAirModel}" DisplayMemberPath="Label"
+                      AutomationProperties.AutomationId="OpticsAirModelCombo"
+                      ToolTip="Ciddor is the default; SCHOTT TIE-19 is the formula OpticStudio-compatible readers use."/>
+            <Label Content="CO2 [µmol/mol]" Visibility="{Binding Optics.AirModelUsesCarbonDioxide, Converter={StaticResource BoolToVis}}"/>
+            <TextBox Text="{Binding Optics.CarbonDioxideMicromolesPerMole}" Visibility="{Binding Optics.AirModelUsesCarbonDioxide, Converter={StaticResource BoolToVis}}"
+                     ToolTip="450 µmol/mol is the value the NIST documentation recommends for closed rooms."/>
+            <Label Content="Relative humidity [%]" Visibility="{Binding Optics.AirModelUsesHumidity, Converter={StaticResource BoolToVis}}"/>
+            <TextBox Text="{Binding Optics.RelativeHumidityPercent}" Visibility="{Binding Optics.AirModelUsesHumidity, Converter={StaticResource BoolToVis}}"/>
         </controls:FormGrid>
+        <TextBlock Text="{Binding Optics.AirModelDescription}" TextWrapping="Wrap" Margin="2,2,0,0"
+                   AutomationProperties.AutomationId="OpticsAirModelDescription"/>
         <CheckBox Content="Adjust indices to the environment" IsChecked="{Binding Optics.AdjustIndexToEnvironment}" Margin="2,2,0,0"
-                  ToolTip="Held and saved now; the thermal and pressure index model that uses it is a later item."/>
+                  ToolTip="On: glass indices follow SCHOTT TIE-19's dn/dT model and the air at this temperature and pressure. Off: catalog indices at each catalog's reference conditions. The wavelengths are converted to vacuum with the air model either way."/>
 
         <TextBlock Text="Units" FontWeight="Bold" Margin="0,8,0,2"/>
         <controls:FormGrid>

@@ -16,8 +16,8 @@ public sealed record SystemSummarySettings
 }
 
 /// <summary>
-/// A text summary of the optical system: the project, the mode and the conventions the trace
-/// uses. The analysis framework's first analysis (OP-9), there to carry a window end to end;
+/// A text summary of the optical system: the project, the mode, the environment with the air
+/// index model in use, and the conventions the trace uses. The analysis framework's first analysis (OP-9), there to carry a window end to end;
 /// the system data report of OP-44 grows out of it as the system editors add aperture, fields
 /// and wavelengths.
 /// </summary>
@@ -46,6 +46,21 @@ public sealed class SystemSummaryAnalysis : OpticsAnalysis<SystemSummarySettings
                 }
             }
         };
+        // The environment, naming the air index model in use (OP-13; docs/Optics-Conventions.md,
+        // "the result line names the model in use").
+        var environment = SystemDataSettings.FromSettings(context.System.SystemData, new List<string>()).Environment;
+        sections.Add(new ReportSection("Environment")
+        {
+            Pairs = new[]
+            {
+                ("Temperature", $"{StudyReport.Number(environment.TemperatureCelsius)} °C"),
+                ("Pressure", $"{StudyReport.Number(environment.PressureAtmospheres)} atm"),
+                ("Glass indices", environment.AdjustIndexToEnvironment
+                    ? "adjusted to this temperature and pressure (SCHOTT TIE-19 dn/dT model)"
+                    : "catalog values at each catalog's reference temperature and pressure"),
+            },
+            Lines = new[] { environment.AirModelDescription }
+        });
         if (settings.ShowConventions)
             sections.Add(new ReportSection("Conventions")
             {

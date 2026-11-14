@@ -25,7 +25,7 @@ public partial class OpticsViewModel : ObservableObject
     public OpticsViewModel(Services.ProjectSession session, GlassCatalogLibrary glassCatalogs, Services.ILogService log)
     {
         // The materials panel first: publishing reads its active catalogs.
-        GlassCatalogs = new OpticsGlassCatalogViewModel(glassCatalogs, PublishSystem);
+        GlassCatalogs = new OpticsGlassCatalogViewModel(glassCatalogs, PublishSystem, () => BuildSystemData().Environment);
         foreach (var warning in GlassCatalogs.LoadWarnings)
             log.Append($"Glass catalogs: {warning}");
         _session = session;

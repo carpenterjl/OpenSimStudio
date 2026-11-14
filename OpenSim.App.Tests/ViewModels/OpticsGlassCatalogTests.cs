@@ -64,6 +64,17 @@ public sealed class OpticsGlassCatalogTests : IDisposable
         Assert.Equal("the good one", panel.GlassComment);
         Assert.StartsWith("n = 1.5168000", panel.ProbeResult);       // the d line by default
 
+        Assert.Equal("", panel.ProbeEnvironmentResult);                 // adjusting is off
+
+        // OP-13: with adjusting on, the probe also shows the index at the system's environment.
+        optics.AdjustIndexToEnvironment = true;
+        Assert.StartsWith("n = 1.5168000 relative to the system's air at 20 °C and 1 atm", panel.ProbeEnvironmentResult);   // the reference conditions
+        Assert.Contains("Ciddor", panel.ProbeEnvironmentResult);
+        optics.TemperatureCelsius = 40;
+        Assert.StartsWith("n = 1.516857", panel.ProbeEnvironmentResult);   // 20 K × about 2.9e-6/K (N-BK7's TD constants) above 1.5168000
+        optics.AdjustIndexToEnvironment = false;
+        optics.TemperatureCelsius = 20;
+
         panel.ProbeMicrometers = 3.0;
         Assert.Contains("outside its valid range 0.3–2.5 µm", panel.ProbeResult);
 

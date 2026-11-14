@@ -22,6 +22,7 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
 {
     private readonly GlassCatalogLibrary _library;
     private readonly Action _activeCatalogsChanged;
+    private readonly Func<OpticsEnvironment>? _environment;
 
     /// <summary>True when the lens names its catalogs; false means every loaded catalog
     /// (the saved form is then null).</summary>
@@ -31,10 +32,13 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
     /// for the user's.</summary>
     private bool _rebuilding;
 
-    public OpticsGlassCatalogViewModel(GlassCatalogLibrary library, Action activeCatalogsChanged)
+    /// <param name="environment">The system's environment, for the probe's adjusted index
+    /// (OP-13); null shows the catalog index only.</param>
+    public OpticsGlassCatalogViewModel(GlassCatalogLibrary library, Action activeCatalogsChanged, Func<OpticsEnvironment>? environment = null)
     {
         _library = library;
         _activeCatalogsChanged = activeCatalogsChanged;
+        _environment = environment;
         RebuildRows(activeNames: null);
         SelectedCatalog = Catalogs.FirstOrDefault();
     }
@@ -163,12 +167,40 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// With "Adjust indices to the environment" on, the selected glass's index at
+    /// <see cref="ProbeMicrometers"/> (taken as measured in the system's air) at the system's
+    /// temperature and pressure (OP-13), naming the air model; otherwise "".
+    /// </summary>
+    public string ProbeEnvironmentResult
+    {
+        get
+        {
+            if (SelectedGlass is not { } glass || _environment?.Invoke() is not { AdjustIndexToEnvironment: true } env) return "";
+            try
+            {
+                var r = ThermalIndex.AtAirWavelength(glass, ProbeMicrometers, env.AirModel, env.Air);
+                string thermal = r.HasThermalData ? "" : " The glass has no TD line, so no dn/dT is applied (reference taken as 20 °C).";
+                return $"n = {r.Relative:F7} relative to the system's air at {Number(env.TemperatureCelsius)} °C and {Number(env.PressureAtmospheres)} atm; " +
+                       $"absolute {r.Absolute:F7}.{thermal} {env.AirModelDescription}";
+            }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or NotSupportedException)
+            {
+                return e.Message.Split(" (Parameter")[0];
+            }
+        }
+    }
+
+    /// <summary>The system's environment changed: the adjusted probe is recomputed.</summary>
+    public void EnvironmentChanged() => OnPropertyChanged(nameof(ProbeEnvironmentResult));
+
     private static readonly string[] GlassProperties =
     {
         nameof(SelectedCheck), nameof(HasSelectedGlass), nameof(GlassFormula), nameof(GlassCoefficients), nameof(GlassRange), nameof(GlassNdVd),
         nameof(GlassComputedNdVd), nameof(GlassCheckResult), nameof(GlassStatusText), nameof(GlassCode), nameof(GlassThermal),
         nameof(GlassReferenceTemperature), nameof(GlassExpansion), nameof(GlassDensity), nameof(GlassDeltaPgF),
-        nameof(GlassCostAndResistance), nameof(GlassTransmittance), nameof(GlassComment), nameof(ProbeResult)
+        nameof(GlassCostAndResistance), nameof(GlassTransmittance), nameof(GlassComment), nameof(ProbeResult),
+        nameof(ProbeEnvironmentResult)
     };
 
     partial void OnSelectedGlassChanged(OpticalMaterial? value)
@@ -176,7 +208,11 @@ public sealed partial class OpticsGlassCatalogViewModel : ObservableObject
         foreach (var name in GlassProperties) OnPropertyChanged(name);
     }
 
-    partial void OnProbeMicrometersChanged(double value) => OnPropertyChanged(nameof(ProbeResult));
+    partial void OnProbeMicrometersChanged(double value)
+    {
+        OnPropertyChanged(nameof(ProbeResult));
+        OnPropertyChanged(nameof(ProbeEnvironmentResult));
+    }
 
     partial void OnSelectedCatalogChanged(OpticsCatalogRow? value)
     {

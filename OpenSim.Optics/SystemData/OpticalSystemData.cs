@@ -40,6 +40,8 @@ public sealed record OpticalSystemData
         Fields.Validate(problems);
         Wavelengths.Validate(problems);
         Environment.Validate(problems);
+        // Every table wavelength must be one the air model can convert to vacuum (OP-13).
+        Environment.ValidateWavelengths(Wavelengths.Wavelengths.Select(w => w.Micrometers), problems);
         return problems;
     }
 }

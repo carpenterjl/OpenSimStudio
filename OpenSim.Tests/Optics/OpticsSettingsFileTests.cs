@@ -2,6 +2,7 @@ using System.Text.Json;
 using OpenSim.Core.Model;
 using OpenSim.Core.Persistence;
 using OpenSim.Optics;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.Tests.Optics;
 
@@ -117,13 +118,18 @@ public sealed class OpticsSettingsFileTests : IDisposable
                 Points = new[] { new FieldPoint(), new FieldPoint { X = 0.00254, Y = -0.0508, Weight = 0.5, DecenterX = 0.1, DecenterY = -0.2, CompressionX = 0.3, CompressionY = 0.4, TiltDegrees = 12 } }
             },
             Wavelengths = SpectralLines.Presets[2].ToWavelengthSet() with { PrimaryIndex = 3 },
-            Environment = new OpticsEnvironment { TemperatureCelsius = -10.5, PressureAtmospheres = 0, AdjustIndexToEnvironment = true }
+            Environment = new OpticsEnvironment
+            {
+                TemperatureCelsius = -10.5, PressureAtmospheres = 0, AdjustIndexToEnvironment = true,
+                AirModel = AirIndexModel.ModifiedEdlen, CarbonDioxideMicromolesPerMole = 512.5, RelativeHumidityPercent = 37.5
+            }
         };
         var notes = new List<string>();
         var settings = SystemDataSettings.ToSettings(data);
         Assert.Equal("Inch", settings.LensUnit);
         Assert.Equal(0.5, settings.ApertureValue, 14);                   // 0.0127 m in inches
         Assert.Equal(4, settings.PrimaryWavelength);                     // 1-based in the file
+        Assert.Equal("ModifiedEdlen", settings.AirIndexModel);           // OP-13: by saved name
 
         var back = SystemDataSettings.FromSettings(settings, notes);
         Assert.Empty(notes);
@@ -149,6 +155,24 @@ public sealed class OpticsSettingsFileTests : IDisposable
         // An angle field is not scaled at all.
         var angles = data with { Fields = new FieldSet { Points = new[] { new FieldPoint { Y = 0.1 + 0.2 } } } };
         Assert.Equal(0.1 + 0.2, SystemDataSettings.FromSettings(SystemDataSettings.ToSettings(angles), notes).Fields.Points[0].Y);
+    }
+
+    /// <summary>OP-13: a file from before the air model (null fields) opens with the default
+    /// air: Ciddor, 450 µmol/mol CO2, dry air.</summary>
+    [Fact]
+    public void AFileWithoutTheAirModel_OpensWithTheDefaultAir()
+    {
+        var notes = new List<string>();
+        var environment = SystemDataSettings.FromSettings(new OpticsSystemSettings(), notes).Environment;
+        Assert.Empty(notes);
+        Assert.Equal(new OpticsEnvironment(), environment);
+        Assert.Equal(AirIndexModel.Ciddor, environment.AirModel);
+        Assert.Equal(450, environment.CarbonDioxideMicromolesPerMole);
+        Assert.Equal(0, environment.RelativeHumidityPercent);
+
+        environment = SystemDataSettings.FromSettings(new OpticsSystemSettings { AirIndexModel = "Kohlrausch" }, notes).Environment;
+        Assert.Equal(AirIndexModel.Ciddor, environment.AirModel);
+        Assert.Contains(notes, n => n.Contains("'Kohlrausch'"));
     }
 
     [Fact]

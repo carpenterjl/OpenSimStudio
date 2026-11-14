@@ -2,7 +2,9 @@
 
 This is the one written convention for the Optics toolbox. Every optics item follows it, and the
 code that implements each rule is named beside the rule. The tests are in
-`OpenSim.Tests/Optics/OpticsConventionsTests.cs` and `OpenSim.Tests/Core/RigidTransformTests.cs`.
+`OpenSim.Tests/Optics/OpticsConventionsTests.cs` and `OpenSim.Tests/Core/RigidTransformTests.cs`;
+those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/AirIndexTests.cs` and
+`OpenSim.Tests/Optics/ThermalIndexTests.cs`.
 
 Two rules decide everything below:
 
@@ -12,7 +14,7 @@ Two rules decide everything below:
   differ, the most accurate model is the default, an OpticStudio-compatible setting is
   selectable, and the result line names the model in use.
 
-Section 9 lists where each OpticStudio rule was read, and section 10 lists the four points that
+Section 9 lists where each OpticStudio rule was read, and section 10 lists the points that
 still need a check against OpticStudio's own output.
 
 ## 1. Units
@@ -38,15 +40,48 @@ still need a check against OpticStudio's own output.
   medium, temperature or pressure, so it identifies the light without further context.
 - OpticStudio's wavelengths are measured in air at the system temperature and pressure (20 °C
   and 1 atm unless changed), and its glass indices are relative to that air.
-- So a wavelength read from a `.zmx` file is multiplied by the index of air at the file's
-  temperature and pressure to give the vacuum wavelength. The air index model belongs to the
-  thermal and pressure item (OP-13); until it exists, no file wavelength is converted.
+- So a wavelength in the table (or read from a `.zmx` file) is multiplied by the index of air
+  at the system temperature and pressure, evaluated at the vacuum wavelength, to give the
+  vacuum wavelength: λvac = n_air(λvac)·λair, solved by fixed-point iteration
+  (`AirIndex.VacuumFromAir`, `OpticsEnvironment.VacuumMicrometers`,
+  `Wavelength.VacuumMicrometers`). This conversion uses the air model whether or not indices
+  are adjusted to the environment. A vacuum (pressure 0) has index 1 exactly.
+- **Air index** (OP-13, `OpenSim.Optics/Materials/AirIndex.cs`). Three models, chosen in the
+  environment group and saved with the system:
+  - **Ciddor** (the default): the Ciddor equation as NIST computes it (Appendix A, A1–A41),
+    with CO2 (default 450 µmol/mol, NIST's recommended value) and relative humidity (default 0,
+    dry air). Refused outside 0.3–1.7 µm (vacuum), −40 to +100 °C and 10–140 kPa, the ranges
+    the NIST text gives.
+  - **SCHOTT TIE-19** (the OpticStudio-compatible setting): TIE-19 equations (8) and (9), the
+    formula both open AGF readers use. Dry air; it states no range, and is refused only at its
+    poles (λ ≤ 1/√41 µm, T ≤ −272.48 °C).
+  - **Modified Edlén**: NIST A42–A49, CO2 fixed at 450 µmol/mol by the formula, same ranges as
+    Ciddor.
+
+  At 20 °C, 1 atm, dry air with 450 µmol/mol CO2, TIE-19's air index is 3·10⁻⁹ to 1.7·10⁻⁸
+  below Ciddor's over 0.4–1.7 µm (measured, `AirIndexTests`); humidity, which TIE-19 does not
+  model, moves Ciddor's by about 4·10⁻⁷ at 50 % and 20 °C. The system summary names the model
+  in use.
 - **Catalog indices** (OP-11, `OpenSim.Optics/Materials`). A glass's dispersion formula takes
   the wavelength in micrometers in the catalog's air and gives the index relative to that air,
   at the catalog's reference temperature (the TD line's last number) and pressure.
-  `OpticalMaterial.RelativeIndex` returns exactly that and nothing else; turning it into an
-  absolute index and moving it to the system's temperature and pressure is OP-13's, which
-  builds on this method. The TD constants are read and kept for it.
+  `OpticalMaterial.RelativeIndex` returns exactly that and nothing else.
+- **Temperature and pressure** (OP-13, `ThermalIndex`). With *Adjust indices to the
+  environment* on, a glass's index follows SCHOTT TIE-19:
+  1. the formula is evaluated at the wavelength in the reference air,
+     λvac / n_air(λvac, T0, P_ref), giving n_rel(λ, T0);
+  2. n_abs(λ, T0) = n_rel(λ, T0) · n_air(λ, T0, P_ref) (equation (5));
+  3. n_abs(λ, T) = n_abs(λ, T0) + Δn_abs, with
+     Δn_abs = (n² − 1)/(2n) · (D0 ΔT + D1 ΔT² + D2 ΔT³ + (E0 ΔT + E1 ΔT²)/(λ² − λtk²)),
+     ΔT = T − T0, λ the vacuum wavelength in µm, n = n_rel(λ, T0) (equations (3), (4));
+  4. n_rel(λ, T, P) = n_abs(λ, T) / n_air(λ, T, P) (equation (5)).
+
+  T0 is the TD line's reference temperature; P_ref is 101325 Pa. Both air indices come from
+  the selected model, and the reference air takes the system's CO2 and humidity, so at
+  T = T0 and P = P_ref the result is the catalog index exactly, and in a vacuum it is the
+  absolute index. A glass without a TD line (and every tabulated material) gets no dn/dT and
+  T0 = 20 °C, TIE-19's T0. With the setting off, a glass's index is the catalog's at the
+  table wavelength, unchanged (`OpticsEnvironment.GlassIndex`).
 - A wavelength outside a material's valid range (the catalog's LD line, or the ends of a
   tabulated material's table) is refused with an error naming the glass, the catalog, the
   wavelength and the range. Nothing is extrapolated.
@@ -171,8 +206,9 @@ scripting item (OP-98) maps `RayStatus` and `FailedAtSurface` to those codes.
 |---|---|---|
 | Wavelength carried by a ray | vacuum | air at system temperature and pressure (file values) |
 | Index after a mirror | positive, direction in the ray | same results; only the bookkeeping differs |
+| Index of air | Ciddor (NIST Appendix A), CO2 450 µmol/mol, dry air | SCHOTT TIE-19 equations (8)–(9) |
 
-More rows are added by the items that introduce a physical model (OP-13, OP-63).
+More rows are added by the items that introduce a physical model (OP-63).
 
 ## 9. Sources
 
@@ -196,6 +232,9 @@ OpticStudio help, which has the same wording.
 | Non-sequential object placement | manual pp. 350, 354 |
 | Ray-trace error and vignetting codes | manual pp. 334, 712, 763–764 |
 | AGF catalog layout, dispersion formula numbers and expressions, glass status numbers | AGFFileReader.jl (MIT): `src/GlassDownload.jl`, `src/utilities.jl` lines 133–183, `src/constants.jl`; ZemaxGlass.py (MIT): `parse_glass_input`, `get_dispersion` lines 845–888, and its user manual's AGF layout and nomenclature. Not read from Ansys's own page |
+| Glass dn/dT, absolute and relative index, TIE-19 air formula | SCHOTT TIE-19, "Temperature Coefficient of the Refractive Index", Version August 2023: equations (2)–(10), P0 = 0.101325·10⁶ Pa (p. 3), catalog values at 0.10133·10⁶ Pa (p. 2), Table 1 (pp. 3–5) |
+| Ciddor and modified Edlén air, vapour pressure, humidity, ranges | J. A. Stone and J. H. Zimmerman, NIST Engineering Metrology Toolbox, "Refractive Index of Air", Documentation (emtoolbox.nist.gov/Wavelength/Documentation.asp): Appendix A equations A1–A49 and Table A1; Section IV (ranges, CO2 450 µmol/mol); Section VII (Table 1, Table 2, Ciddor–Edlén agreement). Ciddor's own paper (Appl. Opt. 35, 1566 (1996)) was not read |
+| What OpticStudio-compatible readers do with TD data | AGFFileReader.jl `src/utilities.jl` (`index`, `absairindex`); ZemaxGlass.py `get_dispersion` (lines ~780–917) |
 
 The manual gives the tilt rules in words and has no matrices. The written-out matrix in section
 4 follows from those words, and agrees with two independent write-ups of what the program
@@ -225,3 +264,34 @@ single place in the code, so a correction is one line and its test.
    form (`DispersionFormulas.Evaluate`, marked unverified), and the AGF reader names every glass
    that uses formula 4 in a note. No glass in the 23 catalogs read for OP-11 uses it. Check: one
    glass with formula 4 and C4 ≠ 0, its index compared with OpticStudio's.
+5. **Thermal index: where the two open readers and TIE-19 differ** (OP-13). The code follows
+   TIE-19 in each case; none is confirmed against OpticStudio. Check: one glass with TD data at
+   40 °C and 0.8 atm in OpticStudio with its TIE-19 air, the index compared to 10⁻⁸.
+   - *Sign of λtk.* TIE-19 and ZemaxGlass write λ² − λtk². AGFFileReader writes λ² − S·λtk², S
+     the sign of λtk. They differ only for a negative λtk; of 2029 TD lines in the 24 AGF files
+     under `plans/sources`, two real glasses have one (lightpath.agf, D-ZLAF52LAM and
+     D-ZLAF52LA_M) besides one test glass.
+   - *Wavelength in equation (3).* TIE-19 says the vacuum wavelength. AGFFileReader uses the
+     wavelength in the reference air; ZemaxGlass the wavelength as given (in the system's
+     air). λ² differs by about 5·10⁻⁴ of itself, which moves only the E0, E1 term of Δn.
+   - *Air index at which wavelength.* TIE-19 (9) and NIST take the vacuum wavelength, and so
+     does this code. AGFFileReader evaluates its air at the air wavelength.
+   - *Referring to air.* AGFFileReader converts to absolute and back with the air at the
+     reference and system conditions, as TIE-19 (5) does, and scales the formula wavelength by
+     the ratio of the two air indices. ZemaxGlass adds Δn_abs to the relative index and uses no
+     air index for a glass at all, so its glass indices do not change with pressure.
+   - *Reference pressure.* TIE-19 gives P0 = 0.101325·10⁶ Pa for the air formula (p. 3) and
+     says catalog indices apply at 0.10133·10⁶ Pa (p. 2), which is P0 rounded to five figures.
+     101325 Pa is used, as AGFFileReader does (1 atm). Read literally, 101330 Pa would move a
+     relative index by about 1.3·10⁻⁸. ZemaxGlass uses 1.0113·10⁵ Pa for its AIR material,
+     which matches neither.
+   - *TIE-19 equation (10).* Its constants (0.00367, T) are not the derivative of equation (8)
+     (3.4785·10⁻³, T − 15); the two agree to 3·10⁻⁶ of the value from −40 °C to 100 °C. Only
+     (8) enters the index; (10) is provided as the source writes it.
+   - *Range of the dn/dT constants.* TIE-19 states SCHOTT's constants valid from −100 °C to
+     +140 °C and 0.365–1.014 µm. Other vendors' TD lines state no range. No range is enforced
+     on Δn: like the open readers, the code applies the constants anywhere.
+   - *TIE-19 Table 1.* With the TD constants of the schott.agf shipped with ZemaxGlass, the
+     model reproduces Table 1's relative coefficients (+20/+40 °C, e-line) for N-BK7, N-PK51
+     and F2 to 0.03·10⁻⁶/K, SF57 to 0.15 and N-LAF2 to 0.09·10⁻⁶/K. Whether that file's
+     constants are older than the 2023 table is not known.

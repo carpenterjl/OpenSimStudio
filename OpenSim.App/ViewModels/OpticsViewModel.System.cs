@@ -4,6 +4,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.Optics;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.App.ViewModels;
 
@@ -23,6 +24,7 @@ public partial class OpticsViewModel
     public IReadOnlyList<OpticsChoice<SourceUnit>> SourceUnitChoices { get; } = OpticsChoice<SourceUnit>.From(SourceUnits.Names);
     public IReadOnlyList<OpticsChoice<MtfUnit>> MtfUnitChoices { get; } = OpticsChoice<MtfUnit>.From(MtfUnits.Names);
     public IReadOnlyList<WavelengthPreset> WavelengthPresets => SpectralLines.Presets;
+    public IReadOnlyList<OpticsChoice<AirIndexModel>> AirModelChoices { get; } = OpticsChoice<AirIndexModel>.From(AirIndexModels.Names);
 
     // Title and notes.
     [ObservableProperty] private string _systemTitle = "";
@@ -81,6 +83,25 @@ public partial class OpticsViewModel
     [ObservableProperty] private double _temperatureCelsius = 20;
     [ObservableProperty] private double _pressureAtmospheres = 1;
     [ObservableProperty] private bool _adjustIndexToEnvironment;
+
+    /// <summary>The air index model (OP-13): Ciddor by default, the OpticStudio-compatible
+    /// TIE-19 formula as a setting (owner decision OQ-10).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AirModelUsesCarbonDioxide), nameof(AirModelUsesHumidity))]
+    private OpticsChoice<AirIndexModel> _selectedAirModel = Choice(AirIndexModels.Names, AirIndexModels.Default);
+
+    /// <summary>CO2, µmol/mol (Ciddor only).</summary>
+    [ObservableProperty] private double _carbonDioxideMicromolesPerMole = AirConditions.DefaultCarbonDioxide;
+
+    /// <summary>Relative humidity, % (Ciddor and modified Edlén).</summary>
+    [ObservableProperty] private double _relativeHumidityPercent;
+
+    public bool AirModelUsesCarbonDioxide => AirIndexModels.UsesCarbonDioxide(SelectedAirModel.Value);
+
+    public bool AirModelUsesHumidity => AirIndexModels.UsesHumidity(SelectedAirModel.Value);
+
+    /// <summary>The line naming the air model in use and its inputs.</summary>
+    public string AirModelDescription => BuildSystemData().Environment.AirModelDescription;
 
     private ObservableCollection<OpticsFieldRow>? _fields;
     private ObservableCollection<OpticsWavelengthRow>? _wavelengths;
@@ -166,7 +187,10 @@ public partial class OpticsViewModel
             {
                 TemperatureCelsius = TemperatureCelsius,
                 PressureAtmospheres = PressureAtmospheres,
-                AdjustIndexToEnvironment = AdjustIndexToEnvironment
+                AdjustIndexToEnvironment = AdjustIndexToEnvironment,
+                AirModel = SelectedAirModel.Value,
+                CarbonDioxideMicromolesPerMole = CarbonDioxideMicromolesPerMole,
+                RelativeHumidityPercent = RelativeHumidityPercent
             }
         };
     }
@@ -294,6 +318,9 @@ public partial class OpticsViewModel
             TemperatureCelsius = data.Environment.TemperatureCelsius;
             PressureAtmospheres = data.Environment.PressureAtmospheres;
             AdjustIndexToEnvironment = data.Environment.AdjustIndexToEnvironment;
+            SelectedAirModel = Choice(AirModelChoices, data.Environment.AirModel);
+            CarbonDioxideMicromolesPerMole = data.Environment.CarbonDioxideMicromolesPerMole;
+            RelativeHumidityPercent = data.Environment.RelativeHumidityPercent;
         }
         finally
         {
@@ -355,7 +382,7 @@ public partial class OpticsViewModel
 
     private static readonly HashSet<string> CheckProperties = new()
     {
-        nameof(SystemProblems), nameof(HasSystemProblems), nameof(SystemCheck)
+        nameof(SystemProblems), nameof(HasSystemProblems), nameof(SystemCheck), nameof(AirModelDescription)
     };
 
     /// <summary>Any edit of the system data re-runs the check the panel shows.</summary>
@@ -371,6 +398,9 @@ public partial class OpticsViewModel
         base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(SystemProblems)));
         base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(HasSystemProblems)));
         base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(SystemCheck)));
+        base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(AirModelDescription)));
+        // The materials panel's probe shows the environment's index when adjusting is on.
+        GlassCatalogs?.EnvironmentChanged();
         // Every system-data edit ends here, so this is where the analysis windows hear of it
         // (OP-9); the analyses view model debounces the burst a row edit can raise.
         PublishSystem();

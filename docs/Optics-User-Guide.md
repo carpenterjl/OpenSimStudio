@@ -96,8 +96,38 @@ lists the glass catalogs the program has loaded and which of them the lens uses.
   resistance classes, the internal transmittance table's extent and the vendor's comment.
   **Index at wavelength** evaluates the glass at any wavelength inside its valid range, at the
   catalog's reference temperature; outside the range it says so rather than extrapolate.
-- The data are shown, not edited, and no surface uses a glass yet; the temperature and
-  pressure correction of indices is a later item.
+  With **Adjust indices to the environment** on (system data, Environment), a second line
+  gives the index at the system's temperature and pressure, relative to the system's air and
+  absolute, and names the air model; the wavelength is then taken as measured in the system's
+  air.
+- The data are shown, not edited, and no surface uses a glass yet.
+
+## Environment and the index of air
+
+The **Environment** group of the system data (`OpenSim.App/Views/Panels/OpticsSystemDataPanel.xaml`)
+holds the system's temperature (°C) and pressure (atm; 0 is a vacuum, 1 atm is 101325 Pa), the
+**air index model**, and **Adjust indices to the environment**. All of it saves with the
+project and the lens file.
+
+- **Air index model.** *Ciddor (NIST)* is the default: the Ciddor equation as NIST's
+  Engineering Metrology Toolbox computes it, with **CO2** (default 450 µmol/mol) and
+  **relative humidity** (default 0 %, dry air). *SCHOTT TIE-19 (OpticStudio-compatible)* is
+  the formula OpticStudio-compatible tools use; it has no CO2 or humidity input. *Modified
+  Edlén (NIST)* is the other NIST equation. The line under the group names the model in use
+  and its inputs, and so does the System summary analysis.
+- **Ranges.** Ciddor and Edlén are valid for vacuum wavelengths 0.3–1.7 µm, −40 to +100 °C
+  and 10–140 kPa; outside that the system check reports a problem and suggests the TIE-19
+  model, which states no range. An infrared system therefore needs the TIE-19 model, or a
+  vacuum.
+- **Wavelengths** in the table are in the system's air, as OpticStudio's are; the vacuum
+  wavelength a ray carries is found with the air model, whatever the setting below.
+- **Adjust indices to the environment.** Off (the default, as in OpticStudio): every glass
+  has its catalog index at the catalog's reference temperature. On: SCHOTT TIE-19's dn/dT
+  model moves each glass to the system temperature, and its index is referred to the system's
+  air. At the catalog's reference temperature and 1 atm this gives the catalog index exactly;
+  in a vacuum it gives the absolute index. A glass without dn/dT data (no TD line) changes
+  only through the air. The equations and every difference from other tools are in
+  `docs/Optics-Conventions.md` §2 and §10.
 
 ## Coming
 

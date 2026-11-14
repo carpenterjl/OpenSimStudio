@@ -5,6 +5,7 @@ using OpenSim.App.Tests.Support;
 using OpenSim.App.ViewModels;
 using OpenSim.Core.Persistence;
 using OpenSim.Optics;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.App.Tests.ViewModels;
 
@@ -46,6 +47,9 @@ public sealed class OpticsSettingsTests : IDisposable
         optics.TemperatureCelsius = 40;
         optics.PressureAtmospheres = 0.8;
         optics.AdjustIndexToEnvironment = true;
+        optics.SelectedAirModel = optics.AirModelChoices.Single(c => c.Value == AirIndexModel.ModifiedEdlen);   // OP-13
+        optics.CarbonDioxideMicromolesPerMole = 1000.0 / 3;
+        optics.RelativeHumidityPercent = 45;
         optics.SelectedMode = optics.Modes.Single(m => m.Mode == OpticsMode.NonSequential);
     }
 

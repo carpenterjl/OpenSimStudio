@@ -5,7 +5,7 @@ namespace OpenSim.Optics.Materials;
 /// temperature its index data refer to. Field order from the ZemaxGlass user manual
 /// (zemaxglass_manual.txt, "TD &lt;D0&gt; &lt;D1&gt; &lt;D2&gt; &lt;E0&gt; &lt;E1&gt; &lt;Ltk&gt; &lt;Temp&gt;") and
 /// AGFFileReader.jl (<c>src/GlassDownload.jl</c>, the AGF layout table). Held as the file
-/// prints them; the thermal index model that uses them is OP-13's, not built yet.
+/// prints them; <see cref="ThermalIndex"/> (OP-13) uses them in SCHOTT TIE-19's equations (2)–(4).
 /// </summary>
 /// <param name="D0">D0, as printed.</param>
 /// <param name="D1">D1, as printed.</param>

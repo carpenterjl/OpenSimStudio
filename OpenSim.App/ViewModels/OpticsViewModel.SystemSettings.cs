@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using OpenSim.Core.Model;
 using OpenSim.Core.Persistence;
 using OpenSim.Optics;
+using OpenSim.Optics.Materials;
 
 namespace OpenSim.App.ViewModels;
 
@@ -45,7 +46,10 @@ public partial class OpticsViewModel
         PrimaryWavelength = PrimaryWavelength,
         TemperatureCelsius = TemperatureCelsius,
         PressureAtmospheres = PressureAtmospheres,
-        AdjustIndexToEnvironment = AdjustIndexToEnvironment
+        AdjustIndexToEnvironment = AdjustIndexToEnvironment,
+        AirIndexModel = AirIndexModels.Names.SavedName(SelectedAirModel.Value),
+        CarbonDioxideMicromolesPerMole = CarbonDioxideMicromolesPerMole,
+        RelativeHumidityPercent = RelativeHumidityPercent
     };
 
     /// <summary>Sets the panel from a file's system data; null (a file from before OP-10) leaves
@@ -90,6 +94,11 @@ public partial class OpticsViewModel
             TemperatureCelsius = saved.TemperatureCelsius;
             PressureAtmospheres = saved.PressureAtmospheres;
             AdjustIndexToEnvironment = saved.AdjustIndexToEnvironment;
+            // A file from before OP-13 has no air model: the default, not the panel's current one.
+            SelectedAirModel = saved.AirIndexModel is null ? Choice(AirModelChoices, AirIndexModels.Default)
+                : Pick(AirModelChoices, AirIndexModels.Names, saved.AirIndexModel, SelectedAirModel, "Air index model", notes);
+            CarbonDioxideMicromolesPerMole = saved.CarbonDioxideMicromolesPerMole ?? AirConditions.DefaultCarbonDioxide;
+            RelativeHumidityPercent = saved.RelativeHumidityPercent ?? 0;
         }
         finally
         {
