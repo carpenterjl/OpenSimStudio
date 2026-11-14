@@ -114,7 +114,7 @@ public sealed record InterferogramSettings
 /// <summary>Settings of the <see cref="FoucaultAnalysis"/>.</summary>
 public sealed record FoucaultSettings
 {
-    [DisplayName("Sampling"), Description("n: an n × n grid of pupil nodes; 8 to 513.")]
+    [DisplayName("Sampling"), Description("n: an n × n grid of pupil nodes, 8 to 513; raised automatically (and said so) when the aberration needs more so the image field does not alias.")]
     public int Sampling { get; init; } = 64;
 
     [DisplayName("Field"), Description("Field row, 1 for the first.")]

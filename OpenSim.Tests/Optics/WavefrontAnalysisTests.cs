@@ -211,13 +211,21 @@ public sealed class WavefrontAnalysisTests
         // In the geometric limit a pupil point is dark when its ray lands on the blocked side of
         // the knife and bright otherwise. The landing points come from the trace itself (the OPD
         // samples' image intercepts), independently of the diffraction calculation and its signs.
-        var lens = DefocusedParaboloid(-2.2e-3);
+        // Defocus 1.1 mm at NA 0.1 is W20 = Δ·NA²/(2λ) ≈ 10 waves at the pupil edge. The knife's
+        // shadow edge in the pupil then has Fresnel parameter v ≈ 2√W20·|Px| ≈ 1.6 at the
+        // |x| ≥ 0.25·reach margin below: about 0.05 on the dark side, near 1.2 on the bright
+        // side. (20 waves also passes, at five times the run time.)
+        var lens = DefocusedParaboloid(-1.1e-3);
         var system = Sys(0.02);
         var result = FoucaultShadowgram.Compute(lens, system, 0, 0, 48, KnifeEdge.VerticalLeft, 0);
         double reach = result.Opd.Samples.Where(s => s.IsValid).Max(s => Math.Abs(s.Ray.Position.X - result.Opd.ChiefRay.Position.X));
         Assert.True(reach > 1e-4, $"the defocus should spread the rays (reach {reach:g3} m).");
         int dark = 0, bright = 0;
-        var nodes = Enumerable.Range(0, 48).Select(k => OpdEngine.Node(k, 48)).ToArray();
+        // The engine raises the pupil sampling until the image field does not alias; at this
+        // defocus 48 nodes per side is far too few (the spot's replicas would overlap it).
+        Assert.True(result.Sampling > 48, $"the sampling should have been raised (it is {result.Sampling}).");
+        int n = result.Sampling;
+        var nodes = Enumerable.Range(0, n).Select(k => OpdEngine.Node(k, n)).ToArray();
         foreach (var s in result.Opd.Samples)
         {
             if (!s.IsValid || s.Px * s.Px + s.Py * s.Py > 0.85 * 0.85) continue;

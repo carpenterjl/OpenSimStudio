@@ -46,6 +46,10 @@ public sealed record FoucaultShadowgramResult
     public required double PassedFraction { get; init; }
 
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+
+    /// <summary>The pupil nodes per side actually used: the requested sampling, or more when the
+    /// aberration needs more so the image field does not alias (the notes then say so).</summary>
+    public int Sampling { get; init; }
 }
 
 /// <summary>
@@ -77,6 +81,9 @@ public static class FoucaultShadowgram
     /// <summary>The image window may hold at most this many samples per axis.</summary>
     public const int MaxImageSamples = 4097;
 
+    /// <summary>The pupil grid may be raised to at most this many nodes per side.</summary>
+    public const int MaxPupilSamples = 1025;
+
     /// <param name="sampling">n: an n × n grid of pupil nodes; at least 8.</param>
     /// <param name="knife">Which half-plane is blocked.</param>
     /// <param name="position">The knife's position relative to the chief ray's image point, along
@@ -93,55 +100,89 @@ public static class FoucaultShadowgram
             throw new InvalidOperationException("Foucault analysis: the knife edge sits at a focus, and afocal image space has none; turn afocal image space off.");
         options = (options ?? new OpdOptions()) with { ReferencePoint = OpdReferencePoint.ChiefRay, ReferenceToPrimary = false };
 
-        int n = sampling;
-        var nodes = new double[n];
-        for (int k = 0; k < n; k++) nodes[k] = OpdEngine.Node(k, n);
-        var pupil = new List<(double, double)>();
-        var index = new List<(int Row, int Column)>();
-        for (int i = 0; i < n; i++)
-            for (int k = 0; k < n; k++)
-                if (nodes[k] * nodes[k] + nodes[i] * nodes[i] <= 1)
-                {
-                    pupil.Add((nodes[k], nodes[i]));
-                    index.Add((i, k));
-                }
-        var opd = OpdEngine.Compute(lens, system, field, wavelength, pupil, options, cancellation);
         string where = $"Foucault analysis (field {field + 1}, wavelength {wavelength + 1})";
-
-        // Pupil scale from the rays' directions, and the geometric spread at the image.
-        var c = opd.ChiefRay;
-        double sxx = 0, sx = 0, syy = 0, sy = 0, spreadX = 0, spreadY = 0;
-        int valid = 0;
-        foreach (var s in opd.Samples)
+        int n = sampling;
+        double[] nodes;
+        List<(double, double)> pupil;
+        List<(int Row, int Column)> index;
+        OpdResult opd;
+        double ax, ay, lambda, nImage;
+        double[] xs, ys;
+        double dx, dy;
+        string? raised = null;
+        for (int attempt = 0; ; attempt++)
         {
-            if (!s.IsValid) continue;
-            valid++;
-            sxx += s.Px * s.Px; sx += (s.Ray.Direction.X - c.Direction.X) * s.Px;
-            syy += s.Py * s.Py; sy += (s.Ray.Direction.Y - c.Direction.Y) * s.Py;
-            spreadX = Math.Max(spreadX, Math.Abs(s.Ray.Position.X - c.Position.X));
-            spreadY = Math.Max(spreadY, Math.Abs(s.Ray.Position.Y - c.Position.Y));
-        }
-        if (valid == 0 || sxx == 0 || syy == 0)
-            throw new InvalidOperationException($"{where}: too few rays reach the image to span the pupil in x and y.");
-        double ax = sx / sxx, ay = sy / syy;
-        if (!(Math.Abs(ax) > 0) || !(Math.Abs(ay) > 0))
-            throw new InvalidOperationException($"{where}: the image-space ray directions do not change across the pupil (scale {ax:g3}, {ay:g3}), so there is no focus.");
+            nodes = new double[n];
+            for (int k = 0; k < n; k++) nodes[k] = OpdEngine.Node(k, n);
+            pupil = new List<(double, double)>();
+            index = new List<(int Row, int Column)>();
+            for (int i = 0; i < n; i++)
+                for (int k = 0; k < n; k++)
+                    if (nodes[k] * nodes[k] + nodes[i] * nodes[i] <= 1)
+                    {
+                        pupil.Add((nodes[k], nodes[i]));
+                        index.Add((i, k));
+                    }
+            opd = OpdEngine.Compute(lens, system, field, wavelength, pupil, options, cancellation);
 
-        double lambda = OpticsConventions.MicrometersToMeters(opd.AirMicrometers), nImage = opd.ImageIndex;
-        (double[] Coordinates, double Spacing) Window(double a, double spread, string axis)
-        {
-            double spacing = lambda / (4 * nImage * Math.Abs(a));
-            double half = 1.5 * spread + 16 * lambda / (nImage * Math.Abs(a));
-            int m = 2 * (int)Math.Ceiling(half / spacing) + 1;
-            if (m > MaxImageSamples)
+            // Pupil scale from the rays' directions, and the geometric spread at the image.
+            var c = opd.ChiefRay;
+            double sxx = 0, sx = 0, syy = 0, sy = 0, spreadX = 0, spreadY = 0;
+            int valid = 0;
+            foreach (var s in opd.Samples)
+            {
+                if (!s.IsValid) continue;
+                valid++;
+                sxx += s.Px * s.Px; sx += (s.Ray.Direction.X - c.Direction.X) * s.Px;
+                syy += s.Py * s.Py; sy += (s.Ray.Direction.Y - c.Direction.Y) * s.Py;
+                spreadX = Math.Max(spreadX, Math.Abs(s.Ray.Position.X - c.Position.X));
+                spreadY = Math.Max(spreadY, Math.Abs(s.Ray.Position.Y - c.Position.Y));
+            }
+            if (valid == 0 || sxx == 0 || syy == 0)
+                throw new InvalidOperationException($"{where}: too few rays reach the image to span the pupil in x and y.");
+            ax = sx / sxx; ay = sy / syy;
+            if (!(Math.Abs(ax) > 0) || !(Math.Abs(ay) > 0))
+                throw new InvalidOperationException($"{where}: the image-space ray directions do not change across the pupil (scale {ax:g3}, {ay:g3}), so there is no focus.");
+
+            lambda = OpticsConventions.MicrometersToMeters(opd.AirMicrometers);
+            nImage = opd.ImageIndex;
+            double l = lambda, ni = nImage;
+            (double[] Coordinates, double Spacing) Window(double a, double spread, string axis)
+            {
+                double spacing = l / (4 * ni * Math.Abs(a));
+                double half = 1.5 * spread + 16 * l / (ni * Math.Abs(a));
+                int m = 2 * (int)Math.Ceiling(half / spacing) + 1;
+                if (m > MaxImageSamples)
+                    throw new InvalidOperationException(
+                        $"{where}: the rays spread {spread:g3} m in {axis} at the image, which needs {m} image samples (at most {MaxImageSamples}); the aberration is too large for a diffraction shadowgram—bring the image nearer focus or use a smaller field.");
+                var coordinates = new double[m];
+                for (int p = 0; p < m; p++) coordinates[p] = (p - (m - 1) / 2) * spacing;
+                return (coordinates, spacing);
+            }
+            (xs, dx) = Window(ax, spreadX, "x");
+            (ys, dy) = Window(ay, spreadY, "y");
+
+            // A pupil sampled every Δp makes the image field periodic with period
+            // λ/(n·|a|·Δp); the window ±half holds the field only if that period is at least
+            // 2·half, else the spot's replicas overlap it (aliasing). So Δp ≤ λ/(2n·|a|·half).
+            int needed = 0;
+            foreach (var (a, coordinates) in new[] { (ax, xs), (ay, ys) })
+            {
+                double half = coordinates[^1];
+                double step = lambda / (2 * nImage * Math.Abs(a) * half);
+                needed = Math.Max(needed, (int)Math.Ceiling(2 / step) + 1);
+            }
+            if (needed <= n) break;
+            if (needed > MaxPupilSamples)
                 throw new InvalidOperationException(
-                    $"{where}: the rays spread {spread:g3} m in {axis} at the image, which needs {m} image samples (at most {MaxImageSamples}); the aberration is too large for a diffraction shadowgram—bring the image nearer focus or use a smaller field.");
-            var coordinates = new double[m];
-            for (int p = 0; p < m; p++) coordinates[p] = (p - (m - 1) / 2) * spacing;
-            return (coordinates, spacing);
+                    $"{where}: the aberration needs {needed} pupil samples per side so the image field does not alias (at most {MaxPupilSamples}); bring the image nearer focus or use a smaller field.");
+            if (attempt >= 3)
+                throw new InvalidOperationException($"{where}: the pupil sampling needed did not settle ({n} then {needed}).");
+            // 10 % more than needed, because the finer grid reaches rays nearer the pupil edge
+            // and so a slightly larger spread.
+            n = Math.Min(MaxPupilSamples, needed + (needed + 9) / 10);
+            raised = $"Pupil sampling raised from {sampling} to {n} per side so the image field does not alias (a pupil step Δp needs λ/(n·a·Δp) ≥ the window width).";
         }
-        var (xs, dx) = Window(ax, spreadX, "x");
-        var (ys, dy) = Window(ay, spreadY, "y");
 
         // Pupil field, rows Px (k), columns Py (i).
         var field_ = new Complex[n, n];
@@ -156,7 +197,7 @@ public static class FoucaultShadowgram
         cancellation.ThrowIfCancellationRequested();
         var fx = xs.Select(x => nImage * ax * x / lambda).ToArray();
         var fy = ys.Select(y => nImage * ay * y / lambda).ToArray();
-        var image = MatrixFourierTransform.Transform(field_, nodes, nodes, fx, fy);
+        var image = MatrixFourierTransform.Transform(field_, nodes, nodes, fx, fy, maxDegreeOfParallelism: null);
         cancellation.ThrowIfCancellationRequested();
 
         var blocked = new Complex[xs.Length, ys.Length];
@@ -178,9 +219,9 @@ public static class FoucaultShadowgram
             }
         var back = nodes.Select(v => nImage * ax * v / lambda).ToArray();
         var backY = nodes.Select(v => nImage * ay * v / lambda).ToArray();
-        var full = MatrixFourierTransform.Transform(image, xs, ys, back, backY, inverse: true);
+        var full = MatrixFourierTransform.Transform(image, xs, ys, back, backY, inverse: true, maxDegreeOfParallelism: null);
         cancellation.ThrowIfCancellationRequested();
-        var cut = MatrixFourierTransform.Transform(blocked, xs, ys, back, backY, inverse: true);
+        var cut = MatrixFourierTransform.Transform(blocked, xs, ys, back, backY, inverse: true, maxDegreeOfParallelism: null);
 
         double mean = 0;
         int counted = 0;
@@ -212,7 +253,8 @@ public static class FoucaultShadowgram
                 $"Image window {xs.Length} × {ys.Length} samples at {dx:g4} × {dy:g4} m, centred on the chief ray; pupil {n} × {n} nodes.",
                 $"Pupil scale (direction cosine per unit pupil coordinate) fitted to the rays: {ax:g6} in x, {ay:g6} in y.",
                 $"The knife passes {(total > 0 ? passed / total : 0):P2} of the energy in the window.",
-            },
+            }.Concat(raised is null ? Array.Empty<string>() : new[] { raised }).ToArray(),
+            Sampling = n,
         };
     }
 }

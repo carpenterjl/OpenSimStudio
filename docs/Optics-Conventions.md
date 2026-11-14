@@ -2267,7 +2267,10 @@ not on hand; the formulas below are derived from the definitions, not copied.
   half-plane (left x ≤ pos, right x ≥ pos, above y ≥ pos, below y ≤ pos, in the image surface's
   frame, from the chief ray); the inverse sum returns to the pupil; the intensity is divided by
   the mean of the same reconstruction without the knife. A window needing more than 4097 samples
-  per axis is refused, as is afocal image space.
+  per axis is refused, as is afocal image space. A pupil sampled every Δp makes the image
+  field periodic with period λ/(n·a·Δp); so the spot's replicas do not overlap the window
+  (±half), the pupil grid is raised until Δp ≤ λ/(2n·a·half), with 10 % to spare, up to 1025
+  nodes per side (refused beyond), and the result says so.
 - **Pupil aberration:** 100 × (real stop intercept − P × r)/r, r the on-axis primary-wavelength
   paraxial marginal ray height at the stop; the y component against Py (tangential), x against
   Px (sagittal); apertures ignored.
