@@ -18,9 +18,12 @@ public sealed record MapOutline(double X0, double Y0, double X1, double Y1);
 public static class FieldMapPlot
 {
     private static readonly Typeface Face = new("Segoe UI");
-    private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0x8A, 0x90, 0x99));
-    private static readonly Pen Frame = new(Ink, 1);
-    private static readonly Pen OutlinePen = new(new SolidColorBrush(Color.FromArgb(0xC0, 0xFF, 0xFF, 0xFF)), 1);
+    private static readonly Brush Ink = Frozen(new SolidColorBrush(Color.FromRgb(0x8A, 0x90, 0x99)));
+    private static readonly Pen Frame = Frozen(new Pen(Ink, 1));
+    private static readonly Pen OutlinePen = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(0xC0, 0xFF, 0xFF, 0xFF)), 1));
+
+    // Shared across renders, so frozen (see CurvePlot).
+    private static T Frozen<T>(T freezable) where T : Freezable { freezable.Freeze(); return freezable; }
 
     /// <param name="values">Samples, [row, column]: row 0 at <paramref name="y0"/>, column 0 at <paramref name="x0"/>.</param>
     /// <param name="scale">Multiplies the data coordinates for the tick labels (1e3 for mm).</param>

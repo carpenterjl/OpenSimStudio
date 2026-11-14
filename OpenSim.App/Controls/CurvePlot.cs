@@ -72,9 +72,13 @@ public sealed record PlotSeries(string Name, IReadOnlyList<double> X, IReadOnlyL
 public static class CurvePlot
 {
     private static readonly Typeface Face = new("Segoe UI");
-    private static readonly Brush Ink = new SolidColorBrush(Color.FromRgb(0x8A, 0x90, 0x99));
-    private static readonly Pen Grid = new(new SolidColorBrush(Color.FromArgb(0x50, 0x8A, 0x90, 0x99)), 1);
-    private static readonly Pen Frame = new(Ink, 1);
+    private static readonly Brush Ink = Frozen(new SolidColorBrush(Color.FromRgb(0x8A, 0x90, 0x99)));
+    private static readonly Pen Grid = Frozen(new Pen(new SolidColorBrush(Color.FromArgb(0x50, 0x8A, 0x90, 0x99)), 1));
+    private static readonly Pen Frame = Frozen(new Pen(Ink, 1));
+
+    // Shared across renders, so frozen: an unfrozen brush belongs to the thread that first
+    // touched the class, and a render on any other thread (a test, a background export) throws.
+    private static T Frozen<T>(T freezable) where T : Freezable { freezable.Freeze(); return freezable; }
 
     public static ImageSource Render(IReadOnlyList<PlotSeries> series, bool logX, bool logY,
         string xLabel, string yLabel, int width = 560, int height = 300)
