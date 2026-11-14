@@ -309,6 +309,19 @@ amplitudes in OpticStudio's convention; retardance φp − φs (transmission) an
 yet), coatings applied to traced rays, per-layer multipliers and offsets in the plots' settings
 (the library takes them), incoherent thick layers, and coating design or optimisation.
 
+## Cross-checks against other programs
+
+The real ray trace, the paraxial data and the thin-film engine are checked against stored
+results of three independently written open programs: Optiland and RayOptics for rays and
+first-order data, tmm for coatings (`OpenSim.Tests/References/OP-102`, read by
+`OpenSim.Tests/Optics/ReferenceProgramTests.cs`). Five lenses with constant indices are
+compared ray by ray and surface by surface: positions to 10⁻⁹ mm, optical paths to 10⁻⁶ waves.
+The reference files were generated once by the Python scripts in that folder; the program does
+not need Python. How each program's conventions map onto this program's is in
+`docs/Optics-Conventions.md` §22. These are checks for developers; there is nothing to set in
+the workspace. Not built: checks with catalog glasses, tilts, aspheres or ray aiming, and any
+comparison with OpticStudio, which was not available.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -318,4 +331,5 @@ Not built yet, and not to be relied on until they appear in this guide:
 - layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
   the rest);
 - optimization and tolerancing of a lens;
-- lens-file import.
+- lens-file import;
+- reference results from OpticStudio itself (the cross-checks use open programs only).

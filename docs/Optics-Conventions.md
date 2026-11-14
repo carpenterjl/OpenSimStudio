@@ -8,7 +8,8 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`.
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
 
@@ -430,6 +431,14 @@ single place in the code, so a correction is one line and its test.
     Paraxial Gaussian Beam help was not read. Check: one singlet and one concave mirror with a
     beam of known waist and M² = 2, compared with OpticStudio's Paraxial Gaussian Beam listing.
 
+18. **Cross-checks are against open programs, not OpticStudio** (OP-102). Section 22's
+    reference files come from Optiland, RayOptics and tmm. They check the real ray trace, the
+    paraxial data and the thin-film engine against independently written code using the same
+    sign rules, but OpticStudio itself was not available, so no number here is claimed to
+    agree with OpticStudio's. The open checks above stay open. Check: the five lenses of
+    `OpenSim.Tests/References/OP-102/lenses.py` in OpticStudio (Single Ray Trace and System
+    Data), stored beside the others as OpticStudio reference files when access exists.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -657,3 +666,66 @@ q = z + i·z_R and 1/q = 1/R − i·λ/(π·w²) in the comments of `GaussianBea
   needs the real ray trace (OP-20) and Arnaud's ray representation; tilted, decentered and
   anamorphic (toroidal, cylindrical) surfaces; Gaussian beam operands; apertures clipping the
   beam. Section 10, item 10, lists the check against OpticStudio.
+
+## 22. Cross-checks against independent programs
+
+OP-102 compares OpenSim with independently written open programs through stored reference
+files in `OpenSim.Tests/References/OP-102`, written once by the committed scripts there
+(`gen_optiland.py`, `gen_rayoptics.py`, `gen_tmm.py`) and read by
+`OpenSim.Tests/Optics/ReferenceProgramTests.cs`; the test suite never runs Python. The programs
+are Optiland 0.6.3 (MIT), RayOptics 0.9.10 (BSD 3-Clause) and tmm 0.2.0 (MIT); the folder's
+README lists the environment, how to regenerate, and where each convention below was read in
+each program's source. When the files are absent the tests are reported as skipped. OpticStudio
+was not used (section 10, item 18).
+
+**Lenses.** Five lenses with constant indices (no catalog glass, so all three programs certainly
+use the same index): a singlet with a prolate front, a cemented doublet at a finite conjugate
+with object-height fields, a Cooke-triplet-like lens with a separate plane stop and an oblate
+surface, a paraboloid mirror, and a paraboloid–hyperboloid two-mirror lens. 24 rays each
+(three fields, eight pupil points including skew rays). Wavelength 0.55 µm.
+
+**Mapping.**
+
+| Matter | Optiland | RayOptics | OpenSim |
+|---|---|---|---|
+| Length unit | lens units, mm here | lens units, mm here | meters (the tests multiply by 10⁻³) |
+| Wavelength unit | µm | nm | µm in the table |
+| Radius and thickness signs | as section 3 | as section 3 | section 3 |
+| Index after a mirror | positive (medium before kept) | positive (medium before kept) | positive |
+| Local frame after a mirror | not turned | not turned (translation only) | not turned |
+| Optical path | Σ t·n from the launch point | Σ n·dst per gap (summed by the script) | Σ n·s from the launch point |
+| Launch, ray aiming off | "paraxial" aimer: paraxial entrance pupil, direction (tan θx, tan θy, 1) | chief ray aimed at the real stop; not used: the script builds the launch from RayOptics' paraxial pupil with OpenSim's rule | `RayLauncher` (section 13) |
+| Image-space focal length n′/Φ | f2 | efl (= fl_img) | `ImageSpaceFocalLength` |
+| Object-space focal length −n/Φ | f1 | −fl_obj | `ObjectSpaceFocalLength` |
+| Front focal point, principal plane (from surface 1) | F1, P1 | ffl, pp1 | `FrontFocalLength`, `FrontPrincipalPlane` |
+| Back focal point, rear principal plane (from the last surface) | F2 + t_last, P2 + t_last (Optiland measures from the image surface) | bfl, ppk | `BackFocalLength`, `RearPrincipalPlane` |
+| Entrance pupil position and diameter | EPL, EPD | enp_dist, 2·enp_radius | `EntrancePupilPosition`, `EntrancePupilDiameter` |
+| Exit pupil position (from the last surface) | XPL + t_last | exp_dist − img_dist + t_last | `ExitPupilPosition` |
+| Exit pupil diameter | \|XPD\| | 2·exp_radius | \|`ExitPupilDiameter`\| |
+| Paraxial image (from the last surface) | not compared | img_dist | `ParaxialImageDistance` |
+| Thin films | — | — | tmm `coh_tmm`: same convention as section 12, compared without mapping |
+
+**What is compared and to what tolerance.**
+
+- *Real rays.* Each stored ray is launched in OpenSim from the program's own launch point and
+  direction, and at every surface from 1 to the image the local intersection point must agree
+  to 10⁻⁹ mm, the direction cosines to 10⁻¹², and the optical path from the launch point to
+  10⁻⁶ waves (5.5·10⁻¹³ m at 0.55 µm), with each of the two programs. Optiland and RayOptics
+  agree with each other to 2.7·10⁻¹³ mm and 1.5·10⁻¹⁵ (README).
+- *Launch.* OpenSim's launcher against Optiland's paraxial aimer: the same direction (10⁻¹²)
+  and OpenSim's start point on Optiland's ray line (10⁻⁹ mm). Only the line is compared,
+  because the two start the ray at different points along it.
+- *First-order data.* Against Optiland, every quantity of the table to 10⁻⁹ mm. Against
+  RayOptics, the system-matrix quantities (focal lengths, focal points, principal planes) to
+  10⁻⁹ mm; the conjugate-dependent ones (pupils, image distance) to 10⁻⁹ mm with a finite
+  object and to 10⁻⁹ mm + 2·EFL²/L for an object at infinity, because RayOptics stands in an
+  object at L = 10¹⁰ mm, which moves an image by f²/L (Newton's equation). The stored files show
+  exactly that shift (10⁻⁶ mm for the 100 mm mirror, 3.6·10⁻⁵ mm for the 600 mm two-mirror lens).
+- *Thin films.* Four stacks (a single layer, nine high/low layers, an absorbing metal layer on
+  an absorbing substrate, and glass to air through total internal reflection) at 2–5 angles and
+  1–3 wavelengths: r and t (complex, so their phases), R, T and the absorbed fraction
+  (power_entering − T) to 10⁻¹².
+
+**Not built.** Catalog glasses in the cross-checks, tilts and decenters, aspheres, ray aiming,
+OPD against a reference sphere, diffraction (prysm and POPPY, later items), and any OpticStudio
+reference file.
