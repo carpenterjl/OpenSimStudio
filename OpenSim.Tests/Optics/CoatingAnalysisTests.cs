@@ -47,15 +47,17 @@ public sealed class CoatingAnalysisTests
     {
         var analysis = new CoatingVsAngleAnalysis(CoatingQuantity.Reflection);
         double brewster = Math.Atan(1.52) * 180 / Math.PI;
-        var settings = new CoatingVsAngleSettings { Substrate = "1.52", MinimumAngleDegrees = 0, MaximumAngleDegrees = 2 * brewster, Points = 3 };
+        // Five points from 0 to 4/3 of Brewster's angle (56.7°, so the range stays below 90°, which
+        // the analysis requires): the fourth point is Brewster's angle.
+        var settings = new CoatingVsAngleSettings { Substrate = "1.52", MinimumAngleDegrees = 0, MaximumAngleDegrees = 4 * brewster / 3, Points = 5 };
         var result = analysis.Compute(new OpticsAnalysisContext("P", new OpticsSettings()), settings, default);
         var plot = (LinePlot)result.Plots[0];
         var s = plot.Curves.Single(c => c.Name == "s");
         var p = plot.Curves.Single(c => c.Name == "p");
         Assert.Equal(Math.Pow(0.52 / 2.52, 2), s.Y[0], 14);
-        Assert.Equal(brewster, p.X[1], 12);
-        Assert.True(p.Y[1] < 1e-28);
-        Assert.Equal((s.Y[2] + p.Y[2]) / 2, plot.Curves.Single(c => c.Name == "Average").Y[2], 15);
+        Assert.Equal(brewster, p.X[3], 12);
+        Assert.True(p.Y[3] < 1e-28);
+        Assert.Equal((s.Y[4] + p.Y[4]) / 2, plot.Curves.Single(c => c.Name == "Average").Y[4], 15);
     }
 
     /// <summary>Against wavelength the quarter-wave coating's minimum lies at the primary

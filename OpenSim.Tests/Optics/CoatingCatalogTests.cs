@@ -140,9 +140,10 @@ public sealed class CoatingCatalogTests
             Name = "P", RotationDegrees = 90,
             PolynomialTerms = new Dictionary<int, double> { [0] = 1, [1] = 0.5, [4] = 0.25 }
         };
-        // θ = 90°: x′ = −y, y′ = x.
-        double xp = -3, yp = 2;
-        Assert.Equal(1 + 0.5 * xp + 0.25 * xp * yp, poly.Factor(2, 3), 14);
+        // θ = 90°: x′ = −y, y′ = x. The point (2, −1) keeps the sum positive (a negative sum
+        // counts as zero, below), so the value checks the rotation and the terms.
+        double xp = 1, yp = 2;
+        Assert.Equal(1 + 0.5 * xp + 0.25 * xp * yp, poly.Factor(2, -1), 14);
 
         // A negative sum counts as zero; a taper with no terms gives zero, as defined.
         Assert.Equal(0, new CoatingTaper { Name = "N", RadialTerms = new Dictionary<int, double> { [0] = -1 } }.Factor(0, 0));
@@ -289,7 +290,9 @@ public sealed class CoatingCatalogTests
         {
             Name = "TAB", Rows = new[] { new TabulatedIndexPoint(0.4, 2.0, 0.1), new TabulatedIndexPoint(0.8, 1.8, 0.0) }
         };
-        Assert.Equal(new Complex(1.9, 0.05), m.Index(0.6));
+        var mid = m.Index(0.6);   // linear interpolation: equal to the midpoint within rounding
+        Assert.Equal(1.9, mid.Real, 14);
+        Assert.Equal(0.05, mid.Imaginary, 14);
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => m.Index(0.3));
         Assert.Contains("TAB", ex.Message);
         Assert.Equal(new Complex(1.7, 0.2), CoatingMaterial.Constant("K", 1.7, 0.2).Index(5.0));
