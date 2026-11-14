@@ -129,6 +129,22 @@ project and the lens file.
   only through the air. The equations and every difference from other tools are in
   `docs/Optics-Conventions.md` §2 and §10.
 
+## Paraxial data
+
+The paraxial engine (`OpenSim.Optics/Paraxial`) computes first-order data: effective, back and
+front focal lengths, cardinal points (focal, principal, nodal), entrance and exit pupil
+positions and diameters, lateral and angular magnification, image-space and working F-numbers,
+object and image NA, the Lagrange invariant, the ABCD matrix and the paraxial marginal and
+chief ray at every surface, per wavelength, for finite and infinite conjugates, telecentric
+object space and afocal systems. Signs and reference points are in
+`docs/Optics-Conventions.md` §11.
+
+The analysis **System data and paraxial rays** (Reports) lists them. There is no sequential
+surface editor yet, so in the app this analysis says the system has no surfaces; the engine is
+used from code and tests until the surface editor (OP-20) feeds it. Not built: real image
+height fields (need ray aiming, OP-22), configurations (OP-30), and any comparison of these
+numbers with OpticStudio's output.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

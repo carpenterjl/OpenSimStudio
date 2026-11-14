@@ -4,7 +4,8 @@ This is the one written convention for the Optics toolbox. Every optics item fol
 code that implements each rule is named beside the rule. The tests are in
 `OpenSim.Tests/Optics/OpticsConventionsTests.cs` and `OpenSim.Tests/Core/RigidTransformTests.cs`;
 those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/AirIndexTests.cs` and
-`OpenSim.Tests/Optics/ThermalIndexTests.cs`.
+`OpenSim.Tests/Optics/ThermalIndexTests.cs`; those of paraxial optics (section 11) in
+`OpenSim.Tests/Optics/ParaxialTests.cs`.
 
 Two rules decide everything below:
 
@@ -295,3 +296,68 @@ single place in the code, so a correction is one line and its test.
      model reproduces Table 1's relative coefficients (+20/+40 °C, e-line) for N-BK7, N-PK51
      and F2 to 0.03·10⁻⁶/K, SF57 to 0.15 and N-LAF2 to 0.09·10⁻⁶/K. Whether that file's
      constants are older than the 2023 table is not known.
+
+6. **Paraxial results with mirrors and theodolite fields** (OP-19). Section 11's effective
+   focal length is 1/power, positive for a converging mirror; image-space positions after an
+   odd number of mirrors are negative. Whether OpticStudio's System Data lists the same signs
+   for a mirror system, where it measures cardinal points from, and its theodolite-angle
+   formula, have not been read at a source. Check: a single concave mirror and a field of
+   azimuth 3°, elevation 4°, compared with OpticStudio's System Data and Paraxial Ray Data.
+
+## 11. Paraxial optics
+
+The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
+through a `ParaxialLens`: surface 0 is the object (its thickness the object distance, possibly
++infinity), the last is the image surface, and exactly one surface between is the stop. Each
+surface has a curvature, a thickness, a medium after it (a constant index or an
+`OpticalMaterial`), and stop and mirror flags. The curvature of the object and image surfaces
+is ignored: heights there are in the vertex plane.
+
+- **Signed index.** Indices stay positive in the data (section 3). Inside the paraxial trace
+  each space's index is multiplied by −1 per mirror before it. With the thickness sign of
+  section 3 the reduced thickness t/n is then positive in every space, and one pair of
+  equations covers lenses and mirrors: transfer y′ = y + (t/n)·ν, surface ν′ = ν − y·φ,
+  φ = c·(n′ − n). A mirror in air has φ = −2c, positive for a concave mirror (c < 0 when it
+  faces light travelling +z).
+- **Slopes.** u = dy/dz in the system's frame; z does not turn round at a mirror. ν = n·u with
+  the signed index. The ABCD matrices act on (y, ν) and have determinant 1
+  (`ParaxialMatrix`).
+- **Indices** are relative to the system's air at the table wavelength
+  (`OpticsEnvironment.GlassIndex`), so they follow the "adjust indices to the environment"
+  setting. A constant index is the same at every wavelength.
+- **Positions** are signed distances along z. Object-space ones (front focal point, front
+  principal and nodal points, entrance pupil) are measured from surface 1's vertex;
+  image-space ones (back focal length, rear principal and nodal points, exit pupil, paraxial
+  image) from the last surface's vertex. With the system matrix [[A, B], [C, D]] from just
+  before surface 1 to just after the last surface, power Φ = −C, object-space index n and
+  signed image-space index n′: EFL = 1/Φ, f′ = n′/Φ, f = −n/Φ, BFL = A·n′/Φ, FFL = −D·n/Φ,
+  front principal plane (1 − D)·n/Φ, rear (A − 1)·n′/Φ, front nodal point (n′ − D·n)/Φ, rear
+  (A·n′ − n)/Φ.
+- **Afocal.** A system is afocal when |C| is within 32·(surfaces + 2)·2⁻⁵² of the sum of
+  the absolute values of the terms that make it up (the product of the absolute-value
+  matrices), i.e. zero within its rounding. Then there is no focal length, cardinal point or
+  image-space F-number, and the angular magnification ū′/ū is D·n/n′. The same test decides
+  a pupil or an image at infinity.
+- **Entrance pupil.** With the matrix from surface 1 to the stop's vertex, the pupil is at
+  z_E = B·n/A from surface 1; A = 0 (within rounding) puts it at infinity. *Telecentric
+  object space* puts it at infinity by definition: chief rays enter parallel to the axis.
+- **Aperture** (`ApertureType`): the entrance pupil diameter; the image space F/# as
+  |EFL|/EPD (at whatever conjugates); the object space NA, which launches the marginal slope
+  tan(asin(NA/n)); the object cone angle θ, slope tan θ; float by stop size, the marginal ray
+  reaching the stop's semi-diameter; the paraxial working F/# 1/(2·n′·|u′|). NA and the
+  cone angle need an object at a finite distance; EPD and the image space F/# need the pupil
+  not at infinity. Results report NA = n·sin(atan |u|).
+- **Fields** (`ParaxialSystem.TraceChiefRay`): an angle θ launches the chief slope tan θ
+  through the entrance-pupil centre; a theodolite field (azimuth x, elevation y) the
+  direction (cos el·sin az, sin el, cos el·cos az), slopes tan az and tan el / cos az; an
+  object height the ray from the object point through the pupil centre (parallel to the
+  axis when the pupil is at infinity); a paraxial image height the chief ray reaching that
+  height on the image surface. Real image height needs the real trace and ray aiming
+  (OP-20, OP-22) and is refused. The x and y planes are traced independently.
+- **Marginal and chief rays.** The marginal ray runs from the axial object point to the top
+  of the entrance pupil; the chief ray of the reports is that of the largest y field
+  (Hy = 1). Lateral magnification is ν/ν′ of the marginal ray (zero for an object at
+  infinity); angular magnification ū′/ū of the chief ray; the Lagrange invariant
+  H = n·(ū·y − u·ȳ) with the signed index, the same in every space.
+- The reports' signs and reference points are ours; section 10, item 6, lists the check
+  against OpticStudio.

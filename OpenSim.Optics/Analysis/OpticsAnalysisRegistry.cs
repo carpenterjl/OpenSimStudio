@@ -50,6 +50,7 @@ public sealed class OpticsAnalysisRegistry
     {
         var registry = new OpticsAnalysisRegistry();
         registry.Register(new SystemSummaryAnalysis());
+        registry.Register(new ParaxialDataAnalysis());
         return registry;
     }
 }
