@@ -36,10 +36,18 @@ public sealed class ParaxialDataAnalysis : OpticsAnalysis<ParaxialDataSettings>
 
     private readonly Func<OpticsAnalysisContext, ParaxialLens?> _lensSource;
 
-    /// <param name="lensSource">Where the surfaces come from; null for none (until OP-20).</param>
+    /// <param name="lensSource">Where the surfaces come from; null for none (until OP-31).</param>
     public ParaxialDataAnalysis(Func<OpticsAnalysisContext, ParaxialLens?>? lensSource = null)
     {
         _lensSource = lensSource ?? (_ => null);
+    }
+
+    /// <summary>The analysis fed from a real-trace lens source (OP-20): the paraxial engine
+    /// takes the same lens through <see cref="Sequential.SequentialLens.ToParaxialLens"/>.</summary>
+    public static ParaxialDataAnalysis FromSequential(Func<OpticsAnalysisContext, Sequential.SequentialLens?> lensSource)
+    {
+        ArgumentNullException.ThrowIfNull(lensSource);
+        return new ParaxialDataAnalysis(context => lensSource(context)?.ToParaxialLens());
     }
 
     public override string Id => SavedId;

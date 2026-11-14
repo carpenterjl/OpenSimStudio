@@ -51,6 +51,8 @@ public sealed class OpticsAnalysisRegistry
         var registry = new OpticsAnalysisRegistry();
         registry.Register(new SystemSummaryAnalysis());
         registry.Register(new ParaxialDataAnalysis());
+        // OP-20: the real ray trace (no saved surfaces until OP-31).
+        registry.Register(new SingleRayTraceAnalysis());
         // Materials (OP-14).
         registry.Register(new GlassMapAnalysis());
         registry.Register(new AthermalGlassMapAnalysis());

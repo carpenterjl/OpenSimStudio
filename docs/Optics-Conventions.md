@@ -6,7 +6,9 @@ code that implements each rule is named beside the rule. The tests are in
 those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/AirIndexTests.cs` and
 `OpenSim.Tests/Optics/ThermalIndexTests.cs`; those of paraxial optics (section 11) in
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
-`OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of Gaussian beams (section 14) in `OpenSim.Tests/Optics/GaussianBeamTests.cs`.
+`OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
+real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`.
 
 Two rules decide everything below:
 
@@ -253,7 +255,8 @@ scripting item (OP-98) maps `RayStatus` and `FailedAtSurface` to those codes.
     −1 ≤ Hx, Hy ≤ 1.
 - **Pupil (Px, Py).** A point on the unit circle. The radius it scales is the paraxial
   entrance-pupil radius, or the stop radius when ray aiming is on. (0, 0) is the chief ray and
-  (0, 1) the upper marginal ray. Px² + Py² ≤ 1. Built with ray aiming (OP-22).
+  (0, 1) the upper marginal ray. Px² + Py² ≤ 1. The real ray trace launches on the paraxial
+  entrance pupil (ray aiming off, section 13); ray aiming is OP-22.
 
 ## 8. Where our default differs from OpticStudio
 
@@ -398,6 +401,28 @@ single place in the code, so a correction is one line and its test.
    - *IDEAL2 amplitudes* with |r|² + |t|² above 1 are refused; the help does not say what
      OpticStudio does.
 
+9. **Real ray trace choices** (OP-20). Each is this program's reading of an OpticStudio name or a
+   choice of its own; none is compared with OpticStudio's output. Check each with one small lens
+   traced in both programs.
+   - *Spider:* arms start at the centre, the first along +x, the others evenly spaced toward +y;
+     arm width is the full width.
+   - *Ignore this surface:* the ray crosses the vertex plane unchanged (no shape, aperture or
+     change of medium), and the thickness still counts.
+   - *Skip rays to this surface:* read as a drawing option only; the trace is unchanged.
+   - *Chip zone:* the mechanical semi-diameter is the larger of the given one (or the clear one)
+     and clear plus chip zone.
+   - *Automatic semi-diameters:* the chief ray and rim rays of the paraxial pupil (four by
+     default), every field and wavelength, apertures ignored; margins (h + margin)·(1 + %/100)
+     as OP-18's record states. OpticStudio's own sampling was not read.
+   - *Launch plane* for an object at infinity: the plane through surface 1's vertex at right
+     angles to the field's direction. It moves absolute optical paths, not differences between
+     rays of one field.
+   - *Pupil wavelength:* the paraxial entrance pupil of the primary wavelength places the rays at
+     every wavelength.
+   - *Far sheet:* a ray that meets a conic only beyond the half that holds the vertex (the far
+     hemisphere of a sphere, the other sheet of a hyperboloid) is a miss; OpticStudio's
+     hyperhemispheric surfaces are not built.
+
 10. **Gaussian beam signs and inputs** (OP-48). Section 14's sign rules (the waist position
     measured along z from the surface, the wavefront radius positive when diverging, the
     input waist position measured from surface 1, an M² input waist being the real beam's)
@@ -530,6 +555,68 @@ coating plots use catalog indices as they are; they do not adjust them to the en
 **Not built.** Coatings are not applied to traced rays (`Ray.Field` is carried, but nothing
 applies a coating to it yet); there are no surfaces to carry a coating; incoherent thick
 layers; coating design or optimisation (OpticStudio has none either).
+
+## 13. Real ray trace
+
+The real ray trace (OP-20, `OpenSim.Optics/Sequential`) traces rays through a `SequentialLens`:
+the surfaces of section 11 with a conic constant, an aperture, clear and mechanical
+semi-diameters, a chip zone, and the flags *ignore this surface* and *skip rays to this
+surface*. `SequentialLens.ToParaxialLens` gives the same lens to the paraxial engine (conics and
+apertures do not enter first-order optics; an ignored surface becomes a plane with the medium
+before it). Spencer and Murty (JOSA 52, 1962) and Welford were not on hand; every formula below
+is derived in `ConicIntersection.cs` and the gate tests, not copied.
+
+- **Frames.** A launched ray is written in surface 1's local frame. Surface j's frame is
+  placed in surface j − 1's by one transform, today the previous thickness along z
+  (`SequentialTrace.SurfaceStep`); coordinate breaks and surface tilts (OP-21) will replace that
+  transform and nothing else. Global positions are in surface 1's frame. Signs are those of
+  section 3: the frame's z never turns round at a mirror, thicknesses after an odd number of
+  mirrors are negative, and a ray's direction carries the sense of travel (N < 0 after one
+  mirror).
+- **Surface.** F = c·(x² + y² + (1 + k)·z²) − 2z = 0, curvature c, conic k (0 sphere, −1
+  paraboloid, < −1 hyperboloid, −1 to 0 prolate, > 0 oblate). Only the sheet that holds the
+  vertex is a surface: 1 − c(1 + k)·z > 0.
+- **Loop.** For each surface: transfer to the vertex plane z = 0 (distance −z/N, negative for a
+  virtual step back); intersect by the rationalised root s = −C/(B − sign(N)·√(B² − AC)) with
+  A = c(L² + M² + (1 + k)N²), B = c(xL + yM) − N, C = c(x² + y²), which has no cancellation for
+  the vertex root and is finite for a plane and an axial paraboloid; test the aperture; refract
+  or reflect with the unit normal (−cx, −cy, 1 − c(1 + k)z)/|…|.
+- **Refraction.** d′ = μ·d + Γ·n̂, μ = n/n′, cos I = d·n̂ ≥ 0, sin²I = |d × n̂|²,
+  cos T = √(1 − μ² sin²I), Γ = (1 − μ)(1 + μ)/(cos T + μ cos I). This conserves
+  n·(d × n̂), which is Snell's law. μ² sin²I > 1 is total internal reflection.
+  **Reflection** is `OpticsConventions.Reflect`; the index after a mirror is the one before.
+- **Optical path.** Each segment adds n·s, n the index before the surface relative to the
+  system's air (the paraxial engine's indices) and s the signed geometric length, so the path is
+  the absolute optical path divided by the air index; in waves divide by the table (air)
+  wavelength. A ray carries its vacuum wavelength (section 2). The batch trace returns each ray's
+  path minus its field's chief ray's, summed segment by segment (`TracedRay.PathFromChief`),
+  which keeps the digits a difference of two totals would lose. OPD against the reference sphere
+  is OP-35.
+- **Launch** (`RayLauncher`), ray aiming off: the pupil point (Px·r, Py·r) lies on the paraxial
+  entrance pupil of the primary wavelength (radius r, position z_E). The field point f = H·F goes
+  through the paraxial chief ray (`ParaxialSystem.TraceChiefRay`), whose object-space slopes are
+  the exact tangents of an angle field and whose object heights are exact for a height field.
+  Object at infinity: direction (ūx, ūy, 1) normalised, through the pupil point, starting on the
+  plane through surface 1's vertex at right angles to it. Finite object: from the object point
+  (x̄, ȳ, −t0) to the pupil point; with the entrance pupil at infinity, direction (Px·u, Py·u, 1),
+  u the paraxial marginal slope. The object surface is taken as a plane. Vignetting factors and
+  real image height are ray aiming's (OP-22).
+- **Apertures** (`SurfaceAperture`) are tested at the intersection, on the local x and y:
+  circular (minimum and maximum radius), rectangular (half-widths), elliptical (semi-axes),
+  spider (arm width and count), user-defined polygon (even-odd rule) and floating (the clear
+  semi-diameter); each may be decentered and made an obscuration. A surface without an aperture
+  never vignettes, whatever its semi-diameter.
+- **Failures.** A miss (no real root, the far sheet, or a ray parallel to the vertex plane),
+  total internal reflection and an aperture stop the ray with `RayStatus` MissedSurface,
+  TotalInternalReflection or Vignetted and the surface number; the ray is returned, never
+  dropped, and `TracePath` keeps its hits up to that surface.
+- **Semi-diameters** (`SemiDiameterSizing`): a fixed clear semi-diameter is kept; an automatic
+  one is the largest √(x² + y²) the chief ray and the pupil-rim rays of every field and
+  wavelength reach (apertures ignored), then (h + margin)·(1 + percent/100). Mechanical is the
+  larger of the given one (or the clear one) and clear plus chip zone.
+- **Batch** (`BatchTracer`): fields × wavelengths × pupil points; each field and wavelength is
+  one `ParallelSlots` work item, so the result is bitwise the same at any degree of parallelism.
+- The choices not read from OpticStudio are listed in section 10, item 9.
 
 ## 14. Gaussian beams
 

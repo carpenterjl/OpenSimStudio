@@ -207,9 +207,42 @@ object space and afocal systems. Signs and reference points are in
 
 The analysis **System data and paraxial rays** (Reports) lists them. There is no sequential
 surface editor yet, so in the app this analysis says the system has no surfaces; the engine is
-used from code and tests until the surface editor (OP-20) feeds it. Not built: real image
+used from code and tests until the lens data editor (OP-31) feeds it. Not built: real image
 height fields (need ray aiming, OP-22), configurations (OP-30), and any comparison of these
 numbers with OpticStudio's output.
+
+## Real ray trace
+
+The real ray trace (`OpenSim.Optics/Sequential`) traces rays exactly through a sequential lens
+of rotationally symmetric conic surfaces: spheres, paraboloids, hyperboloids and prolate and
+oblate ellipsoids, refracting or mirrors. It computes where each ray meets each surface, its
+direction after refraction or reflection, and its optical path. A ray that misses a surface,
+is totally internally reflected, or is stopped by an aperture is kept and reported with the
+reason and the surface number.
+
+- **Apertures:** circular (with an inner radius for an annulus), rectangular, elliptical,
+  spider, user-defined polygon and floating (the surface's clear semi-diameter), each
+  decentered or as an obscuration if wanted. A surface without an aperture does not stop rays.
+- **Semi-diameters:** a surface keeps a semi-diameter you give it; otherwise it is sized from
+  the chief and rim rays of every field and wavelength, plus the system's semi-diameter margins.
+  The mechanical semi-diameter includes the chip zone.
+- **Ignore this surface** traces the surface as if it were not there; **skip rays to this
+  surface** only affects drawing.
+- **Rays** are launched from normalised field and pupil coordinates with ray aiming off: pupil
+  coordinates are on the paraxial entrance pupil.
+- A batch trace over fields, wavelengths and pupil points gives the same numbers, bit for bit,
+  however many processor cores it runs on.
+
+The analysis **Single ray trace** (Rays) lists one ray surface by surface: coordinates (local or
+global), direction cosines, angles of incidence and exit, path lengths and optical path, and the
+status. Like the paraxial report, it says the system has no surfaces until the lens data editor
+(OP-31) supplies them; the trace is used from code and tests until then. The equations and the
+points not yet compared with OpticStudio are in `docs/Optics-Conventions.md` §13 and §10 item 9.
+
+Not built: the lens data editor and saving surfaces (OP-31), tilts, decenters and coordinate
+breaks (OP-21), ray aiming and vignetting factors (OP-22), aspheres and other surface types
+(OP-23 on), hyperhemispheric surfaces, curved object surfaces, coatings applied to rays, OPD
+against the reference sphere (OP-35), and layouts drawing traced rays.
 
 ## Gaussian beams
 
@@ -228,7 +261,7 @@ the distance along the axis from surface 1, unfolded at mirrors; with M² above 
 Gaussian is drawn dashed. Signs and the M² model are in `docs/Optics-Conventions.md` §14.
 
 There is no sequential surface editor yet, so in the app this analysis says the system has no
-surfaces; the engine is used from code and tests until OP-20 feeds it. Not built: the skew
+surfaces; the engine is used from code and tests until the lens data editor (OP-31) supplies surfaces. Not built: the skew
 (generally astigmatic) Gaussian beam about a real chief ray, which needs the real ray trace;
 tilted, decentered and anamorphic surfaces; Gaussian beam operands; any comparison with
 OpticStudio's output.
@@ -282,7 +315,7 @@ Not built yet, and not to be relied on until they appear in this guide:
 
 - the sequential surface editor and the non-sequential object editor;
 - system data (aperture, fields, wavelengths);
-- ray tracing, layouts and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
+- layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
   the rest);
 - optimization and tolerancing of a lens;
 - lens-file import.

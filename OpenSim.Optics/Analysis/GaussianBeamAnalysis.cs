@@ -59,7 +59,7 @@ public sealed record GaussianBeamSettings
 /// plotted against the distance along the axis.
 /// <para>
 /// Like <see cref="ParaxialDataAnalysis"/>, the lens comes from a source given to the
-/// constructor; the default source has none until the surface editor (OP-20) exists, and the
+/// constructor; the default source has none until the lens data editor (OP-31) exists, and the
 /// result then says so.
 /// </para>
 /// </summary>
@@ -70,7 +70,7 @@ public sealed class GaussianBeamAnalysis : OpticsAnalysis<GaussianBeamSettings>
 
     private readonly Func<OpticsAnalysisContext, ParaxialLens?> _lensSource;
 
-    /// <param name="lensSource">Where the surfaces come from; null for none (until OP-20).</param>
+    /// <param name="lensSource">Where the surfaces come from; null for none (until the lens data editor, OP-31).</param>
     public GaussianBeamAnalysis(Func<OpticsAnalysisContext, ParaxialLens?>? lensSource = null)
     {
         _lensSource = lensSource ?? (_ => null);
@@ -92,7 +92,7 @@ public sealed class GaussianBeamAnalysis : OpticsAnalysis<GaussianBeamSettings>
             {
                 new ReportSection("No surfaces")
                 {
-                    Lines = new[] { "The system has no sequential surfaces yet: the surface editor is a later plan item (OP-20), so there is nothing to propagate the beam through." }
+                    Lines = new[] { "The system has no sequential surfaces yet: the lens data editor is a later plan item (OP-31), so there is nothing to propagate the beam through." }
                 }
             }, new[] { "Nothing is traced." });
         }
