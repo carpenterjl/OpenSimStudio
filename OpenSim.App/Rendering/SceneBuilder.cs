@@ -14,7 +14,7 @@ namespace OpenSim.App.Rendering;
 /// Translates core geometry/mesh/result data into WPF 3D models. This is the only
 /// place where simulation data meets the rendering stack.
 /// </summary>
-public static class SceneBuilder
+public static partial class SceneBuilder
 {
     /// <summary>One selectable GeometryModel3D per geometric face, keyed by face id.</summary>
     public static Dictionary<int, GeometryModel3D> BuildFaceModels(TriangleMesh geometry, Color baseColor)
