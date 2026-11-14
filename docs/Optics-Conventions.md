@@ -8,7 +8,7 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; the cross-checks against other programs (section 22) in
 `OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
@@ -431,6 +431,20 @@ single place in the code, so a correction is one line and its test.
     Paraxial Gaussian Beam help was not read. Check: one singlet and one concave mirror with a
     beam of known waist and M² = 2, compared with OpticStudio's Paraxial Gaussian Beam listing.
 
+13. **Asphere readings** (OP-23). Section 17's forms follow the OpticStudio 2025 R2 help pages
+    where they give an equation; these points are this program's reading and are not compared
+    with OpticStudio's output:
+    - *Alternate Even / Alternate Odd:* "the alternate solution" is read as the base conic's
+      other root, refined on the asphere's sag; it must lie on the sheet that holds the vertex.
+    - *Odd Cosine:* θ = atan2(y, x); the slopes of the odd and cosine terms are taken as zero
+      on the axis.
+    - *Qbfs with a conic:* the help cites Forbes 2011 Eqs. 2.1–2.4, which carry the conic κ
+      through 1/σ = √(1 − κc²r²)/φ; that is what is built. Whether OpticStudio evaluates
+      exactly this with κ ≠ 0 was not checked.
+    - *Convert Asphere Types:* the fit (samples, equal weights, Qbfs's curvature from the conic
+      through the edge point) is this program's; the help says only "least squares".
+    Check: each form with non-zero terms, one ray traced in both programs.
+
 15. **Solves** (OP-29). Each solve follows the wording of OpticStudio's help (section 19); none
     is compared with OpticStudio's numbers. The readings that the help leaves open:
     - *Edge thickness at radial height 0* uses the mechanical semi-diameter, as "Thickness
@@ -688,6 +702,77 @@ q = z + i·z_R and 1/q = 1/R − i·λ/(π·w²) in the comments of `GaussianBea
   needs the real ray trace (OP-20) and Arnaud's ray representation; tilted, decentered and
   anamorphic (toroidal, cylindrical) surfaces; Gaussian beam operands; apertures clipping the
   beam. Section 10, item 10, lists the check against OpticStudio.
+
+## 17. Aspheres
+
+`OpenSim.Optics/Sequential/Aspheres` (OP-23) adds surface shapes (section 13's
+`SurfaceShape` hook) for the rotationally symmetric forms of OpticStudio and two that are not
+symmetric but share the machinery. Every form is the Standard conic of the surface's curvature
+c and conic k plus its own terms; the coefficients live on the shape, in SI units (a
+coefficient on rⁿ is in m^(1 − n); a coefficient on a normalised radius is in meters). The
+sag formulas and parameter meanings are copied from the OpticStudio 2025 R2 help
+(ansyshelp.ansys.com), pages saved on 2026-11-14 under `plans/sources/optics/aspheres/`; the Q
+polynomials from Forbes's papers (`plans/sources/optics/forbes/`, transcription with
+equation numbers).
+
+| Form | Class | Added to the conic | Source |
+|---|---|---|---|
+| Even Asphere | `EvenAsphere` | Σ αᵢ r²ⁱ, i = 1…8 | help, "Even Asphere" |
+| Odd Asphere | `OddAsphere` | Σ βᵢ rⁱ, i = 1…8 | help, "Odd Asphere" |
+| Extended Asphere | `ExtendedAsphere` | Σ αᵢ ρ²ⁱ, ρ = r/R_n, up to 240 terms | help, "Extended Asphere" |
+| Extended Odd Asphere | `ExtendedOddAsphere` | Σ αᵢ ρⁱ, ρ = r/R_n, up to 240 terms | help, "Extended Odd Asphere" |
+| Q-Type, Qcon | `QTypeAsphere` | x²·Σ a_m Q^con_m(x), x = (r/ρmax)², up to 100 terms | help, "Q-Type Asphere (sequential…)"; Forbes, Opt. Express 15, 5218 (2007), Eqs. 2–3, 8 |
+| Q-Type, Qbfs | `QTypeAsphere` | (ψ/φ)·x(1 − x)·Σ a_m Q^bfs_m(x), φ = √(1 − (1 + k)c²r²), ψ = √(1 − kc²r²) | help; Forbes, Opt. Express 19, 9923 (2011), Eqs. 2.1–2.4 |
+| Superconic | `SuperconicSurface` | implicit: A z² − 2Bz + C = 0, s² = r² + z², A = kc, B = 1 + Σ Uᵢ s²ⁱ, C = c s² + Σ Vᵢ s²ⁱ⁺², up to 120 pairs | help, "Superconic" |
+| Alternate Even / Odd | `AlternateEvenAsphere`, `AlternateOddAsphere` | as Even / Odd, met at the other root | help, "Alternate Even", "Alternate Odd" |
+| Periodic | `PeriodicSurface` | −A[¼(1 + cos 2παx)(1 + cos 2πβy) − 1] | help, "Periodic" |
+| Odd Cosine | `OddCosineSurface` | Σ βᵢ rⁱ (16) + Σ Aᵢ s^Pᵢ cos(Bᵢθ + Cᵢ) (0–6), s = r/R; R ≤ 0 drops the cosine terms | help, "Odd Cosine" |
+
+- **Q polynomials** (`QPolynomials`) are evaluated by recurrence only: Q^con by the Jacobi
+  recurrence with Forbes's constants (Opt. Express 18, 13851 (2010), Eq. 5.2) and Clenshaw's
+  sum and its derivative (Eqs. 2.2–2.3); Q^bfs through the auxiliary polynomials
+  P_{m+1} = (2 − 4x)P_m − P_{m−1} and the banded change of basis f, g, h (Opt. Express 18,
+  19700 (2010), Eqs. 2.5–2.7, 3.2–3.12, A.14–A.16). No monomial expansion is formed.
+- **Intersection** (`AsphereIntersection`, one routine for all forms): start at the base
+  conic's root (`ConicIntersection`), or at t = 0 when the conic is missed; damped Newton on
+  g(t) = tN − z(x + tL, y + tM), the step halved until |g| does not grow and the sag is defined
+  (which keeps iterates inside the conic's square root), at most 64 steps; if Newton stalls,
+  bisection on a bracket searched outward from the start. A failure is a miss
+  (`RayStatus.MissedSurface`). The normal is (−∂z/∂x, −∂z/∂y, 1)/|…| from the analytic slopes,
+  +z at the vertex like the conic's. A sag is undefined (and a ray there misses) where
+  (1 + k)c²r² ≥ 1, and for Qbfs also where kc²r² ≥ 1.
+- **Alternate forms.** The base conic's quadratic A·s² + 2B·s + C = 0 has roots whose product
+  is C/A; with the vertex root s₁ = −C/q the alternate start is s₂ = −q/A. It must lie on the
+  vertex sheet, so for ordinary rays through a lens (whose other root is on the far
+  hemisphere) the alternate forms miss.
+- **Superconic sag** is the root of F(z) on the vertex sheet (∂F/∂z < 0, its vertex sign),
+  reached by damped Newton from the conic's sag; its slope is −F_r/F_z.
+- **Conversion** (`AsphereConversion`): Even Asphere ↔ Q-type by linear least squares
+  (`HouseholderLeastSquares`) on equal-area samples of 0 ≤ r ≤ ρ, ρ also the Q-type
+  normalization radius. To Qcon and to Even the curvature and conic are kept; to Qbfs the conic
+  is kept and the curvature is that of the conic through the vertex and the edge point,
+  c(ρ² + (1 + k)f²) = 2f (Forbes's best-fit sphere for k = 0). The RMS and largest residual
+  are returned. An Even Asphere without α1 goes to Qcon and back exactly (to rounding); α1·r²
+  cannot be expressed in Qcon and appears in the residual. `QPolynomials.BfsFitByCosineTransform`
+  is Forbes's DCT fit (2010 Eqs. 4.4–4.6); the paper prints the factor (−1)^m/(2N), but its
+  derivation (Eq. B.4) and its worked example (Eq. 4.7) need (−1)^m/N, which is used.
+- **Units of the Superconic.** OpticStudio writes A = k/R and C = s²/R + …; with c = 1/R this is
+  A = kc, C = cs² + …, which also covers the plane (c = 0).
+- **Gates** (`OpenSim.Tests/Optics/AsphereTests.cs`): every form set to a conic traces as the
+  Standard surface to 1e-12 (including a superconic sphere written with U1 = λ, V1 = λc, which
+  is the sphere's equation times 1 + λs²); the alternate forms meet the closed-form second root;
+  normals equal central-difference sag gradients to 1e-8; Even → Qcon → Even keeps the sag to
+  1e-12 of the aperture; the recurrences equal Forbes's closed forms (2007 Eqs. 9 and 14) and
+  his matrix (2010 Eq. A.17); the DCT fit reproduces his worked example (2010 Eqs. 4.7, 4.8).
+- **Not built.** Cubic Spline and Extended Cubic Spline: the help gives the sample points and
+  says the segments have continuous first and second derivatives, but not the end conditions
+  at the vertex and the edge, so the curve between samples cannot be reproduced and the forms
+  are left out. The fast even-asphere trace (Newton is used for every form). The paraxial
+  engine still sees only c: the r² terms of the Even (2α1), Odd (2β2), Extended and Odd Cosine
+  forms, Qbfs's axial curvature c + (2/ρmax²)S(0), and the Periodic surface's curvature are
+  not passed to `SequentialLens.ToParaxialLens` (a paraxial-equivalent hook on `SurfaceShape`
+  is OP-27's). Saving these surfaces is OP-31's. Section 10, item 13, lists the readings not yet
+  compared with OpticStudio.
 
 ## 19. Solves
 

@@ -240,8 +240,8 @@ status. Like the paraxial report, it says the system has no surfaces until the l
 points not yet compared with OpticStudio are in `docs/Optics-Conventions.md` §13 and §10 item 9.
 
 Not built: the lens data editor and saving surfaces (OP-31), tilts, decenters and coordinate
-breaks (OP-21), ray aiming and vignetting factors (OP-22), aspheres and other surface types
-(OP-23 on), hyperhemispheric surfaces, curved object surfaces, coatings applied to rays, OPD
+breaks (OP-21), ray aiming and vignetting factors (OP-22), other surface types beyond the
+aspheres (OP-24 on), hyperhemispheric surfaces, curved object surfaces, coatings applied to rays, OPD
 against the reference sphere (OP-35), and layouts drawing traced rays.
 
 ## Gaussian beams
@@ -308,6 +308,27 @@ amplitudes in OpticStudio's convention; retardance φp − φs (transmission) an
 `docs/Optics-Conventions.md` §12. Not built: coatings on surfaces (there are no surfaces
 yet), coatings applied to traced rays, per-layer multipliers and offsets in the plots' settings
 (the library takes them), incoherent thick layers, and coating design or optimisation.
+
+## Aspheres
+
+The real ray trace also traces these surface types (`OpenSim.Optics/Sequential/Aspheres`), each
+a Standard conic plus its own terms, as OpticStudio defines them: Even Asphere, Odd Asphere,
+Extended Asphere, Extended Odd Asphere, Q-Type Asphere (Qbfs and Qcon, after Forbes),
+Superconic, Alternate Even, Alternate Odd, Periodic and Odd Cosine. All of them share one
+intersection method (Newton's method started from the conic, with a bisection fallback); a ray
+that cannot be placed on the surface is reported as missing it. Coefficients are in SI units.
+
+An Even Asphere can be converted to a Q-Type Asphere and back by a least-squares fit of the sag
+over an aperture radius, which also becomes the Q-type normalization radius; the fit reports
+its RMS and largest sag error. An Even Asphere without the r² term converts to Qcon and back
+exactly; an r² term cannot be expressed in Qcon and shows as fit error.
+
+There is no editor for these surfaces yet: they are built from code until the lens data
+editor (OP-31) saves surfaces. Not built: Cubic Spline and Extended Cubic Spline (OpticStudio's
+help does not give the spline's end conditions), the fast even-asphere trace, and the aspheric
+terms' effect on paraxial data (paraxial results use the base curvature only). The equations,
+sources and the points not yet compared with OpticStudio are in `docs/Optics-Conventions.md`
+§17 and §10 item 13.
 
 ## Solves
 
