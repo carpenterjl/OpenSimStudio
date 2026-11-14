@@ -59,7 +59,10 @@ public sealed class AnalysisRegistryAndSettingsTests
         Assert.NotEmpty(result.Assumptions);
 
         var brief = new SystemSummaryAnalysis().Compute(context, new SystemSummarySettings { ShowConventions = false }, default);
-        Assert.Single(brief.Sections);
+        // Without the conventions, the System section and the Environment section (OP-13, which
+        // names the air index model in use) remain.
+        Assert.Equal(new[] { "System", "Environment" }, brief.Sections.Select(s => s.Heading));
+        Assert.Contains(result.Sections, s => s.Heading == "Conventions");
     }
 
     [Fact]
