@@ -35,9 +35,9 @@ public partial class OpticsViewModel : ObservableObject
         _glassLibrary = glassCatalogs;
         // OP-31: the lens data editor, after the catalogs and coatings its check reads.
         LensEditor = new OpticsLensEditorViewModel(PublishFromLensEditor, BuildLensEditContext);
-        // OP-54: the merit function editor, evaluated on the project's lens.
+        // OP-54: the merit function editor, evaluated over the project's configurations (OP-30).
         MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
-            () => OpenSim.Optics.Merit.SingleMeritConfiguration.FromProject(ToSettings(), BuildLensEditContext().Catalogs));
+            () => new OpenSim.Optics.Merit.ProjectMeritConfigurations(ToSettings(), BuildLensEditContext().Catalogs));
         // OP-30: the multi-configuration editor, applied to the entered system.
         MultiConfig = new OpticsMultiConfigEditorViewModel(PublishFromMultiConfig, () => BuildSettings(withTable: false), ReplaceSystem);
         _log = log;

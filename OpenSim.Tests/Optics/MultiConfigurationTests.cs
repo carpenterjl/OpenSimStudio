@@ -77,6 +77,31 @@ public sealed class MultiConfigurationTests : IDisposable
         Assert.Equal(25e-3, lens2.Surfaces[2].Thickness, 15);
     }
 
+    /// <summary>Wave 5 integration: the merit function (OP-54) switches configurations with CONF
+    /// over the project's table. EFFL in configuration 1 and, after CONF 2, in configuration 2
+    /// stand in the same ratio as the two separate lenses' focal lengths (a ratio, so the test
+    /// does not depend on the unit EFFL reports in).</summary>
+    [Fact]
+    public void TheMeritFunction_SwitchesToEachConfigurationOfTheTable()
+    {
+        var table = ZoomTable();
+        var configurations = new OpenSim.Optics.Merit.ProjectMeritConfigurations(table, NoCatalogs);
+        Assert.Equal(2, configurations.Count);
+        var function = new OpenSim.Optics.Merit.MeritFunction(new[]
+        {
+            OpenSim.Optics.Merit.MeritOperandRow.Of("EFFL", 0, 1, 0, 1, Array.Empty<double>()),
+            OpenSim.Optics.Merit.MeritOperandRow.Of("CONF", 2, 0, 0, 0, Array.Empty<double>()),
+            OpenSim.Optics.Merit.MeritOperandRow.Of("EFFL", 0, 1, 0, 1, Array.Empty<double>()),
+        });
+        var e = OpenSim.Optics.Merit.MeritEvaluator.Evaluate(function, configurations);
+        double separate1 = Efl(new OpticsSettings { Surfaces = Zoom(gap: 10, back: 60) });
+        double separate2 = Efl(new OpticsSettings { Surfaces = Zoom(gap: 25, back: 45) });
+        double ratio = e.Rows[2].Value / e.Rows[0].Value;
+        Assert.True(Math.Abs(ratio - separate2 / separate1) <= 1e-12 * Math.Abs(ratio), $"EFFL ratio {ratio} against {separate2 / separate1}.");
+        Assert.Equal(25e-3, configurations.LensFor(2).Surfaces[2].Thickness, 15);
+        Assert.Throws<ArgumentOutOfRangeException>(() => configurations.LensFor(3));
+    }
+
     [Fact]
     public void SettingsFor_RemovesTheTable_AndLeavesTheInputUnchanged()
     {

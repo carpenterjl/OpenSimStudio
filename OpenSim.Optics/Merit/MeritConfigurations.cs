@@ -7,8 +7,8 @@ namespace OpenSim.Optics.Merit;
 
 /// <summary>
 /// The configurations a merit function is evaluated over (the CONF operand switches between
-/// them). Numbered from 1. Multi-configuration (OP-30) implements this over its configurations;
-/// until then <see cref="SingleMeritConfiguration"/> is the one configuration of the project.
+/// them). Numbered from 1. <see cref="ProjectMeritConfigurations"/> takes them from the project's
+/// multi-configuration table (OP-30); <see cref="SingleMeritConfiguration"/> is one given lens.
 /// </summary>
 public interface IMeritConfigurations
 {
@@ -59,5 +59,49 @@ public sealed class SingleMeritConfiguration : IMeritConfigurations
             ?? throw new ArgumentException("The system has no sequential surfaces: add them in the Lens Data Editor, so there is something to evaluate.");
         var system = SystemDataSettings.FromSettings(optics.SystemData, new List<string>());
         return new SingleMeritConfiguration(lens, system);
+    }
+}
+
+/// <summary>
+/// The project's configurations from its multi-configuration table (OP-30): configuration k is
+/// <see cref="MultiConfig.MultiConfiguration.SettingsFor"/> of the saved settings, turned into a
+/// lens with solves evaluated (<see cref="ProjectLens.From"/>) and its system data. A project
+/// without a table has one configuration, the system as entered. Each configuration is built
+/// once, on first use, and safely from parallel row evaluation.
+/// </summary>
+public sealed class ProjectMeritConfigurations : IMeritConfigurations
+{
+    private readonly Lazy<(SequentialLens Lens, OpticalSystemData System)>[] _built;
+
+    public ProjectMeritConfigurations(OpticsSettings optics, IReadOnlyList<OpticalCatalog> catalogs)
+    {
+        ArgumentNullException.ThrowIfNull(optics);
+        ArgumentNullException.ThrowIfNull(catalogs);
+        int count = MultiConfig.MultiConfiguration.ConfigurationCount(optics);
+        _built = new Lazy<(SequentialLens, OpticalSystemData)>[count];
+        for (int k = 1; k <= count; k++)
+        {
+            int configuration = k;
+            _built[k - 1] = new Lazy<(SequentialLens, OpticalSystemData)>(() =>
+            {
+                var settings = MultiConfig.MultiConfiguration.SettingsFor(optics, configuration);
+                var lens = ProjectLens.From(settings, catalogs)
+                    ?? throw new ArgumentException($"Configuration {configuration} has no sequential surfaces: add them in the Lens Data Editor, so there is something to evaluate.");
+                return (lens, SystemDataSettings.FromSettings(settings.SystemData, new List<string>()));
+            }, LazyThreadSafetyMode.ExecutionAndPublication);
+        }
+    }
+
+    public int Count => _built.Length;
+
+    public SequentialLens LensFor(int configuration) => At(configuration).Lens;
+
+    public OpticalSystemData SystemFor(int configuration) => At(configuration).System;
+
+    private (SequentialLens Lens, OpticalSystemData System) At(int configuration)
+    {
+        if (configuration < 1 || configuration > _built.Length)
+            throw new ArgumentOutOfRangeException(nameof(configuration), configuration, $"There are {_built.Length} configurations, numbered from 1.");
+        return _built[configuration - 1].Value;
     }
 }
