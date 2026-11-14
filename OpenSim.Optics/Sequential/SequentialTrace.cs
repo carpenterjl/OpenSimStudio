@@ -194,15 +194,20 @@ public sealed class SequentialTrace
             double s0 = -p.Z / d.Z;
             double x = p.X + s0 * d.X, y = p.Y + s0 * d.Y;
             double c = s.IsIgnored ? 0 : s.Curvature;
-            if (!ConicIntersection.Intersect(x, y, d, c, s.Conic, out var point, out double delta)
-                || !double.IsFinite(s0))
+            var shape = s.IsIgnored ? null : s.Shape;
+            Vector3D point;
+            double delta;
+            bool met = shape is null
+                ? ConicIntersection.Intersect(x, y, d, c, s.Conic, out point, out delta)
+                : shape.Intersect(x, y, d, s, out point, out delta);
+            if (!met || !double.IsFinite(s0) || !double.IsFinite(delta))
                 return ray.Failed(RayStatus.MissedSurface, j);
             double length = s0 + delta;
             double segment = nBefore * length;
             path += segment;
             if (segments is not null) segments[j] = segment;
             ray = ray with { Position = point, OpticalPath = path };
-            var normal = ConicIntersection.Normal(point, c, s.Conic);
+            var normal = shape is null ? ConicIntersection.Normal(point, c, s.Conic) : shape.Normal(point, s);
 
             // Aperture.
             if (!options.IgnoreApertures && !s.IsIgnored && s.Aperture is { } aperture
@@ -214,7 +219,25 @@ public sealed class SequentialTrace
 
             // Refraction or reflection.
             Vector3D after = d;
-            if (j < image && !s.IsIgnored)
+            if (j < image && shape is not null && shape.TryRedirect(new SurfaceRedirectInput
+                {
+                    Surface = s, SurfaceIndex = j, Point = point, Incoming = d, Normal = normal,
+                    IndexBefore = nBefore, IndexAfter = s.IsMirror ? nBefore : nAfter,
+                    VacuumWavelength = VacuumWavelength,
+                }, out var redirected, out double extra, out var redirectFailure))
+            {
+                if (redirectFailure != RayStatus.Ok)
+                {
+                    Record(hits, j, ray, d, d, normal, nBefore, nAfter, length, segment, redirectFailure);
+                    return ray.Failed(redirectFailure, j);
+                }
+                after = redirected / redirected.Length;
+                path += extra;
+                segment += extra;
+                if (segments is not null) segments[j] = segment;
+                ray = ray with { OpticalPath = path };
+            }
+            else if (j < image && !s.IsIgnored)
             {
                 if (s.IsMirror)
                 {

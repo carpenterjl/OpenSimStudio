@@ -72,6 +72,10 @@ public sealed record SequentialSurface
     /// mechanical semi-diameter always includes.</summary>
     public double ChipZone { get; init; }
 
+    /// <summary>The surface's shape when it is not the Standard conic (aspheres OP-23, special
+    /// surfaces OP-27), or null for the Standard surface.</summary>
+    public SurfaceShape? Shape { get; init; }
+
     /// <summary>The surface's comment, shown in reports.</summary>
     public string Comment { get; init; } = "";
 
