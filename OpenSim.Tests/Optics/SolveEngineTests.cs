@@ -3,6 +3,7 @@ using OpenSim.Optics;
 using OpenSim.Optics.Materials;
 using OpenSim.Optics.Paraxial;
 using OpenSim.Optics.Sequential;
+using OpenSim.Optics.Sequential.Aspheres;
 using OpenSim.Optics.Sequential.Solves;
 
 namespace OpenSim.Tests.Optics;
@@ -91,6 +92,31 @@ public sealed class SolveEngineTests
         Close(-0.1, p.MarginalRay.Slopes[2], 1e-15, "marginal slope after surface 2");
         Close(0.05, p.EffectiveFocalLength!.Value, 1e-15, "EFL");
         Assert.Equal(result.Statuses[0].Value, result.Lens.Surfaces[2].Curvature);
+    }
+
+    [Fact]
+    public void CurvatureSolves_OnAnAsphere_CountItsSecondOrderTerm()
+    {
+        // TC-6: an Even Asphere's alpha1 r^2 term adds 2*alpha1 to the curvature the paraxial
+        // engine sees (Conventions section 17). A curvature solve finds the paraxial curvature
+        // the ray needs, so the vertex curvature it enters is that minus 2*alpha1 (derived), and
+        // the ray then leaves at the asked angle. Before the fix the asphere's term was counted
+        // twice. The element power solve goes through the same conversion.
+        var system = Sys(0.01);
+        const double alpha1 = 2.0;   // 1/m, so 2*alpha1 = 4 /m
+        var sphere = Solve(Singlet(), system, new MarginalRayAngleSolve { Surface = 2, Angle = -0.1 });
+        var aspheric = Singlet() with
+        {
+            Surfaces = Singlet().Surfaces.Select((s, j) => j == 2 ? s with { Shape = new EvenAsphere(new[] { alpha1 }) } : s).ToArray()
+        };
+        var result = Solve(aspheric, system, new MarginalRayAngleSolve { Surface = 2, Angle = -0.1 });
+        var p = Paraxial(result.Lens, system);
+        Close(-0.1, p.MarginalRay.Slopes[2], 1e-15, "marginal slope after the asphere");
+        Close(0.05, p.EffectiveFocalLength!.Value, 1e-15, "EFL");
+        Close(sphere.Lens.Surfaces[2].Curvature - 2 * alpha1, result.Lens.Surfaces[2].Curvature, 1e-12, "vertex curvature");
+
+        var power = Solve(aspheric, system, new ElementPowerSolve { Surface = 2, Power = 25 });
+        Close(25, -Paraxial(power.Lens, system).Matrix(1, 2).C, 1e-13, "element power through the asphere");
     }
 
     [Fact]

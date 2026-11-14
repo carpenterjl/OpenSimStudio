@@ -1226,6 +1226,11 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
   - element power: c₂ = (φ − φ₁)/((n₃ − n₂)(1 − φ₁t₂/n₂));
   - marginal or chief ray height: t = (h − y)/u;
   - pupil position: t = −ȳ/ū of the unit paraxial chief ray.
+  The curvature forms give the curvature the paraxial engine must see. On a surface with a
+  shape (an asphere's 2α₁ term, a thin-lens power; section 17, section 18) the engine sees
+  `ParaxialEquivalent`, so the vertex curvature entered is found by inverting that map, which
+  is linear in the curvature (TC-6). A shape whose paraxial action does not change with its
+  curvature (an ideal Paraxial lens, an ABCD block) fails the solve by name.
 - **Real rays.** The real marginal-ray-height solve (pupil zone not 0) traces the on-axis ray at
   Py = zone with apertures ignored. It sets t so that the ray's height on the next vertex plane
   is the target. The optical path difference solve finds the thickness by a bracket search and

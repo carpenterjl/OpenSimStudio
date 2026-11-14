@@ -380,33 +380,39 @@ public static class SolveEngine
                 case MarginalRayAngleSolve m:
                 {
                     var p = Paraxial(lens);
-                    return Number(CurvatureForSlope(lens, s, p, p.MarginalRay, m.Angle, "marginal"));
+                    return Number(Vertex(lens, s, CurvatureForSlope(lens, s, p, p.MarginalRay, m.Angle, "marginal"), Step(p, s)));
                 }
                 case ChiefRayAngleSolve c:
                 {
                     var p = Paraxial(lens);
-                    return Number(CurvatureForSlope(lens, s, p, Chief(p), c.Angle, "chief"));
+                    return Number(Vertex(lens, s, CurvatureForSlope(lens, s, p, Chief(p), c.Angle, "chief"), Step(p, s)));
                 }
                 case FNumberSolve f:
                 {
                     // "The marginal ray angle exiting the surface is −1/2F" ("Curvature Solves").
                     var p = Paraxial(lens);
-                    return Number(CurvatureForSlope(lens, s, p, p.MarginalRay, -1 / (2 * f.FNumber), "marginal"));
+                    return Number(Vertex(lens, s, CurvatureForSlope(lens, s, p, p.MarginalRay, -1 / (2 * f.FNumber), "marginal"), Step(p, s)));
                 }
                 case MarginalRayNormalSolve:
                 {
                     var p = Paraxial(lens);
-                    return Number(NormalCurvature(lens, s, p.MarginalRay, "marginal"));
+                    return Number(Vertex(lens, s, NormalCurvature(lens, s, p.MarginalRay, "marginal"), 0));
                 }
                 case ChiefRayNormalSolve:
                 {
                     var p = Paraxial(lens);
-                    return Number(NormalCurvature(lens, s, Chief(p), "chief"));
+                    return Number(Vertex(lens, s, NormalCurvature(lens, s, Chief(p), "chief"), 0));
                 }
                 case AplanaticSolve:
-                    return Number(AplanaticCurvature(lens, s, Paraxial(lens)));
+                {
+                    var p = Paraxial(lens);
+                    return Number(Vertex(lens, s, AplanaticCurvature(lens, s, p), Step(p, s)));
+                }
                 case ElementPowerSolve e:
-                    return Number(ElementPowerCurvature(lens, s, Paraxial(lens), e.Power));
+                {
+                    var p = Paraxial(lens);
+                    return Number(Vertex(lens, s, ElementPowerCurvature(lens, s, p, e.Power), Step(p, s)));
+                }
                 case ConcentricWithSurfaceSolve c:
                 {
                     // Centre of curvature at the vertex of surface Of: R = z(Of) − z(s) = −Σ t.
@@ -637,6 +643,35 @@ public static class SolveEngine
         /// c = (ν − n′·u′)/(y·(n′ − n)). The height at the surface does not depend on its own
         /// curvature.
         /// </summary>
+        /// <summary>The signed index step n′ − n at surface <paramref name="s"/>.</summary>
+        private static double Step(ParaxialSystem p, int s) => p.SignedIndices[s] - p.SignedIndices[s - 1];
+
+        /// <summary>
+        /// The vertex curvature to enter so the surface acts paraxially as a surface of curvature
+        /// <paramref name="paraxialCurvature"/> (TC-6). The curvature solves above find the
+        /// curvature the paraxial engine must see; a surface with a <see cref="SurfaceShape"/>
+        /// adds its own first-order action (an asphere's 2·α1, a thin-lens power) through
+        /// <see cref="SurfaceShape.ParaxialEquivalent"/>, which is linear in the vertex curvature.
+        /// The engine sees c·Δn + φ_thin (ParaxialSystem), so with <paramref name="indexStep"/> =
+        /// Δn the target is c_eff + φ_thin/Δn; with 0 (the normal solves, which are geometric)
+        /// it is c_eff alone. The map is evaluated at two curvatures and inverted; a shape whose
+        /// paraxial action does not change with the curvature, or acts by a matrix, fails here.
+        /// </summary>
+        private static double Vertex(SequentialLens lens, int s, double paraxialCurvature, double indexStep)
+        {
+            var surface = lens.Surfaces[s];
+            if (surface.Shape is not { } shape) return paraxialCurvature;
+            ParaxialShapeEquivalent At(double c) => shape.ParaxialEquivalent(surface with { Curvature = c });
+            double Seen(ParaxialShapeEquivalent e) => indexStep == 0 ? e.Curvature : e.Curvature + e.ThinLensPower / indexStep;
+            var e0 = At(0);
+            if (e0.SlopeMatrix is not null)
+                throw Fail($"the {shape.TypeName} surface acts on paraxial rays by its ABCD matrix, so its curvature cannot be solved.");
+            double f0 = Seen(e0), slope = Seen(At(1)) - f0;
+            if (slope == 0 || !double.IsFinite(slope))
+                throw Fail($"the {shape.TypeName} surface's paraxial action does not depend on its curvature, so this solve cannot set it.");
+            return (paraxialCurvature - f0) / slope;
+        }
+
         private static double CurvatureForSlope(SequentialLens lens, int s, ParaxialSystem p, ParaxialRay ray, double slope, string name)
         {
             RequireNotIgnored(lens, s);
