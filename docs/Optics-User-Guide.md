@@ -846,6 +846,53 @@ Not built: the Reference OPD as one system setting (each analysis has its own), 
 phase, exit-pupil-shaped maps, intermediate surfaces, subapertures, the interferogram's second
 beam from another configuration, the Foucault reference bitmap and the FOUC operand.
 
+## Multiple configurations
+
+**Multi-Configuration Editor…** in the Optics panel opens the configurations of the lens
+(zoom positions, conjugates, scan angles) in a window
+(`OpenSim.App/Views/MultiConfigEditorWindow.xaml`,
+`OpenSim.App/ViewModels/OpticsMultiConfigEditorViewModel.cs`). Beside it, a picker sets the
+**current configuration**: every analysis computes on that configuration, and changing it
+recomputes the open analysis windows. The table saves with the project and the lens file; a
+lens without one is a single configuration, and files from before this feature open as such.
+
+- **The table.** One row per operand: the operand code in the first column (MOFF, an unused
+  row, is the default), its numbers (surface, parameter, field or wavelength, as the column
+  header says) in the next three, then one column per configuration. Insert and Delete (or the
+  buttons) add and remove rows; cell and row edits undo and redo. Surfaces count from the
+  object (0), fields and wavelengths from 1; values are in the lens unit, degrees and
+  micrometers, as in the other editors. THIC takes Infinity.
+- **Operands.** 92 of OpticStudio's 116 codes are applied: surface data, glass, model glass,
+  parameters, semi-diameters, conic, TCE, coating, comment, ignore and draw flags, the stop,
+  apertures, tilts and decenters, coordinate returns, solve parameters, system aperture,
+  apodization, fields, wavelengths, ray aiming, polarization, temperature, pressure, title,
+  configuration weight (CWGT) and range pickups (PUCN). The others (non-sequential objects,
+  composite surfaces, CAD parts, tolerancing, settings this program does not save) can be
+  entered and are saved, but the problems line names them and the analyses refuse the table
+  until they are removed. The type cell's tooltip says what each operand does.
+- **A value an operand controls** is replaced in every configuration, whatever the Lens Data
+  Editor holds; a solve or pickup on that Lens Data Editor cell is not applied in the
+  configurations. Edit such values in this editor. The Lens Data Editor keeps showing the lens
+  as entered, not the current configuration.
+- **Cell flags.** A cell can be variable, pick up another cell (scale and offset; from an
+  earlier configuration, or an earlier row of the same configuration), or carry a thermal
+  pickup. Thermal pickups are saved but not evaluated yet: a configuration that uses one is
+  refused with a message.
+- **Configurations.** Insert configuration (a copy of the column at the cursor), Insert with
+  pickups (every cell picks up configuration 1), Delete configuration (the column at the
+  cursor; pickups from it become fixed and the status line says which), Previous and Next.
+  These change the columns, so they clear the undo history.
+- **Tools.** Add all data adds a row of the chosen operand for every surface, field or
+  wavelength that holds such data and is not yet in the table, at its current value in each
+  configuration. Make single configuration removes the table and leaves the lens, the system
+  data included, in the current configuration.
+- **Problems.** The line under the table lists, per configuration, every row that cannot be
+  applied (a missing surface, an unsupported operand, a pickup from a later cell), and the
+  failing cell carries the message.
+- **Not built.** Make Thermal and thermal pickups (thermal analysis is a later item), Make
+  Conjugate, ZPL-macro solves, and showing or editing the current configuration's values in
+  the Lens Data Editor.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -864,6 +911,10 @@ Not built yet, and not to be relied on until they appear in this guide:
   OP-51 is built, but nothing but its own five analyses uses it yet);
 - optimization and tolerancing of a lens (the merit function and its editor are built; the
   full operand catalogue, the default merit function wizard and the optimizer are not);
+
+- optimization and tolerancing of a lens;
+- thermal configurations (Make Thermal, thermal pickups) and Make Conjugate in the
+  Multi-Configuration Editor;
 - lens-file import;
 - reference results from OpticStudio itself (the cross-checks use open programs only).
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

@@ -31,6 +31,17 @@
                 <TextBlock Text="{Binding Optics.MeritEditor.OperandCount, StringFormat='{}{0} operands'}"
                            VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
             </DockPanel>
+            <!-- OP-30: the configurations, edited in the Multi-Configuration Editor window; the
+                 current one is what the analyses use. -->
+            <DockPanel Margin="0,8,0,0">
+                <Button DockPanel.Dock="Left" Content="Multi-Configuration Editor…" Click="MultiConfigEditor_Click"
+                        AutomationProperties.AutomationId="OpticsMultiConfigEditorButton"/>
+                <ComboBox DockPanel.Dock="Left" Width="56" Margin="8,0,0,0" ItemsSource="{Binding Optics.MultiConfig.Configurations}"
+                          SelectedItem="{Binding Optics.MultiConfig.CurrentConfiguration}"
+                          ToolTip="The current configuration: the one every analysis uses."
+                          AutomationProperties.AutomationId="OpticsCurrentConfigurationCombo"/>
+                <TextBlock Text="{Binding Optics.MultiConfig.Summary}" VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
+            </DockPanel>
             <!-- OP-18: the system data; OP-10: the lens on its own. -->
             <panels:OpticsSystemDataPanel/>
             <!-- OP-11: the glass catalogs. -->

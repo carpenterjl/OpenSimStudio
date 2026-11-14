@@ -33,6 +33,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.NotNull(optics.Surfaces[0].CoordinateReturn!.Mode);
         Assert.Equal(2, optics.MeritFunction!.Operands!.Count);              // OP-54
         Assert.Equal(2, optics.MeritFunction.Operands[1].Data!.Count);
+        Assert.Equal(2, optics.MultiConfiguration!.Operands![0].Values!.Count);   // OP-30: the table
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 

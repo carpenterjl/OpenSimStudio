@@ -7,6 +7,7 @@ namespace OpenSim.App.Views.Panels;
 public partial class OpticsPanel : UserControl
 {
     private LensDataEditorWindow? _lensEditor;
+    private MultiConfigEditorWindow? _multiConfigEditor;
 
     public OpticsPanel() => InitializeComponent();
 
@@ -39,5 +40,19 @@ public partial class OpticsPanel : UserControl
         _meritEditor = new MeritFunctionEditorWindow(optics.MeritEditor) { Owner = Window.GetWindow(this) };
         _meritEditor.Closed += (_, _) => _meritEditor = null;
         _meritEditor.Show();
+    }
+
+    /// <summary>Opens the Multi-Configuration Editor (OP-30), or brings the open one forward.</summary>
+    private void MultiConfigEditor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_multiConfigEditor is { IsLoaded: true })
+        {
+            _multiConfigEditor.Activate();
+            return;
+        }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _multiConfigEditor = new MultiConfigEditorWindow(optics.MultiConfig) { Owner = Window.GetWindow(this) };
+        _multiConfigEditor.Closed += (_, _) => _multiConfigEditor = null;
+        _multiConfigEditor.Show();
     }
 }

@@ -20,6 +20,9 @@ public abstract class OpticsAnalysis<TSettings> : IOpticsAnalysis where TSetting
                 $"Analysis '{Id}' takes settings of type {typeof(TSettings).Name}, not {settings?.GetType().Name ?? "null"}.",
                 nameof(settings));
         cancellation.ThrowIfCancellationRequested();
+        // OP-30: every analysis computes on the current configuration of a multi-configuration
+        // system (a context without a table is passed through unchanged).
+        context = MultiConfig.MultiConfiguration.ForCurrentConfiguration(context);
         return Compute(context, typed, cancellation);
     }
 

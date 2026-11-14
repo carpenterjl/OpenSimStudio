@@ -10,7 +10,7 @@ namespace OpenSim.Core.Model;
 /// that defines its content, so any older file loads (null = what that item's default is):
 /// <see cref="SystemData"/> (OP-18, OP-10), <see cref="Analyses"/> (OP-9) and
 /// <see cref="Materials"/> (OP-11), <see cref="Coatings"/> (OP-15) and
-/// <see cref="Surfaces"/> (OP-31) now; the non-sequential objects (OP-70 on), configurations (OP-30), the merit function
+/// <see cref="Surfaces"/> (OP-31) and <see cref="MultiConfiguration"/> (OP-30) now; the non-sequential objects (OP-70 on), the merit function
 /// (OP-54) and tolerance data (OP-63) later. No placeholder is declared for those: their shape
 /// is their item's to decide, and an empty schema written now would be a promise a later file
 /// could not keep.
@@ -51,4 +51,9 @@ public sealed record OpticsSettings
     /// <summary>The merit function's operand rows (OP-54's Merit Function Editor). Null — every
     /// file written before OP-54 — is an empty merit function.</summary>
     public OpticsMeritFunctionSettings? MeritFunction { get; init; }
+
+    // OP-30
+    /// <summary>The multi-configuration table (OP-30). Null — every file written before OP-30,
+    /// and every single-configuration lens — is one configuration: the system as entered.</summary>
+    public OpticsMultiConfigSettings? MultiConfiguration { get; init; }
 }

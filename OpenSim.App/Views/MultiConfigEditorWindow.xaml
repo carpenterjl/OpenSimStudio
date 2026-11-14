@@ -1,0 +1,61 @@
+<Window x:Class="OpenSim.App.Views.MultiConfigEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        xmlns:sheet="clr-namespace:OpenSim.App.Controls.Spreadsheet"
+        Title="Multi-Configuration Editor" Width="900" Height="480" MinWidth="520" MinHeight="300"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-30: the Multi-Configuration Editor. DataContext is the OpticsMultiConfigEditorViewModel;
+         the sheet is OP-10's SpreadsheetGrid (its own keys and context menu also work: Insert and
+         Delete add and remove operand rows, the flag menu sets variable, pickup and thermal pickup). -->
+    <DockPanel Margin="8">
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+            <Button Content="Insert operand" Command="{Binding InsertOperandCommand}" Margin="0,0,4,4"/>
+            <Button Content="Delete operand" Command="{Binding DeleteOperandCommand}" Margin="0,0,4,4"/>
+            <Button Content="Undo" Command="{Binding UndoCommand}" Margin="8,0,4,4"/>
+            <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,4,4"/>
+            <Button Content="Insert configuration" Command="{Binding InsertConfigurationCommand}" Margin="8,0,4,4"
+                    ToolTip="Insert a configuration at the cursor's column, a copy of the one there."/>
+            <Button Content="Insert with pickups" Command="{Binding InsertConfigurationWithPickupsCommand}" Margin="0,0,4,4"
+                    ToolTip="Insert a configuration whose cells pick up configuration 1."/>
+            <Button Content="Delete configuration" Command="{Binding DeleteConfigurationCommand}" Margin="0,0,4,4"
+                    ToolTip="Delete the configuration at the cursor's column."/>
+            <Button Content="Make single configuration" Command="{Binding MakeSingleConfigurationCommand}" Margin="0,0,4,4"
+                    ToolTip="Remove the table, leaving the lens in the current configuration."/>
+        </WrapPanel>
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+            <controls:FormGrid DockPanel.Dock="Left" Width="280">
+                <Label Content="Current configuration"/>
+                <ComboBox ItemsSource="{Binding Configurations}" SelectedItem="{Binding CurrentConfiguration}"
+                          AutomationProperties.AutomationId="MultiConfigCurrentCombo"
+                          ToolTip="The configuration every analysis uses."/>
+                <Label Content="Add all data for"/>
+                <ComboBox ItemsSource="{Binding AddAllDataCodes}" SelectedItem="{Binding AddAllDataCode}"/>
+            </controls:FormGrid>
+            <WrapPanel Margin="8,0,0,0" VerticalAlignment="Top">
+                <Button Content="Previous" Command="{Binding PreviousConfigurationCommand}" Margin="0,0,4,4"/>
+                <Button Content="Next" Command="{Binding NextConfigurationCommand}" Margin="0,0,4,4"/>
+                <Button Content="Add all data" Command="{Binding AddAllDataCommand}" Margin="8,0,4,4"
+                        ToolTip="Add a row of the chosen operand for every surface, field or wavelength that holds such data."/>
+            </WrapPanel>
+        </DockPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Margin="0,2,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource FaintText}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasProblems}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </StackPanel>
+
+        <sheet:SpreadsheetGrid x:Name="Grid" Document="{Binding Document}"/>
+    </DockPanel>
+</Window>

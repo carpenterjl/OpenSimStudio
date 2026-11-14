@@ -725,6 +725,19 @@ single place in the code, so a correction is one line and its test.
     fan (one and all wavelengths, chief and centroid), wavefront map and interferogram compared
     with OpticStudio's; a telecentric lens's OPD fan. This also settles item 2.
 
+20. **Multi-configuration readings** (OP-30). Section 24's operands follow the help's table, but
+    no configuration is compared with OpticStudio's. Check, with a two-configuration zoom saved
+    in both programs (Multi-Configuration Editor and Prescription Data per configuration):
+    - *An operand over a solved cell* drops the solve in that configuration; OpticStudio's
+      precedence was not read.
+    - *Insert Configuration* copies the column at the cursor; what OpticStudio's new column
+      holds was not read.
+    - *PUCN* applies to fixed and variable cells only, and a negative PUCN is refused.
+    - *APMX on a spider* is the number of arms, read from the order of the help's sentence.
+    - *SDIA and MCSD on an automatic semi-diameter* read no value (Add All Data skips them);
+      writing one fixes the cell.
+    - *Next and Previous* stop at the ends; whether OpticStudio wraps was not read.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2241,3 +2254,89 @@ maps, rotation and surface plots, analyses at intermediate surfaces, subaperture
 Gaussian-quadrature RMS, the interferogram's second beam from another configuration, "Ref Beam
 To Vertex" and "Consider Path Length Difference", the Foucault reference bitmap, the difference
 display, its registration and the FOUC operand.
+
+## 24. Multi-configuration
+
+A multi-configuration system (OP-30) is the optics record plus a table,
+`OpticsSettings.MultiConfiguration` (`OpenSim.Core/Model/OpticsMultiConfigSettings.cs`): operand
+rows, each with an operand code, up to three integer arguments and one value per
+configuration, the number of configurations and the current one. Null is one configuration, the
+system as entered; the project format version is unchanged. The operand list, the arguments and
+the integer codes are OpticStudio's (OpticStudio 2025 R2 help, "Multi-Configuration Operands" and
+the pages under "Multiple Configuration Editor", saved in `plans/sources/optics/op-30-help/`).
+
+- **Substitution.** Configuration k is the entered record with every row's value in column k
+  written into the data the operand controls (`MultiConfiguration.SettingsFor`,
+  `OpenSim.Optics/MultiConfig/MultiConfiguration.cs`); the result has no table, and
+  `ProjectLens` gives its solved lens (`SolveFor`, `LensFor`). Rows are applied in table order,
+  so a later row wins where two control the same value (the help says so for IGNR and IGNM).
+  Every problem (an unknown or unsupported code, a missing surface, field or wavelength, a
+  value the target refuses) is listed in one `ArgumentException`, a line each naming the row,
+  its code and arguments, and the configuration.
+- **Units and numbering.** Values are in the saved record's units: lens units, 1/lens unit for
+  CRVT, degrees, micrometers, °C, atmospheres. Surfaces count from the object (0), fields and
+  wavelengths from 1. THIC takes +infinity (saved as `IsInfinite`, since JSON has no infinity).
+  Operand strings are limited to 32 characters (help: "Comment About Operands that Define
+  Character Strings"); the table to 160 configurations (help: "Defining the Number of
+  Configurations").
+- **Solves under an operand.** Writing a surface cell (CRVT, THIC, GLSS, CONN, SDIA, MCSD, CHZN,
+  TCEX, PRAM, the model glass, APER under float by stop size) removes a solve or pickup the Lens
+  Data Editor has on that cell, keeping a variable flag, so the operand's value is the one
+  traced in that configuration. This is this program's rule: the help does not say which wins.
+  The solve-parameter operands (CSP, TSP, PSP) instead change the cell's solve: for a pickup the
+  parameters are surface, scale factor, offset (help: "Summary of Solves"; a curvature pickup
+  has no offset), for a solve its own parameters in that table's order.
+- **Cells.** Fixed, `Variable` (listed by `MultiConfiguration.Variables` for the optimizer,
+  written back by `WithValue`), `Pickup` (target × scale + offset from a cell whose
+  configuration and operand numbers are each no greater than its own and which is not itself,
+  help: "Solve Types"; a text cell copies the text) or `ThermalPickup` (from a reference
+  configuration; stored but not evaluated: thermal analysis is OP-91, and a configuration that
+  reaches one fails by name). PUCN with value c in configuration k makes the fixed and variable
+  cells of the rows below it, up to the next PUCN row, take configuration c's value; c must be
+  less than k (help); 0 ends the range; a negative PUCN ("a negative pickup") is not defined
+  further by the help and is refused.
+- **Weights.** The weight of configuration k is the value of the last CWGT row there, 1 without
+  one (`MultiConfiguration.WeightOf`); CWGT, PUCN, HOLD and MOFF change nothing in the system.
+- **Supported operands.** 92 of the help's 116 codes: surface data (CRVT, THIC, GLSS, CONN,
+  SDIA, MCSD, CHZN, TCEX, COTN, MCOM, PRAM and the obsolete PAR1–PAR8 as PRAM 1–8, MIND, MABB,
+  MDPG), flags and stop (IGNR, IGNM, SDRW, SRTS, STPS), apertures (APTP 0–10, APMN, APMX, APDX,
+  APDY), tilt and decenter before and after (CBDX … CBOR, CADX … CAOR), coordinate returns
+  (CROR, CRSR), solve parameters (CSP1–2, TSP1–3, PSP1–3), system data (AFOC, TELE, APDF, APDT,
+  SATP, APER, FLTP, RAAM, MTFU, TEMP, PRES, PSHX/Y/Z, PSCX/Y, LTTL, PRWV), polarization (GPJX,
+  GPJY, GPPX, GPPY, GPIU), fields (XFIE, YFIE, FLWT, FVDX, FVDY, FVCX, FVCY, FTAN, and the
+  obsolete FVAN as FTAN), wavelengths (WAVE, WLWT), and CWGT, PUCN, HOLD, MOFF. The type
+  operands' integers are the help's and equal the enumerations' values (`ApertureType`,
+  `FieldType`, `ApodizationType`, `RayAimingMode`, `MtfUnit`, `TiltDecenterOrder`,
+  `CoordinateReturnMode`). APMN and APMX are the first and second parameter of the aperture
+  (circular: minimum and maximum radius; rectangular and elliptical: x and y half-widths;
+  spider: arm width and number of arms, the order of the help's "Aperture" page); they refuse a
+  user-defined or floating aperture. APER under float by stop size is the stop's semi-diameter
+  (help). SDIA and MCSD read no value from an automatic semi-diameter.
+- **Not supported** (registered, so a table naming them fails with the code and the reason):
+  AICN and CPCN (Inventor and Creo parts), CSDX–CSTZ (composite surfaces, OP-32), FCMM (fields
+  have no comment), GCRS, MCHI and OPDR (not in the saved system data), GQPO (the default merit
+  function, OP-54), HLGV (no optically fabricated hologram), IGTO (tolerancing, OP-63), NCOM,
+  NCOT, NGLS, NPAR, NPOS, NPRO (non-sequential, OP-70 on), PXAR (no physical optics), UDAF
+  (apertures are vertex lists, not files), GPEX and GPEY (obsolete, no meaning given).
+- **Tools** (`OpenSim.Optics/MultiConfig/MultiConfigTools.cs`). Insert Configuration at a
+  position copies the stored values of the configuration that was there (the last when
+  appending) as fixed values: the help does not say what a new column holds. Insert with
+  Pickups makes every new cell pick up the same row of configuration 1. Insert and Delete move
+  pickup references, thermal references, PUCN values and the current configuration with their
+  configuration; Delete turns a pickup from the deleted configuration into a fixed cell and a
+  PUCN naming it into 0, and says so. Make Single Configuration is `SettingsFor` the current
+  configuration. Add All Data adds, for one chosen operand, a row for each target the system
+  holds such data for (every thickness, every field's y value, each surface with a tilt …) that
+  the table does not already control, each cell fixed at the value the target has in that
+  configuration, so no configuration changes. Next and Previous stop at the ends.
+- **Current configuration.** Every analysis computes on the current configuration:
+  `OpticsAnalysis<T>.Compute` passes its context through
+  `MultiConfiguration.ForCurrentConfiguration` (help: "The program will use the current
+  configuration for all calculations and graphics", "Changing Configurations"). The Lens Data
+  Editor keeps the entered lens; it does not show the current configuration's values.
+- **Not built.** Make Thermal and the evaluation of thermal pickups (OP-91: the TCE the editor
+  saves is not enough without the thermal expansion model and the mount data); Make Conjugate
+  (the help names its assumptions but not how the subset's object thickness and "other data as
+  appropriate" are formed); ZPL-macro and substitute solves; Add Hologram Variables; showing
+  the current configuration's values in the Lens Data Editor and writing Lens Data Editor
+  edits back into the table, as OpticStudio does.

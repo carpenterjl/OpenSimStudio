@@ -23,6 +23,7 @@ public partial class OpticsViewModel : ObservableObject
 {
     private readonly Services.ProjectSession _session;
     private readonly GlassCatalogLibrary _glassLibrary;
+    private readonly Services.ILogService _log;
 
     public OpticsViewModel(Services.ProjectSession session, GlassCatalogLibrary glassCatalogs, Services.ILogService log)
     {
@@ -37,6 +38,9 @@ public partial class OpticsViewModel : ObservableObject
         // OP-54: the merit function editor, evaluated on the project's lens.
         MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
             () => OpenSim.Optics.Merit.SingleMeritConfiguration.FromProject(ToSettings(), BuildLensEditContext().Catalogs));
+        // OP-30: the multi-configuration editor, applied to the entered system.
+        MultiConfig = new OpticsMultiConfigEditorViewModel(PublishFromMultiConfig, () => BuildSettings(withTable: false), ReplaceSystem);
+        _log = log;
         _session = session;
         PublishSystem();
     }
@@ -58,6 +62,7 @@ public partial class OpticsViewModel : ObservableObject
         if (_session is null) return;
         // The lens editor's check and automatic semi-diameters read the system data and catalogs.
         LensEditor?.Refresh();
+        MultiConfig?.Refresh();
         _session.PublishOptics(ToSettings());
     }
 
@@ -65,8 +70,25 @@ public partial class OpticsViewModel : ObservableObject
     private void PublishFromLensEditor()
     {
         if (_session is null) return;
+        MultiConfig?.Refresh();   // OP-30: the configurations apply to the entered lens
         _session.PublishOptics(ToSettings());
     }
+
+    /// <summary>The multi-configuration editor's own edits (OP-30): it has already checked them.</summary>
+    private void PublishFromMultiConfig()
+    {
+        if (_session is null) return;
+        _session.PublishOptics(ToSettings());
+    }
+
+    /// <summary>Make Single Configuration (OP-30): the whole system replaced by one configuration.</summary>
+    private void ReplaceSystem(OpticsSettings settings)
+    {
+        foreach (var note in LoadSettings(settings)) _log.Append($"Make single configuration: {note}");
+    }
+
+    /// <summary>The multi-configuration table (OP-30), saved with the lens.</summary>
+    public OpticsMultiConfigEditorViewModel MultiConfig { get; }
 
     /// <summary>The sequential surfaces (OP-31), saved with the lens.</summary>
     public OpticsLensEditorViewModel LensEditor { get; }
@@ -110,7 +132,11 @@ public partial class OpticsViewModel : ObservableObject
     };
 
     /// <summary>The workspace's inputs as the project file (and a lens file) stores them.</summary>
-    public OpticsSettings ToSettings() => new()
+    public OpticsSettings ToSettings() => BuildSettings(withTable: true);
+
+    /// <summary>The inputs, with or without the multi-configuration table (OP-30; without it is
+    /// the system as entered, which the configurations are applied to).</summary>
+    private OpticsSettings BuildSettings(bool withTable) => new()
     {
         Mode = OpticsModes.SavedName(Mode),
         SystemData = SystemDataToSettings(),
@@ -118,6 +144,7 @@ public partial class OpticsViewModel : ObservableObject
         Coatings = Coatings?.ToSettings(),
         Surfaces = LensEditor?.ToSettings(),
         MeritFunction = MeritEditor?.ToSettings(),   // OP-54
+        MultiConfiguration = withTable ? MultiConfig?.ToSettings() : null
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -140,6 +167,8 @@ public partial class OpticsViewModel : ObservableObject
         Coatings.LoadSettings(saved.Coatings, notes);
         LensEditor.LoadSettings(saved.Surfaces, notes);
         MeritEditor.LoadSettings(saved.MeritFunction, notes);   // OP-54
+
+        MultiConfig.LoadSettings(saved.MultiConfiguration, notes);   // OP-30: null is one configuration
         PublishSystem();
         return notes;
     }
@@ -153,6 +182,8 @@ public partial class OpticsViewModel : ObservableObject
         Coatings.Reset();
         LensEditor.Reset();
         MeritEditor.Reset();   // OP-54
+
+        MultiConfig.Reset();
         PublishSystem();
     }
 }
