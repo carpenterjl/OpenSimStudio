@@ -52,9 +52,10 @@ public sealed class SheetSchema
     public SheetRowType DefaultRowType => RowTypes[0];
 
     /// <summary>The row type named <paramref name="name"/> (ignoring case and surrounding
-    /// spaces), or null.</summary>
+    /// spaces), or else the one with that alias, or null.</summary>
     public SheetRowType? FindRowType(string name) =>
-        RowTypes.FirstOrDefault(t => string.Equals(t.Name, name.Trim(), StringComparison.OrdinalIgnoreCase));
+        RowTypes.FirstOrDefault(t => string.Equals(t.Name, name.Trim(), StringComparison.OrdinalIgnoreCase))
+        ?? RowTypes.FirstOrDefault(t => t.Aliases.Any(a => string.Equals(a, name.Trim(), StringComparison.OrdinalIgnoreCase)));
 
     /// <summary>The header of grid column <paramref name="column"/> for a row of
     /// <paramref name="type"/>: the type's own header where it uses the slot, else the fallback.</summary>

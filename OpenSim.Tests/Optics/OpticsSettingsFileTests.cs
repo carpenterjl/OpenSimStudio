@@ -31,6 +31,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.NotNull(optics.Surfaces[0].TiltBefore);                       // TC-6: tilts and returns
         Assert.NotNull(optics.Surfaces[0].TiltAfter!.Mode);
         Assert.NotNull(optics.Surfaces[0].CoordinateReturn!.Mode);
+        Assert.Equal(2, optics.MeritFunction!.Operands!.Count);              // OP-54
+        Assert.Equal(2, optics.MeritFunction.Operands[1].Data!.Count);
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 

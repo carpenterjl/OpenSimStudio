@@ -34,6 +34,9 @@ public partial class OpticsViewModel : ObservableObject
         _glassLibrary = glassCatalogs;
         // OP-31: the lens data editor, after the catalogs and coatings its check reads.
         LensEditor = new OpticsLensEditorViewModel(PublishFromLensEditor, BuildLensEditContext);
+        // OP-54: the merit function editor, evaluated on the project's lens.
+        MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
+            () => OpenSim.Optics.Merit.SingleMeritConfiguration.FromProject(ToSettings(), BuildLensEditContext().Catalogs));
         _session = session;
         PublishSystem();
     }
@@ -67,6 +70,10 @@ public partial class OpticsViewModel : ObservableObject
 
     /// <summary>The sequential surfaces (OP-31), saved with the lens.</summary>
     public OpticsLensEditorViewModel LensEditor { get; }
+
+    // OP-54
+    /// <summary>The merit function (OP-54), saved with the lens.</summary>
+    public OpticsMeritEditorViewModel MeritEditor { get; }
 
     /// <summary>What the lens editor's tools and check read: the system data as saved, the
     /// active glass catalogs and the coating names.</summary>
@@ -109,7 +116,8 @@ public partial class OpticsViewModel : ObservableObject
         SystemData = SystemDataToSettings(),
         Materials = GlassCatalogs?.ToSettings(),
         Coatings = Coatings?.ToSettings(),
-        Surfaces = LensEditor?.ToSettings()
+        Surfaces = LensEditor?.ToSettings(),
+        MeritFunction = MeritEditor?.ToSettings(),   // OP-54
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -131,6 +139,7 @@ public partial class OpticsViewModel : ObservableObject
         GlassCatalogs.LoadSettings(saved.Materials, notes);
         Coatings.LoadSettings(saved.Coatings, notes);
         LensEditor.LoadSettings(saved.Surfaces, notes);
+        MeritEditor.LoadSettings(saved.MeritFunction, notes);   // OP-54
         PublishSystem();
         return notes;
     }
@@ -143,6 +152,7 @@ public partial class OpticsViewModel : ObservableObject
         GlassCatalogs.Reset();
         Coatings.Reset();
         LensEditor.Reset();
+        MeritEditor.Reset();   // OP-54
         PublishSystem();
     }
 }

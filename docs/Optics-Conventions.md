@@ -676,6 +676,30 @@ single place in the code, so a correction is one line and its test.
     the glass's catalog value. Check: Prescription Data, Surface Data and Cardinal Points of a
     singlet, a cemented doublet and an immersed-image lens in both programs.
 
+27. **Merit function readings** (OP-54). Section 31's rules come from OpticStudio's help, but
+    none is compared with its output, and some are this program's reading where the help is
+    silent:
+    - *Parameter columns.* The help names each operand's parameters (Surf, Wave, Op#, Flag,
+      Factor) but places only some of them: Data1 to Data4 are Hx, Hy, Px, Py; CTGT, CTVA,
+      CVVA and COVA take their surface in Int1; TTHI, SUMM, DIVI, PROD and DIFF take theirs in
+      Int1 and Int2; OPGT its row in Int1. Wave in Int2 (EFFL, REAX, REAY, REAZ, REAR), the
+      trigonometric Flag in Int2, and DIVB's and PROB's Factor in Data1 are read by that pattern,
+      not from the help.
+    - *Wavelength numbers* start at 1; Wave 0 is refused (whether OpticStudio reads it as the
+      primary was not found).
+    - *A failed ray* fails its row only, scored with the penalty 10⁶ in place of V − T; the help
+      does not say how OpticStudio scores it. A ray that fails after the surface a row reads
+      does not fail the row.
+    - *Rotational symmetry* for SKIS and SKIN is tested on the lens alone (no tilt, decenter or
+      coordinate break; Standard, radial asphere or Paraxial surfaces only); the help gives no
+      test.
+    - *Math rows* read earlier rows only (the help says "prior" for DIVB alone); OSUM, QSUM,
+      MAXX and MINN read their range inclusively; GOTO, SKIS and SKIN jump forward only.
+    - *MXCT* is read as MNCT with the sign turned (the help's worked example is MNCT's).
+    - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
+    Check: a merit function with one row of each operand, saved by OpticStudio with its values,
+    evaluated here on the same lens.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2048,3 +2072,68 @@ header) and the saved surfaces; `SavedSurfaces.ToLens` with the same catalogs gi
 back. It reads only this program's report, not OpticStudio files. Not carried: variable, solve
 and pickup flags (the read-back lens holds the solved values), the drawing options (hide rays,
 do not draw, row colour), and model glasses, which `SavedSurfaces.FromLens` writes by name.
+
+## 31. Merit function
+
+`OpenSim.Optics/Merit` (OP-54) evaluates a merit function: a list of operand rows, each with
+OpticStudio's four-letter code, two integer and six real parameters (Int1, Int2, Data1 to
+Data6), a target and a weight. The definitions were read from OpticStudio's 2025 R2 help, saved
+under `plans/sources/optics/op-54-help/` (Modifying the merit function, Notes on Operand
+Weights, Understanding Boundary Operands, Merit Function Control Operands, General Math
+Operands, Changing System Data, the category pages and the alphabetical operand list; the two
+equation images are saved rendered as PNG beside their SVGs).
+
+- **The merit value.** MF² = Σ Wᵢ(Vᵢ − Tᵢ)² / Σ Wᵢ, with W the absolute value of the weight,
+  V the value and T the target (help: Modifying the merit function, "Merit function
+  definition"). Rows with weight 0, control rows, CONF and skipped rows are not in either sum.
+  With no weighted row the merit value is 0. Each sum adds its terms smallest first, so
+  reordering rows that do not read each other gives the same bits. Negative weights count by
+  their absolute value; their Lagrange-multiplier meaning belongs to the optimizer (OP-57) and is
+  not built.
+- **Percent contribution.** 100·Wᵢ(Vᵢ − Tᵢ)² / Σⱼ Wⱼ(Vⱼ − Tⱼ)² (help: Notes on Operand Weights).
+- **Residuals.** One per row, rᵢ = √(Wᵢ/ΣW)·(Vᵢ − Tᵢ), zero for rows that do not count, so
+  Σ rᵢ² = MF². `MeritResiduals` hands them to the optimizer kernel as its `ResidualFunction`
+  (OP-5); how the variables change the lens is the caller's.
+- **Bounds.** A one-sided bound (CTGT, CTLT, CVGT, CVLT, OPGT, OPLT, ABGT, ABLT) takes the
+  target as its value while it holds and the actual value when violated (help: Understanding
+  Boundary Operands). MNCT's value is the target less the sum of the violations over its
+  surface range (the help's example: thicknesses 2.5 and 2.2 under 3.0 give 1.7); MXCT is the
+  same with the sign turned.
+- **Control rows** (help: Merit Function Control Operands). BLNK and DMFS do nothing (DMFS only
+  marks where OP-56's default merit function would go); OOFF is evaluated as BLNK and is what a
+  saved code this build does not know becomes, named in the load notes; ENDX ends the
+  evaluation; GOTO continues at row Op#; SKIS continues at row Op# when the lens is rotationally
+  symmetric, SKIN when it is not; USYM anywhere makes every configuration count as symmetric.
+  Jumps go forward only. The order of evaluation depends on these rows alone, never on a value.
+- **Configurations.** CONF switches the configuration for the rows after it (help: Changing
+  System Data); evaluation starts in configuration 1 unless told otherwise. Configurations come
+  from `IMeritConfigurations` (a lens and system data per number); `SingleMeritConfiguration`
+  is the project's one configuration until multi-configuration (OP-30) implements the interface.
+- **Math rows** read the values of earlier rows by number. A math row reading a failed or
+  skipped row fails, naming it.
+- **Failures.** A row whose value cannot be computed (a ray that fails at or before the surface
+  it reads, a surface or wavelength that does not exist, a negative square root, a division by
+  zero, an afocal system for EFFL) fails alone: its value is NaN, its message names the row,
+  and it stands in the sums with V − T = `FailedRowPenalty` (10⁶ by default, this program's
+  choice). Problems of the list itself (an unknown code, a backward jump, a math row reading a
+  later or a control row, a CONF to no configuration) are refused before anything is computed,
+  every one named.
+- **Shared traces and determinism.** The real rays the evaluated rows read are collected once
+  per configuration, wavelength, field and pupil point and traced in parallel, each into its own
+  slot; the rows are then evaluated in order. The result is bitwise the same at any degree of
+  parallelism.
+- **Units.** Lengths in lens units, curvatures in 1/lens unit; real-ray coordinates are local to
+  the surface (help: Constraints on Real Ray Data, "Local real ray y-coordinate"). Total track
+  adds the thicknesses from surface 1 to the image and takes the greatest less the least vertex
+  z (help: Total Track).
+
+**Operands built** (`MeritOperandRegistry.CreateDefault`; OpenSim's names, codes alongside):
+the control rows BLNK, DMFS, ENDX, GOTO, OOFF, SKIN, SKIS, USYM and CONF; EFFL and TOTR; CTVA,
+CTGT, CTLT, CVVA, CVGT, CVLT, COVA, TTHI, MNCT and MXCT; REAX, REAY, REAZ and REAR; and the
+general math operands ABSO, ACOS, ASIN, ATAN, CONS, COSI, DIFF, DIVB, DIVI, LOGE, LOGT, MAXX,
+MINN, OPGT, OPLT, OPVA, OSUM, PROB, PROD, QSUM, RECI, SQRT, SUMM, SINE, TANG, ABGT and ABLT.
+
+**Not built.** The rest of the operand catalogue (OP-55); EQUA (the help does not say how its
+value meets its target); the default merit function and its wizard (OP-56); the optimizer and
+Lagrange multipliers (OP-57); the merit function listing; reading or writing OpticStudio's .MF
+files (the help names the file but does not document its format).

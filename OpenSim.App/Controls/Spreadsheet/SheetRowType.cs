@@ -24,6 +24,10 @@ public sealed class SheetRowType
     /// <summary>The definition of each slot; null where the type has no column.</summary>
     public IReadOnlyList<SheetColumn?> Columns { get; }
 
+    /// <summary>Other names typed or pasted text matches this type by (ignoring case): the merit
+    /// function editor's four-letter operand codes (OP-54).</summary>
+    public IReadOnlyList<string> Aliases { get; init; } = Array.Empty<string>();
+
     /// <summary>A sentence on what the type is, shown as the type cell's tooltip.</summary>
     public string? Description { get; init; }
 

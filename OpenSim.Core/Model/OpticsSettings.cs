@@ -46,4 +46,9 @@ public sealed record OpticsSettings
     /// <summary>The sequential surfaces, object first and image last (OP-31's lens data editor).
     /// Null — every file written before OP-31 — is a system with no surfaces.</summary>
     public List<OpticsSurfaceSettings>? Surfaces { get; init; }
+
+    // OP-54
+    /// <summary>The merit function's operand rows (OP-54's Merit Function Editor). Null — every
+    /// file written before OP-54 — is an empty merit function.</summary>
+    public OpticsMeritFunctionSettings? MeritFunction { get; init; }
 }

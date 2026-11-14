@@ -785,6 +785,30 @@ settings, the XZ orientation of Cardinal points, the best fit glass of a model g
 system summary graphic, and the report graphic's page arrangement and saved report files.
 Element volumes take circular edges at the clear semi-diameters; surface apertures do not enter.
 
+## Merit function
+
+**Merit Function Editor…** in the Optics panel opens the merit function: a list of operands,
+one per row, saved with the project and the lens file. Type an operand's four-letter code
+(EFFL), its name (Effective focal length) or pick it in the Operand column; the parameter
+columns then show what the operand reads (Surf, Wave, Hx, Hy, Px, Py, Op#...). "Find an
+operand" searches the codes and names. Insert, Delete, Undo and Redo work as in the Lens Data
+Editor, as do the grid's own keys.
+
+**Update** evaluates the merit function on the project's lens, solves applied, and fills the
+Value and % Contrib columns; the merit value is shown at the top. The merit value is the
+weighted root-mean-square of value minus target, √(Σ W(V − T)² / Σ W), with W the absolute
+value of the weight. Any edit clears the values until the next Update. A row that cannot be
+computed (a ray that misses a surface, a surface that does not exist) shows "failed", with the
+reason in its tooltip and below the grid; it is scored with a large penalty and the other rows
+are unaffected. A list that cannot be evaluated at all (an unknown code, a GOTO to an earlier
+row, a math row reading a later one) is refused with every problem named.
+
+Built: the control operands (BLNK, DMFS, ENDX, GOTO, OOFF, SKIN, SKIS, USYM), CONF, effective
+focal length, total track, a few lens-data constraints and bounds, real ray coordinates and the
+general math operands. Rules and readings are in docs/Optics-Conventions.md §31. Not built: the
+rest of the operand catalogue, the default merit function wizard, optimization, the merit
+function listing, and .MF files.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -797,7 +821,8 @@ Not built yet, and not to be relied on until they appear in this guide:
 - the solve column of the sequential surface editor (the solve library is built; see Solves);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built, but nothing but its own five analyses uses it yet);
-- optimization and tolerancing of a lens;
+- optimization and tolerancing of a lens (the merit function and its editor are built; the
+  full operand catalogue, the default merit function wizard and the optimizer are not);
 - lens-file import;
 - reference results from OpticStudio itself (the cross-checks use open programs only).
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

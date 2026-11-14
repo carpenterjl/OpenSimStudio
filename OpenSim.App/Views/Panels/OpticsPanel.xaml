@@ -24,6 +24,13 @@
                            VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
             </DockPanel>
             <TextBlock Text="{Binding Optics.LensEditor.ProblemsText}" TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,4,0,0"/>
+            <!-- OP-54: the merit function, edited in the Merit Function Editor window. -->
+            <DockPanel Margin="0,4,0,0">
+                <Button DockPanel.Dock="Left" Content="Merit Function Editor…" Click="MeritFunctionEditor_Click"
+                        AutomationProperties.AutomationId="OpticsMeritFunctionEditorButton"/>
+                <TextBlock Text="{Binding Optics.MeritEditor.OperandCount, StringFormat='{}{0} operands'}"
+                           VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
+            </DockPanel>
             <!-- OP-18: the system data; OP-10: the lens on its own. -->
             <panels:OpticsSystemDataPanel/>
             <!-- OP-11: the glass catalogs. -->

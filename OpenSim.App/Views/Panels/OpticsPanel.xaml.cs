@@ -23,4 +23,21 @@ public partial class OpticsPanel : UserControl
         _lensEditor.Closed += (_, _) => _lensEditor = null;
         _lensEditor.Show();
     }
+
+    // OP-54
+    private MeritFunctionEditorWindow? _meritEditor;
+
+    /// <summary>Opens the Merit Function Editor (OP-54), or brings the open one forward.</summary>
+    private void MeritFunctionEditor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_meritEditor is { IsLoaded: true })
+        {
+            _meritEditor.Activate();
+            return;
+        }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _meritEditor = new MeritFunctionEditorWindow(optics.MeritEditor) { Owner = Window.GetWindow(this) };
+        _meritEditor.Closed += (_, _) => _meritEditor = null;
+        _meritEditor.Show();
+    }
 }
