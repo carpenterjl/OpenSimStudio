@@ -131,6 +131,8 @@ public static class SavedSurfaces
                 SemiDiameter = s.SemiDiameter * perUnit,
                 MechanicalSemiDiameter = s.MechanicalSemiDiameter * perUnit,
                 ChipZone = s.ChipZone * perUnit,
+                Coating = string.IsNullOrWhiteSpace(s.Coating) ? null : s.Coating,
+                ThermalExpansion = s.Tce,
                 Comment = s.Comment ?? "",
             };
         }
@@ -220,6 +222,8 @@ public static class SavedSurfaces
             list.Add(new OpticsSurfaceSettings
             {
                 Comment = s.Comment.Length > 0 ? s.Comment : null,
+                Coating = s.Coating,
+                Tce = s.ThermalExpansion,
                 Radius = s.Curvature == 0 ? null : 1.0 / s.Curvature / perUnit,
                 Thickness = double.IsPositiveInfinity(s.Thickness) ? 0 : s.Thickness / perUnit,
                 ThicknessIsInfinite = double.IsPositiveInfinity(s.Thickness),

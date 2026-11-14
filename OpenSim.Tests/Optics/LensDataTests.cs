@@ -100,6 +100,28 @@ public sealed class LensDataTests
     }
 
     [Fact]
+    public void CoatingAndTce_ReachTheTrace_AndComeBack()
+    {
+        // Wave 4 integration: the editor's coating and TCE columns feed SequentialSurface.Coating
+        // (read by the polarization trace, OP-51) and ThermalExpansion (read by TCE pickups, OP-29).
+        var saved = new List<OpticsSurfaceSettings>
+        {
+            new() { ThicknessIsInfinite = true },
+            new() { Radius = 50, Thickness = 5, Index = 1.5, Coating = "AR", Tce = 7.1, IsStop = true },
+            new() { Radius = -50, Thickness = 45 },
+            new(),
+        };
+        var lens = SavedSurfaces.ToLens(saved, LensUnit.Millimeter, _ => null);
+        Assert.Equal("AR", lens.Surfaces[1].Coating);
+        Assert.Equal(7.1, lens.Surfaces[1].ThermalExpansion);
+        Assert.Null(lens.Surfaces[2].Coating);
+        var back = SavedSurfaces.FromLens(lens, LensUnit.Millimeter);
+        Assert.Equal("AR", back[1].Coating);
+        Assert.Equal(7.1, back[1].Tce);
+        Assert.Null(back[2].Coating);
+    }
+
+    [Fact]
     public void AnUnknownSurfaceType_OrGlass_IsRefusedByName()
     {
         var saved = Singlet();
