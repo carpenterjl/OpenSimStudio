@@ -181,14 +181,22 @@ public sealed class FieldAberrationTests
     public void Coddington_RefusesAPencilThatLeavesTheMeridionalPlane()
     {
         // The rear surface decentred in x: the y scan's chief ray is no longer in a plane of symmetry.
+        // A decentred surface with power has no paraxial model, so the launcher cannot be built
+        // for that lens (RayLauncher refuses it); the ray is launched through the centred lens,
+        // whose object space and stop are the same, and traced through the decentred one.
+        var centred = FieldAberrationFixtures.Lens(500,
+            FieldAberrationFixtures.S(Inf, 10, stop: true),
+            FieldAberrationFixtures.S(40, 6, 1.6),
+            FieldAberrationFixtures.S(-120, 50));
         var lens = FieldAberrationFixtures.Lens(500,
             FieldAberrationFixtures.S(Inf, 10, stop: true),
             FieldAberrationFixtures.S(40, 6, 1.6),
             FieldAberrationFixtures.S(-120, 50, before: new TiltDecenter(0.5 * Mm, 0, 0, 0, 0)));
         var system = FieldAberrationFixtures.Sys(10, FieldType.ObjectHeight, new[] { 0.0, 60.0 });
-        var setup = FieldAberrationFixtures.Setup(lens, system);
-        var trace = setup.Trace(0);
-        var path = trace.TracePath(setup.Launcher.Launch(trace, 0, 1, 0, 0));
+        var setup = FieldAberrationFixtures.Setup(centred, system);
+        var ray = setup.Launcher.Launch(setup.Trace(0), 0, 1, 0, 0);
+        var trace = SequentialTrace.Create(lens, setup.System, 0, setup.SemiDiameters);
+        var path = trace.TracePath(ray);
         var e = Assert.Throws<InvalidOperationException>(() => CoddingtonTrace.Trace(trace, path, Vector3D.UnitX, "test"));
         Assert.Contains("surface 3", e.Message);
     }
