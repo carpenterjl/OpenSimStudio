@@ -10,7 +10,8 @@ namespace OpenSim.Optics.Sequential;
 /// <see cref="ToParaxialLens"/> gives the same lens to the paraxial engine (OP-19), so the
 /// first-order data and the real trace always describe one lens.
 /// <para>
-/// Persistence and the editor are OP-31; until then a lens is built in code.
+/// The project saves its surfaces as <c>OpticsSurfaceSettings</c> (OP-31); <see cref="SavedSurfaces"/>
+/// converts them to and from this record.
 /// </para>
 /// </summary>
 public sealed record SequentialLens

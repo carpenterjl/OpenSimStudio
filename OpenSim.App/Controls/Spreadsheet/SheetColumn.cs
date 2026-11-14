@@ -25,6 +25,10 @@ public sealed record SheetColumn(string Key, string Header)
     /// <summary>The value of a new cell, or of a cleared one; see <see cref="DefaultValue"/>.</summary>
     public CellValue? Default { get; init; }
 
+    /// <summary>The flag of a new or cleared cell; null is Fixed. OP-31's clear semi-diameter
+    /// starts as the "Automatic" solve, as in OpticStudio's editor.</summary>
+    public CellFlag? DefaultFlag { get; init; }
+
     /// <summary>True for a computed column (a merit operand's value, a contribution) the user does
     /// not type into; the owning editor writes it through <see cref="SheetDocument.SetComputed"/>.</summary>
     public bool IsReadOnly { get; init; }

@@ -51,7 +51,7 @@ public sealed class OpticsAnalysisRegistry
         var registry = new OpticsAnalysisRegistry();
         registry.Register(new SystemSummaryAnalysis());
         registry.Register(new ParaxialDataAnalysis());
-        // OP-20: the real ray trace (no saved surfaces until OP-31).
+        // OP-20: the real ray trace, on the project's saved surfaces (OP-31).
         registry.Register(new SingleRayTraceAnalysis());
         // OP-21: global vertices and coordinate breaks (no saved surfaces until OP-31).
         registry.Register(new GlobalVertexAnalysis());

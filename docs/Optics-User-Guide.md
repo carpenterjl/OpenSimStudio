@@ -205,11 +205,10 @@ chief ray at every surface, per wavelength, for finite and infinite conjugates, 
 object space and afocal systems. Signs and reference points are in
 `docs/Optics-Conventions.md` §11.
 
-The analysis **System data and paraxial rays** (Reports) lists them. There is no sequential
-surface editor yet, so in the app this analysis says the system has no surfaces; the engine is
-used from code and tests until the lens data editor (OP-31) feeds it. A real image height
-field is refused here (the real ray launcher solves it; see Ray aiming and vignetting). Not
-built: configurations (OP-30), and any comparison of these numbers with OpticStudio's output.
+The analysis **System data and paraxial rays** (Reports) lists them for the surfaces of the
+Lens Data Editor (see below). A real image height field is refused here (the real ray
+launcher solves it; see Ray aiming and vignetting). Not built: configurations (OP-30), and
+any comparison of these numbers with OpticStudio's output.
 
 ## Real ray trace
 
@@ -235,11 +234,10 @@ reason and the surface number.
 
 The analysis **Single ray trace** (Rays) lists one ray surface by surface: coordinates (local or
 global), direction cosines, angles of incidence and exit, path lengths and optical path, and the
-status. Like the paraxial report, it says the system has no surfaces until the lens data editor
-(OP-31) supplies them; the trace is used from code and tests until then. The equations and the
+status, for the surfaces of the Lens Data Editor. The equations and the
 points not yet compared with OpticStudio are in `docs/Optics-Conventions.md` §13 and §10 item 9.
 
-Not built: the lens data editor and saving surfaces (OP-31), surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, OPD
+Not built: surface types beyond the aspheres and the idealised and special surfaces (OP-24 on, and those listed as not built under "Aspheres" and "Idealised and special surfaces"), hyperhemispheric surfaces, curved object surfaces, OPD
 against the reference sphere (OP-35), and layouts drawing traced rays.
 
 ## Gaussian beams
@@ -258,8 +256,7 @@ radius and the Gouy phase accumulated from surface 1. The plot shows the beam ra
 the distance along the axis from surface 1, unfolded at mirrors; with M² above 1 the embedded
 Gaussian is drawn dashed. Signs and the M² model are in `docs/Optics-Conventions.md` §14.
 
-There is no sequential surface editor yet, so in the app this analysis says the system has no
-surfaces; the engine is used from code and tests until the lens data editor (OP-31) supplies surfaces. Not built: the skew
+It reads the surfaces of the Lens Data Editor. Not built: the skew
 (generally astigmatic) Gaussian beam about a real chief ray, which needs the real ray trace;
 tilted, decentered and anamorphic surfaces; Gaussian beam operands; any comparison with
 OpticStudio's output.
@@ -467,6 +464,56 @@ Not built:
 - solves on extra data;
 - the optimizer that would use solves in its derivatives.
 
+## Lens Data Editor
+
+**Lens Data Editor…** in the Optics panel opens the sequential surfaces in a window
+(`OpenSim.App/Views/LensDataEditorWindow.xaml`, `OpenSim.App/ViewModels/OpticsLensEditorViewModel.cs`).
+The panel shows the number of surfaces and whether the lens can be traced. The surfaces save
+with the project and the lens file; a new project starts with an object at infinity, a stop
+and an image surface. The analyses System data and paraxial rays, Single ray trace and
+Paraxial Gaussian beam read these surfaces.
+
+- **The table.** One row per surface, 0 the object and the last the image; neither can be
+  deleted, and no surface can be inserted before the object or after the image. Columns:
+  comment, radius (Infinity is a plane), thickness, material, coating, clear semi-diameter,
+  chip zone, mechanical semi-diameter, conic, TCE and, for other surface types, Par 1 to 16.
+  Lengths are in the lens unit; changing the lens unit converts the surfaces so the lens keeps
+  its size (and clears the undo history). The material is a glass of the active catalogs
+  (`catalog:glass` picks one), `MIRROR`, an index such as `1.5`, a model glass `nd, Vd` or
+  `nd, Vd, ΔPgF`, or empty for air.
+- **Semi-diameters.** A clear or mechanical semi-diameter marked **A** is automatic and shows
+  the size the program computed; typing a value fixes it.
+- **Flags.** Cells can be made variable (V), given a solve (OpticStudio's solve names, with
+  their parameters) or picked up from another cell (P), with the grid's context menu,
+  Ctrl+Shift+V (variable) or Ctrl+Shift+F (the flag editor). Solves and pickups are **stored, not evaluated** in this build: the value in the
+  cell is what is traced, and System Check names every stored solve and every pickup whose
+  value does not match.
+- **Surface properties…** (or the row's context menu) opens the surface's properties: type,
+  row colour, make surface stop, ignore this surface, aperture type and its sizes and decenters
+  (circular, rectangular, elliptical, spider, user-defined vertices as `x y; x y`, floating),
+  obscuration, tilt/decenter (not built yet) and the drawing options (skip rays to this
+  surface; hide rays and do not draw are kept for the layouts but not drawn differently yet).
+- **Commands.** Insert surface, Insert after, Delete surface, Undo, Redo (every edit and every
+  tool is one undo step; the grid's own keys work too), Make stop, Go to surface (a number, or
+  part of a type or comment).
+- **Tools** (the Tools expander; first and last surface, factor, focal length and reflecting
+  surface are its inputs): Reverse elements, Scale lens, Make focal, Make double pass, Remove
+  all apertures, Semi-diameters to circular / floating / maximum apertures, Remove all
+  variables, Set all radii variable, Set all thicknesses variable, System check and Compare with
+  file… (the File Comparator, against a lens file or a project; Differences only is on by
+  default). What each does, and where it reads OpticStudio's help differently, is in
+  `docs/Optics-Conventions.md` §20.
+- A surface type this build does not trace (from a file of a later build) is shown with its
+  parameters by number, saved back unchanged, and the lens check names it; the analyses then
+  refuse the lens.
+
+Not built: editing and saving surface types other than Standard and tilts, decenters and
+coordinate breaks (the ray trace has them: see Coordinate breaks and tilts, Aspheres,
+Idealised and special surfaces), solves and pickups evaluated in the editor (the solve library
+is built: see Solves), configurations (OP-30), Create Error Ray, the surface
+properties' scattering, physical optics and import tabs, and per-surface coating layer
+multipliers.
+
 ## Polarization
 
 The polarization ray trace (`OpenSim.Optics/Polarization`, OP-51) carries the electric field
@@ -537,7 +584,8 @@ comparison with OpticStudio, which was not available.
 
 Not built yet, and not to be relied on until they appear in this guide:
 
-- the sequential surface editor and the non-sequential object editor;
+- the non-sequential object editor; in the Lens Data Editor, surface types other than
+  Standard, tilts and decenters, and the evaluation of solves and pickups;
 - system data (aperture, fields, wavelengths);
 - layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
   the rest);

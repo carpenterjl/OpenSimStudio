@@ -24,9 +24,9 @@ public sealed record ParaxialDataSettings
 /// System Data, Cardinal Points and Paraxial Ray Data reports), from the paraxial engine
 /// (<see cref="ParaxialSystem"/>, OP-19).
 /// <para>
-/// The project has no sequential surfaces until the lens data editor (OP-20, OP-31) adds them,
-/// so the lens comes from a source given to the constructor; the default source has none, and
-/// the result then says so instead of listing numbers.
+/// The lens comes from a source given to the constructor; the default reads the project's saved
+/// surfaces (<see cref="ProjectLens"/>, OP-31), and the result says so instead of listing
+/// numbers when there are none.
 /// </para>
 /// </summary>
 public sealed class ParaxialDataAnalysis : OpticsAnalysis<ParaxialDataSettings>
@@ -36,10 +36,10 @@ public sealed class ParaxialDataAnalysis : OpticsAnalysis<ParaxialDataSettings>
 
     private readonly Func<OpticsAnalysisContext, ParaxialLens?> _lensSource;
 
-    /// <param name="lensSource">Where the surfaces come from; null for none (until OP-31).</param>
+    /// <param name="lensSource">Where the surfaces come from; null for the project's saved surfaces (OP-31).</param>
     public ParaxialDataAnalysis(Func<OpticsAnalysisContext, ParaxialLens?>? lensSource = null)
     {
-        _lensSource = lensSource ?? (_ => null);
+        _lensSource = lensSource ?? ProjectLens.Paraxial;
     }
 
     /// <summary>The analysis fed from a real-trace lens source (OP-20): the paraxial engine
@@ -66,7 +66,7 @@ public sealed class ParaxialDataAnalysis : OpticsAnalysis<ParaxialDataSettings>
             {
                 new ReportSection("No surfaces")
                 {
-                    Lines = new[] { "The system has no sequential surfaces yet: the surface editor is a later plan item (OP-20), so there is nothing to trace." }
+                    Lines = new[] { "The system has no sequential surfaces: add them in the Lens Data Editor, so there is something to trace." }
                 }
             }, new[] { "Nothing is traced." });
         }

@@ -364,7 +364,7 @@ public sealed partial class SheetDocument
         return SheetEditResult.Ok with { CellsChanged = changed, CellsSkipped = skipped };
     }
 
-    /// <summary>Resets the cells to their column's default, Fixed. The type column, unused and
+    /// <summary>Resets the cells to their column's default value and flag (Fixed unless the column says otherwise). The type column, unused and
     /// computed cells are skipped.</summary>
     public SheetEditResult ClearCells(IEnumerable<SheetCellAddress> cells, string description = "Clear")
     {
@@ -376,7 +376,7 @@ public sealed partial class SheetDocument
             CheckColumn(address.Column);
             var cell = address.Column == SheetSchema.TypeColumn ? null : r.Cells[address.Column - 1];
             if (cell is not { IsEditable: true }) { skipped++; continue; }
-            var state = new CellState(cell.Definition!.DefaultValue, CellFlag.Fixed);
+            var state = new CellState(cell.Definition!.DefaultValue, cell.Definition!.DefaultFlag ?? CellFlag.Fixed);
             if (cell.State == state) continue;
             if (!byRow.TryGetValue(r, out var after)) byRow[r] = after = r.Capture().Copy();
             after.Cells[cell.Slot] = state;

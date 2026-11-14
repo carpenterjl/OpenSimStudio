@@ -39,9 +39,8 @@ public sealed record SingleRayTraceSettings
 /// (<see cref="SequentialTrace"/>, OP-20): coordinates, direction cosines, angles of incidence
 /// and exit, segment lengths and optical path, and where and why the ray failed, if it did.
 /// <para>
-/// The project has no saved sequential surfaces until the lens data editor (OP-31), so the lens
-/// comes from a source given to the constructor; the default has none, and the result then
-/// says so.
+/// The lens comes from a source given to the constructor; the default reads the project's saved
+/// surfaces (<see cref="ProjectLens"/>, OP-31), and the result says so when there are none.
 /// </para>
 /// </summary>
 public sealed class SingleRayTraceAnalysis : OpticsAnalysis<SingleRayTraceSettings>
@@ -51,10 +50,10 @@ public sealed class SingleRayTraceAnalysis : OpticsAnalysis<SingleRayTraceSettin
 
     private readonly Func<OpticsAnalysisContext, SequentialLens?> _lensSource;
 
-    /// <param name="lensSource">Where the surfaces come from; null for none (until OP-31).</param>
+    /// <param name="lensSource">Where the surfaces come from; null for the project's saved surfaces (OP-31).</param>
     public SingleRayTraceAnalysis(Func<OpticsAnalysisContext, SequentialLens?>? lensSource = null)
     {
-        _lensSource = lensSource ?? (_ => null);
+        _lensSource = lensSource ?? ProjectLens.Sequential;
     }
 
     public override string Id => SavedId;
@@ -73,7 +72,7 @@ public sealed class SingleRayTraceAnalysis : OpticsAnalysis<SingleRayTraceSettin
             {
                 new ReportSection("No surfaces")
                 {
-                    Lines = new[] { "The system has no sequential surfaces yet: the lens data editor is a later plan item (OP-31), so there is nothing to trace." }
+                    Lines = new[] { "The system has no sequential surfaces: add them in the Lens Data Editor, so there is something to trace." }
                 }
             }, new[] { "Nothing is traced." });
         }

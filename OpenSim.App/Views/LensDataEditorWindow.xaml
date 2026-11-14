@@ -1,0 +1,90 @@
+<Window x:Class="OpenSim.App.Views.LensDataEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        xmlns:sheet="clr-namespace:OpenSim.App.Controls.Spreadsheet"
+        Title="Lens Data Editor" Width="1100" Height="560" MinWidth="520" MinHeight="300"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-31: the Lens Data Editor. DataContext is the OpticsLensEditorViewModel; the sheet
+         is OP-10's SpreadsheetGrid, whose own keys (Insert, Delete, Ctrl+Z, Ctrl+C...) and
+         context menu also work. -->
+    <DockPanel Margin="8">
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+            <Button Content="Insert surface" Command="{Binding InsertSurfaceCommand}" Margin="0,0,4,4"
+                    ToolTip="Insert a surface before the current one (not before the object)."/>
+            <Button Content="Insert after" Command="{Binding InsertSurfaceAfterCommand}" Margin="0,0,4,4"/>
+            <Button Content="Delete surface" Command="{Binding DeleteSurfaceCommand}" Margin="0,0,4,4"
+                    ToolTip="The object and image surfaces cannot be deleted."/>
+            <Button Content="Undo" Command="{Binding UndoCommand}" Margin="8,0,4,4"/>
+            <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,4,4"/>
+            <Button Content="Make stop" Command="{Binding MakeStopCommand}" Margin="8,0,4,4"/>
+            <Button Content="Surface properties…" Click="Properties_Click" Margin="0,0,4,4"
+                    ToolTip="Type, stop, ignore, aperture, tilt/decenter and drawing options of the current surface."/>
+            <TextBox Text="{Binding GoToText, UpdateSourceTrigger=PropertyChanged}" Width="120" Margin="8,0,4,4"
+                     ToolTip="A surface number, or part of a surface type or comment."/>
+            <Button Content="Go to surface" Command="{Binding GoToSurfaceCommand}" Margin="0,0,4,4"/>
+        </WrapPanel>
+
+        <Expander DockPanel.Dock="Top" Header="Tools" Margin="0,0,0,4">
+            <DockPanel Margin="4">
+                <controls:FormGrid DockPanel.Dock="Left" Width="300">
+                    <Label Content="First surface"/>
+                    <TextBox Text="{Binding FirstSurface}"/>
+                    <Label Content="Last surface"/>
+                    <TextBox Text="{Binding LastSurface}"/>
+                    <Label Content="Scale factor"/>
+                    <TextBox Text="{Binding ScaleFactor}"/>
+                    <Label Content="Focal length [lens units]"/>
+                    <TextBox Text="{Binding TargetFocalLength}"/>
+                    <Label Content="Reflect at surface"/>
+                    <TextBox Text="{Binding ReflectAtSurface}"/>
+                </controls:FormGrid>
+                <WrapPanel Margin="12,0,0,0">
+                    <Button Content="Reverse elements" Command="{Binding ReverseElementsCommand}" Margin="0,0,4,4"
+                            ToolTip="Reverse the first to last surface."/>
+                    <Button Content="Scale lens" Command="{Binding ScaleLensCommand}" Margin="0,0,4,4"
+                            ToolTip="Scale the lengths of the first to last surface by the factor."/>
+                    <Button Content="Make focal" Command="{Binding MakeFocalCommand}" Margin="0,0,4,4"
+                            ToolTip="Scale the whole lens to the focal length."/>
+                    <Button Content="Make double pass" Command="{Binding MakeDoublePassCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Remove all apertures" Command="{Binding RemoveAllAperturesCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Semi-diameters to circular apertures" Command="{Binding ConvertToCircularAperturesCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Semi-diameters to floating apertures" Command="{Binding ConvertToFloatingAperturesCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Semi-diameters to maximum apertures" Command="{Binding ConvertToMaximumAperturesCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Remove all variables" Command="{Binding RemoveAllVariablesCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Set all radii variable" Command="{Binding SetAllRadiiVariableCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Set all thicknesses variable" Command="{Binding SetAllThicknessesVariableCommand}" Margin="0,0,4,4"/>
+                    <Button Content="System check" Command="{Binding RunSystemCheckCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Compare with file…" Click="Compare_Click" Margin="0,0,4,4"/>
+                    <CheckBox Content="Differences only" IsChecked="{Binding DifferencesOnly}" VerticalAlignment="Center" Margin="4,0,4,4"/>
+                </WrapPanel>
+            </DockPanel>
+        </Expander>
+
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Margin="0,2,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource FaintText}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasProblems}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <Expander Header="Reports" Margin="0,4,0,0">
+                <StackPanel>
+                    <TextBox Text="{Binding SystemCheckReport, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="160"
+                             VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/>
+                    <TextBox Text="{Binding ComparisonReport, Mode=OneWay}" IsReadOnly="True" MaxHeight="160" Margin="0,4,0,0"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" FontFamily="Consolas"/>
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+
+        <sheet:SpreadsheetGrid x:Name="Grid" Document="{Binding Document}"/>
+    </DockPanel>
+</Window>

@@ -102,6 +102,9 @@ public sealed class SheetSchema
                 throw new ArgumentException($"{where} has two solves with the same key.");
             if (column.Flags != CellFlagSupport.None && !column.IsNumeric && column.Flags != CellFlagSupport.Pickup)
                 throw new ArgumentException($"{where}: only numeric columns can be variable or solved.");
+            if (column.DefaultFlag is { } defaultFlag && (defaultFlag.Kind == CellFlagKind.Pickup || !column.Supports(defaultFlag.Kind)
+                || (defaultFlag.Kind == CellFlagKind.Solve && column.FindSolveCode(defaultFlag.SolveCode) is null)))
+                throw new ArgumentException($"{where}: the default flag {defaultFlag} is not one the column accepts.");
             if (column.Default is { } value && CellText.Validate(column, value) is { } error)
                 throw new ArgumentException($"{where}: the default is invalid: {error}");
         }

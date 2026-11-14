@@ -9,8 +9,8 @@ namespace OpenSim.Core.Model;
 /// The optical model grows here one nullable property per plan item, each added by the item
 /// that defines its content, so any older file loads (null = what that item's default is):
 /// <see cref="SystemData"/> (OP-18, OP-10), <see cref="Analyses"/> (OP-9) and
-/// <see cref="Materials"/> (OP-11) now; the surfaces of a sequential system (OP-20,
-/// OP-31), the non-sequential objects (OP-70 on), configurations (OP-30), the merit function
+/// <see cref="Materials"/> (OP-11), <see cref="Coatings"/> (OP-15) and
+/// <see cref="Surfaces"/> (OP-31) now; the non-sequential objects (OP-70 on), configurations (OP-30), the merit function
 /// (OP-54) and tolerance data (OP-63) later. No placeholder is declared for those: their shape
 /// is their item's to decide, and an empty schema written now would be a promise a later file
 /// could not keep.
@@ -41,4 +41,9 @@ public sealed record OpticsSettings
     /// <summary>The thin-film coating catalog (OP-15). Null — every file written before OP-15 —
     /// is an empty catalog.</summary>
     public OpticsCoatingsSettings? Coatings { get; init; }
+
+    // OP-31
+    /// <summary>The sequential surfaces, object first and image last (OP-31's lens data editor).
+    /// Null — every file written before OP-31 — is a system with no surfaces.</summary>
+    public List<OpticsSurfaceSettings>? Surfaces { get; init; }
 }

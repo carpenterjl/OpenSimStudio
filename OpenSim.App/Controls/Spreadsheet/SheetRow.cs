@@ -23,7 +23,7 @@ public sealed class SheetRow : INotifyPropertyChanged
         for (int i = 0; i < _cells.Length; i++)
         {
             var definition = type.ColumnAt(i);
-            _cells[i].Set(definition, definition?.DefaultValue ?? CellValue.Empty, CellFlag.Fixed);
+            _cells[i].Set(definition, definition?.DefaultValue ?? CellValue.Empty, definition?.DefaultFlag ?? CellFlag.Fixed);
         }
         foreach (var property in type.Properties) _properties[property.Key] = property.DefaultValue;
         Tint = type.DefaultTint;

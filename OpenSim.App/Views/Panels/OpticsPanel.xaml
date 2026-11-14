@@ -3,8 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:OpenSim.App.Controls"
              xmlns:panels="clr-namespace:OpenSim.App.Views.Panels">
-    <!-- The Optics workspace's one panel so far: the mode switch. The system editors join
-         it as they are built. -->
+    <!-- The Optics workspace's panel: the mode, the lens data editor, the system data, the
+         glass and coating catalogs. -->
     <GroupBox Header="Optical system">
         <StackPanel>
             <controls:FormGrid>
@@ -16,8 +16,14 @@
             </controls:FormGrid>
             <TextBlock Text="{Binding Optics.ModeDescription}" TextWrapping="Wrap"
                        Foreground="{DynamicResource TextFaintBrush}" Margin="0,4,0,0"/>
-            <TextBlock Text="There are no surfaces yet, so there is nothing to trace. The mode and the system data are saved with the project, or as a lens of their own."
-                       TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,8,0,0"/>
+            <!-- OP-31: the sequential surfaces, edited in the Lens Data Editor window. -->
+            <DockPanel Margin="0,8,0,0">
+                <Button DockPanel.Dock="Left" Content="Lens Data Editor…" Click="LensDataEditor_Click"
+                        AutomationProperties.AutomationId="OpticsLensDataEditorButton"/>
+                <TextBlock Text="{Binding Optics.LensEditor.SurfaceCount, StringFormat='{}{0} surfaces, object and image included'}"
+                           VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
+            </DockPanel>
+            <TextBlock Text="{Binding Optics.LensEditor.ProblemsText}" TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,4,0,0"/>
             <!-- OP-18: the system data; OP-10: the lens on its own. -->
             <panels:OpticsSystemDataPanel/>
             <!-- OP-11: the glass catalogs. -->

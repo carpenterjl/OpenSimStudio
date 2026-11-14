@@ -218,6 +218,8 @@ public partial class OpticsViewModel
         if (!FieldTypes.IsAngle(SelectedFieldType.Value))
             foreach (var f in Fields) { f.X = Convert(f.X); f.Y = Convert(f.Y); }
         ConvertRayAimingLengths(Convert);
+        // OP-31: the surfaces keep their size too.
+        LensEditor?.ConvertLensUnit(from / to);
     }
 
     // A picker pushes a transient null while its list rebuilds; none of these is ever unset.

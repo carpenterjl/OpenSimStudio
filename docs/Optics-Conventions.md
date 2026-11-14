@@ -8,7 +8,7 @@ those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/Air
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
 `OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of the
 real ray trace (section 13) in `OpenSim.Tests/Optics/RealRayTraceTests.cs`; those of Gaussian beams (section 14) in
-`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of coordinate breaks and tilts (section 15) in `OpenSim.Tests/Optics/CoordinateBreakTests.cs`; those of ray aiming and vignetting (section 16) in `OpenSim.Tests/Optics/RayAimingTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; those of the polarization ray trace (section 21) in `OpenSim.Tests/Optics/PolarizationTraceTests.cs`; the cross-checks against other programs (section 22) in
+`OpenSim.Tests/Optics/GaussianBeamTests.cs`; those of coordinate breaks and tilts (section 15) in `OpenSim.Tests/Optics/CoordinateBreakTests.cs`; those of ray aiming and vignetting (section 16) in `OpenSim.Tests/Optics/RayAimingTests.cs`; those of aspheres (section 17) in `OpenSim.Tests/Optics/AsphereTests.cs`; those of the idealised and special surfaces (section 18) in `OpenSim.Tests/Optics/IdealSurfaceTests.cs`; those of solves (section 19) in `OpenSim.Tests/Optics/SolveEngineTests.cs`; those of lens data and the editing tools (section 20) in `OpenSim.Tests/Optics/LensDataTests.cs`; those of the polarization ray trace (section 21) in `OpenSim.Tests/Optics/PolarizationTraceTests.cs`; the cross-checks against other programs (section 22) in
 `OpenSim.Tests/Optics/ReferenceProgramTests.cs`.
 
 Two rules decide everything below:
@@ -547,6 +547,16 @@ single place in the code, so a correction is one line and its test.
     - *Material pickup* copies the MIRROR flag with the medium.
     Check: one lens with one solve of each kind, compared with the values OpticStudio's
     lens data editor shows.
+
+16. **Lens data and editing tools** (OP-31). Section 20's readings of OpticStudio's help are
+    not compared with OpticStudio's output: the rule Reverse Elements and Make Double Pass
+    follow (derived from section 3's signs, the help gives none), which solves and pickups they
+    remove, the surfaces Set All Radii / Thickness Variable choose ("boundary between two
+    different media" read as a different material entry, MIRROR included; the object distance
+    left out), Scale Lens leaving the system data unscaled, Convert to Maximum Apertures sizing
+    one configuration, the inserted surface being Standard (the help says "OFF", an ignored
+    surface), and System Check's list of checks (the help does not list OpticStudio's). Check:
+    each tool on one small lens in both programs, compared with OpticStudio's prescription.
 
 17. **Polarization ray trace choices** (OP-51). Section 21's rules are derived or read from
     OpticStudio's help, but none is compared with its output. Check each with a coated singlet
@@ -1209,6 +1219,70 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
   - Solves on the non-sequential editor.
   - The solve column in the lens data editor (OP-31).
   - Variables and the optimizer.
+
+## 20. Lens data and saved surfaces
+
+The sequential surfaces (OP-31) are saved in the optics record as `OpticsSettings.Surfaces`
+(`OpenSim.Core/Model/OpticsSurfaceSettings.cs`), a list from the object (surface 0) to the
+image. The project format version is unchanged (5); a file without the list is a system with
+no surfaces.
+
+- **Units and signs.** Lengths are in the system data's lens unit, as the editor shows them, so
+  a typed value reloads digit for digit. Signs are section 3's. A plane is written without a
+  radius (JSON has no infinity; zero is also a plane); an infinite thickness (an object at
+  infinity) is the flag `ThicknessIsInfinite`. Semi-diameters are null when automatic.
+- **Material.** One of: a glass name of the active catalogs (`catalog:glass` picks a catalog),
+  `MIRROR` (any case), a constant index relative to the system's air, or a model glass (nd, Vd,
+  ΔPgF; `ModelGlassFit`, trained on the active catalogs). Nothing is the system's air. The
+  editor's material cell reads `N-BK7`, `MIRROR`, `1.5` and `1.6, 40` or `1.6, 40, 0.01`.
+- **Generic data.** The surface type is a name (null is Standard); its numeric data is a
+  numbered parameter list (OpticStudio's Par columns) and an extra-data list; the per-cell
+  flags are kept as given: `Variable`, `Solve` with its code and parameters, `Pickup` with the
+  source surface (0-based), source column, scale and offset. Column names are
+  `SavedSurfaces`' (`Radius`, `Thickness`, `Material`, `SemiDiameter`, `Conic`, `Par3`, …).
+  Solves and pickups are stored, never evaluated here (OP-29): the value in the cell is traced.
+- **Conversion** (`OpenSim.Optics/Sequential/SavedSurfaces.cs`). `ToLens` gives the
+  `SequentialLens` in meters (radius × meters per lens unit, curvature by
+  `OpticsConventions.CurvatureFromRadius`). Only the Standard surface converts in this build; a
+  lens holding another type is refused with every problem named, one line per surface, never
+  traced as something else. A Standard surface with a non-zero parameter is refused too.
+  `FromLens` writes a lens built in code back. The analyses read the project's lens through
+  `ProjectLens` (System data and paraxial rays, Single ray trace, Paraxial Gaussian beam).
+- **Editing tools** (`OpenSim.Optics/Sequential/LensEditing/`), each read from OpticStudio
+  2025 R2's help (the files are in `plans/sources/optics/ansyshelp-op31/`):
+  - *Reverse Elements* (first to last surface): surface first + i becomes old surface last − i
+    with its radius negated; the thickness and material after it are those after old surface
+    last − 1 − i, and after the new last surface those after the old last, so the gaps before
+    and after the group stay. Solves and pickups on the reversed radius, thickness and material
+    cells are removed (the help: solves on affected data are removed); variables move with
+    their values. Mirrors and other surface types in the group are refused.
+  - *Scale Lens* (factor, first to last surface): lengths × factor (radius, finite thickness,
+    semi-diameters, chip zone, aperture sizes and decenters, pickup offsets on length cells);
+    not the conic, TCE, wavelengths, solve parameters or the system data. Other surface types
+    are refused. *Make Focal* scales every surface by target / current paraxial effective
+    focal length at the primary wavelength; a sign change and an afocal lens are refused.
+  - *Make Double Pass* (reflect at surface k): k becomes a mirror with thickness −t(k−1); copies
+    of surfaces k−1 … 1 follow with the same radius and conic, thickness −t(j−1) and the
+    material that was before surface j, picking radius, conic and thickness (scale −1) up from
+    the originals; the image follows at −t0, on the object surface; with the object at
+    infinity it is placed at thickness 0. All solves are removed. A mirror before k is refused.
+  - *Remove All Apertures*; *Convert Semi-Diameters to Circular / Floating / Maximum
+    Apertures* on surfaces 1 to the image without an aperture (circular: a fixed semi-diameter
+    and a circular aperture of that radius, also on a floating aperture with a picked-up
+    semi-diameter; floating: the semi-diameter mode is kept; maximum: the automatic size of
+    the one configuration, fixed, with the "Maximum" solve stored).
+  - *Remove All Variables* (variables only); *Set All Radii Variable* (Standard, curved, the
+    material differs from the one before); *Set All Thickness Variable* (surfaces 1 to the last,
+    finite and non-zero). Cells with a solve or pickup are left.
+  - *System Check*: errors (system data, conversion) and warnings (unknown coating, stored
+    solves, pickups that do not hold their value, glasses not covering a wavelength, chief and
+    marginal rays that fail). *File Comparator*: every field of the system data and of each
+    surface, by default only where they differ.
+- **Not built.** Evaluating solves and pickups (OP-29), surface types other than Standard
+  (OP-21, OP-23, OP-27), tilts and decenters (OP-21), configurations (OP-30), Create Error Ray
+  (non-sequential sources), the surface properties' scattering, physical optics and import
+  tabs, coating layer multipliers on a surface, and the drawing options (hide rays, do not
+  draw) in the layouts. Section 10, item 16, lists what is to compare with OpticStudio.
 
 ## 21. Polarization ray trace
 

@@ -59,8 +59,8 @@ public sealed record GaussianBeamSettings
 /// plotted against the distance along the axis.
 /// <para>
 /// Like <see cref="ParaxialDataAnalysis"/>, the lens comes from a source given to the
-/// constructor; the default source has none until the lens data editor (OP-31) exists, and the
-/// result then says so.
+/// constructor; the default reads the project's saved surfaces (<see cref="ProjectLens"/>,
+/// OP-31), and the result says so when there are none.
 /// </para>
 /// </summary>
 public sealed class GaussianBeamAnalysis : OpticsAnalysis<GaussianBeamSettings>
@@ -70,10 +70,10 @@ public sealed class GaussianBeamAnalysis : OpticsAnalysis<GaussianBeamSettings>
 
     private readonly Func<OpticsAnalysisContext, ParaxialLens?> _lensSource;
 
-    /// <param name="lensSource">Where the surfaces come from; null for none (until the lens data editor, OP-31).</param>
+    /// <param name="lensSource">Where the surfaces come from; null for the project's saved surfaces (OP-31).</param>
     public GaussianBeamAnalysis(Func<OpticsAnalysisContext, ParaxialLens?>? lensSource = null)
     {
-        _lensSource = lensSource ?? (_ => null);
+        _lensSource = lensSource ?? ProjectLens.Paraxial;
     }
 
     public override string Id => SavedId;
@@ -92,7 +92,7 @@ public sealed class GaussianBeamAnalysis : OpticsAnalysis<GaussianBeamSettings>
             {
                 new ReportSection("No surfaces")
                 {
-                    Lines = new[] { "The system has no sequential surfaces yet: the lens data editor is a later plan item (OP-31), so there is nothing to propagate the beam through." }
+                    Lines = new[] { "The system has no sequential surfaces: add them in the Lens Data Editor, so there is something to propagate the beam through." }
                 }
             }, new[] { "Nothing is traced." });
         }

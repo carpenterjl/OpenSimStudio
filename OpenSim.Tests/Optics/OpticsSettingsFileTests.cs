@@ -26,6 +26,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.NotNull(optics.SystemData);
         Assert.Equal(2, optics.SystemData!.Fields!.Count);
         Assert.Equal(2, optics.Materials!.ActiveCatalogs!.Count);
+        Assert.Equal(2, optics.Surfaces!.Count);                              // OP-31
+        Assert.Equal(2, optics.Surfaces[0].Flags![0].SolveParameters!.Count);
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 
@@ -245,6 +247,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
             else if (t == typeof(string)) value = $"label {counter}";
             // The active glass catalogs (OP-11) are a list of names.
             else if (t == typeof(List<string>)) value = new List<string> { $"label {counter}", $"label {counter + 1}" };
+            // OP-31: a solve's parameters are a list of numbers.
+            else if (t == typeof(List<double>)) value = new List<double> { counter / 7.0 + 0.1, counter / 11.0 + 0.2 };
             else if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>))
             {
                 var list = (System.Collections.IList)Activator.CreateInstance(t)!;

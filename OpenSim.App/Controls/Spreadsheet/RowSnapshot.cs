@@ -36,7 +36,7 @@ internal sealed record RowSnapshot(
                 if (Type.ColumnAt(j) is { } d && d.Key == definition.Key && d.Kind == definition.Kind) { from = j; break; }
             if (from < 0 || CellText.Validate(definition, Cells[from].Value) is not null)
             {
-                cells[i] = new CellState(definition.DefaultValue, CellFlag.Fixed);
+                cells[i] = new CellState(definition.DefaultValue, definition.DefaultFlag ?? CellFlag.Fixed);
                 continue;
             }
             var flag = Cells[from].Flag;
