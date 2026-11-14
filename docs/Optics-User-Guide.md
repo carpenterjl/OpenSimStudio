@@ -1023,6 +1023,39 @@ as OpticStudio's Make Thermal does.
   thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
   thermal table at a changed temperature.
 
+## Seidel and full-field aberrations
+
+Three analyses (OP-36, `OpenSim.Optics/Analysis/Aberrations/`) under **Aberrations** read the lens
+data editor's surfaces.
+
+- **Seidel coefficients.** Surface by surface and summed: the unconverted Seidel sums S1 to S5
+  (spherical, coma, astigmatism, Petzval field curvature, distortion) and the colour sums CL and
+  CT (lens units); the wave coefficients W040 … W220T (waves at the edge of the exit pupil); the
+  transverse coefficients TSPH … TLAC and the longitudinal ones LSPH … LLAC (lens units); the
+  Petzval radius and the Lagrange invariant. The aspheric part of each aspheric surface is listed.
+  Setting: wavelength (0 for the primary). Colour is measured between the shortest and longest
+  table wavelengths.
+- **Seidel diagram.** The same unconverted sums as bars for a surface range, with their sum as
+  the last group. Settings: first and last surface, wavelength, ignore distortion, ignore
+  chromatic.
+- **Full-field aberration.** Zernike Standard terms fitted to the wavefront at each point of a
+  grid of field points, and one aberration mapped over the field: defocus (Z4), primary
+  astigmatism or primary coma (magnitude, with the angle in the table), or any one term.
+  Settings: centre field, field shape (rectangular or elliptical), wavelength, x and y half-widths
+  (0 for the largest field) and samplings, maximum term (up to 231), aberration and term, pupil
+  sampling, display (absolute, relative to the average, or the average), image or contours.
+  Points outside the field's normalisation boundary are left blank.
+
+The Seidel sums hold for Standard, Even, Odd, Extended and Extended Odd Asphere surfaces, the
+types OpticStudio's help lists; any other surface is refused, naming it, as is an odd asphere
+with an r or r³ term. The transverse coefficients are the image-plane ray errors (TSPH matches the
+ray fan's cubic coefficient); the longitudinal ones are positive when rays cross the axis before
+the paraxial image. Definitions and the readings of OpticStudio's help that are this program's
+own are in `docs/Optics-Conventions.md` §32 and §10 item 28. Not built: the Contrast Loss Map
+(it needs the MTF), the Seidel diagram's plot scale, full-field aberration's icon and grey-scale
+displays, fifth-order coefficients, the afocal forms, and any comparison with OpticStudio's
+output.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1031,6 +1064,9 @@ Not built yet, and not to be relied on until they appear in this guide:
 - layouts with traced rays, and the analysis windows not described above (MTF, PSF, Seidel
   coefficients, encircled energy and the rest; the Configuration Matrix Spot; Strehl ratio in
   the RMS analyses);
+
+- layouts with traced rays, and the analysis windows not described above (MTF, PSF, the
+  Contrast Loss Map, encircled energy and the rest; the Configuration Matrix Spot);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);

@@ -117,6 +117,11 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new SurfaceCurvatureCrossSectionAnalysis());
         registry.Register(new SurfaceSlopeCrossSectionAnalysis());
 
+        // OP-36: third-order and full-field aberrations (Contrast Loss Map not built: it needs the MTF's cutoff).
+        registry.Register(new SeidelCoefficientsAnalysis());
+        registry.Register(new SeidelDiagramAnalysis());
+        registry.Register(new FullFieldAberrationAnalysis());
+
         // OP-40: RMS against field, wavelength and focus, and the RMS field map (Strehl not built).
         registry.Register(new RmsVsFieldAnalysis());
         registry.Register(new RmsVsWavelengthAnalysis());

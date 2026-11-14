@@ -818,6 +818,30 @@ single place in the code, so a correction is one line and its test.
     RMS vs Wavelength of a singlet at two fields and three wavelengths against OpticStudio's
     text output.
 
+28. **Seidel and full-field aberration readings** (OP-36, section 32). Read from the help pages
+    "Seidel Coefficients", "Seidel Diagram" and "Full-Field Aberration"; no OpticStudio number
+    was compared:
+    - *Wave column.* The page's relations S1 = 8 W040, S2 = 2 W131, S3 = 2 W222,
+      S4 = 4 W220 − 2 W222, S5 = 2 W311 are used. Its table prints S1/2, S3/4 and (3 S3 + S4)/2
+      for W040, W222 and W220T, which contradict them; W220T is taken as (3 S3 + S4)/4.
+    - *Transverse sign.* The page writes every transverse coefficient as −k·S/(n′u′). With this
+      program's slope u′ = dy/dz that is the negative of the image-plane ray error, so the minus
+      sign is dropped (the page's u′ is read as measured the other way); TSPH then equals the
+      ray fan's cubic coefficient.
+    - *Longitudinal form* k·S/(|n′|u′²): positive when rays cross the axis before the paraxial
+      image along the light; the absolute index after mirrors is this program's reading.
+    - *Colour* uses δn = n(shortest) − n(longest) of the table, and the chief ray is that of the
+      largest radial field; the help says only "the extreme defined wavelength".
+    - *Odd terms.* Odd and Extended Odd Aspheres with an r or r³ term are refused; the help lists
+      the types as supported without saying how those terms enter.
+    - *Petzval radius* uses signed indices in each term and |n| of image space.
+    - *Full-field aberration:* Relative and Average act on the plotted magnitude (the help's
+      per-term averaging is for its icon display, not built); the OPD is on the exit-pupil
+      reference sphere centred on each point's chief ray; vignetting factors are cleared; the
+      default half-width (0) is the largest radial field.
+    Check: Seidel Coefficients text of a singlet and of a two-mirror telescope, and Full-Field
+    Aberration of a singlet, in both programs.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2691,3 +2715,64 @@ Multi-Configuration pages "Make Thermal" and "Solve Types"; copies in
   (a one-line change in `OpenSim.Optics/Merit/MeritConfigurations.cs`, not made here), until
   then its thermal configurations at a changed temperature fail by name; the prescription
   report's thermal listing; coupling to OpenSim's own thermal and structural solvers (OP-92).
+
+## 32. Seidel and full-field aberrations
+
+OP-36 adds three analyses in `OpenSim.Optics/Analysis/Aberrations/`: Seidel Coefficients,
+Seidel Diagram and Full-Field Aberration. Their definitions are read from the Ansys OpticStudio
+2025 R2 help pages of the same names (saved with their equation images in
+`plans/sources/optics/op-36-help/`). The tests are `OpenSim.Tests/Optics/SeidelTests.cs` and
+`OpenSim.Tests/Optics/Gates/SeidelGateTests.cs`. Readings not checked against OpticStudio are
+section 10, item 28.
+
+**Surface sums** (`SeidelEngine`). From the paraxial marginal ray (y, u) of the system aperture
+and the chief ray (ȳ, ū) of the largest radial field, at the selected wavelength, with signed
+indices (section 11): A = n(u + yc), Ā = n(ū + ȳc), H = n(ūy − uȳ), Δ(u/n) = u′/n′ − u/n,
+Δ(1/n²) = 1/n′² − 1/n², P = c(1/n′ − 1/n), and
+
+- S1 = −A²yΔ(u/n), S2 = −AĀyΔ(u/n), S3 = −Ā²yΔ(u/n), S4 = −H²P,
+  S5 = −Ā(Ā²Δ(1/n²)y − (H + Āy)ȳP);
+- CL = AyΔ(δn/n), CT = ĀyΔ(δn/n), δn = n(shortest) − n(longest) of each space, signed like n;
+- an aspheric surface adds 8G(n′ − n)·(y⁴, y³ȳ, y²ȳ², 0, yȳ³) to (S1 … S5), G being the r⁴
+  coefficient of its sag minus c_p³/8 of its paraxial sphere (for a Standard surface kc³/8).
+
+These are RayOptics 0.9.10's formulas (`rayoptics/parax/thirdorder.py`, BSD 3-Clause), written
+anew here; G is generalised to surfaces with an r² term (derived in
+`SeidelEngine.FourthOrderDeparture`). Welford's book, which the help cites, was not on hand. c is
+the paraxial curvature (an asphere's r² term included). Supported surfaces are those the help
+lists: Standard, Even, Odd, Extended and Extended Odd Asphere; the alternate-root forms, odd
+aspheres with an r or r³ term, and every other shape are refused naming the surface. Ignored
+surfaces and coordinate breaks contribute nothing; tilts are accepted only where the paraxial
+lens is (section 15). Mirrors need no special case.
+
+**Conversions** (`SeidelResult`). Waves at the edge of the exit pupil: W040 = S1/8,
+W131 = S2/2, W222 = S3/2, W220P = S4/4, W311 = S5/2, W020 = CL/2, W111 = CT,
+W220S = (S3 + S4)/4, W220M = (2S3 + S4)/4, W220T = (3S3 + S4)/4, divided by the wavelength in
+the system's air. Transverse: k·S/(n′u′), n′u′ the marginal ray's reduced slope in image space,
+with k = 1/2 (TSPH, TSCO, TPFC, TDIS on S1, S2, S4, S5), 3/2 (TTCO on S2), 1 (TAST on S3,
+TAXC on CL, TLAC on CT), and TSFC = (S3 + S4)/(2n′u′), TTFC = (3S3 + S4)/(2n′u′); these are the
+image-plane ray errors (TSPH is the marginal ray's height on the paraxial image plane to third
+order). Longitudinal: the same with |n′|u′² in place of n′u′, positive when the rays cross the
+axis before the paraxial image along the light. Both are undefined (not listed) when the image is
+at infinity. Petzval radius: 1/R_p = −|n_m| Σ (nᵢ − nᵢ₋₁)/(nᵢnᵢ₋₁Rᵢ), signed as a radius
+(section 3), infinite when the sum is zero.
+
+**Seidel Diagram.** The unconverted S1 … S5, CL, CT of a surface range and their sum as bars
+(rectangles in a line plot, `SeidelDiagramAnalysis.Bars`), the sum at the last surface + 1;
+distortion and colour can be left out.
+
+**Full-field aberration** (`FieldZernike`, `FullFieldAberrationAnalysis`). A grid of
+nx × ny field points centred on a chosen field, half-widths in the field's unit (0: the largest
+radial field), rectangular or elliptical; points outside the field normalisation boundary are not
+computed. Each point is appended to the field list (the scale is unchanged, being inside the
+boundary) with vignetting factors cleared, its OPD computed by `OpdEngine` (exit-pupil reference
+sphere centred on the chief ray, section 26) on an n × n pupil grid, and Zernike Standard terms
+1 … N fitted by least squares over the rays that reached the reference. Plotted: Z4,
+√(Z5² + Z6²) with angle ½·atan2(−Z5, −Z6), √(Z7² + Z8²) with angle atan2(−Z7, −Z8), or one
+term; absolute, less the average over the computed points, or the average.
+
+**Not built.** The Contrast Loss Map (its pupil shift comes from the MTF's cutoff frequency for
+the field, and it reports the MTF; it waits for the MTF, OP-39); the Seidel Diagram's plot scale;
+Full-Field Aberration's icon display and grey-scale styles (the map is a false-colour image or
+contours); fifth- and higher-order (Sasian) coefficients; the afocal forms of the transverse and
+longitudinal coefficients.
