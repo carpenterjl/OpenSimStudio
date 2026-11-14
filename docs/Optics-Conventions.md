@@ -1086,8 +1086,8 @@ equation numbers).
 - **Not built.** Cubic Spline and Extended Cubic Spline: the help gives the sample points and
   says the segments have continuous first and second derivatives, but not the end conditions
   at the vertex and the edge, so the curve between samples cannot be reproduced and the forms
-  are left out. The fast even-asphere trace (Newton is used for every form). Saving these
-  surfaces is OP-31's. Section 10, item 13, lists the readings not yet compared with
+  are left out. The fast even-asphere trace (Newton is used for every form). Saving and editing
+  Odd Cosine (its term order is not documented; §20 lists the saved types). Section 10, item 13, lists the readings not yet compared with
   OpticStudio.
 - **Paraxial curvature** (TC-6). Each form overrides `SurfaceShape.ParaxialEquivalent` with
   its sag's second derivative at the vertex along the y meridian, so first-order data (EFL,

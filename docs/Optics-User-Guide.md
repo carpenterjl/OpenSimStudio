@@ -386,8 +386,9 @@ over an aperture radius, which also becomes the Q-type normalization radius; the
 its RMS and largest sag error. An Even Asphere without the r² term converts to Qcon and back
 exactly; an r² term cannot be expressed in Qcon and shows as fit error.
 
-There is no editor for these surfaces yet: they are built from code until the lens data
-editor (OP-31) saves surfaces. Not built: Cubic Spline and Extended Cubic Spline (OpticStudio's
+The Lens Data Editor offers every form except Odd Cosine (its help page does not give the
+order of its term parameters), with OpticStudio's parameter columns, and saves them with the lens
+(see "Lens Data Editor"). Odd Cosine is built from code only. Not built: Cubic Spline and Extended Cubic Spline (OpticStudio's
 help does not give the spline's end conditions) and the fast even-asphere trace. The equations,
 sources and the points not yet compared with OpticStudio are in `docs/Optics-Conventions.md`
 §17 and §10 item 13.
