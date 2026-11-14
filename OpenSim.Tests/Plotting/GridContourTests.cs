@@ -41,18 +41,22 @@ public class GridContourTests
     [Fact]
     public void LinearField_ContoursAreExactlyTheIsoLines()
     {
-        // f = 2x + y: every crossing of level L lies on 2x + y = L to rounding.
+        // f = 2x + y: every crossing of level L lies on 2x + y = L to within the on-level
+        // nudge. A node that lands exactly on a level (here -0.7 does) is moved off it by
+        // 1e-12 x the field's range (GridContour.Lines), so that is the bound, plus rounding.
         var field = GridField.FromFunction((x, y) => 2 * x + y, 11, 13, -1, 2, 0, 1.5);
         var levels = new[] { -0.7, 0.3, 1.9, 3.2 };
         var lines = GridContour.Lines(field, levels);
+        var (min, max) = field.FiniteRange();
+        double bound = 1e-12 * (max - min) + 1e-14;
         Assert.Equal(levels.Length, lines.Count);
         foreach (var line in lines)
         {
             Assert.NotEmpty(line.Segments);
             foreach (var (a, b) in line.Segments)
             {
-                Assert.Equal(line.Level, 2 * a.X + a.Y, 12);
-                Assert.Equal(line.Level, 2 * b.X + b.Y, 12);
+                Assert.InRange(Math.Abs(2 * a.X + a.Y - line.Level), 0, bound);
+                Assert.InRange(Math.Abs(2 * b.X + b.Y - line.Level), 0, bound);
             }
         }
     }
