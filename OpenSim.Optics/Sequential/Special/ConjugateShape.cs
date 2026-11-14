@@ -79,7 +79,7 @@ public sealed class ConjugateShape : SurfaceShape
             if (!double.IsFinite(f) || fz == 0) return double.NaN;
             double step = f / fz;
             z -= step;
-            if (Math.Abs(step) <= 4 * Eps * (Math.Abs(z) + Math.Abs(x) + Math.Abs(y)))
+            if (Math.Abs(step) <= 4 * Eps * (Math.Abs(z) + Math.Abs(x) + Math.Abs(y)) || Math.Abs(f) <= Noise(p))
                 return OnVertexSheet(new Vector3D(x, y, z)) ? z : double.NaN;
         }
         return double.NaN;
@@ -96,7 +96,7 @@ public sealed class ConjugateShape : SurfaceShape
             if (!double.IsFinite(f) || !double.IsFinite(df) || df == 0) break;
             double step = f / df;
             s -= step;
-            if (Math.Abs(step) <= 4 * Eps * (Math.Abs(s) + scale))
+            if (Math.Abs(step) <= 4 * Eps * (Math.Abs(s) + scale) || Math.Abs(f) <= Noise(p))
             {
                 point = new Vector3D(x + s * direction.X, y + s * direction.Y, s * direction.Z);
                 distance = s;
@@ -108,6 +108,12 @@ public sealed class ConjugateShape : SurfaceShape
         distance = double.NaN;
         return false;
     }
+
+    /// <summary>The rounding error of <see cref="F"/> at <paramref name="p"/>: F subtracts
+    /// lengths of size |p − P₁| and |p − P₂|, so a residual within a few ulps of their sum is a
+    /// root. Without this a ray meeting the surface near its vertex, where the step test's
+    /// scale is tiny, stagnates at that noise and is reported as a miss.</summary>
+    private double Noise(Vector3D p) => 8 * Eps * ((p - First).Length + (p - Second).Length);
 
     private bool OnVertexSheet(Vector3D p) => _orientation * Gradient(p).Z > 0;
 
