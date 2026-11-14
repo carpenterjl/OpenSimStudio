@@ -719,6 +719,40 @@ cosines; polarization and scattering in the spots; the ray fan at intermediate s
 footprint's "Ring" density and aperture shapes other than the semi-diameter circle; afocal-mode
 spots.
 
+## Toroidal, biconic and irregular surfaces
+
+The real ray trace also takes four surfaces without rotational symmetry (OP-24,
+`OpenSim.Optics/Sequential/Anamorphic`), as their OpticStudio 2025 R2 help pages define them:
+
+- **Toroidal:** a y–z curve (the surface's radius and conic plus α1…α7 on y² … y¹⁴) turned
+  about an axis parallel to y at the radius of rotation (parameter 1), with optional Zernike
+  Standard sag terms. A radius of rotation of 0 is infinite: that is OpticStudio's cylinder
+  lens, with power in y only; an infinite y radius with a radius of rotation gives power in x.
+- **Biconic:** separate radius and conic in x (parameters 1 and 2) and y (the radius and conic
+  columns).
+- **Biconic Zernike:** the biconic plus polynomials in x and in y (x¹ … x¹⁶, y¹ … y¹⁶) and up to
+  210 Zernike Standard terms.
+- **Irregular:** a Standard conic with spherical aberration, astigmatism and coma terms given at
+  the clear semi-diameter, the whole surface decentered and tilted for tolerancing. The terms
+  need a fixed clear semi-diameter; with an automatic one the trace stops with a message.
+
+The Lens Data Editor offers and saves all four with OpticStudio's parameter columns, including
+the extrapolate flag in parameter 0 of the Zernike forms (0: the Zernike terms stop at the
+normalization radius; 1: they apply everywhere).
+
+Paraxial data use the surface's curvature in the y–z plane at its vertex (for example the y
+radius of a biconic or a cylinder lens), as for Paraxial XY. A surface that the rotationally
+symmetric paraxial model cannot hold is refused with a message naming the surface and the
+cause: a Zernike term that moves the vertex (piston, defocus and the other m = 0 terms), tilts
+it (tilt, coma) or turns the astigmatism to 45°, a linear x or y term, a tilted or decentered
+Irregular surface, or Irregular astigmatism at an angle that is not a multiple of 90°. A lens
+holding such a surface cannot be launched, aimed, solved or analysed until that is lifted; only
+rays traced from given starting points go through it. The equations and the readings not yet
+compared with OpticStudio are in `docs/Optics-Conventions.md` §23 and §10 item 19.
+
+Not built: importing Zernike coefficients from a file into the Toroidal surface, a separate
+"Cylinder" type name, and any comparison with OpticStudio's output.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

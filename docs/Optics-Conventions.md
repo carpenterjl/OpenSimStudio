@@ -645,6 +645,27 @@ single place in the code, so a correction is one line and its test.
     Check: the standard spot (RMS, GEO, Airy radius), a ray fan and a footprint of a singlet at
     two fields in OpticStudio, with all three patterns.
 
+19. **Toroidal, biconic and irregular surfaces** (OP-24). Section 23's surfaces follow their
+    OpticStudio 2025 R2 help pages; these points are this program's reading where a page is
+    silent, and none is compared with OpticStudio's output.
+    - *Toroidal rotation:* the sheet z = R − sign(R)·√((R − z_y)² − x²) through the vertex, read
+      from the help's two figures; the sag is undefined where the curve crosses the axis of
+      rotation.
+    - *Irregular r_max:* the surface's fixed clear semi-diameter; an automatic one is refused
+      when Zs, Za or Zc is non-zero. The help says "the clear semi-diameter or semi-diameter
+      value" without saying which value an automatic semi-diameter gives.
+    - *Irregular tilt order:* the help's "decentered, tilted about x, then about y" taken as
+      the coordinate break of order 0 with no z tilt (§4).
+    - *Paraxial model:* the y–z vertex curvature, and a refusal for a vertex off z = 0, a slope
+      at the vertex or ∂²z/∂x∂y ≠ 0 (a Zernike piston, defocus, tilt or 45° astigmatism term,
+      a linear x or y term, a decentered or tilted Irregular surface, an Irregular Za at an
+      angle that is not a multiple of 90°). What OpticStudio's paraxial data do with these was
+      not read.
+    - *Extrapolate flag 0:* the Zernike terms are dropped for ρ > 1 (sag and slope), so the
+      surface has a step at the normalization radius, as the help's words imply.
+    Check: one lens per type traced in both programs (ray positions and directions), and the
+    paraxial data of a lens holding a Zernike defocus term.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -1862,3 +1883,61 @@ repository).
   surface aperture shapes other than the semi-diameter circle; afocal-mode spots (positions
   are on the image surface regardless). Section 10, item 21 lists the checks against
   OpticStudio.
+
+## 23. Toroidal, biconic and irregular surfaces
+
+OP-24 adds four `SurfaceShape` subclasses in `OpenSim.Optics/Sequential/Anamorphic/`. Each
+definition is quoted from its OpticStudio 2025 R2 help page (ansyshelp.ansys.com, OpticStudio
+User Guide, "Sequential Surfaces (lens data editor)": "Toroidal", "Biconic", "Biconic Zernike",
+"Irregular", and "Zernike Standard Sag" for the Zernike terms) on the class; the pages are saved
+under `plans/sources/optics/op-24-help/`. Formulas not on a page are derived in the class
+comments and in `AnamorphicSurfaceTests`. All four use the asphere intersection of §17
+(damped Newton from the base conic's root, bisection fallback). Coefficients are SI.
+
+- **Toroidal** (`ToroidalSurface`): the y–z curve z_y = c·y²/(1 + √(1 − (1 + k)c²y²)) + α1·y² +
+  … + α7·y¹⁴ (c, k the surface's own) turned about the line z = R parallel to y, R the radius
+  of rotation (parameter 1, 0 = infinite). With ρ = R − z_y,
+  z = z_y + x²/(ρ + sign(ρ)·√(ρ² − x²)); ∂z/∂x = sign(ρ)·x/√(ρ² − x²), ∂z/∂y = |ρ|/√(ρ² − x²)·z_y′.
+  Not defined where x² ≥ ρ² or ρ has the other sign from R. Optional Zernike Standard terms
+  (parameters 0, 13, 14, 15–245). **Cylinder:** R = 0 gives z = z_y(y), power in y only; c = 0
+  with R ≠ 0 gives power in x only.
+- **Biconic** (`BiconicSurface`): z = (cx·x² + cy·y²)/(1 + √(1 − (1 + kx)cx²x² − (1 + ky)cy²y²)),
+  cy and ky the surface's, Rx and kx parameters 1 and 2 (Rx = 0 is infinite). With cx = cy and
+  kx = ky it is the Standard conic.
+- **Biconic Zernike** (`BiconicZernikeSurface`): the biconic + Σ αᵢ·xⁱ + Σ βᵢ·yⁱ (i = 1…16,
+  parameters 13–28 and 29–44) + Σ Aᵢ·Zᵢ (parameters 3 the term count up to 210, 4 the
+  normalization radius, 45–254 the coefficients, 0 the extrapolate flag).
+- **Zernike terms** (`ZernikeSagTerms`): Noll-ordered Standard polynomials of OP-33
+  (`ZernikeBasis`, φ counter-clockwise from +x) at (x/R_n, y/R_n), coefficients in lens units;
+  extrapolate 0 drops them for ρ > 1. A term count above zero needs R_n > 0.
+- **Irregular** (`IrregularSurface`): z = conic + Zs·ρ⁴ + Za·ρ′y² + Zc·ρ²·ρ′y, ρ = r/r_max,
+  ρ′y = ρy·cos θ − ρx·sin θ, r_max the surface's fixed clear semi-diameter (an automatic one
+  is refused when a Z term is non-zero). The whole sag lives in the frame of the coordinate
+  break (dx, dy, tilt x, tilt y, 0, order 0) of §4: the ray is carried into it, met there and
+  carried back with its normal; the distance along the ray is the same in both frames. The
+  shape's `Sag` is the local z line's intersection with the placed surface.
+- **Paraxial model.** The paraxial engine is rotationally symmetric and traces the y–z meridian
+  (§18), so each surface gives its y–z vertex curvature ∂²z/∂y²(0, 0): Toroidal c + 2α1,
+  Biconic cy, Biconic Zernike cy + 2β2, Irregular c + 2Za·cos²θ/r_max², plus the Zernike terms'
+  share (−2N·A·p_k(0)/R_n² from each cos 2θ term, N its normalisation and p_k(0) its radial
+  polynomial's lowest coefficient from the recurrence at the origin; −2N·A/R_n² for n = 2). The x–z curvature is not passed on, as for Paraxial XY. A surface
+  whose vertex is off z = 0 (Zernike piston and every m = 0 term), has a slope there (Zernike
+  tilt and coma, α1, β1, a tilted or decentered Irregular surface other than a decentered
+  plane) or has ∂²z/∂x∂y ≠ 0 (Zernike sin 2θ, an Irregular Za at an angle not a multiple of
+  90°) has no such model and is refused with an `ArgumentException` naming the cause and the
+  surface, as the engine refuses a tilted or decentered lens (§15). Such a lens still traces
+  real rays from given starting points; the launcher, ray aiming, solves and every analysis
+  that needs paraxial data refuse it. `OpdLimitation` is null: the path through these surfaces
+  is the true one.
+- **Saved layouts** (`SurfaceTypes`, §20): parameter numbers, names and units from each page's
+  parameter table; parameter 0 (extrapolate) is a whole number 0 or 1; numbers 13 and above
+  are extra data.
+- **Gates** (`AnamorphicSurfaceTests`): a Biconic and a Biconic Zernike with equal x and y terms,
+  an Irregular surface with zero terms and a toroid with R = Ry, k = 0 trace as the Standard
+  surface to 1e-12 m; a cylinder lens focuses collimated y rays, Richardson-extrapolated to
+  zero height, at the derived back focal distance Rc/(n − 1) − t/n to 1e-11 m, with x rays
+  undeviated (a line focus), and the paraxial engine puts its focus there too; normals match
+  central differences of the sag to 1e-8; intersections lie on the surface to 1e-14 m.
+- **Not built:** OpticStudio's import of Zernike coefficients into the Toroidal surface (they
+  are typed in the editor); the Cylinder as a separate type name (it is the Toroidal surface);
+  any comparison with OpticStudio's output.

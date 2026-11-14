@@ -1,6 +1,7 @@
 using System.Globalization;
 using OpenSim.Core.Numerics;
 using OpenSim.Optics.Paraxial;
+using OpenSim.Optics.Sequential.Anamorphic;
 using OpenSim.Optics.Sequential.Aspheres;
 using OpenSim.Optics.Sequential.Special;
 
@@ -556,6 +557,93 @@ public static class SurfaceTypes
             _ => null,
             _ => throw new InvalidOperationException("A coordinate break has no shape."))
         { UsesRadiusAndConic = false, IsCoordinateBreak = true });
+
+        // OP-24: Toroidal, Biconic, Biconic Zernike and Irregular (docs/Optics-Conventions.md
+        // §23), from the OpticStudio 2025 R2 help pages of those names (saved under
+        // plans/sources/optics/op-24-help/). A Cylinder is a Toroidal surface with radius of
+        // rotation 0 ("which OpticStudio interprets as infinite radius").
+        SurfaceParameterInfo Extrapolate() => new(0, "Extrapolate", 0)
+        {
+            IsInteger = true, Range = (0, 1),
+            Description = "0: the Zernike terms are ignored outside the normalization radius; 1: they are used wherever the ray lands.",
+        };
+
+        // "Toroidal": 0 extrapolate, 1 radius of rotation (lens units; 0 is infinite), 2–8
+        // α1–α7 on y², y⁴, … y¹⁴, 13 number of Zernike terms, 14 normalization radius, 15–245
+        // the coefficients on Zernike Standard polynomials 1–231 (lens units).
+        list.Add(new SurfaceTypeLayout("Toroidal", "OpticStudio 2025 R2 help, \"Toroidal\", table Parameter Definitions for Toroidal Surfaces",
+            new[] { Extrapolate(), P(1, "Radius of rotation", 1, "Radius of rotation in lens units; 0 is infinite (a cylinder flat in x).") }
+                .Concat(Enumerable.Range(1, 7).Select(i => P(i + 1, $"α{i}", 1 - 2 * i, $"Coefficient on y^{2 * i}.")))
+                .Append(Count(13, "Number of terms", 231, "The highest Zernike Standard term used; terms beyond it are ignored."))
+                .Append(P(14, "Norm radius", 1, "Normalization radius of the Zernike terms, lens units."))
+                .Concat(Enumerable.Range(1, 231).Select(i => P(14 + i, $"Zernike {i}", 1, $"Coefficient on Zernike Standard polynomial {i}, lens units.")))
+                .ToArray(),
+            v => new ToroidalSurface(v(1), Trimmed(Range(v, 2, 7)), Range(v, 15, Whole(v, 13)), v(14), v(0) != 0),
+            s =>
+            {
+                var t = (ToroidalSurface)s;
+                return With(Numbered(t.Alpha, 2).Concat(Numbered(t.Zernike, 15)).ToDictionary(k => k.Key, k => k.Value),
+                    (0, t.Extrapolate ? 1 : 0), (1, t.RadiusOfRotation), (13, t.Zernike.Count), (14, t.NormalizationRadius));
+            }));
+
+        // "Biconic": 1 Rx (0 is infinite), 2 kx; Ry and ky are the radius and conic columns.
+        list.Add(new SurfaceTypeLayout("Biconic", "OpticStudio 2025 R2 help, \"Biconic\", table Parameter Definitions for Biconic Surfaces",
+            new[] { P(1, "Rx", 1, "Radius in x, lens units; 0 is infinite."), P(2, "kx", 0, "Conic constant in x.") },
+            v => new BiconicSurface(v(1), v(2)),
+            s =>
+            {
+                var b = (BiconicSurface)s;
+                return new Dictionary<int, double> { [1] = b.RadiusX, [2] = b.ConicX };
+            }));
+
+        // "Biconic Zernike": 0 extrapolate, 1 Rx, 2 kx, 3 number of Zernike terms (0 to 210), 4
+        // normalization radius, 13–28 coefficients on x¹ … x¹⁶, 29–44 on y¹ … y¹⁶, 45–254 on the
+        // Zernike Standard polynomials 1–210.
+        list.Add(new SurfaceTypeLayout("Biconic Zernike", "OpticStudio 2025 R2 help, \"Biconic Zernike\", table Parameter Definitions for Biconic Zernike Surfaces",
+            new[]
+            {
+                Extrapolate(),
+                P(1, "Rx", 1, "Radius in x, lens units; 0 is infinite."),
+                P(2, "kx", 0, "Conic constant in x."),
+                Count(3, "Number of terms", 210, "The highest Zernike Standard term used (at most 210)."),
+                P(4, "Norm radius", 1, "Normalization radius of the Zernike terms, lens units."),
+            }
+                .Concat(Enumerable.Range(1, 16).Select(i => P(12 + i, $"x^{i}", 1 - i, $"Coefficient on x^{i}.")))
+                .Concat(Enumerable.Range(1, 16).Select(i => P(28 + i, $"y^{i}", 1 - i, $"Coefficient on y^{i}.")))
+                .Concat(Enumerable.Range(1, 210).Select(i => P(44 + i, $"Zernike {i}", 1, $"Coefficient on Zernike Standard polynomial {i}, lens units.")))
+                .ToArray(),
+            v => new BiconicZernikeSurface(v(1), v(2), Trimmed(Range(v, 13, 16)), Trimmed(Range(v, 29, 16)), Range(v, 45, Whole(v, 3)), v(4), v(0) != 0),
+            s =>
+            {
+                var b = (BiconicZernikeSurface)s;
+                return With(Numbered(b.Alpha, 13).Concat(Numbered(b.Beta, 29)).Concat(Numbered(b.Zernike, 45)).ToDictionary(k => k.Key, k => k.Value),
+                    (0, b.Extrapolate ? 1 : 0), (1, b.RadiusX), (2, b.ConicX), (3, b.Zernike.Count), (4, b.NormalizationRadius));
+            }));
+
+        // "Irregular": 1 decenter x, 2 decenter y (lens units), 3 tilt about x, 4 tilt about y
+        // (degrees), 5 Zs, 6 Za, 7 Zc (lens units), 8 θ (degrees).
+        list.Add(new SurfaceTypeLayout("Irregular", "OpticStudio 2025 R2 help, \"Irregular\", table Parameter Definitions for Irregular Surfaces",
+            new[]
+            {
+                P(1, "Decenter X", 1, "Lens units."),
+                P(2, "Decenter Y", 1, "Lens units."),
+                new SurfaceParameterInfo(3, "Tilt About X", 0) { IsAngle = true, Description = "Degrees; the surface is decentered, then tilted about x, then about y." },
+                new SurfaceParameterInfo(4, "Tilt About Y", 0) { IsAngle = true, Description = "Degrees, about the new y." },
+                P(5, "Zs", 1, "Spherical aberration at the maximum radial aperture (the clear semi-diameter), lens units."),
+                P(6, "Za", 1, "Astigmatism at the maximum radial aperture, lens units."),
+                P(7, "Zc", 1, "Coma at the maximum radial aperture, lens units."),
+                new SurfaceParameterInfo(8, "θ", 0) { IsAngle = true, Description = "Angle of the astigmatism and coma from the y axis, degrees." },
+            },
+            v => new IrregularSurface(v(1), v(2), v(3), v(4), v(5), v(6), v(7), v(8)),
+            s =>
+            {
+                var r = (IrregularSurface)s;
+                return new Dictionary<int, double>
+                {
+                    [1] = r.DecenterX, [2] = r.DecenterY, [3] = r.TiltXDegrees, [4] = r.TiltYDegrees,
+                    [5] = r.Spherical, [6] = r.Astigmatism, [7] = r.Coma, [8] = r.AngleDegrees,
+                };
+            }));
 
         // OP-52
         // "Jones Matrix (sequential surfaces, lens data editor)": "This surface uses eight
