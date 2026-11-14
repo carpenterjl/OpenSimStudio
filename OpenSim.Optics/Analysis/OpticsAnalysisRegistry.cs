@@ -61,6 +61,8 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new GlassFitAnalysis());
         // OP-15: the twelve coating plots.
         foreach (var coating in CoatingAnalyses.All()) registry.Register(coating);
+        // OP-48: Gaussian beams.
+        registry.Register(new GaussianBeamAnalysis());
         return registry;
     }
 }

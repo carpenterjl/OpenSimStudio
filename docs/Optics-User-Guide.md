@@ -211,6 +211,28 @@ used from code and tests until the surface editor (OP-20) feeds it. Not built: r
 height fields (need ray aiming, OP-22), configurations (OP-30), and any comparison of these
 numbers with OpticStudio's output.
 
+## Gaussian beams
+
+The analysis **Paraxial Gaussian beam** (Beams) carries a Gaussian beam through the paraxial
+model (`OpenSim.Optics/Paraxial/GaussianBeam.cs`, `OpenSim.Optics/Analysis/GaussianBeamAnalysis.cs`).
+Its settings: the wavelength row (0 for the primary); in x, the waist radius (1/e² intensity),
+the waist's position as a signed distance along z from surface 1 (negative in front of it) and
+M²; **Same in y** (on: a round beam; off: the y waist, position and M² given separately); and
+the points per gap of the plot. Lengths in the settings are millimeters whatever the lens unit.
+
+It lists the input beam (Rayleigh range and divergence in object space) and a table, **Paraxial
+Gaussian Beam**, with one row per surface (two tables, x and y, for an astigmatic beam): beam
+radius, waist radius, waist position from the surface, Rayleigh range, divergence, wavefront
+radius and the Gouy phase accumulated from surface 1. The plot shows the beam radius against
+the distance along the axis from surface 1, unfolded at mirrors; with M² above 1 the embedded
+Gaussian is drawn dashed. Signs and the M² model are in `docs/Optics-Conventions.md` §14.
+
+There is no sequential surface editor yet, so in the app this analysis says the system has no
+surfaces; the engine is used from code and tests until OP-20 feeds it. Not built: the skew
+(generally astigmatic) Gaussian beam about a real chief ray, which needs the real ray trace;
+tilted, decentered and anamorphic surfaces; Gaussian beam operands; any comparison with
+OpticStudio's output.
+
 ## Coatings
 
 Below the glass catalogs, the **Coatings** group (`OpenSim.App/Views/Panels/OpticsCoatingsPanel.xaml`)

@@ -6,7 +6,7 @@ code that implements each rule is named beside the rule. The tests are in
 those of the air and glass index models (section 2) in `OpenSim.Tests/Optics/AirIndexTests.cs` and
 `OpenSim.Tests/Optics/ThermalIndexTests.cs`; those of paraxial optics (section 11) in
 `OpenSim.Tests/Optics/ParaxialTests.cs`; those of thin-film coatings (section 12) in
-`OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`.
+`OpenSim.Tests/Optics/ThinFilmTests.cs` and `OpenSim.Tests/Optics/CoatingCatalogTests.cs`; those of Gaussian beams (section 14) in `OpenSim.Tests/Optics/GaussianBeamTests.cs`.
 
 Two rules decide everything below:
 
@@ -398,6 +398,13 @@ single place in the code, so a correction is one line and its test.
    - *IDEAL2 amplitudes* with |r|² + |t|² above 1 are refused; the help does not say what
      OpticStudio does.
 
+10. **Gaussian beam signs and inputs** (OP-48). Section 14's sign rules (the waist position
+    measured along z from the surface, the wavefront radius positive when diverging, the
+    input waist position measured from surface 1, an M² input waist being the real beam's)
+    and its "Gouy phase accumulated from surface 1" are this program's choices; OpticStudio's
+    Paraxial Gaussian Beam help was not read. Check: one singlet and one concave mirror with a
+    beam of known waist and M² = 2, compared with OpticStudio's Paraxial Gaussian Beam listing.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -524,3 +531,42 @@ coating plots use catalog indices as they are; they do not adjust them to the en
 applies a coating to it yet); there are no surfaces to carry a coating; incoherent thick
 layers; coating design or optimisation (OpticStudio has none either).
 
+## 14. Gaussian beams
+
+`OpenSim.Optics/Paraxial/GaussianBeam.cs` (OP-48) carries a fundamental-mode Gaussian beam
+through the paraxial model of section 11. The equations are derived from the definitions
+q = z + i·z_R and 1/q = 1/R − i·λ/(π·w²) in the comments of `GaussianBeamTests`; Siegman's
+*Lasers*, the plan's reference, is not on disk and nothing is copied from it.
+
+- **Reduced beam parameter.** The engine carries q̂ = q/n with n the signed index of the
+  space (section 11). Because the ABCD matrices act on (y, n·u), q̂ = y/(n·u) of any ray pair
+  obeys q̂′ = (A·q̂ + B)/(C·q̂ + D) with the same matrices: a transfer adds t/n, a surface of
+  power φ makes 1/q̂′ = 1/q̂ − φ, and mirrors need nothing more. In a space of index |n| the
+  physical parameter along the beam's direction of travel is q = |n|·q̂; Im q̂ stays positive
+  through every lossless step.
+- **Wavelength.** The table's wavelength is in the system's air, which is the wavelength in a
+  medium of relative index 1 (section 2); in a medium of relative index n it is λ/n. So
+  z_R = π·w0²·n/λ in that medium.
+- **Reported quantities**, per space: beam radius w = w0·√(1 + (z/z_R)²) (1/e² intensity);
+  waist radius w0 = √(λ_n·z_R/π); Rayleigh range z_R = Im q; distance from the waist z = Re q
+  along the direction of travel; divergence θ = w0/z_R (half angle, radians); wavefront radius
+  R = z + z_R²/z, positive when diverging and infinite at a waist; and the Gouy phase summed
+  over the spaces crossed since surface 1, atan(z₂/z_R) − atan(z₁/z_R) per space, which for a
+  total below π equals −arg(A + B/q̂) of the matrix crossed.
+- **Positions.** The input waist position is a signed distance along z from surface 1's
+  vertex (negative in front of it), like every object-space position. A reported waist
+  position is a signed distance along z from the surface's vertex to the waist of the beam in
+  the space after it: −n·Re q̂, so after an odd number of mirrors a waist ahead of the beam is
+  at negative z, as a thickness is. Rows are the beam just after each surface; the first row
+  is the input beam arriving at surface 1, the last the beam arriving at the image surface.
+- **M² (embedded Gaussian).** With beam quality M² the input waist W0 is the real beam's; the
+  embedded Gaussian has waist W0/M (M = √M²) and is the beam propagated, so z_R = π·W0²·n/(M²·λ).
+  The real beam's radius, waist radius and divergence are M times the embedded beam's; its
+  Rayleigh range, waist position, wavefront radius and Gouy phase are the embedded beam's.
+- **Astigmatism.** The x and y planes have their own waist, position and M² and propagate
+  independently (a simple astigmatic beam); with rotationally symmetric surfaces the same
+  matrices act on both.
+- **Not built.** The generally astigmatic (skew) beam traced about a real chief ray, which
+  needs the real ray trace (OP-20) and Arnaud's ray representation; tilted, decentered and
+  anamorphic (toroidal, cylindrical) surfaces; Gaussian beam operands; apertures clipping the
+  beam. Section 10, item 10, lists the check against OpticStudio.
