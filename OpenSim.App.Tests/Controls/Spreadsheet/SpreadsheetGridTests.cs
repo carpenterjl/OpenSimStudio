@@ -110,7 +110,12 @@ public sealed class SpreadsheetGridTests
         var before = Descendants<DataGridRow>(grid);
         Assert.InRange(before.Count, 1, 40);   // 400 px of 22 px rows, plus the virtualising panel's cache
 
-        grid.DataGrid.ScrollIntoView(doc.Rows[450]);
+        // Off-screen, with no window, the DataGrid defers ScrollIntoView and never completes
+        // it, so scroll its own viewer: item scrolling, so the offset counts rows.
+        var viewer = Descendants<ScrollViewer>(grid.DataGrid).First();
+        Assert.True(viewer.CanContentScroll);
+        viewer.ScrollToVerticalOffset(445);
+        grid.UpdateLayout();
         Flush();
         grid.UpdateLayout();
         var after = Descendants<DataGridRow>(grid);
