@@ -592,7 +592,8 @@ yet compared with OpticStudio are in §10 item 17.
 Not built: real transmission in the other analyses (the call `PolarizationTracer.Transmission`
 exists for them, but spot diagrams, MTF, PSF and the rest do not use it yet); pupil
 apodization and vignetting factors in the transmission (OP-22); diattenuation and retardance
-maps, Jones and Mueller matrix surfaces (OP-52) and birefringent media (OP-53); polarization of
+maps and birefringent media (OP-53) (the Jones and Mueller matrix surfaces are in their own
+section below); polarization of
 non-sequential rays; the Polarization pupil map's interference between configurations; the
 system's retardance (only its diattenuation is listed).
 
@@ -639,6 +640,46 @@ side was taken as air, and the sphere removed. Definitions and the readings of O
 help are in `docs/Optics-Conventions.md` §28. Not built: Surface Phase and Phase Slope (no
 surface type carries a phase yet), off-axis coordinates, the Base Sag and Composite Sag removal
 options, and the 3-D surface plot and grey-scale display.
+
+## Jones and Mueller matrix surfaces
+
+Two surface types act on the polarization of light without changing the geometry of the trace
+(OP-52). Both are planes: rays refract or reflect there as at a plane Standard surface, and
+the surface's coating or Fresnel amplitudes apply as at any interface. Pick them in the Lens
+Data Editor's type column; neither takes a radius or conic.
+
+- **Jones Matrix** (as in OpticStudio): parameters 1–8 are Ar, Ai, Br, Bi, Cr, Ci, Dr, Di, the
+  real and imaginary parts of the 2 × 2 matrix [[A, B], [C, D]] acting on the field's
+  components along the surface's local x and y axes, in OpticStudio's sign convention for
+  phases. Examples from OpticStudio's help: an X analyzer is A = 1 and the rest 0; a
+  quarter-wave plate in x is A = (0, 1), D = (1, 0); a 25% intensity filter is A = D = 0.5. The
+  matrix is meant for normal incidence; at other angles it acts in the plane at right angles to
+  the ray, which keeps the field transverse and never adds power.
+- **Mueller Matrix** (this program's own type; OpticStudio has no sequential one): parameters
+  1–16 are the 4 × 4 Mueller matrix M00 … M33 row by row, acting on the Stokes vector
+  (I, Q, U, V) in the surface's local x, y axes. It can depolarize: diag(1, d, d, d) keeps the
+  power and multiplies the degree of polarization by d. A matrix that would turn a ray's Stokes
+  vector into an unphysical one (negative intensity, or more polarized power than power) stops
+  the analysis with a message naming the surface.
+
+After a Mueller surface a ray carries partially polarized light, which has no single field:
+
+- **Polarization ray trace** shows dashes for Ex, Ey, Ez from that surface on, and "not
+  defined" for the system diattenuation and matrix. For every ray it lists the Stokes vector at
+  the last surface reached and the degrees of polarization, linear polarization and circular
+  polarization (V/I, signed).
+- **Transmission** and **Transmission fan** work as before (the power is exact).
+- **Polarization pupil map** at or after a Mueller surface, and **Phase aberration** of a lens
+  with one, stop with a message naming the surface.
+
+Only the polarization analyses see the matrices; the geometric analyses treat both types as
+plain planes. The equations and the readings of OpticStudio's help are in
+`docs/Optics-Conventions.md` §30 and §10 item 26.
+
+Not built: the non-sequential Jones Matrix object and any non-sequential Mueller object (they
+need the non-sequential core, OP-70); a check that a Mueller matrix is physically realisable
+for every input (only each ray's output is checked); the pupil map of the polarized part of
+partially polarized light.
 
 ## Coming
 

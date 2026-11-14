@@ -96,6 +96,28 @@ public sealed record PolarizedSurface
     /// <summary>A global field written in this surface's local frame.</summary>
     public RayField LocalField(SequentialTrace trace, RayField globalField) =>
         globalField.RotatedBack(trace.GlobalPlacement(Surface));
+
+    // OP-52: Jones and Mueller matrix surfaces (docs/Optics-Conventions.md §30).
+
+    /// <summary>The embedded Jones matrix applied after the interface on a Jones Matrix surface
+    /// (included in <see cref="Matrix"/>); null elsewhere and for an identity Jones matrix.</summary>
+    public PolarizationMatrix? JonesMatrix { get; init; }
+
+    /// <summary>True on a Mueller Matrix surface that acted on the ray.</summary>
+    public bool IsMueller { get; init; }
+
+    /// <summary>The coherency matrix after the surface (surface 1's frame) from the first Mueller
+    /// matrix surface on; null while the ray is described by its field. Where it is set, the
+    /// field (<see cref="FieldOut"/>, and <see cref="FieldIn"/> after that surface) and
+    /// <see cref="Cumulative"/> are NaN: partially polarized light has no single field.</summary>
+    public CoherencyMatrix? Coherency { get; init; }
+
+    /// <summary>The state after the surface: <see cref="Coherency"/>, or E E^H of the field.</summary>
+    public CoherencyMatrix State => Coherency ?? CoherencyMatrix.FromField(FieldOut);
+
+    /// <summary>The Stokes vector after the surface in the transverse basis of the surface's
+    /// local x and y axes for the ray leaving it (<see cref="PlaneMatrixShape.TransverseBasis"/>).</summary>
+    public StokesVector Stokes(SequentialTrace trace) => PolarizationTracer.StokesAt(trace, Surface, Hit.Direction, State);
 }
 
 /// <summary>A ray traced with its field: the geometric path, the launch, every surface, and
@@ -121,8 +143,22 @@ public sealed record PolarizedPath
     /// <summary>The power transmitted to the image surface; zero for a ray that failed.</summary>
     public double Transmission => Final.IsOk ? Final.Intensity : 0;
 
-    /// <summary>The system's matrix from the launch to the last surface reached.</summary>
+    /// <summary>The system's matrix from the launch to the last surface reached (NaN after a
+    /// Mueller matrix surface, see <see cref="MuellerSurface"/>).</summary>
     public PolarizationMatrix Cumulative => Surfaces.Count > 0 ? Surfaces[^1].Cumulative : PolarizationMatrix.Identity;
+
+    // OP-52.
+
+    /// <summary>The first Mueller matrix surface the ray met, or null. From there on the ray
+    /// carries a coherency matrix, and its field is NaN.</summary>
+    public int? MuellerSurface { get; init; }
+
+    /// <summary>The coherency matrix at the last surface reached (surface 1's frame).</summary>
+    public required CoherencyMatrix FinalCoherency { get; init; }
+
+    /// <summary>The Stokes vector at the last surface reached, in the transverse basis of that
+    /// surface's local x and y axes (<see cref="PlaneMatrixShape.TransverseBasis"/>).</summary>
+    public required StokesVector FinalStokes { get; init; }
 }
 
 /// <summary>
@@ -241,6 +277,8 @@ public sealed class PolarizationTracer
         var cumulative = PolarizationMatrix.Identity;
         double previousPower = field.NormSquared;
         var records = new List<PolarizedSurface>(path.Hits.Count);
+        CoherencyMatrix? coherency = null;    // OP-52: set from the first Mueller matrix surface on
+        int? muellerSurface = null;
 
         for (int h = 1; h < path.Hits.Count; h++)
         {
@@ -261,6 +299,7 @@ public sealed class PolarizationTracer
                 bulk = amplitude * amplitude;
                 field = Scale(field, amplitude);
                 cumulative = cumulative.Scaled(amplitude);
+                coherency = coherency?.Scaled(bulk);
             }
             var fieldIn = field;
 
@@ -268,11 +307,11 @@ public sealed class PolarizationTracer
             bool interfaceHere = hit.Status == RayStatus.Ok && j < image && !s.IsIgnored;
             if (!interfaceHere)
             {
-                double powerHere = field.NormSquared;
+                double powerHere = coherency?.Power ?? field.NormSquared;
                 records.Add(new PolarizedSurface
                 {
                     Surface = j, Hit = hit, BulkTransmittance = bulk, FieldIn = fieldIn, FieldOut = field,
-                    Matrix = PolarizationMatrix.Identity, Cumulative = cumulative,
+                    Matrix = PolarizationMatrix.Identity, Cumulative = cumulative, Coherency = coherency,
                     RelativeTransmission = previousPower > 0 ? powerHere / previousPower : 0, TotalTransmission = powerHere,
                 });
                 previousPower = powerHere;
@@ -310,11 +349,38 @@ public sealed class PolarizationTracer
             }
 
             var matrix = PolarizationMatrix.Interface(sHat, pIn, kIn, sOut, pOut, kOut, aS, aP);
+
+            // OP-52: a Jones matrix surface's matrix acts on the field leaving the interface, in
+            // the transverse basis of its local axes (docs §30); an exact identity is skipped.
+            PolarizationMatrix? jonesMatrix = null;
+            if (s.Shape is JonesMatrixShape jonesShape && !jonesShape.IsIdentity)
+            {
+                var (u, v) = PlaneMatrixShape.TransverseBasis(kOut,
+                    Unit(placement.ApplyDirection(Vector3D.UnitX)), Unit(placement.ApplyDirection(Vector3D.UnitY)));
+                jonesMatrix = jonesShape.Embedded(u, v, kOut);
+                matrix = jonesMatrix * matrix;
+            }
+
             field = matrix.Apply(field);
             cumulative = matrix * cumulative;
-            double power = field.NormSquared;
+            coherency = coherency?.Transformed(matrix);
+
+            // OP-52: a Mueller matrix surface acts on the Stokes vector in the same basis; from
+            // here on the ray carries its coherency matrix and its field is undefined (NaN).
+            bool mueller = false;
+            if (s.Shape is MuellerMatrixShape muellerShape)
+            {
+                coherency = ApplyMueller(j, muellerShape, coherency ?? CoherencyMatrix.FromField(field), kOut, placement);
+                muellerSurface ??= j;
+                mueller = true;
+                field = UndefinedField;
+                cumulative = PolarizationMatrix.Undefined;
+            }
+
+            double power = coherency?.Power ?? field.NormSquared;
             records.Add(new PolarizedSurface
             {
+                JonesMatrix = jonesMatrix, IsMueller = mueller, Coherency = coherency,
                 Surface = j, Hit = hit, BulkTransmittance = bulk, FieldIn = fieldIn, FieldOut = field, IsInterface = true,
                 CoatingName = coating?.Name, Response = response,
                 FieldAmplitudeS = fs, FieldAmplitudeP = fp, AmplitudeS = aS, AmplitudeP = aP, CoatingThickness = thickness,
@@ -326,12 +392,73 @@ public sealed class PolarizationTracer
 
         int finalSurface = path.Final.IsOk ? image : path.Final.FailedAtSurface;
         var local = field.RotatedBack(Trace.GlobalPlacement(Math.Clamp(finalSurface, 0, image)));
-        var final = path.Final with { Field = local, Intensity = field.NormSquared };
+        var final = path.Final with { Field = local, Intensity = coherency?.Power ?? field.NormSquared };
+        var finalState = coherency ?? CoherencyMatrix.FromField(field);
+        var last = path.Hits[^1];
         return new PolarizedPath
         {
             Path = path, Jones = jones, LaunchS = launchS, LaunchP = launchP, LaunchField = jones.ToField(k0, Options.Reference),
             Surfaces = records, Final = final,
+            MuellerSurface = muellerSurface, FinalCoherency = finalState,
+            FinalStokes = StokesAt(Trace, Math.Clamp(last.Surface, 0, image), last.Direction, finalState),
         };
+    }
+
+    // ------------------------------------------------------------------ OP-52: Stokes and Mueller
+
+    private static readonly RayField UndefinedField = new(new Complex(double.NaN, double.NaN),
+        new Complex(double.NaN, double.NaN), new Complex(double.NaN, double.NaN));
+
+    /// <summary>The Stokes vector of a coherency matrix at surface <paramref name="surface"/> for
+    /// a ray leaving it along <paramref name="localDirection"/> (that surface's frame), in the
+    /// transverse basis of the surface's local x and y axes.</summary>
+    internal static StokesVector StokesAt(SequentialTrace trace, int surface, Vector3D localDirection, CoherencyMatrix state)
+    {
+        var placement = trace.GlobalPlacement(surface);
+        var (u, v) = PlaneMatrixShape.TransverseBasis(Unit(placement.ApplyDirection(localDirection)),
+            Unit(placement.ApplyDirection(Vector3D.UnitX)), Unit(placement.ApplyDirection(Vector3D.UnitY)));
+        return state.Stokes(u, v);
+    }
+
+    /// <summary>
+    /// The Stokes vector at the image of a traced ray for the system polarization: polarized,
+    /// that of its Jones vector; unpolarized, that of the mean of the coherency matrices of the
+    /// (1, 0) and (0, 1) traces (every step of the trace is linear in the coherency matrix, so
+    /// the mean of the two is the trace of the unpolarized launch). Throws for a failed ray.
+    /// </summary>
+    public StokesVector FinalStokes(RayPath path, SystemPolarization polarization)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(polarization);
+        if (!path.Final.IsOk)
+            throw new ArgumentException($"The ray failed ({path.Final.Status}) at surface {path.Final.FailedAtSurface}; it has no Stokes vector at the image.", nameof(path));
+        if (!polarization.Unpolarized) return TracePath(path, polarization.ToJones()).FinalStokes;
+        var a = TracePath(path, JonesVector.AlongS);
+        var b = TracePath(path, JonesVector.AlongP);
+        var last = path.Hits[^1];
+        return StokesAt(Trace, last.Surface, last.Direction, CoherencyMatrix.Average(a.FinalCoherency, b.FinalCoherency));
+    }
+
+    /// <summary>
+    /// S_out = M·S_in in the transverse basis (û, v̂) of the surface's local axes for the ray
+    /// leaving along k̂, and the coherency matrix of S_out in that basis (the part of the state
+    /// along k̂, zero for a transverse field up to rounding, is dropped). Throws, naming the
+    /// surface, when S_out is not a physical Stokes vector: I below −10⁻¹²·I_in, or
+    /// √(Q² + U² + V²) above I + 10⁻¹²·I_in.
+    /// </summary>
+    private static CoherencyMatrix ApplyMueller(int j, MuellerMatrixShape shape, CoherencyMatrix state, Vector3D kOut, RigidTransform placement)
+    {
+        var (u, v) = PlaneMatrixShape.TransverseBasis(kOut,
+            Unit(placement.ApplyDirection(Vector3D.UnitX)), Unit(placement.ApplyDirection(Vector3D.UnitY)));
+        var sIn = state.Stokes(u, v);
+        var sOut = sIn.Apply(shape.Matrix);
+        double tolerance = 1e-12 * Math.Abs(sIn.I);
+        double polarized = Math.Sqrt(sOut.Q * sOut.Q + sOut.U * sOut.U + sOut.V * sOut.V);
+        if (!(sOut.I >= -tolerance) || !(polarized <= sOut.I + tolerance))
+            throw new InvalidOperationException(
+                $"Polarization ray trace, surface {j} ({MuellerMatrixShape.Name}): the matrix takes the Stokes vector {sIn} to {sOut}, " +
+                "which is not physical (a negative intensity, or a polarized part larger than the intensity). Check the matrix entries.");
+        return CoherencyMatrix.FromStokes(sOut, u, v);
     }
 
     /// <summary>

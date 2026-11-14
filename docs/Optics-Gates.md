@@ -118,3 +118,9 @@ comments by measured worst cases.
 Every other expected literal in the 27 files is derived in its test or cited to a source with
 its table, equation, page, line or file. The new tests in `OpenSim.Tests/Optics/Gates/` derive
 every expected value in their comments from the test's own inputs.
+
+## OP-52 Jones and Mueller matrix surfaces
+
+| Item | Gate (plan text, shortened) | Tests | Status |
+|---|---|---|---|
+| OP-52 Jones and Mueller matrix elements | Malus's law through two polarizers; a quarter-wave plate turns linear into circular; a Mueller depolarizer reduces the degree of polarization by its stated factor (brief: an identity matrix surface leaves the trace unchanged bit for bit) | `OpenSim.Tests/Optics/JonesMuellerSurfaceTests` (`MalusLaw_ThroughTwoPolarizers_IsCosSquared`, cos²θ polarized and ½cos²θ unpolarized at 1e-14; `QuarterWavePlateAt45_TurnsLinearIntoCircular`, \|V\|/I = 1 at 1e-15; `MuellerDepolarizer_ReducesTheDegreeOfPolarization_ByItsFactor`, degree d for linear and circular light at 1e-15; `AnIdentityJonesSurface_LeavesTheTraceUnchanged_BitForBit`; also `AUnitaryJonesMatrix_KeepsThePower_AtObliqueIncidence_AndTheFieldTransverse`, `TheMuellerMatrixOfAJonesMatrix_MatchesTheTable_AndTheTwoSurfacesAgree`) | pinned for the sequential surfaces; the non-sequential Jones and Mueller objects are not built (OP-70). Expected values are derived in the test comments, except two Mueller matrices copied from Wikipedia, "Mueller calculus". Nothing is compared with OpticStudio's output (Conventions §10 item 26). |

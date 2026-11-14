@@ -617,6 +617,18 @@ single place in the code, so a correction is one line and its test.
       curvature" (or slope) without a formula.
     - *Automatic step* of the Sag Table and the default sampling of 65: OpenSim's choices.
 
+26. **Jones and Mueller matrix surfaces** (OP-52). Section 30's readings of OpticStudio's help
+    are not compared with its output. Check with a Jones surface at normal and at 20° incidence
+    (Polarization Ray Trace listing):
+    - *Complex convention:* the entries Ar + i·Ai are taken in the convention of OpticStudio's
+      Jones-vector phases, so this program applies their conjugates; the help does not say.
+    - *Frame:* Ex and Ey along the surface's local x and y axes.
+    - *Off normal incidence:* the matrix acts in the transverse basis (û, v̂) built from the
+      local x axis; OpticStudio's adjustment of Ez or of Ex and Ey is not given as a formula.
+    - *Interface:* the surface is also an ordinary interface (Fresnel or coating), and the matrix
+      acts after it.
+    - *Image surface:* a matrix type on the image surface is not applied (no interface is).
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -1523,8 +1535,8 @@ Transmission", and the five analyses) are saved under `plans/sources/optics/ansy
   pair; the field transverse to the ray at every surface; normal incidence on a mirror scaling
   the whole field by r_s; the index-matched layer above.
 - **Not built.** Real transmission in the other analyses (the API exists; nothing else calls
-  it yet); pupil apodization and vignetting factors (OP-22); retardance of the system; Jones
-  and Mueller matrix surfaces (OP-52); birefringent media (OP-53); gradient-index polarization;
+  it yet); pupil apodization and vignetting factors (OP-22); retardance of the system (the Jones
+  and Mueller matrix surfaces of OP-52 are section 30); birefringent media (OP-53); gradient-index polarization;
   non-sequential polarization; interference between configurations in the pupil map. The
   points not compared with OpticStudio are section 10, item 17.
 
@@ -1664,3 +1676,90 @@ phase: there are no diffractive surfaces yet); Off-Axis Coordinates; Remove "Bas
 BFSD operand (a merit-function item); a best-fit sphere of a surface that is not rotationally
 symmetric beyond its y profile. The readings in §10 item 24 are not compared with OpticStudio's
 output.
+
+## 30. Jones and Mueller matrix surfaces
+
+OP-52 adds two plane surface types that act on the polarization ray trace of section 21:
+OpticStudio's Jones Matrix surface and a Mueller Matrix surface of this program's own
+(`OpenSim.Optics/Polarization/MatrixSurfaces.cs`, `StokesVector.cs`, and additions to
+`PolarizationTracer.cs`). Sources, saved under `plans/sources/optics/op-52-help/`: OpticStudio
+2025 R2 help, "Jones Matrix (sequential surfaces, lens data editor)", "Defining Polarizing
+Components" (its sample Jones matrices) and "Summary Table of Sequential Surface Types";
+Wikipedia, "Stokes parameters" and "Mueller calculus".
+
+- **Geometry.** Both are planes ("The surface shape is always plane"), traced by the same
+  `ConicIntersection` calls as a Standard surface of zero curvature and conic, so the geometric
+  trace is a plane's bit for bit. Rays refract or reflect there by the media on the two sides,
+  and the surface is an ordinary interface for the Fresnel or coating amplitudes of section 21;
+  the matrix acts after that interface, on the light leaving the surface. Radius and conic are
+  refused on both types when a saved lens is read. Only the polarization trace and its analyses
+  see the matrix, as the help says of the Jones surface.
+- **Jones Matrix parameters** (help table): 1 Ar, 2 Ai, 3 Br, 4 Bi, 5 Cr, 6 Ci, 7 Dr, 8 Di;
+  (Ex′, Ey′) = (A Ex + B Ey, C Ex + D Ey). The entries are read as OpticStudio complex numbers
+  in its convention, so the matrix applied in this program's convention (section 21) is the
+  conjugate, A = Ar − i·Ai and so on (a field in one convention is the conjugate of the field in
+  the other, and conj(JE) = conj(J)·conj(E)).
+- **Local frame.** Ex and Ey are read along the surface's local x and y axes. For a ray leaving
+  along k̂ the transverse basis is û = the part of x̂_L at right angles to k̂, normalised, and
+  v̂ = k̂ × û (where k̂ lies along x̂_L: v̂ = the part of ŷ_L at right angles to k̂, û = v̂ × k̂).
+  At normal incidence (û, v̂) = (x̂_L, ŷ_L). `PlaneMatrixShape.TransverseBasis`.
+- **Embedding in the 3 × 3 calculus.** P_J = [û v̂]·J·[û v̂]ᵀ + k̂k̂ᵀ
+  = û(A ûᵀ + B v̂ᵀ) + v̂(C ûᵀ + D v̂ᵀ) + k̂k̂ᵀ. It maps a transverse field Eu û + Ev v̂ to
+  (A Eu + B Ev) û + (C Eu + D Ev) v̂ and k̂ to k̂, like the interface matrices, and multiplies
+  the surface's interface matrix from the left (P = P_J·P_interface), so the system matrix stays
+  the product of the surfaces' matrices. The help says OpticStudio adjusts Ez, or Ex and Ey,
+  after the matrix so that k·E = 0 without increasing |E|, and gives no formula; this program's
+  embedding keeps the field transverse by construction, never increases |E| for a passive
+  matrix (singular values at most 1) and keeps |E| for a unitary one at every angle, but off
+  normal incidence it need not give OpticStudio's numbers (section 10, item 26). An exact
+  identity matrix (Ar = Dr = 1, the rest 0) is skipped, so it leaves every number of the trace
+  unchanged.
+- **Mueller Matrix surface.** OpticStudio has no sequential Mueller surface (the summary table
+  lists none). Parameters 1 to 16 are M00 … M33 row-major (parameter 4r + c + 1 is M_rc),
+  dimensionless; 13–16 are saved as extra data like every registered type's numbers from 13.
+  S_out = M·S_in with the Stokes vector in the basis (û, v̂) above. An output that is not a
+  physical Stokes vector (I < −10⁻¹²·I_in, or √(Q² + U² + V²) > I + 10⁻¹²·I_in) stops the
+  trace with a message naming the surface; a full test of the physical realisability of M is
+  not made.
+- **Stokes vector.** In a basis (û, v̂), I = |Eu|² + |Ev|², Q = |Eu|² − |Ev|²,
+  U = 2 Re(Eu Ev*), V = −2 Im(Eu Ev*) ("Stokes parameters", representation in a fixed basis),
+  applied to this program's amplitudes; it is S = A·(E ⊗ E*) with "Mueller calculus"'s matrix A,
+  and a Jones matrix's Mueller matrix is A·(J ⊗ J*)·A⁻¹ (`StokesVector.MuellerFromJones`). Which
+  sign of V is right-handed is not asserted; the degree of circular polarization is V/I, signed.
+  The degrees of polarization, of linear and of circular polarization are √(Q² + U² + V²)/I,
+  √(Q² + U²)/I and V/I, NaN where I = 0.
+- **How the two calculi compose.** A ray is described by its field E until it meets a Mueller
+  surface. There the trace forms the 3 × 3 coherency matrix Φ = E E^H (surface 1's frame),
+  reads the Stokes vector from its transverse 2 × 2 block in (û, v̂), applies M, and writes the
+  result back as Φ = Σ c_ab â b̂ᵀ with c00 = (I + Q)/2, c11 = (I − Q)/2, c01 = (U − iV)/2
+  (`CoherencyMatrix`). From then on every polarization matrix P of section 21 (interfaces, Jones
+  surfaces) acts as Φ → P Φ P^H and bulk absorption as Φ → T·Φ; further Mueller surfaces act as
+  above. The power is tr Φ. A fully polarized state has Φ = E E^H, so for a ray that meets no
+  Mueller surface the two descriptions agree; every step is linear in Φ, so unpolarized light is
+  still the mean of the (1, 0) and (0, 1) traces (`PolarizationTracer.FinalStokes`).
+- **What is reported after a Mueller surface.** The field and the system matrix are not defined
+  (NaN in `PolarizedSurface.FieldOut`, `Cumulative` and `Ray.Field`); `PolarizedSurface.Coherency`
+  and `PolarizedPath.FinalCoherency` hold the state, and `PolarizedPath.MuellerSurface` names
+  the first such surface. Every transmission (per surface, per ray, the Transmission and
+  Transmission fan analyses, `PolarizationTracer.Transmission`) is tr Φ. The Polarization ray
+  trace shows dashes for Ex, Ey, Ez after the surface, "not defined" for the system
+  diattenuation and no system matrix; for every ray it now also lists the Stokes vector at the
+  last surface reached (that surface's local x, y basis) with the three degrees of polarization.
+  The Polarization pupil map at or after a Mueller surface, and the Phase aberration of a lens
+  with one, refuse with a message naming the surface, since partially polarized light has no
+  single ellipse or phase.
+- **Gates** (`OpenSim.Tests/Optics/JonesMuellerSurfaceTests`): Malus's law, cos²θ through two
+  polarizers (½cos²θ unpolarized, degree of polarization 1 after them); a quarter-wave plate at
+  45° (the help's quarter-wave plate rotated) turns x-linear light circular, |V|/I = 1; the
+  depolarizer diag(1, d, d, d) leaves a degree of polarization d for linear and circular light,
+  and an analyzer behind it passes (1 + d)/2; an identity Jones surface leaves positions,
+  directions, path, fields and matrices unchanged bit for bit against a Standard plane; a
+  unitary Jones matrix keeps the power at oblique incidence; A·(J ⊗ J*)·A⁻¹ reproduces two
+  entries of "Mueller calculus"'s table, and a Mueller surface holding the quarter-wave plate's
+  matrix gives the Jones surface's Stokes vector.
+- **Not built.** The non-sequential Jones Matrix object and any Mueller object (they need the
+  non-sequential core, OP-70); a test of the physical realisability of a Mueller matrix (only
+  its output on each ray is checked); diattenuation and retardance of a system containing a
+  Mueller surface; the pupil map of the polarized part of partially polarized light;
+  depolarization by anything but a Mueller surface (scattering, coatings; birefringence is
+  OP-53).

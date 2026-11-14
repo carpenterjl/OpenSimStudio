@@ -557,6 +557,44 @@ public static class SurfaceTypes
             _ => throw new InvalidOperationException("A coordinate break has no shape."))
         { UsesRadiusAndConic = false, IsCoordinateBreak = true });
 
+        // OP-52
+        // "Jones Matrix (sequential surfaces, lens data editor)": "This surface uses eight
+        // parameter values, and none of the extra data values": 1 Ar, 2 Ai, 3 Br, 4 Bi, 5 Cr,
+        // 6 Ci, 7 Dr, 8 Di; "The surface shape is always plane". Saved under
+        // plans/sources/optics/op-52-help/.
+        list.Add(new SurfaceTypeLayout(Polarization.JonesMatrixShape.Name,
+            "OpticStudio 2025 R2 help, \"Jones Matrix (sequential surfaces, lens data editor)\", table Parameter Definitions for Jones Matrix Surfaces",
+            new[]
+            {
+                P(1, "Ar", 0, "Real part of A (Ex' = A Ex + B Ey), OpticStudio's convention."),
+                P(2, "Ai", 0, "Imaginary part of A, OpticStudio's convention."),
+                P(3, "Br", 0, "Real part of B."), P(4, "Bi", 0, "Imaginary part of B."),
+                P(5, "Cr", 0, "Real part of C (Ey' = C Ex + D Ey)."), P(6, "Ci", 0, "Imaginary part of C."),
+                P(7, "Dr", 0, "Real part of D."), P(8, "Di", 0, "Imaginary part of D."),
+            },
+            v => new Polarization.JonesMatrixShape(v(1), v(2), v(3), v(4), v(5), v(6), v(7), v(8)),
+            s =>
+            {
+                var j = (Polarization.JonesMatrixShape)s;
+                return new Dictionary<int, double>
+                {
+                    [1] = j.Ar, [2] = j.Ai, [3] = j.Br, [4] = j.Bi, [5] = j.Cr, [6] = j.Ci, [7] = j.Dr, [8] = j.Di,
+                };
+            })
+        { UsesRadiusAndConic = false });
+
+        // This program's Mueller Matrix surface (OpticStudio has no sequential one; its "Summary
+        // Table of Sequential Surface Types" lists none): parameter 4r + c + 1 is M_rc, row-major,
+        // dimensionless (MuellerMatrixShape). Parameters 13–16 are saved as extra data, as every
+        // registered type's numbers from 13 are.
+        list.Add(new SurfaceTypeLayout(Polarization.MuellerMatrixShape.Name,
+            "This program's own type (OP-52); OpticStudio 2025 R2 has no sequential Mueller matrix surface (help, \"Summary Table of Sequential Surface Types\")",
+            Enumerable.Range(0, 16).Select(i => P(i + 1, $"M{i / 4}{i % 4}", 0,
+                $"Mueller matrix element row {i / 4}, column {i % 4} (S_out = M·S_in, Stokes vector in the surface's local x, y basis).")).ToArray(),
+            v => new Polarization.MuellerMatrixShape(Range(v, 1, 16)),
+            s => Numbered(((Polarization.MuellerMatrixShape)s).Matrix, 1))
+        { UsesRadiusAndConic = false });
+
         return list.ToArray();
     }
 }

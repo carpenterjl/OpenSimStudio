@@ -39,6 +39,19 @@ public sealed class PolarizationMatrix
         Complex.Zero, Complex.Zero, Complex.One,
     });
 
+    // OP-52: matrices built elsewhere in this folder (the Jones matrix surface's embedding).
+
+    /// <summary>A matrix from nine row-major entries (copied).</summary>
+    internal static PolarizationMatrix FromRowMajor(Complex[] entries)
+    {
+        if (entries.Length != 9) throw new ArgumentException("A polarization matrix has nine entries.", nameof(entries));
+        return new PolarizationMatrix((Complex[])entries.Clone());
+    }
+
+    /// <summary>Every entry NaN: the system matrix after a Mueller matrix surface, where the light
+    /// is described by its coherency matrix and no field matrix exists (docs §30).</summary>
+    internal static PolarizationMatrix Undefined { get; } = new(Enumerable.Repeat(new Complex(double.NaN, double.NaN), 9).ToArray());
+
     /// <summary>The matrix of one interface, a_s ŝŝᵀ + a_p p̂_out p̂_inᵀ + k̂_out k̂_inᵀ.</summary>
     public static PolarizationMatrix Interface(Vector3D s, Vector3D pIn, Vector3D kIn, Vector3D sOut, Vector3D pOut, Vector3D kOut,
         Complex aS, Complex aP)

@@ -215,6 +215,21 @@ public abstract class PolarizationAnalysisBase<TSettings> : OpticsAnalysis<TSett
         return p;
     }
 
+    /// <summary>
+    /// OP-52: an analysis that needs the field (its phase or its ellipse) refuses a surface at or
+    /// after a Mueller matrix surface, where the ray carries a Stokes vector and has no single
+    /// field (docs/Optics-Conventions.md §30). Throws naming the Mueller surface.
+    /// </summary>
+    protected static void RefuseAfterMueller(SequentialLens lens, int surface, string who)
+    {
+        for (int j = 1; j <= Math.Min(surface, lens.ImageIndex - 1); j++)
+            if (lens.Surfaces[j].Shape is MuellerMatrixShape && !lens.Surfaces[j].IsIgnored)
+                throw new InvalidOperationException(
+                    $"{who}: surface {j} is a {MuellerMatrixShape.Name} surface, so from there on a ray carries a Stokes vector (partially polarized light), " +
+                    "which has no single field to plot. Use the Polarization ray trace (Stokes vector and degree of polarization) or the transmission analyses, " +
+                    "or evaluate a surface before it.");
+    }
+
     /// <summary>Transmission of one launched ray: polarized or the mean of two orthogonal states.</summary>
     protected static double Transmission(PolarizationTracer tracer, RayPath path, bool unpolarized, JonesVector jones) =>
         !path.Final.IsOk ? 0
@@ -259,6 +274,7 @@ public sealed class PolarizationRayTraceAnalysis : PolarizationAnalysisBase<Pola
         foreach (var s in result.Surfaces)
         {
             var e = Shown(s, s.FieldOut);
+            bool stokes = s.Coherency is not null;   // OP-52: no single field after a Mueller surface
             string name = s.Surface == lens.ImageIndex ? "IMA" : s.Surface == lens.StopIndex ? $"{s.Surface} (stop)" : s.Surface.ToString();
             bool mirror = lens.Surfaces[s.Surface].IsMirror;
             rows.Add(new[]
@@ -271,8 +287,8 @@ public sealed class PolarizationRayTraceAnalysis : PolarizationAnalysisBase<Pola
                 s.Response is { } r2 ? N(mirror ? r2.P.R : r2.P.T, "g8") : "—",
                 s.IsInterface ? C(s.AmplitudeS) : "—",
                 s.IsInterface ? C(s.AmplitudeP) : "—",
-                C(e.X), C(e.Y), C(e.Z),
-                N(s.FieldOut.NormSquared, "g8"),
+                stokes ? "—" : C(e.X), stokes ? "—" : C(e.Y), stokes ? "—" : C(e.Z),
+                N(stokes ? s.TotalTransmission : s.FieldOut.NormSquared, "g8"),
                 N(s.RelativeTransmission, "g8"),
                 N(s.TotalTransmission, "g8"),
                 RayStatuses.Label(s.Hit.Status),
@@ -291,12 +307,19 @@ public sealed class PolarizationRayTraceAnalysis : PolarizationAnalysisBase<Pola
             ("Launch field (Ex, Ey, Ez)", $"{C(result.LaunchField.X)}; {C(result.LaunchField.Y)}; {C(result.LaunchField.Z)}"),
             ("Status", final.IsOk ? "Reached the image surface" : $"{RayStatuses.Label(final.Status)} at surface {final.FailedAtSurface}"),
             ("Transmission", N(result.Transmission, "g10")),
-            ("System diattenuation", N(result.Cumulative.Diattenuation(k0), "g8")),
+            ("System diattenuation", result.MuellerSurface is { } mu
+                ? $"not defined: surface {mu} is a {MuellerMatrixShape.Name} surface" : N(result.Cumulative.Diattenuation(k0), "g8")),
         };
+        // OP-52: the Stokes vector at the last surface reached (docs/Optics-Conventions.md §30).
+        var stokesFinal = result.FinalStokes;
+        pairs.Add(("Stokes (I, Q, U, V), last surface's local x, y", $"{N(stokesFinal.I, "g8")}, {N(stokesFinal.Q, "g8")}, {N(stokesFinal.U, "g8")}, {N(stokesFinal.V, "g8")}"));
+        pairs.Add(("Degree of polarization", Degree(stokesFinal.DegreeOfPolarization)));
+        pairs.Add(("Degree of linear / circular polarization", $"{Degree(stokesFinal.DegreeOfLinearPolarization)} / {Degree(stokesFinal.DegreeOfCircularPolarization)}"));
         var matrixRows = new List<IReadOnlyList<string>>();
         var m = result.Cumulative;
-        for (int r = 0; r < 3; r++)
-            matrixRows.Add(new[] { "xyz"[r].ToString(), C(m[r, 0]), C(m[r, 1]), C(m[r, 2]) });
+        if (result.MuellerSurface is null)
+            for (int r = 0; r < 3; r++)
+                matrixRows.Add(new[] { "xyz"[r].ToString(), C(m[r, 0]), C(m[r, 1]), C(m[r, 2]) });
         var sections = new[]
         {
             new ReportSection("Ray") { Pairs = pairs },
@@ -314,13 +337,17 @@ public sealed class PolarizationRayTraceAnalysis : PolarizationAnalysisBase<Pola
             new ReportSection("System polarization matrix (surface 1's frame)")
             {
                 TableHeaders = new[] { "Row", "x", "y", "z" }, TableRows = matrixRows,
-                Lines = new[] { "E at the last surface reached = P × launch E. Entries |z| ∠ phase." }
+                Lines = result.MuellerSurface is { } mueller
+                    ? new[] { $"Not defined: surface {mueller} is a {MuellerMatrixShape.Name} surface, after which the ray carries a Stokes vector (coherency matrix), not a field." }
+                    : new[] { "E at the last surface reached = P × launch E. Entries |z| ∠ phase." }
             },
         };
         return OpticsAnalysisResult.FromSections(Name, sections, CommonAssumptions(setup));
     }
 
     private static string V(Vector3D v) => $"({N(v.X, "g8")}, {N(v.Y, "g8")}, {N(v.Z, "g8")})";
+
+    private static string Degree(double d) => double.IsNaN(d) ? "— (no light)" : N(d, "g8");
 }
 
 /// <summary>
@@ -358,6 +385,7 @@ public sealed class PolarizationPupilMapAnalysis : PolarizationAnalysisBase<Pola
             throw new ArgumentException($"{Name}: the sampling must lie in 1–257 (it is {settings.Sampling}).");
         var grid = BatchTracer.SquareGrid(settings.Sampling);
         var (hx, hy) = setup.System.Fields.Normalized(field);
+        RefuseAfterMueller(setup.Lens, surface, Name);
 
         var fields = new (double Px, double Py, RayField? E)[grid.Count];
         double sum = 0;
@@ -555,6 +583,7 @@ public sealed class PolarizationPhaseAberrationAnalysis : PolarizationAnalysisBa
         var tracer = setup.Tracer(Row(settings.Wavelength, setup.System, Name));
         var fan = Fan(settings.Points, Name);
         var (hx, hy) = setup.System.Fields.Normalized(field);
+        RefuseAfterMueller(setup.Lens, setup.Lens.ImageIndex, Name);
 
         RayField? ImageField(double px, double py)
         {
