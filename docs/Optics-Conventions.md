@@ -842,6 +842,22 @@ single place in the code, so a correction is one line and its test.
     Check: Seidel Coefficients text of a singlet and of a two-mirror telescope, and Full-Field
     Aberration of a singlet, in both programs.
 
+29. **Point spread function readings** (OP-38). Section 33 follows OpticStudio's help, but no
+    PSF is compared with its output, and some rules are this program's where the help is silent:
+    - *Default FFT image delta.* The help stretches the pupil grid (Δ = λF(n − 2)/(2n)·(32/n)^½);
+      here the grid is not stretched, Δ = λ/(n·|a|·2n·ΔP), so for the same sampling OpticStudio's
+      image is finer and its pupil sampled more coarsely.
+    - *Sampling thresholds.* ½ and ¼ wave per pupil sample are derived here; OpticStudio's own
+      thresholds and messages were not found.
+    - *Polychromatic weights.* w·(λ_min/λ)² over each wavelength's unaberrated peak, read from the
+      Huygens page's "wFactor" and applied to the FFT PSF as well; the help gives none for the FFT.
+    - *Huygens weights.* Pupil amplitude × √(direction-space Jacobian), derived; OpticStudio's
+      weighting is not stated. Use Centroid centres on the A²-weighted mean intercept.
+    - *Strehl.* The peak is refined off the grid; OpticStudio may report the largest sample.
+    - *Edge spread* runs from 0 to 1 across the window; the help does not give its normalisation.
+    Check: FFT and Huygens PSFs of a singlet off axis, saved by OpticStudio as text, compared here
+    at the same sampling.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2776,3 +2792,88 @@ the field, and it reports the MTF; it waits for the MTF, OP-39); the Seidel Diag
 Full-Field Aberration's icon display and grey-scale styles (the map is a false-colour image or
 contours); fifth- and higher-order (Sasian) coefficients; the afocal forms of the transverse and
 longitudinal coefficients.
+
+## 33. Point spread function and Strehl ratio
+
+OP-38. Code: `OpenSim.Optics/Wavefront/PsfEngine.cs` (public: `PupilFunction`, `PsfImage`,
+`HuygensRay`, `HuygensPupil`, `PsfEngine`) and the analyses in
+`OpenSim.Optics/Analysis/PsfAnalyses.cs`. Tests: `OpenSim.Tests/Optics/PsfAnalysisTests.cs` and the
+gate `OpenSim.Tests/Optics/Gates/PsfGateTests.cs`. OpticStudio's behaviour is read from its 2025 R2
+help ("PSF", "FFT PSF", "FFT Cross Section", "FFT Line/Edge Spread", "Huygens PSF", "Huygens Cross
+Section", "Strehl Ratio"), saved with their equation images under
+`plans/sources/optics/op-38-help/`. Goodman and Born and Wolf were not on hand; the closed forms
+the gate uses are derived in its comments.
+
+- **Pupil function.** A·e^{2πiW} on an n × n grid of normalised pupil nodes from −1 to 1
+  (`OpdEngine.Node`; row = Py, column = Px). W is the OPD of section 26 (exit-pupil reference
+  sphere centred on the chief ray). A is the pupil apodization (uniform, Gaussian e^{−Gρ²} or
+  cosine cubed, read as section 27 reads it) where the ray reaches the image, and 0 where it is
+  vignetted or fails; the failures are counted by reason in the result.
+- **Pupil scale.** A node stands for the image-space direction offset (a_x·Px, a_y·Py) from the
+  chief ray, on two unit axes normal to the chief ray (the image surface's x̂ and ŷ with the chief
+  ray's component taken out); a_x and a_y are least-squares fits to the traced rays' direction
+  offsets. The working F/# the result reports is 1/(2n·|a|), n the image-space index. A negative a
+  (an inverted image) reverses the transform, so x and y stay the image's.
+- **Kernel.** U(x) = Σ A·e^{2πi(W − n(a_x·Px·x + a_y·Py·y)/λ)}, λ the wavelength in the system's
+  air (the Foucault kernel of section 26). Intensity is |U|² / (Σ A)²: the peak of the
+  unaberrated PSF (the same A, W = 0) is 1, so the PSF's peak is the Strehl ratio.
+- **FFT PSF.** The pupil is zero-padded to M = 2n (help: for 32 × 32 sampling the PSF is
+  "distributed over a 64 x 64 size grid") and transformed (`Fft2D`). Sample p of each axis is at
+  (p − M/2)·Δ, Δ = λ/(n·|a|·M·ΔP), ΔP = 2/(n − 1); the window is one period of the PSF, so its
+  energy sums exactly (Parseval) to the transmission Σ A² / (nodes in the unit circle). The
+  help's pupil-grid stretching (its default Δ = λF(n − 2)/(2n)·(32/n)^½) is not built: the
+  default Δ here is the unstretched one, and the image does not grow finer with sampling. The
+  plane is normal to the chief ray through the reference point, as the help says.
+- **Image delta.** A chosen Δ samples the same sum at (p − M/2)·Δ by the matrix Fourier transform.
+  A Δ larger than the FFT's own would make the window wider than the period and is refused (the
+  help also refuses a delta "too big").
+- **Polychromatic.** Every wavelength is referenced to the primary wavelength's chief ray
+  (lateral colour is a shift), sampled at the shortest wavelength's FFT grid by the matrix Fourier
+  transform (no interpolation), and summed with factor w·(λ_min/λ)², each over its own unaberrated
+  peak, then divided by Σ w·(λ_min/λ)². The factor is the help's Huygens "wFactor" without the
+  configuration weight; it gives each wavelength energy in proportion to its weight. Phase, real
+  and imaginary displays with every wavelength chosen use the primary wavelength (help, "FFT PSF").
+- **Strehl ratio** (help: "the peak intensity of the diffraction point spread function (PSF)
+  divided by the peak intensity of the diffraction point spread function (PSF) in the absence of
+  aberrations"). The aberrated peak is the largest sample refined by eight rounds of 7 × 7 patches
+  of the sum, the spacing divided by 3 each round, so it does not depend on where the grid falls.
+  A ratio below 0.1 is warned about (the help: "not useful … for Strehl ratios smaller than about
+  0.1"). The Strehl analysis also lists σ, the RMS of W about its mean with each node weighted by
+  its amplitude, and 1 − (2πσ)², the second-order estimate (derived; at the reference point it is
+  a lower bound, see the gate).
+- **Sampling rule** (`PsfEngine.CheckSampling`). The sum over nodes spaced ΔP repeats in the
+  image with period T = λ/(n·|a|·ΔP). A wavefront slope of s waves per node puts the light at s·T
+  from the reference point (stationary phase), and the window holds ±T/2, so: more than ½ wave
+  between neighbouring lit nodes is **ALIASED** (the light wraps round); more than ¼ is a caution
+  (the outer half holds wrapped tails). Rays whose image intercepts reach beyond ±T/2 are also
+  ALIASED, as is an image grid (Huygens, chosen delta) wider than T. The help gives the tradeoff
+  but no number; ½ and ¼ are this program's, derived above. The help's validity notes are warned
+  about too: a chief ray more than 20° from the image surface's normal (FFT "overly optimistic")
+  and an image cone faster than F/1.5 (scalar theory). Warnings head the result.
+- **Huygens PSF.** Rays on the same n × n grid are traced to the image surface with the Absolute
+  reference (each ray's path P relative to the chief ray, waves). The plane is "tangent to the
+  image surface at the chief ray intercept" (or the centroid with Use Centroid: the mean intercept
+  weighted by A²), its axes the image surface's x̂ and ŷ with the normal component taken out. Each
+  ray is a plane wave (the help's "planar reference"): U(r) = Σ c·e^{2πi[P − n·d·(r − q)/λ]}, d its
+  direction and q its intercept; intensity over (Σ c)². The weight c = A·√J,
+  J = |∂(d·x̂′, d·ŷ′)/∂(Px, Py)| by differences between neighbouring nodes: the rays sample the
+  entrance pupil evenly and carry equal power, so a distorted pupil keeps its energy where it falls
+  (derived; the help does not say how OpticStudio weights rays). Default spacing λF/√n_p (help),
+  λ the selected or longest wavelength, F from the fitted pupil scale; point p at (p − m/2)·Δ.
+  Polychromatic: the same w·(λ_min/λ)² sum, centred on the primary wavelength. The help's switch
+  to a spherical phase reference (when the exit pupil's distances to the image centre and corner
+  differ by more than λ/4) is not built; the condition is warned about, λ read as the wavelength
+  in the image medium.
+- **Cross sections.** FFT: a row (X) or column (Y) of the 2n × 2n image, 0 for the centre (the
+  reference point, "not always the peak of the PSF"). Huygens: the sum evaluated on the line
+  through the centre only.
+- **Line and edge spread** (help: "The X-orientation means the line or edge is parallel to the
+  X-axis"). X sums each FFT row over x and runs along y; Y the reverse. The line spread is divided
+  by its peak; the edge spread is the running sum (half the current sample) over the window's
+  total.
+- **Determinism.** The FFT, the matrix transform and the Huygens sum compute each output row on
+  its own; results are bitwise the same at any degree of parallelism.
+
+Not built: polarization (vector diffraction), the image rotation setting, surface plots,
+intermediate surfaces, the help's pupil-grid stretching, the Huygens spherical phase reference,
+the Huygens sum over configurations, True Color, and "Use Coherent PSF" in the line/edge spread.

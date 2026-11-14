@@ -1056,6 +1056,49 @@ own are in `docs/Optics-Conventions.md` §32 and §10 item 28. Not built: the Co
 displays, fifth-order coefficients, the afocal forms, and any comparison with OpticStudio's
 output.
 
+## Point spread function and Strehl ratio
+
+Six analyses in the **PSF** group compute the diffraction image of a point source from the lens
+data editor's surfaces: the pupil function (the OPD against the chief ray's reference sphere, the
+pupil apodization, and no light where a ray is vignetted or fails), transformed to the image.
+
+- **FFT PSF:** the PSF by FFT of an n × n pupil grid (*Sampling*) zero-padded to 2n × 2n, on a
+  plane normal to the chief ray, as a false-colour map or contours. *Type*: linear or logarithmic
+  intensity (*Log decades* below the peak), real or imaginary amplitude, or phase in degrees.
+  *Display* draws only the central samples. *Image delta* (µm) samples the image more finely
+  than the FFT's own spacing (0 for the FFT's own; a larger one is refused). *Wavelength* 0 is
+  polychromatic: every wavelength on the shortest wavelength's grid, weighted by its weight and
+  (λ_min/λ)².
+- **FFT PSF cross section:** a row (X) or column (Y) of the FFT PSF, the centre by default;
+  *Plot scale* limits the half-width.
+- **FFT line/edge spread:** the FFT PSF summed across a line parallel to x (X) or y (Y); the
+  line spread is scaled to its peak, the edge spread runs from 0 to 1.
+- **Huygens PSF:** the sum of one wavelet per traced ray on the plane tangent to the image
+  surface, so tilted or curved image surfaces and distorted pupils are handled. *Pupil
+  sampling*, *Image sampling* and *Image delta* (0 for the help's default λF/√n);
+  *Use centroid* centres the image on the rays' centroid instead of the chief ray. The result
+  lists the centre, the peak position and the PSF's own centroid offset.
+- **Huygens PSF cross section:** the Huygens PSF along x or y through the centre.
+- **Strehl ratio:** for each field and wavelength (and polychromatic), the Strehl ratio, the RMS
+  wavefront σ and the small-aberration estimate 1 − (2πσ)².
+
+Every PSF is scaled so the unaberrated PSF (the same pupil with no OPD) peaks at 1; its own peak
+is then the Strehl ratio. *Normalize* scales the peak to 1 instead. The Strehl ratio is the
+peak found by refining the largest sample; below about 0.1 it is flagged as not useful.
+
+**Sampling warnings** head the result: *ALIASED* when the wavefront changes by more than half a
+wave between neighbouring pupil samples, when the rays spread beyond the half-period the pupil
+sampling resolves, or when the image grid is wider than that period; a caution above a quarter
+wave. Raise the sampling or bring the image nearer focus. The help's validity notes are also
+flagged: a chief ray more than 20° from the image surface's normal (use the Huygens PSF), a cone
+faster than F/1.5 (scalar diffraction is optimistic there), and, for the Huygens PSF, an image
+large enough that OpticStudio would switch to a spherical phase reference.
+
+The rules are in `docs/Optics-Conventions.md` §33; readings not yet checked against OpticStudio
+are in §10 item 29. Not built: polarization, image rotation, surface plots, intermediate
+surfaces, OpticStudio's pupil-grid stretching, the Huygens spherical phase reference, the sum
+over configurations, True Color and the coherent line/edge spread.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1067,6 +1110,9 @@ Not built yet, and not to be relied on until they appear in this guide:
 
 - layouts with traced rays, and the analysis windows not described above (MTF, PSF, the
   Contrast Loss Map, encircled energy and the rest; the Configuration Matrix Spot);
+
+- layouts with traced rays, and the analysis windows not described above (MTF, Seidel
+  coefficients, encircled energy and the rest; the Configuration Matrix Spot);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);

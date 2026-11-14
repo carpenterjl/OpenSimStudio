@@ -117,6 +117,14 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new SurfaceCurvatureCrossSectionAnalysis());
         registry.Register(new SurfaceSlopeCrossSectionAnalysis());
 
+        // OP-38: point spread functions and the Strehl ratio.
+        registry.Register(new FftPsfAnalysis());
+        registry.Register(new FftPsfCrossSectionAnalysis());
+        registry.Register(new FftLineEdgeSpreadAnalysis());
+        registry.Register(new HuygensPsfAnalysis());
+        registry.Register(new HuygensPsfCrossSectionAnalysis());
+        registry.Register(new StrehlRatioAnalysis());
+
         // OP-36: third-order and full-field aberrations (Contrast Loss Map not built: it needs the MTF's cutoff).
         registry.Register(new SeidelCoefficientsAnalysis());
         registry.Register(new SeidelDiagramAnalysis());
