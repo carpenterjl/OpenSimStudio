@@ -738,6 +738,30 @@ single place in the code, so a correction is one line and its test.
       writing one fixes the cell.
     - *Next and Previous* stop at the ends; whether OpticStudio wraps was not read.
 
+23. **Field curvature, distortion, colour and relative illumination** (OP-37, section 27). Read
+    from the help pages' wording; no OpticStudio number was compared:
+    - *Field curvature* is measured from the chief ray's image point along the image surface's
+      z axis, positive in the direction the light travels; the help says "along the Z-axis from
+      the image surface to the paraxial image surface" without a sign rule.
+    - *Distortion's reference*: f is the slope of the real chief ray's radial image height
+      against tan θ (or θ, or the field height) from rays at H = ±10⁻⁴; the help says "tracing a
+      real ray from a very small field height, and then scaling".
+    - *Calibrated distortion*: the best-fit f is the least-squares Σ r·g/Σ g² over the scan; the
+      help says only that it "selects the best f value to minimize the distortion".
+    - *Field scans* run to the largest radial field (fields normalised radially for the scan),
+      and a real-image-height system is scanned in paraxial image height for distortion, where
+      OpticStudio switches to field angle.
+    - *Grid distortion*: symmetric magnification is the nearest rotation and scale of the ABCD
+      matrix, A = D = (A + D)/2, C = −B = (C − B)/2; SMIA-TV with a failed ray is reported as not
+      computed, where the help lists zero.
+    - *Lateral colour*: the sign is y(shortest) − y(longest), or y(λ) − y(primary).
+    - *Relative illumination*: the integral is this program's derivation in pupil coordinates
+      (Rimmer's paper was not available), not the help's uniform grid in cosine space; the
+      effective F/# uses geometric direction cosines with no n′ factor; apodization weights the
+      integrand as transmission does.
+    Check: a singlet's field curvature, F-tan and calibrated distortion, grid distortion and RI
+    against OpticStudio's text output.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2340,3 +2364,79 @@ the pages under "Multiple Configuration Editor", saved in `plans/sources/optics/
   appropriate" are formed); ZPL-macro and substitute solves; Add Hologram Variables; showing
   the current configuration's values in the Lens Data Editor and writing Lens Data Editor
   edits back into the table, as OpticStudio does.
+
+## 27. Field curvature, distortion, colour and relative illumination
+
+OP-37 adds six analyses under `OpenSim.Optics/Analysis/FieldAberrations/`. Their definitions are
+read from the Ansys OpticStudio 2025 R2 help pages "Field Curvature and Distortion", "Grid
+Distortion", "Longitudinal Aberration", "Lateral Color", "Chromatic Focal Shift", "Relative
+Illumination" and "Apodization Type" (saved in `plans/sources/optics/op-37-help/` with their
+equation images). The tests are `OpenSim.Tests/Optics/FieldAberrationTests.cs` and
+`OpenSim.Tests/Optics/Gates/FieldAberrationGateTests.cs`. Readings not checked against
+OpticStudio are section 10, item 23.
+
+**Field scans.** A scan runs along +y, +x, −y or −x (`FieldScan`) in normalised field H from 0 to
+1, with the fields normalised radially for the scan, so H = 1 is the largest radial field
+(`FieldScanCommon.ScanSystem`). The tangential plane contains the scan direction; the sagittal
+direction is its normal (x̂ for a y scan, ŷ for an x scan).
+
+**Coddington traces** (`CoddingtonTrace`). Along the traced real chief ray, the sagittal and
+tangential distances s and t to the foci (along the ray, positive in the direction of travel)
+follow n′/s′ = n/s + φ_s and n′cos²I′/t′ = n cos²I/t + φ_t, then s ← s′ − d and t ← t′ − d over
+each segment d. The equations are those of RayOptics 0.9.10 (`raytr/trace.py`,
+`trace_coddington_fan`, BSD 3-Clause), which states them for spheres with
+φ = c(n′cos I′ − n cos I). Here φ_t and φ_s use the surface's normal curvatures κ_t and κ_s in
+the tangential and sagittal directions at the hit point, from the second fundamental form of its
+sag (closed form for the Standard conic; central differences of the slopes for a sag shape;
+second differences of the sag otherwise). This extension is derived in the code, not taken from
+a source; the tests check it against finite-difference foci of real rays. Cosines are signed
+against the surface's +z-at-vertex normal and indices are positive, so mirrors need no special
+case. The trace refuses, naming the surface, when the chief ray or a normal leaves the meridional
+plane (a skew pencil), when the tangential and sagittal directions are not principal directions
+of the surface, and at a surface that turns rays by its own rule (paraxial, ABCD, Fresnel,
+lenslet, retroreflector). Field curvature is t and s at the image surface times |N| of the chief
+ray: the distance along the image surface's z from the chief ray's image point to each focus,
+positive in the direction of travel.
+
+**Distortion** (`FieldCurvatureDistortion`). The real chief ray's radial image height r against
+the reference f·g: g is tan θ (F-tan) or θ (F-θ), θ the object-space chief ray's angle to the
+axis, for angle fields, or the field height for height fields (F-θ is refused for those). f is
+the slope dr/dg from chief rays at H = ±10⁻⁴; the calibrated forms replace it by Σ r·g/Σ g² over
+the scan. Percent distortion is 100·(r − f·g)/(f·g), at the axis its limit 100·(k/f − 1). An
+F-tan scan of angle fields beyond 89° stops at 89°. Real image heights are read as paraxial
+image heights. When the Coddington trace refuses, the distortion is still given and the field
+curvature is listed as not computed.
+
+**Grid distortion** (`GridDistortion`). Field coordinates are (tan θx, tan θy) for angle fields
+and heights otherwise; the grid's corner is at the largest radial field, or the grid has a given
+full x width, with the H/W aspect; the ABCD matrix comes from central differences at ±10⁻⁴ of
+the half-width about the reference field; percent distortion follows the help's sign rule;
+SMIA-TV uses the four corners and the ends of the centre column. Theodolite fields are refused.
+
+**Longitudinal aberration, lateral colour, chromatic focal shift.** Axis crossings are measured
+from the image surface's vertex along its z, positive in the direction of travel
+(`FieldScanCommon.AxisCrossing`; paraxially −h/u at the image surface). Longitudinal aberration
+uses on-axis rays (0, 0, 0, ρ) at each wavelength, ρ = 0 being the paraxial marginal ray.
+Lateral colour is the chief ray's image-surface y, real (as the launcher aims it) or paraxial
+(each wavelength's own paraxial chief ray). The focal shift is the marginal ray's crossing
+(paraxial, or real at a pupil zone) minus the primary wavelength's paraxial crossing, at
+wavelengths spread evenly over the table's range; the depth of focus is 4λF² with the paraxial
+working F/#.
+
+**Relative illumination** (`RelativeIllumination`). Rimmer's paper (Proc. SPIE 655, 1986), which
+the help cites, was not available; the integral is derived in the code. With radiance conserved
+along rays and a uniform Lambertian object, the image irradiance is proportional to
+A = ∫∫ τ·a²·(d̂·n̂)/|N|·|∂(L, M)/∂(Px, Py)| dPx dPy over the unit pupil: the projected solid
+angle of the exit pupil seen from the image point, as an area in direction-cosine space. τ is
+the ray's transmission (1, or the polarization trace's unpolarized transmission), a the
+apodization amplitude (Gaussian e^(−Gρ²), cosine cubed (1 + (ρ tan α)²)^(−3/4), from "Apodization
+Type"), n̂ the image surface's normal. The quadrature is ⌈n/2⌉ Gauss–Legendre radii by 2n angles;
+the Jacobian comes from central differences at ±10⁻⁵ traced with apertures ignored.
+RI = A/max A; effective F/# = √(π/(4A)).
+
+**Not built.** The afocal forms (diopters, angles); field curvature through skew pencils (a
+general astigmatic trace) and through surfaces that redirect rays by their own rule; the SMIA-TV
+option, reference field and H/W aspect of Field Curvature and Distortion; the Display (cross or
+vector) choice of Grid Distortion; the Airy disk of Lateral Color; the solid-angle apodization
+of an object-cone-angle aperture; plot-scale settings (the plot window scales itself). The
+Vignetting Plot is OP-22's (section 16).

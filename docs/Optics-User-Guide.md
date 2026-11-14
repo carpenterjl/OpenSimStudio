@@ -893,6 +893,48 @@ lens without one is a single configuration, and files from before this feature o
   Conjugate, ZPL-macro solves, and showing or editing the current configuration's values in
   the Lens Data Editor.
 
+## Field curvature, distortion, colour and illumination
+
+Six analyses (OP-37, `OpenSim.Optics/Analysis/FieldAberrations/`) read the lens data editor's
+surfaces. Five are under **Aberrations**, relative illumination under **Illumination**.
+
+- **Field curvature and distortion.** Tangential (T) and sagittal (S) focus against field, from
+  Coddington's equations along each field's real chief ray, as the distance along the image
+  surface's z from the chief ray's image point to each focus (positive in the direction the
+  light travels); and distortion against field as a percentage or as a length, F-tan(θ), F-θ or
+  either calibrated (best-fit focal length). Settings: wavelength (0 for all), number of field
+  points, scan direction (+y, +x, −y, −x), distortion type, distortion as a length, ignore
+  vignetting factors (on by default). The text lists the reference focal length used. For a
+  system that is not symmetric about the scan plane, or with an ideal, ABCD or Fresnel surface,
+  the field curvature is listed as not computed and the distortion is still given.
+- **Grid distortion.** A square grid of chief rays against the linear (ABCD) prediction taken
+  at a reference field; the percent distortion at each point, the largest, and SMIA-TV
+  distortion. Settings: grid size, wavelength, reference field (0 for the axis), plot scale
+  (exaggeration), H/W aspect, symmetric magnification, field width. Angle fields use tangents of
+  the angles; theodolite fields are refused.
+- **Longitudinal aberration.** Where on-axis marginal rays cross the axis, measured from the
+  image surface, against pupil zone, for each wavelength (zone 0 paraxial).
+- **Lateral colour.** The chief ray's image height of the shortest wavelength minus the longest,
+  or of every wavelength minus the primary, against +y field; real or paraxial rays.
+- **Chromatic focal shift.** The focal shift against wavelength over the range of the wavelength
+  table, referred to the primary wavelength's paraxial focus; paraxial, or real marginal rays at
+  a pupil zone. The text lists the shift at each table wavelength, the largest range, and the
+  diffraction-limited depth of focus 4λF².
+- **Relative illumination.** Image irradiance of a uniform Lambertian scene against field,
+  normalised to its largest value, from the projected solid angle of the exit pupil seen from
+  each image point; with the effective F/#. Settings: ray density (at least 5), field density,
+  use polarization (weights each ray by its Fresnel or coating transmission for unpolarized
+  light), remove vignetting factors, wavelength, scan direction, log scale. The pupil
+  apodization (Gaussian or cosine cubed) is applied.
+
+The definitions, what each number assumes, and which readings of OpticStudio's help are this
+program's own are in `docs/Optics-Conventions.md` §27 and §10 item 23. Not built: the afocal
+forms (diopters and angles), field curvature for skew (non-symmetric) systems, the SMIA-TV,
+reference-field and H/W aspect settings of field curvature and distortion, the vector display of
+grid distortion, the Airy disk of lateral colour, apodization of an object-cone-angle aperture,
+and any comparison with OpticStudio's output. The vignetting plot is described under "Ray aiming
+and vignetting".
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -912,6 +954,11 @@ Not built yet, and not to be relied on until they appear in this guide:
 - optimization and tolerancing of a lens (the merit function and its editor are built; the
   full operand catalogue, the default merit function wizard and the optimizer are not);
 
+- layouts with traced rays and the analysis windows (spot diagrams, ray fans, OPD, MTF, PSF and
+  the rest; field curvature, distortion, colour and relative illumination are built, see above);
+- the solve column of the sequential surface editor (the solve library is built; see Solves);
+- real transmission and polarization in the image-quality analyses (the polarization trace of
+  OP-51 is built; besides its own five analyses only relative illumination uses it, as an option);
 - optimization and tolerancing of a lens;
 - thermal configurations (Make Thermal, thermal pickups) and Make Conjugate in the
   Multi-Configuration Editor;

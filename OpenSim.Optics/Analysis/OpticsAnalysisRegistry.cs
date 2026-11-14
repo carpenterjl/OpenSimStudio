@@ -75,6 +75,14 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new PolarizationTransmissionAnalysis());
         registry.Register(new PolarizationPhaseAberrationAnalysis());
         registry.Register(new PolarizationTransmissionFanAnalysis());
+        // OP-37: field, distortion, colour and illumination.
+        registry.Register(new FieldCurvatureDistortionAnalysis());
+        registry.Register(new GridDistortionAnalysis());
+        registry.Register(new LongitudinalAberrationAnalysis());
+        registry.Register(new LateralColorAnalysis());
+        registry.Register(new ChromaticFocalShiftAnalysis());
+        registry.Register(new RelativeIlluminationAnalysis());
+
         // OP-35: optical path difference and wavefront.
         registry.Register(new OpdFanAnalysis());
         registry.Register(new WavefrontMapAnalysis());
