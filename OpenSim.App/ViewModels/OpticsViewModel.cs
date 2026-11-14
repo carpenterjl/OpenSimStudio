@@ -19,6 +19,23 @@ public sealed record OpticsModeOption(string Label, OpticsMode Mode)
 /// </summary>
 public partial class OpticsViewModel : ObservableObject
 {
+    private readonly Services.ProjectSession _session;
+
+    public OpticsViewModel(Services.ProjectSession session)
+    {
+        _session = session;
+        PublishSystem();
+    }
+
+    /// <summary>Hands the session a snapshot of the system after an edit, so the analysis
+    /// windows recompute (OP-9). Field initialisers raise property changes before the constructor has set the session,
+    /// so there is nothing to publish to until then.</summary>
+    private void PublishSystem()
+    {
+        if (_session is null) return;
+        _session.PublishOptics(ToSettings());
+    }
+
     public IReadOnlyList<OpticsModeOption> Modes => OpticsModeOption.All;
 
     [ObservableProperty]
@@ -30,6 +47,7 @@ public partial class OpticsViewModel : ObservableObject
     {
         // A picker pushes a transient null while its list rebuilds; the mode is never unset.
         if (value is null) SelectedMode = OpticsModeOption.All[0];
+        else PublishSystem();
     }
 
     public OpticsMode Mode => SelectedMode.Mode;

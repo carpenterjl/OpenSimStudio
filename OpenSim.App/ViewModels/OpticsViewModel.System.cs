@@ -371,5 +371,8 @@ public partial class OpticsViewModel
         base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(SystemProblems)));
         base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(HasSystemProblems)));
         base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(SystemCheck)));
+        // Every system-data edit ends here, so this is where the analysis windows hear of it
+        // (OP-9); the analyses view model debounces the burst a row edit can raise.
+        PublishSystem();
     }
 }
