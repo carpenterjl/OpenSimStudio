@@ -245,6 +245,8 @@ scripting item (OP-98) maps `RayStatus` and `FailedAtSurface` to those codes.
   reference sphere. `OpticsConventions.OpticalPathDifference`.
 - It is shown in waves of the ray's own wavelength. `OpticsConventions.InWaves`.
 - This sign is one of the open checks in section 10.
+- The reference surfaces (the sphere, its plane limit, the afocal planes) and the OPD analyses
+  are in section 26.
 
 ## 7. Normalised field and pupil coordinates
 
@@ -699,6 +701,29 @@ single place in the code, so a correction is one line and its test.
     - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
     Check: a merit function with one row of each operand, saved by OpticStudio with its values,
     evaluated here on the same lens.
+
+22. **OPD references and the OPD analyses** (OP-35). Section 26 follows OpticStudio's help
+    wording; these readings are not checked against its output:
+    - *All wavelengths referenced to the primary* (the OPD fan with every wavelength, the
+      Wavefront Map's "Reference To Primary"): the sphere's centre is the primary wavelength's
+      chief ray (or centroid), but each wavelength's OPD is against its own chief ray, so there
+      is no piston between wavelengths. The help says "the primary wavelength based reference
+      sphere and chief ray"; if OpticStudio also takes the primary chief ray's path, its OPD at
+      other wavelengths carries a constant that this one does not.
+    - *Centroid reference:* the sphere is centred on the mean image-surface intercept of a
+      square pupil grid. The help ("RMS vs. Field") speaks of a mean-shifted, tilted reference
+      sphere with Rimmer's correction; that correction is not built.
+    - *Telecentric image space:* the exit-pupil reference becomes the plane through the image
+      point normal to each ray (the Infinity formula). The help does not say what OpticStudio
+      does when the exit pupil is at infinity.
+    - *Afocal exit-pupil plane:* placed at the point of the chief ray's line nearest the
+      paraxial exit pupil centre, normal to the reference direction.
+    - *Interferogram tilt:* "the number of fringes of tilt" is taken across the full pupil
+      diameter.
+
+    Check: a singlet with spherical aberration and lateral colour at two wavelengths, its OPD
+    fan (one and all wavelengths, chief and centroid), wavefront map and interferogram compared
+    with OpticStudio's; a telecentric lens's OPD fan. This also settles item 2.
 
 ## 11. Paraxial optics
 
@@ -2137,3 +2162,82 @@ MINN, OPGT, OPLT, OPVA, OSUM, PROB, PROD, QSUM, RECI, SQRT, SUMM, SINE, TANG, AB
 value meets its target); the default merit function and its wizard (OP-56); the optimizer and
 Lagrange multipliers (OP-57); the merit function listing; reading or writing OpticStudio's .MF
 files (the help names the file but does not document its format).
+
+## 26. Optical path difference and wavefront
+
+OP-35. Code: `OpenSim.Optics/Wavefront/OpdEngine.cs`, `WavefrontTools.cs` and
+`FoucaultShadowgram.cs`; the analyses in `OpenSim.Optics/Analysis/WavefrontAnalyses.cs`. Tests:
+`OpenSim.Tests/Optics/WavefrontAnalysisTests.cs` and the gate
+`OpenSim.Tests/Optics/Gates/OpdGateTests.cs`. OpticStudio's definitions are read from its 2025 R2
+help ("Reference OPD", "Exit Pupil", "Infinity", "Absolute/Absolute 2", "Afocal Image Space",
+"Optical Path Difference", "Ray Aberration (Aberrations)", "Wavefront Map", "Interferogram",
+"Foucault Analysis (Wavefront)", "Pupil Aberration", "RMS vs. Field"), saved under
+`plans/sources/optics/op-35-help/`. Welford's "Aberrations of Optical Systems" and Hopkins were
+not on hand; the formulas below are derived from the definitions, not copied.
+
+- **What is compared.** A ray and the chief ray of the same field and wavelength are traced to
+  the image surface (`BatchTracer`; ΔP, the ray's path minus the chief ray's, summed segment by
+  segment) and carried along their image-space lines to the reference surface.
+  **OPD = chief path − ray path** (section 6), in waves of the traced wavelength in the system's
+  air (paths are relative to the air index, section 13). The chief ray's OPD is zero by
+  construction. This is the help's "OPD = OPD Absolute + OPD Correction".
+- **Reference point** (`OpdReferencePoint`): the chief ray's image-surface intercept, or the
+  centroid, the mean intercept of the rays of an n × n grid of pupil nodes (n = 33 by default).
+  Moving the centre adds, to first order, a tilt.
+- **Reference sphere** (Reference OPD = Exit Pupil, the default). Centre C, radius R = |E − C|,
+  E the centre of the primary wavelength's paraxial exit pupil (`ParaxialSystem.ExitPupilPosition`,
+  placed from the last surface's vertex as the OPD solve does), on E's side of C (σ = −1 when E
+  lies behind C along the reference ray, +1 when ahead). With q a ray's image intercept, d its
+  unit direction, w = q − C, b = w·d and p = −|w − b·d|²:
+  `OPD = −ΔP + n·[(b_r − b_c) + σ·(p_c − p_r)/(√(R² + p_c) + √(R² + p_r))]`, n the image-space
+  index. A ray whose line passes farther than R from C misses the sphere and is reported.
+- **Infinity, and telecentric image space.** As R → ∞ the bracket tends to b_r − b_c, the error
+  at most n·|w|²/R: each ray carried to the plane through C normal to itself. This is the help's
+  Infinity reference (the correction "given strictly by the angular error in the ray"), and it is
+  what the exit-pupil reference uses when the paraxial exit pupil is at infinity, so a telecentric
+  lens is the continuous limit of nearby non-telecentric ones (the sphere's sheet changes side as
+  the exit pupil passes through infinity; the OPD does not jump).
+- **Absolute, Absolute 2** (focal): no correction, OPD = −ΔP, the paths to the image surface.
+  The reference point plays no part.
+- **Afocal image space** (`Aperture.AfocalImageSpace`): a plane with unit normal u, the chief
+  ray's direction (the mean ray direction for the centroid reference), through Q; a ray meets it
+  at t = (Q − q)·u/(d·u) and OPD = −ΔP + n·(t_c − t_r). Exit Pupil (and Infinity, which the help
+  says is the same in afocal mode): Q is the point of the chief ray's line nearest E; with the
+  exit pupil at infinity this is refused. Absolute: Q is the chief ray's image intercept.
+  Absolute 2: no correction.
+- **Reference to primary.** The centre (or afocal direction) is the primary wavelength's; the
+  OPD is still against the traced wavelength's own chief ray (section 10, item 22).
+- **OPD limitations.** A surface whose shape says the OPD through it is approximate or undefined
+  (`SurfaceShape.OpdLimitation`) makes the engine refuse, naming the surface, unless "Allow OPD
+  limitations" is on; the result then lists it.
+- **Failed rays** keep their status and surface; their OPD is NaN; they are blank on maps,
+  left out of curves and statistics, and counted in the assumptions.
+- **Statistics** (`WavefrontTools.Statistics`): peak-to-valley = max − min; RMS about the mean
+  (piston removed), every sample weighted equally (the help's rectangular-array method;
+  Gaussian quadrature is not built).
+- **Tilt and focus removal** (`WavefrontTools.Remove`): a joint least-squares fit of Fringe
+  Zernike terms 1–3 or 1–4 (`ZernikeFit`; terms 2, 3 and 4 are x, y and 2ρ² − 1 on the
+  normalised pupil); only the removed terms are subtracted.
+- **Pupil grids.** Maps use an n × n grid of nodes from −1 to 1 (an odd n puts a node on the
+  chief ray); nodes outside the unit circle are blank. This is a private grid until OP-34's
+  shared pupil sampling lands.
+- **Interferogram:** intensity (1 − cos 2πΔ)/2, Δ = s·W + (t_x·Px + t_y·Py)/2, dark where Δ is
+  a whole number.
+- **Foucault:** the pupil field is e^{2πiW} (zero where the ray failed); a pupil node stands for
+  the image-space direction d_c + (a_x·Px, a_y·Py), a fitted to the rays' directions; the image
+  field U(x) = Σ e^{2πi(W − n·Δd·x/λ)} is the matrix Fourier transform on a window of
+  ±(1.5 × the rays' geometric spread + 16 λ/(n·a)) at spacing λ/(4n·a); the knife zeroes its
+  half-plane (left x ≤ pos, right x ≥ pos, above y ≥ pos, below y ≤ pos, in the image surface's
+  frame, from the chief ray); the inverse sum returns to the pupil; the intensity is divided by
+  the mean of the same reconstruction without the knife. A window needing more than 4097 samples
+  per axis is refused, as is afocal image space.
+- **Pupil aberration:** 100 × (real stop intercept − P × r)/r, r the on-axis primary-wavelength
+  paraxial marginal ray height at the stop; the y component against Py (tangential), x against
+  Px (sagittal); apertures ignored.
+
+Not built: OpticStudio's system-level Reference OPD setting (each analysis has its own), the
+Rimmer centroid correction, polarization phase in the wavefront, "Use Exit Pupil Shape" on the
+maps, rotation and surface plots, analyses at intermediate surfaces, subapertures, STAR data,
+Gaussian-quadrature RMS, the interferogram's second beam from another configuration, "Ref Beam
+To Vertex" and "Consider Path Length Difference", the Foucault reference bitmap, the difference
+display, its registration and the FOUC operand.

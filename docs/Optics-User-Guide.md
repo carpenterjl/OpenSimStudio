@@ -809,6 +809,43 @@ general math operands. Rules and readings are in docs/Optics-Conventions.md §31
 rest of the operand catalogue, the default merit function wizard, optimization, the merit
 function listing, and .MF files.
 
+## Optical path difference and wavefront
+
+Five analyses read the lens data editor's surfaces and measure the optical path difference (OPD)
+against the chief ray, in waves (positive: the ray's wavefront is ahead of the reference). Four
+are in the **Wavefront** group, one in **Aberrations**.
+
+- **Optical path difference:** the OPD fan against Py (tangential, Px = 0) and Px (sagittal,
+  Py = 0), with *Number of rays* on each side of the centre, one field or all (field 0), one
+  wavelength or all (wavelength 0; every wavelength then uses the primary wavelength's reference
+  point). A table lists every value; a failed ray is marked "failed".
+- **Wavefront map:** the OPD over an n × n pupil grid as a false-colour image or contours, with
+  its peak-to-valley and its RMS about the mean. *Remove tilt* and *Remove focus* subtract a
+  least-squares fit; *Reference to primary* uses the primary wavelength's reference point.
+- **Interferogram:** the fringes of this beam against a perfect reference beam, dark where the
+  OPD is a whole number of waves; *Scale factor* (2 for double pass) and *X-tilt*, *Y-tilt*
+  (fringes across the pupil diameter).
+- **Foucault analysis:** the knife-edge shadowgram: the diffraction field at focus, the knife
+  (left, right, above or below, at *Position* µm from the chief ray) taking away its half, and
+  the field propagated back to the pupil. *Logarithmic* shows log10 of the relative intensity.
+- **Pupil aberration:** where real rays cross the stop compared with where the paraxial pupil
+  puts them, as a percentage of the stop radius. More than a few percent means ray aiming is
+  needed; with aiming on it is near zero.
+
+Common settings: **Reference OPD** — *Exit pupil* (the default: a sphere centred on the image
+point through the paraxial exit pupil; a plane per ray when the exit pupil is at infinity),
+*Infinity*, *Absolute* (no correction) or *Absolute 2*; in afocal image space the reference is a
+plane normal to the chief ray. **Reference point** — chief ray or centroid. **Check apertures**,
+and **Allow OPD limitations**, which lets the analyses run through a surface (ABCD, a Fresnel on
+a curved substrate, a lenslet array, Paraxial XY) whose OPD is approximate or undefined; without
+it such a lens is refused with the surface named. The result lists the reference used and how
+many rays failed. The rules are in `docs/Optics-Conventions.md` §26; readings not yet checked
+against OpticStudio are in §10 item 22.
+
+Not built: the Reference OPD as one system setting (each analysis has its own), polarization
+phase, exit-pupil-shaped maps, intermediate surfaces, subapertures, the interferogram's second
+beam from another configuration, the Foucault reference bitmap and the FOUC operand.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -818,6 +855,10 @@ Not built yet, and not to be relied on until they appear in this guide:
 - system data (aperture, fields, wavelengths);
 - layouts with traced rays and the analysis windows beyond those above (OPD, MTF, PSF and the
   rest; the Configuration Matrix Spot);
+
+- layouts with traced rays and the analysis windows (spot diagrams, ray fans, MTF, PSF and
+  the rest; the OPD and wavefront analyses are built, see "Optical path difference and
+  wavefront");
 - the solve column of the sequential surface editor (the solve library is built; see Solves);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built, but nothing but its own five analyses uses it yet);

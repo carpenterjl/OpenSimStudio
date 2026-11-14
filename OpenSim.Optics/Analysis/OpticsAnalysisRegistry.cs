@@ -75,6 +75,13 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new PolarizationTransmissionAnalysis());
         registry.Register(new PolarizationPhaseAberrationAnalysis());
         registry.Register(new PolarizationTransmissionFanAnalysis());
+        // OP-35: optical path difference and wavefront.
+        registry.Register(new OpdFanAnalysis());
+        registry.Register(new WavefrontMapAnalysis());
+        registry.Register(new InterferogramAnalysis());
+        registry.Register(new FoucaultAnalysis());
+        registry.Register(new PupilAberrationAnalysis());
+
         // OP-44: reports.
         registry.Register(new SystemDataAnalysis());
         registry.Register(new PrescriptionDataAnalysis());
