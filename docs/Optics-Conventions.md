@@ -1167,24 +1167,6 @@ single place in the code, so a correction is one line and its test.
     Check: Test Plate Fitting in OpticStudio on a lens and a vendor list, the chosen plates, their
     order and the merit after each step compared with this program's report.
 
-46. **High-Yield readings** (OP-62, section 50). The penalty τ = |n − n′|(1 − R·N) and which
-    ray R is are copied from Zemax Knowledgebase KA-01837; nothing is compared with OpticStudio's
-    HYLD values or its "Improve Manufacturing Yield" rows. These are this program's readings
-    where the sources are short:
-    - *Row weights.* Each HYLD row weighs W × overall × field × wavelength × pupil weight, the
-      default merit function's ray weight times the High-Yield Weight. The help says only that
-      the Weight "sets the weight of the overall contribution from the HYLD operands"; the
-      article's editor screenshot shows HYLD weights equal to the criterion rows' ring weights.
-    - *Which rays and surfaces.* The default merit function's rays (same rule, symmetry
-      reduction and switch to the rectangular array), one row per surface with a different index
-      on either side; rays that fail are left out. The screenshot shows rows on surfaces 2 and 3
-      only, its HYLD rows at pupil points that are not the criterion rows' printed above them, so
-      OpticStudio's own sampling of the HYLD rows is not reproduced exactly.
-    - *Mirrors.* The sources do not say what n′ is at a mirror; HYLD there fails by name and no
-      rows are written for mirrors.
-    - *Column order.* Surf in Int1, Wave in Int2, Hx Hy Px Py in Data1–4, from the screenshot.
-    Check: OpticStudio's HYLD values on a lens, ray by ray, and the rows its wizard writes.
-
 45. **Stray-light and application readings** (OP-46, section 49). Read from the help pages
     saved under `plans/sources/optics/op-46-help/`; nothing is compared with OpticStudio's output.
     - *Ghost apertures.* Fixed apertures are copied into a ghost system; a floating aperture with
@@ -1214,6 +1196,24 @@ single place in the code, so a correction is one line and its test.
       from the fitted form A + B cos 2θ + C sin 2θ. The spherical EFL is 1/(average power).
     Check: OpticStudio's Ghost Focus Generator on a cemented doublet (focus distances, EFLs, RMS
     radii), GPIM in each mode, YNIP on a germanium lens, and both power maps on a toroidal lens.
+
+46. **High-Yield readings** (OP-62, section 50). The penalty τ = |n − n′|(1 − R·N) and which
+    ray R is are copied from Zemax Knowledgebase KA-01837; nothing is compared with OpticStudio's
+    HYLD values or its "Improve Manufacturing Yield" rows. These are this program's readings
+    where the sources are short:
+    - *Row weights.* Each HYLD row weighs W × overall × field × wavelength × pupil weight, the
+      default merit function's ray weight times the High-Yield Weight. The help says only that
+      the Weight "sets the weight of the overall contribution from the HYLD operands"; the
+      article's editor screenshot shows HYLD weights equal to the criterion rows' ring weights.
+    - *Which rays and surfaces.* The default merit function's rays (same rule, symmetry
+      reduction and switch to the rectangular array), one row per surface with a different index
+      on either side; rays that fail are left out. The screenshot shows rows on surfaces 2 and 3
+      only, its HYLD rows at pupil points that are not the criterion rows' printed above them, so
+      OpticStudio's own sampling of the HYLD rows is not reproduced exactly.
+    - *Mirrors.* The sources do not say what n′ is at a mirror; HYLD there fails by name and no
+      rows are written for mirrors.
+    - *Column order.* Surf in Int1, Wave in Int2, Hx Hy Px Py in Data1–4, from the screenshot.
+    Check: OpticStudio's HYLD values on a lens, ray by ray, and the rows its wizard writes.
 
 47. **Tolerance wizard and Quick Yield readings** (OP-66, section 51). Nothing is compared with
     OpticStudio's wizard output or Quick Yield; these are this program's readings where the help
@@ -4191,58 +4191,6 @@ Plate Lists" (saved under `plans/sources/optics/op-17-help/`). No list ships wit
   (any file is chosen instead); the ZPL keyword TESTPLATEFIT and a command-line arm; higher-order
   aspheric terms in the edge-sag test. Nothing is compared with OpticStudio's output (§10 item 44).
 
-## 50. High-yield optimization
-
-`OpenSim.Optics/Optimization/HighYield/` (`HighYieldPenalty.cs`, `HighYieldMerit.cs`) and the
-operand `OpenSim.Optics/Merit/HighYieldOperands.cs` (OP-62). Sources, saved under
-`plans/sources/optics/op-62-help/`: OpticStudio 2025 R2 help, "Optimization Goal" and
-"Constraints on Real Ray Data" (HYLD); Zemax Knowledgebase KA-01837, "Designing for as-built
-performance with High-Yield Optimization" (C. Normanshire, 2021, an archived copy with its
-equation images); the Zemax eGuide "High-Yield Optimization" (2019). The help cites K. E. Moore,
-"Optimization for as-built performance", Proc. SPIE 10925, 1092502 (2019); it is not freely
-readable and was not read. Ansys's current knowledgebase page (optics.ansys.com) refused
-automated fetches; the archived Zemax copy was used instead.
-
-- **The measure: the HYLD term.** OpticStudio's tolerance-sensitivity operand for optimization is
-  HYLD, a ray-angle proxy, not a tolerance run: "uses the angles of incidence as a proxy for the
-  actual tolerances" (eGuide). Implemented as KA-01837 defines it: τ = |n − n′|(1 − R·N), n and
-  n′ the indices before and after the surface, N the unit normal, R the incident ray when
-  n′ &gt; n, else the refracted ray — the larger of the two angles. R·N is taken as |R·N| (the
-  angle's cosine, 0 to 90°), and 1 − cos θ is computed as sin²θ/(1 + cos θ), |R × N|² for
-  sin²θ, which keeps its digits at small angles. Dimensionless; ≈ |n − n′|θ²/2 for small θ.
-  The help's other tolerance-data operand, TOLR (an RSS tolerance estimate inside the merit
-  function), is not built.
-- **HYLD.** Surf (Int1), Wave (Int2), Hx, Hy, Px, Py (Data1–4); the ray is the merit function's
-  shared real ray. It fails by name for surface 0, a ray that fails at or before the surface,
-  and a mirror (the sources do not give n′ there).
-- **The rows.** `HighYieldMerit.Generate` writes, for every configuration, field and wavelength
-  of non-zero weight and every pupil point of the default merit function (the Optimization
-  Wizard's saved options: its rule, symmetry reduction and switch to the rectangular array when
-  vignetted, `DefaultMeritWizard.Points`), one HYLD row per surface with a different index on
-  either side (`HighYieldPenalty.RefractingSurfaces`, the indices of the real-ray trace), target
-  0, weight W × overall × field × wavelength × pupil weight. Rays that fail are left out and
-  counted in the notes; mirrors are named. A BLNK row whose comment starts "High-Yield:" heads
-  the block, CONF rows switch configurations, and the block sits at the end of the merit
-  function: `WithRows` replaces an earlier block, `Without` removes it, and a block not at the
-  end, HYLD rows outside it, or a jump into it are refused by name.
-- **Report.** `HighYieldMerit.Report` groups an evaluation's HYLD rows by configuration and
-  surface: Σwτ/Σw, the largest τ and the share of the merit function.
-- **Optimize window.** The High Yield section: Weight (default 1, the wizard's box in the
-  article's screenshot; saved with the lens as `OpticsSettings.HighYield`), Add High-Yield rows
-  (one undo step of the Merit Function Editor), Remove, Evaluate and the per-surface table.
-  Optimization itself is the ordinary Start (OP-57) or Global and Hammer (OP-58) on the merit
-  function holding the rows.
-- **Gate.** `Gates/HighYieldGateTests` (Slow): a zero-thickness glass shell before an ideal lens,
-  so every shell curvature has the same perfect nominal image; with the High-Yield rows the
-  optimizer flattens the shell, and OP-65's Monte Carlo over the shell front's decenter (fixed
-  seed) gives a standard deviation of the RMS spot radius below half the start's, with the
-  nominal RMS spot radii equal to 1e-9 lens units.
-- **Readings** where the sources are short are in §10, item 46.
-
-**Not built.** The "Improve Manufacturing Yield" choice inside the Optimization Wizard itself
-(the rows are added from the Optimize window, from the wizard's saved options); TOLR; HYLD at
-mirrors; OpticStudio's exact HYLD pupil sampling; a command-line arm.
-
 ## 49. Stray-light and application analyses
 
 OP-46 (`OpenSim.Optics/Analysis/StrayLight/`, `OpenSim.Optics/Merit/GhostOperands.cs`). The
@@ -4297,6 +4245,59 @@ features follow OpticStudio 2025 R2's help pages saved under `plans/sources/opti
 - **Not built.** Biocular Field of View and Biocular Dipvergence/Convergence; Save Files (no
   GHfffsss.ZMX files); ghosts of lenses with coordinate breaks or tilts; the power maps' surface
   plot, grey scale and scan displays.
+
+## 50. High-yield optimization
+
+`OpenSim.Optics/Optimization/HighYield/` (`HighYieldPenalty.cs`, `HighYieldMerit.cs`) and the
+operand `OpenSim.Optics/Merit/HighYieldOperands.cs` (OP-62). Sources, saved under
+`plans/sources/optics/op-62-help/`: OpticStudio 2025 R2 help, "Optimization Goal" and
+"Constraints on Real Ray Data" (HYLD); Zemax Knowledgebase KA-01837, "Designing for as-built
+performance with High-Yield Optimization" (C. Normanshire, 2021, an archived copy with its
+equation images); the Zemax eGuide "High-Yield Optimization" (2019). The help cites K. E. Moore,
+"Optimization for as-built performance", Proc. SPIE 10925, 1092502 (2019); it is not freely
+readable and was not read. Ansys's current knowledgebase page (optics.ansys.com) refused
+automated fetches; the archived Zemax copy was used instead.
+
+- **The measure: the HYLD term.** OpticStudio's tolerance-sensitivity operand for optimization is
+  HYLD, a ray-angle proxy, not a tolerance run: "uses the angles of incidence as a proxy for the
+  actual tolerances" (eGuide). Implemented as KA-01837 defines it: τ = |n − n′|(1 − R·N), n and
+  n′ the indices before and after the surface, N the unit normal, R the incident ray when
+  n′ &gt; n, else the refracted ray — the larger of the two angles. R·N is taken as |R·N| (the
+  angle's cosine, 0 to 90°), and 1 − cos θ is computed as sin²θ/(1 + cos θ), |R × N|² for
+  sin²θ, which keeps its digits at small angles. Dimensionless; ≈ |n − n′|θ²/2 for small θ.
+  The help's other tolerance-data operand, TOLR (an RSS tolerance estimate inside the merit
+  function), is not built.
+- **HYLD.** Surf (Int1), Wave (Int2), Hx, Hy, Px, Py (Data1–4); the ray is the merit function's
+  shared real ray. It fails by name for surface 0, a ray that fails at or before the surface,
+  and a mirror (the sources do not give n′ there).
+- **The rows.** `HighYieldMerit.Generate` writes, for every configuration, field and wavelength
+  of non-zero weight and every pupil point of the default merit function (the Optimization
+  Wizard's saved options: its rule, symmetry reduction and switch to the rectangular array when
+  vignetted, `DefaultMeritWizard.Points`), one HYLD row per surface with a different index on
+  either side (`HighYieldPenalty.RefractingSurfaces`, the indices of the real-ray trace), target
+  0, weight W × overall × field × wavelength × pupil weight. Rays that fail are left out and
+  counted in the notes; mirrors are named. A BLNK row whose comment starts "High-Yield:" heads
+  the block, CONF rows switch configurations, and the block sits at the end of the merit
+  function: `WithRows` replaces an earlier block, `Without` removes it, and a block not at the
+  end, HYLD rows outside it, or a jump into it are refused by name.
+- **Report.** `HighYieldMerit.Report` groups an evaluation's HYLD rows by configuration and
+  surface: Σwτ/Σw, the largest τ and the share of the merit function.
+- **Optimize window.** The High Yield section: Weight (default 1, the wizard's box in the
+  article's screenshot; saved with the lens as `OpticsSettings.HighYield`), Add High-Yield rows
+  (one undo step of the Merit Function Editor), Remove, Evaluate and the per-surface table.
+  Optimization itself is the ordinary Start (OP-57) or Global and Hammer (OP-58) on the merit
+  function holding the rows.
+- **Gate.** `Gates/HighYieldGateTests` (Slow): a zero-thickness glass shell before an ideal lens,
+  so every shell curvature has the same perfect nominal image; with the High-Yield rows the
+  optimizer flattens the shell, and OP-65's Monte Carlo over the shell front's decenter (fixed
+  seed) gives a standard deviation of the RMS spot radius below half the start's, with the
+  nominal RMS spot radii equal to 1e-9 lens units.
+- **Readings** where the sources are short are in §10, item 46.
+
+**Not built.** The "Improve Manufacturing Yield" choice inside the Optimization Wizard itself
+(the rows are added from the Optimize window, from the wizard's saved options); TOLR; HYLD at
+mirrors; OpticStudio's exact HYLD pupil sampling. (The command line has `optics optimise
+--high-yield W`, section 46.)
 
 ## 51. Tolerance wizard, viewers and yield
 
