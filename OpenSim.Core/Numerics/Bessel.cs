@@ -279,4 +279,52 @@ public static class Bessel
                 "H0(2) is evaluated via K0(jz), valid only for Im(z) ≤ 0 (physical poles).");
         return new Complex(0, 2 / Math.PI) * K0(Complex.ImaginaryOne * z);
     }
+
+    // OP-47: integer orders, for the thin sinusoidal phase grating's J_m(a)² efficiencies.
+
+    /// <summary>
+    /// J_n(x) for integer n and real x (OP-47). J_{−n} = (−1)ⁿJ_n (DLMF 10.4.1) and
+    /// J_n(−x) = (−1)ⁿJ_n(x) (derived: the ascending series of J_n is (x/2)ⁿ times a series in x²).
+    /// n = 1 is <see cref="J1"/>; every other order comes from Miller's backward recurrence
+    /// J_{k−1} = (2k/x)J_k − J_{k+1} (DLMF 10.6.1) from an order well above both n and |x|,
+    /// normalised by 1 = J₀ + 2J₂ + 2J₄ + … (DLMF 10.12.4) — the procedure DLMF 10.74(iv) gives for
+    /// J_n, which is the minimal solution of the recurrence, so the backward direction is stable at
+    /// every order — rescaling the unnormalised values when they grow past 10²⁰⁰. The absolute
+    /// error is a few ulps of 1 (the normalising sum's terms are bounded by 1).
+    /// </summary>
+    public static double Jn(int n, double x)
+    {
+        if (!double.IsFinite(x)) throw new ArgumentOutOfRangeException(nameof(x), x, "J_n needs a finite argument.");
+        if (n == int.MinValue) throw new ArgumentOutOfRangeException(nameof(n), n, "The order is out of range.");
+        double sign = 1;
+        if (n < 0)
+        {
+            n = -n;
+            if ((n & 1) == 1) sign = -sign;
+        }
+        if (x < 0)
+        {
+            x = -x;
+            if ((n & 1) == 1) sign = -sign;
+        }
+        if (n == 1) return sign * J1(x);
+        if (x == 0) return n == 0 ? 1 : 0;
+        int start = 2 * ((Math.Max(n, (int)Math.Ceiling(x)) + 30 + (int)Math.Sqrt(40.0 * Math.Max(n, x))) / 2);   // even
+        double above = 0, here = 1e-300, sum = 0, wanted = 0;
+        for (int k = start; k >= 1; k--)
+        {
+            double below = 2 * k / x * here - above;   // J_{k−1}
+            above = here;
+            here = below;
+            int order = k - 1;
+            if (order == n) wanted = here;
+            if (order >= 2 && (order & 1) == 0) sum += 2 * here;
+            if (Math.Abs(here) > 1e200)
+            {
+                here *= 1e-200; above *= 1e-200; sum *= 1e-200; wanted *= 1e-200;
+            }
+        }
+        sum += here;   // J_0
+        return sign * wanted / sum;
+    }
 }

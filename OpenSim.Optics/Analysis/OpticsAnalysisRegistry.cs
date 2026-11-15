@@ -163,6 +163,12 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new StrayLight.YniContributionsAnalysis());
         registry.Register(new StrayLight.PowerPupilMapAnalysis());
         registry.Register(new StrayLight.PowerFieldMapAnalysis());
+
+        // OP-47: diffraction efficiency (volume holograms by Kogelnik; gratings by RCWA or scalar theory).
+        registry.Register(new DiffractionEfficiencyAnalysis());
+        registry.Register(new EfficiencyVsAngleAnalysis());
+        registry.Register(new EfficiencyVsWavelengthAnalysis());
+        registry.Register(new GratingEfficiencyAnalysis());
         return registry;
     }
 }

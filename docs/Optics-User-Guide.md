@@ -1514,6 +1514,8 @@ a part not built), 2 the run failed or was cancelled.
 - `opensim optics convert <project> --tool asphere|best-asphere|stock` runs Convert Asphere
   Types, Find Best Asphere or Stock Lens Matching and writes the report and the project with the
   result (Design conversion tools below).
+- `opensim optics efficiency --period UM --wavelength UM [options]` prints a grating's efficiency
+  per order by RCWA or the scalar theory, without a project (Diffraction efficiency below).
 - Glass catalogs: the app's (the built-in set and your catalog folder); `--builtin-catalogs` uses
   the built-in set alone, for a run that does not depend on the machine.
 - Ctrl+C stops a run between steps. A stopped optimization still writes the best design so far.
@@ -1895,8 +1897,7 @@ off-axis hologram deviates the axis, so paraxial data are refused for that lens 
 named; the real ray trace still works.
 
 Not built: Radial Grating, Elliptical Grating 1 and 2, Extended Toroidal Grating, Binary Optic 3
-and 4, Grid Phase, Zone Plate, Optically Fabricated Hologram, the volume hologram option,
-diffraction efficiency, and these types in CODE V and OSLO files (they are read from and written to
+and 4, Grid Phase, Zone Plate, Optically Fabricated Hologram, and these types in CODE V and OSLO files (they are read from and written to
 .zmx files, see Zemax lens files; macros set them with SETSURFACEPROPERTY). Convert Asphere Types
 refuses a diffractive surface, and Find Best Asphere skips one. The readings not yet
 checked against OpticStudio are listed in docs/Optics-Conventions.md §10 item 53.
@@ -2142,6 +2143,34 @@ that change the system data for later rows); EQUA; the skew Gaussian beam operan
 GBSR, GBSS, GBSW); the gradient-index, fiber-coupling, POP, non-sequential, hologram-construction
 and coating operands (CMGT to CIVA, CODA); UDOC; off-axis coordinates and the Base/Composite sag
 removal in SSAG, SSLP and SCRV; the removal of fitted terms in SPHS and PSLP.
+
+## Diffraction efficiency
+
+How much light a grating or hologram sends into each order (docs/Optics-Conventions.md §61). Four
+analyses, in the Polarization group of the analysis menu:
+
+- **Diffraction efficiency**, **Efficiency vs. angle** and **Efficiency vs. wavelength** are
+  OpticStudio's analyses for volume holograms, by Kogelnik's coupled-wave theory. Set a Hologram 1,
+  Hologram 2 or Toroidal Hologram surface's "Volume hologram?" parameter to 1 and fill in the
+  thickness, the construction indices n1 and n2, the emulsion index n, the modulation dn, the
+  shrinkage and the index shift (the ray trace does not use them). The field type must be Angle:
+  the analyses scan the chosen field's Y angle (default 99% to 101% of it) and the wavelength
+  (default 99% to 101% of the selected one), trace the chief ray to the hologram and plot the
+  diffracted and undiffracted efficiency, or a map of both scans. The order must be +1 or −1.
+- **Grating efficiency (RCWA / scalar)** is this program's own: a lamellar, blazed, multilevel or
+  sinusoidal relief of given period (or a Diffraction Grating surface's lines/µm), depth and
+  indices, by rigorous coupled-wave analysis (TE, TM or unpolarized, reflected and transmitted
+  orders, absorption for lossy media) or by the thin-element theory (transmitted orders only, normal
+  incidence). It lists every propagating order and can plot one order against angle or wavelength.
+
+The command line gives the grating efficiency without a project:
+`opensim optics efficiency --period 1.5 --wavelength 1 --depth 0.5 --angle 10 --polarization tm`
+(`opensim help` lists the options).
+
+Not built: the conical mounting and two-dimensional gratings in RCWA, anisotropic media, the
+Optically Fabricated Hologram, "Consider Fresnel?", efficiency in the ray trace of the other
+diffractive surfaces, and the non-sequential analyses. The volume-hologram readings not yet checked
+against OpticStudio are listed in docs/Optics-Conventions.md §10 item 57.
 
 ## Coming
 

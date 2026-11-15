@@ -231,6 +231,13 @@ public static partial class CliRunner
                    [--epd-tol P] [--air] [--any-shape] [--both-ways]
             --cycles auto|N     the optimization of every trial
 
+        opensim optics efficiency --period UM --wavelength UM [options]
+            A one-dimensional grating's efficiency per order (OP-47), no project needed.
+            --method rcwa|scalar  --profile lamellar|blazed|multilevel|sinusoidal
+            --depth UM --fill F --levels N --slices N --ridge N[,K] --groove N --cover N
+            --substrate N[,K] --angle DEG --polarization te|tm|unpolarized --harmonics N
+            --out FILE          also write the orders as CSV
+
         Optics sweeps: a sweep job whose targets are all optics:... sets the lens instead of
         solving a body, and tabulates the saved merit function and each row's value.
             Targets: optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|

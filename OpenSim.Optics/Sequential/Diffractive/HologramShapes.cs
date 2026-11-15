@@ -33,8 +33,8 @@ namespace OpenSim.Optics.Sequential.Diffractive;
 /// The construction wavelength is in micrometers whatever the lens units ("always has units of
 /// micrometers") and, like the playback wavelength, in air ("the construction beams are always
 /// assumed to be in the AIR"). Not built: a negative construction wavelength (constructed in
-/// transmission, used in reflection; "OPD tracing will not work") and the volume hologram
-/// (parameter 13 non-zero, efficiency only); both are refused by name.
+/// transmission, used in reflection; "OPD tracing will not work"), refused by name. The volume
+/// hologram (parameter 13 non-zero) carries efficiency data only (<see cref="Volume"/>, OP-47).
 /// </para>
 /// </summary>
 public abstract class TwoPointHologram : DiffractiveShape
@@ -147,11 +147,43 @@ public abstract class TwoPointHologram : DiffractiveShape
         };
     }
 
-    /// <summary>Throws for a non-zero volume-hologram flag (not built).</summary>
-    internal static void RefuseVolume(string form, double flag)
+    // OP-47: the volume hologram.
+
+    /// <summary>The volume-hologram data (Volume Hologram? ≠ 0), or null for a surface hologram
+    /// (the default). "Only used for efficiency calculations not ray-tracing": the trace above is
+    /// the same either way; OP-47's efficiency analyses read it
+    /// (<see cref="OpenSim.Optics.Diffraction.VolumeHologramEfficiencies"/>).</summary>
+    public OpenSim.Optics.Diffraction.VolumeHologram? Volume { get; init; }
+
+    /// <summary>The propagation directions r₁ and r₂ of the two construction beams at
+    /// <paramref name="point"/> (local frame): the unit vectors of the rule above, the second
+    /// reversed for a converging beam, so ∇Φ = m·(2π/λc)·(r₁ − r₂). False where a point coincides
+    /// with a construction point.</summary>
+    internal bool TryConstructionDirections(Vector3D point, out Vector3D first, out Vector3D second)
     {
-        if (flag != 0)
-            throw new ArgumentException($"{form}: the volume hologram (Volume Hologram? ≠ 0) is not built in this program; set it to 0 (the surface hologram, which deviates rays only).");
+        first = default;
+        second = default;
+        if (!Beam(point, First, out _, out var u1) || !Beam(point, Second, out _, out var u2)) return false;
+        first = u1;
+        second = BothDiverge ? u2 : -u2;
+        return true;
+    }
+
+    /// <summary>The volume data of parameters (flag; thickness, n1, n2, n, dn, shrinkage, index
+    /// shift, Fresnel from <paramref name="first"/> on), or null when the flag is 0 (OP-47; before
+    /// OP-47 a non-zero flag was refused).</summary>
+    internal static OpenSim.Optics.Diffraction.VolumeHologram? VolumeOf(string form, double flag, Func<int, double> value, int first)
+    {
+        if (flag == 0) return null;
+        try
+        {
+            return new OpenSim.Optics.Diffraction.VolumeHologram(value(first), value(first + 1), value(first + 2), value(first + 3),
+                value(first + 4), value(first + 5), value(first + 6), value(first + 7) != 0);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new ArgumentException($"{form}: {ex.Message}", ex);
+        }
     }
 }
 

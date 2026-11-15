@@ -338,8 +338,9 @@ public sealed class DiffractiveSurfaceTests
     public void Holograms_RefuseWhatIsNotBuilt_ByName()
     {
         var h1 = SurfaceTypes.Find("Hologram 1")!;
-        var values = new Dictionary<int, double> { [3] = -0.1, [6] = -0.2, [7] = 0.6328, [8] = 1, [13] = 1 };
-        Assert.Contains("volume hologram", Assert.Throws<ArgumentException>(() => h1.Build(n => values.TryGetValue(n, out double v) ? v : 0)).Message);
+        // OP-47 built the volume hologram; its "Consider Fresnel?" option is refused by name instead.
+        var values = new Dictionary<int, double> { [3] = -0.1, [6] = -0.2, [7] = 0.6328, [8] = 1, [13] = 1, [14] = 1e-5, [15] = 1, [16] = 1, [17] = 1.5, [21] = 1 };
+        Assert.Contains("Consider Fresnel", Assert.Throws<ArgumentException>(() => h1.Build(n => values.TryGetValue(n, out double v) ? v : 0)).Message);
         values[13] = 0;
         values[7] = -0.6328;
         Assert.Contains("negative construction wavelength", Assert.Throws<ArgumentException>(() => h1.Build(n => values.TryGetValue(n, out double v) ? v : 0)).Message);

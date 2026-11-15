@@ -51,7 +51,28 @@ internal static class DiffractiveLayouts
     private static SurfaceParameterInfo Lines(int number) => P(number, "Lines/µm", 0, "Grating lines per micrometer, whatever the lens units.");
 
     private static SurfaceParameterInfo Volume(int number) => Flag(number, "Volume hologram?",
-        "0: a surface hologram (deviates rays only). 1, the volume hologram, is not built in this program.");
+        "0: a surface hologram (deviates rays only). 1: a volume hologram; the following parameters feed the diffraction efficiency analyses, not the ray trace.");
+
+    // OP-47: the volume-hologram parameters ("only available when Par 13 ≠ 0"): Hologram 1 and 2 14–21, Toroidal Hologram 23–30.
+    private static IEnumerable<SurfaceParameterInfo> VolumeParameters(int first) => new[]
+    {
+        P(first, "Hologram thickness", 1, "Hologram thickness, lens units (only used for efficiency calculations, not ray tracing)."),
+        P(first + 1, "n1", 0, "Refractive index seen by construction beam 1 outside the hologram."),
+        P(first + 2, "n2", 0, "Refractive index seen by construction beam 2 outside the hologram."),
+        P(first + 3, "Emulsion n", 0, "Average refractive index of the hologram emulsion."),
+        P(first + 4, "dn", 0, "Modulation of the refractive index."),
+        P(first + 5, "Shrinkage", 0, "0 for no shrinkage, else the scale of thickness (0.98 is 2% shrinkage)."),
+        P(first + 6, "Index shift", 0, "Change of the average refractive index after developing."),
+        Flag(first + 7, "Consider Fresnel?", "0: no Fresnel losses. 1 is not built in this program."),
+    };
+
+    private static void VolumeValues(Dictionary<int, double> d, OpenSim.Optics.Diffraction.VolumeHologram? v, int flag, int first)
+    {
+        d[flag] = v is null ? 0 : 1;
+        if (v is null) return;
+        d[first] = v.Thickness; d[first + 1] = v.N1; d[first + 2] = v.N2; d[first + 3] = v.MeanIndex;
+        d[first + 4] = v.Modulation; d[first + 5] = v.Shrinkage; d[first + 6] = v.IndexShift; d[first + 7] = 0;
+    }
 
     public static IEnumerable<SurfaceTypeLayout> Build()
     {
@@ -180,30 +201,31 @@ internal static class DiffractiveLayouts
         }
 
         // "Hologram 1" / "Hologram 2": 1–3 the first construction point, 4–6 the second (lens
-        // units), 7 construction wavelength (µm), 8 diffraction order, 13 volume hologram flag.
-        // Parameters 14–21 ("only available when Par 13 ≠ 0") belong to the volume hologram,
-        // which is not built, and are not offered.
+        // units), 7 construction wavelength (µm), 8 diffraction order, 13 volume hologram flag,
+        // 14–21 the volume hologram ("only available when Par 13 ≠ 0"; OP-47).
         foreach (int kind in new[] { 1, 2 })
         {
             int k = kind;
             string name = $"Hologram {k}";
             yield return new SurfaceTypeLayout(name, $"OpticStudio 2025 R2 help, \"{name}\", table Parameter Definitions for {name} Surfaces",
-                Points(1).Append(P(7, "Construction λ", 0, "The construction wavelength λc, micrometers.")).Append(Order(8)).Append(Volume(13)).ToArray(),
-                v =>
+                Points(1).Append(P(7, "Construction λ", 0, "The construction wavelength λc, micrometers.")).Append(Order(8)).Append(Volume(13))
+                    .Concat(VolumeParameters(14)).ToArray(),
+                v => new HologramShape(k, new Vector3D(v(1), v(2), v(3)), new Vector3D(v(4), v(5), v(6)), v(7), v(8))
                 {
-                    TwoPointHologram.RefuseVolume(name, v(13));
-                    return new HologramShape(k, new Vector3D(v(1), v(2), v(3)), new Vector3D(v(4), v(5), v(6)), v(7), v(8));
+                    Volume = TwoPointHologram.VolumeOf(name, v(13), v, 14),
                 },
                 s =>
                 {
                     var h = (HologramShape)s;
-                    return With(PointValues(h, 1), (7, h.ConstructionMicrometers), (8, h.Order), (13, 0));
+                    var d = With(PointValues(h, 1), (7, h.ConstructionMicrometers), (8, h.Order));
+                    VolumeValues(d, h.Volume, 13, 14);
+                    return d;
                 });
         }
 
         // "Toroidal Hologram (sequential surfaces, lens data editor)": 1 radius of rotation, 2–8
         // α1–α7, 13–18 the construction points, 19 construction wavelength, 20 order, 21
-        // converge/diverge flag, 22 volume hologram flag (23–30 belong to the volume hologram).
+        // converge/diverge flag, 22 volume hologram flag, 23–30 the volume hologram (OP-47).
         yield return new SurfaceTypeLayout("Toroidal Hologram", "OpticStudio 2025 R2 help, \"Toroidal Hologram (sequential surfaces, lens data editor)\", table Parameter Definitions for Toroidal Hologram Surfaces",
             new[] { P(1, "Radius of rotation", 1, "Radius of rotation in lens units; 0 is infinite (a cylinder flat in x).") }
                 .Concat(EvenTerms(2, 7))
@@ -212,16 +234,17 @@ internal static class DiffractiveLayouts
                 .Append(Order(20))
                 .Append(P(21, "Converge/diverge", 0, "+1 (any positive value): both beams diverge or both converge; −1 (any negative value): one converges, one diverges."))
                 .Append(Volume(22))
+                .Concat(VolumeParameters(23))
                 .ToArray(),
-            v =>
+            v => new ToroidalHologram(v(1), Trimmed(Range(v, 2, 7)), new Vector3D(v(13), v(14), v(15)), new Vector3D(v(16), v(17), v(18)), v(19), v(20), v(21))
             {
-                TwoPointHologram.RefuseVolume("Toroidal Hologram", v(22));
-                return new ToroidalHologram(v(1), Trimmed(Range(v, 2, 7)), new Vector3D(v(13), v(14), v(15)), new Vector3D(v(16), v(17), v(18)), v(19), v(20), v(21));
+                Volume = TwoPointHologram.VolumeOf("Toroidal Hologram", v(22), v, 23),
             },
             s =>
             {
                 var h = (ToroidalHologram)s;
-                var d = With(PointValues(h, 13), (1, h.RadiusOfRotation), (19, h.ConstructionMicrometers), (20, h.Order), (21, h.BothDiverge ? 1 : -1), (22, 0));
+                var d = With(PointValues(h, 13), (1, h.RadiusOfRotation), (19, h.ConstructionMicrometers), (20, h.Order), (21, h.BothDiverge ? 1 : -1));
+                VolumeValues(d, h.Volume, 22, 23);
                 return Numbered(h.Alpha, 2, d);
             });
     }

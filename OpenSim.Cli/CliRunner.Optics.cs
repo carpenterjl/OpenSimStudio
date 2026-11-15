@@ -21,7 +21,7 @@ namespace OpenSim.Cli;
 public static partial class CliRunner
 {
     /// <summary>The optics subcommands, in the order Usage lists them.</summary>
-    public static readonly IReadOnlyList<string> OpticsSubcommands = new[] { "list", "analyse", "trace", "optimise", "tolerance", "import", "export", "catalog", "macro", "convert" };   // OP-94: import, export; OP-16: catalog; OP-99: macro; OP-61: convert
+    public static readonly IReadOnlyList<string> OpticsSubcommands = new[] { "list", "analyse", "trace", "optimise", "tolerance", "import", "export", "catalog", "macro", "convert", "efficiency" };   // OP-94: import, export; OP-16: catalog; OP-99: macro; OP-61: convert; OP-47: efficiency
 
     /// <summary>Subcommands planned but not built; each fails with a message naming its item.
     /// Empty since wave 8 wired the Global and Hammer searches (OP-58) and Monte Carlo (OP-65).</summary>
@@ -33,6 +33,7 @@ public static partial class CliRunner
             throw new UsageException($"'optics' needs a subcommand: {string.Join(", ", OpticsSubcommands)}.");
         string sub = args[1].ToLowerInvariant();
         if (sub == "list") return OpticsList(o, stdout);
+        if (sub == "efficiency") return OpticsEfficiency(o, stdout);   // OP-47: grating efficiency, no project (CliRunner.OpticsEfficiency.cs)
         string project = args.Length > 2 && !args[2].StartsWith("--") ? args[2]
             : throw new UsageException($"'optics {args[1]}' needs a project file.");
         return sub switch

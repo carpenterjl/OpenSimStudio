@@ -1439,6 +1439,22 @@ single place in the code, so a correction is one line and its test.
       changed since, as the help's GETMERIT text implies.
     Check: the help's Tolerance Script Example run in OpticStudio and here on one lens, the
     criteria compared trial by trial.
+57. **Volume hologram efficiency readings** (OP-47, section 61). The help names the method
+    (Kogelnik) and the parameters but not how they enter it. Read here:
+    - *The fringes* are those of the two construction beams refracted into the emulsion from n1
+      and n2 (the help: "the refractive indexes seen by construction beams 1 and 2 outside of the
+      hologram"), while the ray trace keeps OP-26's air form; with n1 = n2 = 1 the two agree.
+    - *Shrinkage* scales the thickness to s·d and the fringe vector's normal component by 1/s;
+      *index shift* adds to the playback index only.
+    - *The order*: σ = ρ + m·K_g, m the surface's diffraction order, ±1 only.
+    - *Polarization*: the system Jones vector taken on the surface's local x and y, without the
+      polarization changes of earlier surfaces; TE along ρ × σ.
+    - *The scanned angle* is the field's Y value (the help's "Minimum Angle Minimum incident angle
+      of the chief ray" with defaults from the field's Y value), the chief ray through the stop's
+      vertex, apertures not applied.
+    - *Efficiency* is Kogelnik's eq. 40 inside the emulsion; no Fresnel loss at its faces.
+    Check: a volume hologram's Diffraction Efficiency, Efficiency vs. Angle and Efficiency vs.
+    Wavelength in OpticStudio and here.
 
 59. **Imaging and ray operand readings** (OP-55A, section 63). The operand definitions are
     OpticStudio 2025 R2's "Optimization Operands (Alphabetically)" and category pages (saved under
@@ -4282,7 +4298,9 @@ write Zemax lens files (§52); `import` also reads CODE V .seq and OSLO .len fil
 extension (OP-95, §54); `opensim optics catalog` (OP-16, `CliRunner.OpticsCatalog.cs`)
 indexes and searches a stock lens catalog (§53); `opensim optics macro` (OP-99,
 `CliRunner.OpticsMacro.cs`) runs a ZPL macro (§56); `opensim optics convert` (OP-61,
-`CliRunner.OpticsDesign.cs`) runs a design conversion tool (§59).
+`CliRunner.OpticsDesign.cs`) runs a design conversion tool (§59); `opensim optics efficiency`
+(OP-47, `CliRunner.OpticsEfficiency.cs`) computes a grating's efficiency per order without a
+project (§61).
 
 - **One report function.** An analysis report is `OpticsAnalysisReport.Compose` over the
   analyses' results, the function the app's Save report calls
@@ -5275,9 +5293,9 @@ passes that wavelength to the redirect hook.
 | Zernike Fringe Phase | Standard | M·Σ 2πAᵢ Zᵢ, Fringe, waves | 0 M, 1 extrapolate, 13 N (37), 14 R, 15–51 |
 | Zernike Standard Phase | Standard | the same, Standard terms | 0 M, 1 extrapolate, 13 N (231), 14 R, 15–245 |
 | Zernike Annular Phase | Standard | the same, annular terms, obscuration ε | 0 M, 1 extrapolate, 3 ε, 13 N (80), 14 R, 15–94 |
-| Hologram 1 | Standard | m(2π/λc)(D₁ − D₂), both beams diverging | 1–6 points, 7 λc (µm), 8 m, 13 volume (0 only) |
+| Hologram 1 | Standard | m(2π/λc)(D₁ − D₂), both beams diverging | 1–6 points, 7 λc (µm), 8 m, 13 volume, 14–21 volume data (OP-47, §61) |
 | Hologram 2 | Standard | m(2π/λc)(D₁ + D₂), the second beam converging | as Hologram 1 |
-| Toroidal Hologram | Toroidal, α1–α7 | as Hologram 1 (flag > 0) or 2 (flag < 0) | 1 R, 2–8 α, 13–18 points, 19 λc, 20 m, 21 flag, 22 volume (0 only) |
+| Toroidal Hologram | Toroidal, α1–α7 | as Hologram 1 (flag > 0) or 2 (flag < 0) | 1 R, 2–8 α, 13–18 points, 19 λc, 20 m, 21 flag, 22 volume, 23–30 volume data (OP-47, §61) |
 
 T, λ₀ and λc are in micrometers and the phase coefficients in radians or waves whatever the lens
 units; they do not scale with Scale Lens. The grating lines are the planes y = const ("parallel to
@@ -5319,8 +5337,9 @@ limited (`OpdLimitation` is the substrate's, null for all eleven).
 - *Zone Plate*: not diffractive in OpticStudio's model; its depths need both media's indices at
   the reference wavelength.
 - *Optically Fabricated Hologram*: needs construction optics nested in the lens.
-- The volume hologram option (efficiency only), a negative construction wavelength, efficiency
-  and multiple orders, and the diffractive types in CODE V and OSLO files.
+- A negative construction wavelength, multiple orders, and the diffractive types in CODE V and
+  OSLO files. (The volume hologram option and efficiency are OP-47's, §61; the volume data do not
+  change the ray trace.)
 
 **Lens files and macros** (wave 11). The eleven types are read from and written to .zmx files
 under their SETSURFACEPROPERTY TYPE codes (§52, §10 item 48). Macros reach them through
@@ -5805,3 +5824,135 @@ and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
 **Not built:** off-axis coordinates and the Base/Composite sag removal of SSAG, SSLP and SCRV; the
 fitted-term removals of SPHS and PSLP; OpticStudio's global reference surface. Readings in §10
 item 60.
+
+## 61. Diffraction efficiency
+
+OP-47 adds `OpenSim.Optics/Diffraction/`: thin-element (scalar) efficiencies, rigorous coupled-wave
+analysis (RCWA) of one-dimensional gratings, Kogelnik's coupled waves for volume holograms, the
+volume-hologram data on OP-26's hologram surfaces, four analyses and `opensim optics efficiency`.
+The sources are saved under `plans/sources/optics/op-47-help/`: the OpticStudio 2025 R2 help pages
+"Diffraction Efficiency Analyses", "Diffraction Efficiency", "Efficiency vs. Angle", "Efficiency vs.
+Wavelength", "Calculation Assumptions and Limitations" (sequential and non-sequential) and
+"Hologram 1" and "Hologram 2"; and, in `papers/`, Kogelnik, "Coupled wave theory for thick hologram
+gratings", Bell Syst. Tech. J. 48, 2909–2947 (1969) (page images), Swanson, "Binary Optics
+Technology: The Theory and Design of Multi-Level Diffractive Optical Elements", MIT Lincoln
+Laboratory TR-854 (1989, DTIC ADA213404), and DLMF §10.4, 10.6, 10.11, 10.12 and 10.74. Moharam,
+Grann, Pommet and Gaylord (JOSA A 12, 1068 and 1077, 1995), Li (JOSA A 13, 1870, 1996) and Lalanne
+and Morris (JOSA A 13, 779, 1996) are not on this machine: the RCWA equations are derived in
+`Rcwa1D`'s comments, and EMpy's IsotropicRCWA (ElectroMagneticPython 2.2.4, MIT, which follows
+those papers) was read as documentation and run as the test oracle.
+
+**What OpticStudio's analyses are.** The three sequential Diffraction Efficiency analyses are
+"for Sequential mode volume hologram surfaces … calculated using the Kogelnik approximation
+method for thick holograms"; "Currently the Kogelnik method is the default and only method
+available"; they apply to Hologram 1, Hologram 2, Toroidal Hologram and Optically Fabricated
+Hologram surfaces "set up as a volume hologram". The surface-relief efficiency of binary optics
+and gratings is not an OpticStudio sequential analysis ("Other effects, such as efficiency or
+multiple order diffraction are ignored", "Binary 1"); RCWA is a non-sequential diffraction DLL in
+OpticStudio. This program offers both: the three analyses as the help defines them, and its own
+Grating Efficiency analysis over the scalar and RCWA solvers.
+
+**Scalar theory** (`ScalarGratingEfficiency`). Transmittance e^{−iφ(x)}; order m is the Fourier
+coefficient c_m = ∫₀¹ e^{−iφ(u)}e^{+i2πmu} du and its efficiency |c_m|² (Swanson p. 4). α is the
+peak phase delay in waves, α = (n − n₀)d/λ (`DepthInWaves`).
+
+| Profile | η_m | Source |
+|---|---|---|
+| Blazed (sawtooth φ = 2παu) | sinc²(α − m) | Swanson eq. 2.4; 2.7 (depth error), 2.8 (wavelength) |
+| N-level staircase φ = 2πα⌊Nu⌋/N | sinc²(m/N)·[sin π(α − m) / (N sin(π(α − m)/N))]² | derived (exact); at α = 1, m = 1 it is Swanson eq. 3.2 |
+| Binary, step φ, fill f | η₀ = 1 − 2f(1 − f)(1 − cos φ); η_m = 4f² sinc²(mf) sin²(φ/2) | derived |
+| Sinusoid φ = a sin 2πu | J_m(a)² | DLMF 10.12.1 (Jacobi–Anger) |
+| Any levels (widths, phases) | the Fourier sum | derived |
+
+Swanson's eq. 3.1, the product sinc²(α − m)·sinc²(α/N), is the approximation that drops the orders
+1 ± N, 1 ± 2N, …; the staircase formula above keeps them. A phase that increases with x within the
+period favours positive orders (a prism deviates toward its base). `Bessel.Jn` (OP-47, additive in
+`OpenSim.Core/Numerics/Bessel.cs`) gives integer orders: forward recurrence below the argument,
+Miller's backward recurrence normalised by DLMF 10.12.4 otherwise.
+
+**RCWA** (`Rcwa1D`, `GratingStructure`, `GratingLayer`, `GratingProfiles`). Planar mounting, TE
+and TM; a lossless cover, layers from the cover down, a substrate.
+
+- *Conventions.* e^{+iωt}; an index is given as n + ik with k ≥ 0 absorbing, ε = (n − ik)². Order m
+  has k_x,m = k₀(n_c sin θ + mλ/Λ), OpticStudio's grating equation with M = m. Layers are piecewise
+  constant across the period (segments from x = 0 whose widths add to 1).
+- *Layer modes.* TE: ∂²S/∂z′² = (K_x² − [[ε]])S. TM with Li's rules: ∂²U/∂z′² =
+  [[1/ε]]⁻¹(K_x[[ε]]⁻¹K_x − I)U, the second field V = [[1/ε]]WQ. Eigenvectors W and q = √eigenvalue
+  with Re q ≥ 0 from `ComplexEigenSolver` (new, `OpenSim.Core/Numerics/ComplexEigenSolver.cs`:
+  Householder Hessenberg reduction, complex shifted QR with Wilkinson and exceptional shifts,
+  eigenvectors by back substitution on the Schur form; tested against MathNet.Numerics). A
+  homogeneous layer skips the eigen-solve.
+- *Boundary solve.* The enhanced transmittance matrix: from the substrate up,
+  a = ½(W⁻¹f − V⁻¹g), b = ½(W⁻¹f + V⁻¹g), f ← W(I + XbA), g ← V(−I + XbA), A = a⁻¹X, X = e^{−Qd′};
+  at the cover (iY_c f − g)t = 2iY_cδ (Y_c/n_c² for TM); R = ft − δ, T = A_L⋯A₁t. No growing
+  exponential is formed.
+- *Output.* Per order the reflected and transmitted efficiencies (z-flux over the incident flux),
+  whether each propagates and its angle; the sums and the absorbed fraction 1 − ΣR − ΣT. With an
+  absorbing substrate the transmitted orders carry no defined power: they are reported as zero,
+  `TransmissionDefined` is false, and the absorbed fraction includes what enters the substrate.
+- *Staircases.* `GratingProfiles.Blazed` (equal slices, the ridge where the sawtooth is above the
+  slice's mid-height), `Multilevel` (the exact N-level staircase, N − 1 layers of H/N) and
+  `Sinusoidal`.
+- *Refused by name:* the conical mounting (not built), a cover that absorbs, a gain medium, more
+  than 200 harmonics, an order grazing exactly in a layer (q = 0), a singular boundary system.
+
+**Kogelnik** (`KogelnikCoupledWave`). The general two-wave solution of eq. 21–22 with γ from eq. 30
+and the boundary conditions eq. 31 (transmission, c_S > 0) and eq. 35 (reflection, c_S < 0):
+S(d), R(d) and S(0), R(d) in closed form (they equal eq. 34 and eq. 39), evaluated with the
+exponentials scaled so nothing overflows; η = |c_S|/c_R·|S|² (eq. 40); the undiffracted output
+|R(d)|². κ may be complex (absorption grating) and α ≥ 0. `ForIndexGrating` builds the parameters
+of an index grating from the wave vectors: β = 2πn/λ, ρ = β·d̂, σ = ρ − K (eq. 11), c_R = ρ·ẑ/β,
+c_S = σ·ẑ/β, ϑ = (β² − σ·σ)/(2β) (eq. 17, 87), κ = πΔn/λ times r·s, 1 for TE and ρ̂·σ̂ for TM (the
+vector form of eq. 90).
+
+**Volume holograms** (`VolumeHologram`, `VolumeHologramEfficiencies`). Hologram 1 and 2 parameters
+13–21 and Toroidal Hologram 22–30 are now read ("only available when Par 13 ≠ 0"): thickness
+(lens units), n1, n2, the emulsion's average n, dn, shrinkage, index shift, Consider Fresnel. They
+are an additive `TwoPointHologram.Volume` member, null by default, so a surface hologram and every
+saved lens trace exactly as before; "only used for efficiency calculations not ray-tracing". The
+efficiency at a ray is this program's reading (§10 item 57): the construction beams r₁, r₂ of the
+surface hologram's rule, in media n1 and n2, refract into the emulsion keeping their tangential
+wave vectors; K_g = k₁ − k₂; shrinkage s ≠ 0 scales the thickness to s·d and K_g's normal component
+by 1/s; the playback ray enters the emulsion (index n + shift) keeping its tangential wave vector;
+order m goes to σ = ρ + mK_g, so Kogelnik's K = −mK_g; the orders ±1 only. TE is along ρ × σ.
+Consider Fresnel = 1 is refused.
+
+**The analyses** (`DiffractionEfficiencyAnalyses.cs`, registered under `// OP-47`, category
+Polarization):
+
+| Id | Name | Plot | Settings (help) |
+|---|---|---|---|
+| `DiffractionEfficiency` | Diffraction efficiency | map: wavelength × field Y angle (image or contour) | Sampling, Surface, Wavelength, Field, Show As, Min/Max Angle, Min/Max Wavelength |
+| `EfficiencyVsAngle` | Efficiency vs. angle | diffracted and undiffracted against field Y angle | Sampling, Surface, Wavelength, Field, Min/Max Angle |
+| `EfficiencyVsWavelength` | Efficiency vs. wavelength | the same against wavelength | Sampling, Surface, Wavelength, Field, Min/Max Wavelength |
+| `GratingEfficiency` | Grating efficiency (RCWA / scalar) | efficiency by order; optionally one order against angle or wavelength | method, profile, period or a grating surface, depth, fill, levels, slices, indices, angle, wavelength, polarization, harmonics, sweep |
+
+The volume-hologram analyses follow the help: "The Field Type must be Angle"; "the Y value of the
+Field is varied and the X value is fixed"; with both limits 0 the range is 99% to 101% of the
+field's Y or of the wavelength (an empty range, field Y = 0, is refused); Surface 0 takes the first
+volume hologram. For each sample the chief ray is traced from the object to the surface
+(`VolumeHologramScan`): with the object at infinity it is the field direction through the stop's
+vertex, found by Newton on its crossing of surface 1's vertex plane, so a lens whose paraxial model
+is refused (an off-axis hologram) is still analysed; a finite object uses the ray launcher.
+Apertures are not applied to the chief ray. Polarization: unpolarized averages TE and TM;
+otherwise the system Jones vector on the surface's local x and y, split into TE and TM.
+The Grating Efficiency analysis takes the period from a Diffraction Grating or Toroidal Grating
+surface's lines/µm when Surface is set; the scalar method is for normal incidence and lossless
+media.
+
+**Command line.** `opensim optics efficiency --period UM --wavelength UM [--method rcwa|scalar]
+[--profile lamellar|blazed|multilevel|sinusoidal] [--depth UM] [--fill F] [--levels N] [--slices N]
+[--ridge N[,K]] [--groove N] [--cover N] [--substrate N[,K]] [--angle DEG]
+[--polarization te|tm|unpolarized] [--harmonics N] [--out FILE.csv]` (`CliRunner.OpticsEfficiency.cs`)
+prints each order with non-zero efficiency and the sums; no project is needed.
+
+**No operand.** The help's operand tables (`op-54-help`) list no diffraction-efficiency operand,
+so none is registered.
+
+**Not built:** the conical mounting and two-dimensional gratings in RCWA; anisotropic media;
+Optically Fabricated Hologram (OP-26 left it out); Consider Fresnel; efficiency of the binary,
+Zernike phase and grating surfaces within the ray trace (OpticStudio ignores it there too) and
+multiple-order ray splitting; the non-sequential analyses and their RCWA DLL; multiplexed
+holograms (the help: "There can only be one set of fringes"). The Kogelnik validity checks the
+help states as rules of thumb (dn/n < 0.06 or 0.16, thickness) are not enforced; the Q-parameter
+equation is an image in the help and not read.
