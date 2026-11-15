@@ -2256,6 +2256,43 @@ systems, the surface properties' physical optics settings, fiber coupling (POPD 
 63 are refused), the DLL beam, and POP in non-sequential mode. The readings not yet checked
 against OpticStudio are listed in docs/Optics-Conventions.md §10 item 62.
 
+## Extended scenes and image simulation
+
+What a real scene looks like through the lens (docs/Optics-Conventions.md §67). Seven analyses in
+the "Extended scene" group of the analysis menu; each takes the full path of its source file as a
+setting:
+
+- **Image simulation**: a BMP (24/32-bit), PNG (8-bit), IMA or BIM picture "Field Height" high,
+  centred on a field, imaged through a grid of PSFs (none, geometric spots, or the Huygens or FFT
+  diffraction PSF) interpolated across the field, with distortion and lateral colour from real
+  chief rays and, optionally, relative illumination. Oversampling, guard band, flips and quarter
+  turns edit the source first; Show As gives the simulated image, the edited source or the PSF
+  grid. RGB pictures image red, green and blue at 0.606, 0.535 and 0.465 µm (or on wavelengths 3, 2
+  and 1, or one channel at one wavelength) and show one map per colour. The detector defaults to
+  the picture's pixel count and the help's pixel size; the result can be written to a BMP or PNG.
+- **Geometric image analysis**: rays from an IMA or BIM source binned on a square detector, in
+  watts per pixel, with the efficiency; spot diagram, map, contour or cross-sections; pixel
+  interpolation; the detector image can be saved as a BIM file.
+- **Geometric bitmap image analysis**: the same for a BMP or PNG picture, colour by colour
+  (0.656, 0.587 and 0.486 µm for RGB), normalised by the peak or the average pixel.
+- **Partially coherent image analysis**: the diffraction image of an IMA or BIM object given in
+  image space, with one transfer function (the chosen field's): incoherent, coherent or partially
+  coherent (Gaussian or sinc γ of scale α, "mostly coherent" or "mostly incoherent" sums), the
+  transfer functions themselves, the raw object and its transform; optional detector resampling
+  and the help's MTF estimate from a cross-section.
+- **Extended diffraction image analysis**: coherent or incoherent, with the transfer function
+  interpolated from an n × n grid over the file, optional distortion and relative illumination.
+- **IMA/BIM file viewer** and **Bitmap file viewer** show a file's maps.
+
+Sampling problems (a PSF wider than its window, a transfer function beyond the grid's Nyquist
+frequency) are reported under "Sampling and validity warnings". The rays use a Sobol sequence, so a
+result repeats exactly.
+
+Not built: polarization, ray scattering, JPG and palette bitmaps, ZBF files, Light Source Analysis
+(Premium; non-sequential source files), afocal image space, surface plots, true-colour pictures
+(each colour is its own map). The readings not yet checked against OpticStudio are listed in
+docs/Optics-Conventions.md §10 item 63.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

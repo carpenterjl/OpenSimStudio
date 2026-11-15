@@ -111,7 +111,7 @@ public static class RelativeIllumination
     public const double JacobianStep = 1e-5;
 
     internal static RelativeIlluminationResult Compute(FieldScanSetup setup, int row, FieldScan scan, int rayDensity, double[] h,
-        CoatingCatalog? polarizationCatalog, CancellationToken cancellation)
+        CoatingCatalog? polarizationCatalog, CancellationToken cancellation, IReadOnlyList<(double Hx, double Hy)>? points = null)
     {
         const string who = "Relative illumination";
         var system = setup.System;
@@ -129,10 +129,12 @@ public static class RelativeIllumination
         var image = lens.Surfaces[lens.ImageIndex];
         string wl = FieldScanCommon.WavelengthLabel(system, row);
 
-        var area = new double[h.Length];
-        for (int f = 0; f < h.Length; f++)
+        // OP-42: points, when given, are the normalised fields to integrate at instead of the scan (h is then ignored).
+        int count = points?.Count ?? h.Length;
+        var area = new double[count];
+        for (int f = 0; f < count; f++)
         {
-            double hx = h[f] * dx, hy = h[f] * dy;
+            double hx = points is null ? h[f] * dx : points[f].Hx, hy = points is null ? h[f] * dy : points[f].Hy;
             double sum = 0;
             for (int i = 0; i < rings; i++)
             {

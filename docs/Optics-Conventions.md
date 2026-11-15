@@ -1630,6 +1630,36 @@ single place in the code, so a correction is one line and its test.
     Check: a 1D and a 2D plot of EFFL against radii, and of a real-ray operand through a point
     that misses, made in OpticStudio on the same lens.
 
+63. **Image simulation readings** (OP-42, section 67). From the help pages under
+    `plans/sources/optics/op-42-help/`; nothing has been compared with OpticStudio's output.
+    - *Diffraction-to-geometric switch.* "20 times the diffraction limit" is read as an RMS spot
+      radius beyond 20 Airy radii 1.22·λ·F at that grid point and wavelength.
+    - *Kernels.* The PSF is expressed in source pixels through the local chief-ray Jacobian and
+      binned to whole pixels; its window is ±min(half the PSF period, max(8λF, 3·RMS + 4λF)) and it
+      is normalised to 1 (an FFT PSF's energy beyond the window is reported below 95 %).
+    - *Detector.* Each detector pixel looks up the blurred picture through the inverted chief-ray
+      map (bilinear between up to 65 × 65 traced chief rays), standing for the help's unpublished
+      "scaled and stretched" step; the reference "Chief Ray" with several colours is the primary
+      wavelength's when it is one of them, else the middle colour's.
+    - *Relative illumination off.* "uses the chief ray to establish the overall intensity" is read
+      as weight 1 for every pixel whose chief ray traces.
+    - *Rotate Source and the doubling settings.* Quarter turns counter-clockwise; oversampling,
+      guard band and zero padding 1 to 32 in powers of two (the help names no list).
+    - *Zero padding by z > 2.* z·n − (z − 1) pixels for odd n, z·n for even n (the help gives 2X).
+    - *Rays.* Sobol positions instead of random ones; each wavelength traces its own rays instead
+      of drawing a wavelength per ray.
+    - *Geometric Image Analysis values.* Watts per pixel; the help does not name the plotted unit.
+    - *Bitmap "Average" normalisation.* The detected mean equals the source's mean over the traced
+      channels, clipped at 255.
+    - *Partially coherent methods.* The help's "Mostly Coherent" and "Mostly Incoherent" (Saleh and
+      Rabbani, not available) are built as Abbe's source sum and the sum over separations, each
+      exact on the grid; "Fraction" keeps the largest |S| or γ² terms. α is read in lens units.
+    - *Extended Diffraction display.* 2 × OTF sampling × resolution samples across the display (the
+      help's screenshot: 64 × 64 at 2X shows 256 × 256 pixels); OTF grid points placed by the
+      paraxial Jacobian at the chosen field.
+    - *Byte order.* BIM and binary IMA are little-endian.
+    Check: each analysis in OpticStudio and here on one lens and one file.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6252,3 +6282,123 @@ stretch by the probing rays; fiber coupling (OP-50); POP in non-sequential mode 
 non-sequential surfaces; disk storage; projection other than along the beam; zoom; the
 transfer-function, ensquared and enslitted displays; the DLL beam and fiber types. Readings in
 §10 item 62.
+
+## 67. Image simulation
+
+OP-42 adds `OpenSim.Optics/Analysis/ImageSimulation/`: scene files, the field-varying convolution
+of the Image Simulation, ray-traced scenes, diffraction images of extended objects (coherent,
+incoherent, partially coherent), two file viewers and seven analyses in the "Extended scene" group.
+The sources are saved under `plans/sources/optics/op-42-help/`: the OpticStudio 2025 R2 help pages
+"Extended Scene Analysis", "Image Simulation", "Geometric Image Analysis", "Geometric Bitmap Image
+Analysis", "Light Source Analysis", "Partially Coherent Image Analysis", "Extended Diffraction Image
+Analysis", "Relative Illumination", "IMA and BIM File Viewer" and "Bitmap File Viewer", with their
+screenshots and equation images (`images/rendered_equations.png` renders the equation SVGs); and,
+in `formats/`, the W3C PNG specification (third edition) and Microsoft's BITMAPFILEHEADER,
+BITMAPINFOHEADER, RGBTRIPLE, RGBQUAD and "Bitmap Storage" pages. Goodman's books, Gaskill, and Saleh
+and Rabbani (Applied Optics 21, 2770, 1982), which the help cites, were not available; the sums
+below are derived from the help's own equations.
+
+**Scenes** (`SceneImage`, `SceneFile`). A scene is one or more maps [row, column], row 0 the top
+and column 0 the left. IMA files go through OP-41's `ImaFile` (text digits 0–9; binary bytes with
+one map per wavelength). BIM files: two 32-bit integers nx = ny, then doubles, "The first pixel is
+the bottom left corner ... listed by rows along x"; little-endian (the help gives no byte order).
+BMP: uncompressed BI_RGB, 24- or 32-bit, bottom-up or top-down by the sign of biHeight, rows padded
+to ((width·bits + 31) & ~31) >> 3 bytes, pixels blue, green, red (RGBTRIPLE, RGBQUAD). PNG: the
+signature, chunks with their CRC (Annex D's table), IHDR, the IDAT stream inflated by the BCL's
+`ZLibStream`, the five filter types of Table 11 and the PaethPredictor of §9.4; 8-bit greyscale,
+truecolour, greyscale-alpha and truecolour-alpha, not interlaced; alpha dropped. JPG, palette,
+16-bit and interlaced files are refused by name. Writers: BIM, 24-bit BMP, 8-bit PNG.
+
+**Source edits** (`SceneTransforms`): oversampling copies a pixel into n × n; the guard band
+centres the picture on a black canvas n times as large; flips; quarter-turn rotations
+counter-clockwise; the diffraction analyses' zero padding of z·n − (z − 1) pixels for odd n (the
+help's 2n − 1) and z·n for even n. Oversampling, guard band and zero padding take 1, 2, 4 … 32.
+
+**Field geometry.** Pixel (r, c) of a W × H picture of field height F (the Image Simulation's
+"Field Height", the Geometric Bitmap's "Field Y Size", the Geometric Image Analysis's square "Field
+Size") covers the field offsets ((c + u − W/2)·δ, (H/2 − r − v)·δ), u, v ∈ [0, 1), δ = F/H, about
+the chosen field (degrees for angle fields, lens units for heights). The picture's corners (turned by
+any rotation) are appended to the fields with weight 0 so every point normalises inside them;
+vignetting factors cannot be interpolated across a picture and must be removed ("Remove vignetting
+factors" replaces them by apertures). Real image height reads as paraxial image height in the Image
+Simulation, the Geometric Bitmap and the Extended Diffraction analyses (help).
+
+**Image Simulation** (`ImageSimulator`). (1) A grid of PSF X × PSF Y points spanning the picture's
+edges (help figures: corners at f ± (W·δ/2, H·δ/2), spacing W·δ/(n − 1)). (2) At each point and
+colour a kernel on whole source-pixel offsets: the delta (Aberrations None); the rays of an n × n
+pupil grid weighted by the apodization squared (Geometric); or OP-38's Huygens or FFT PSF sampled
+at h = min(λF/2, half the short side of a pixel's image, 2·window/Image Sampling) over the window
+±min(half the PSF period, max(8λF, 3·RMS + 4λF)) (Diffraction). Every sample's image offset u is
+taken back to source pixels by Δ = J⁻¹·u, J = ∂(chief-ray landing point)/∂(pixel) at the point,
+binned to the nearest pixel and the kernel normalised to 1. The diffraction PSF switches to the
+geometric one where the RMS spot radius exceeds 20 Airy radii (1.22·λ·F). (3) The picture times the
+relative illumination is convolved with the PSF interpolated bilinearly between the points: by the
+identity Σ_p S(p)·Σ_g t_g(p)·K_g(q − p) = Σ_g ((t_g·S) ⊛ K_g)(q), one FFT convolution per point over
+its tent's support, added in place (`SpatiallyVariantConvolution`, overlap-add). The picture keeps
+its size: light spread past its edges is lost unless a guard band is added (help). (4) Each detector
+pixel takes the blurred picture at the picture point whose real chief ray (at that colour's
+wavelength) lands on its centre, found by Newton's method on a bilinear map of chief rays traced at
+up to 65 × 65 points (`ChiefRayMap`): distortion and lateral colour. A detector pixel larger than a
+source pixel's image averages s × s points (s = ⌈p/√|det J|⌉ ≤ 8). The image is scaled so its peak
+equals the picture's (help). Default pixel size: √2/2 × the distance between the chief rays of the
+centre pixel's corners (help figure). Detector pixel (i, j) is centred at the reference + ((j − (Nx −
+1)/2)·p, ((Ny − 1)/2 − i)·p) in the image surface's local x, y. Relative illumination: OP-37's
+projected solid angle (ray density 20) at each grid point and colour over the largest, bilinear
+between points (`RelativeIllumination.Compute` takes explicit points under `// OP-42`); without it
+every pixel whose chief ray traces weighs 1. Colours: RGB adds 0.606, 0.535 and 0.465 µm (help);
+1+2+3 puts red on wavelength 3, green on 2, blue on 1, the wavelength weights setting the colour
+balance only for a monochrome file and three wavelengths; a single wavelength k reads blue for k = 1,
+4, 7 …, green for 2, 5, 8 …, red for 3, 6, 9 ….
+
+**Geometric Image and Geometric Bitmap Image Analysis** (`GeometricSceneTracer`). Rays from every
+lit pixel, positions in the pixel (u, v) and the pupil (ρ = √s, θ = 2πt) from one 4-D Sobol
+sequence (OP-41's scheme). The Geometric Image Analysis shares about 1000 × "Rays x 1000" rays by
+pixel value × wavelength weight, at least one per lit pixel and wavelength; the Bitmap traces
+"Rays/Pixel" per lit pixel and colour. A ray weighs value × colour weight / count × A(ρ)², times
+|d_z| of its launch direction for a Lambertian source. Odd parity reverses the rows; the rotation
+turns the field offsets counter-clockwise. A ray counts when it passes the chosen surface (and, with
+"Delete Vignetted", reaches the image); the NA cut drops rays with |n′|·√(L² + M²) above it.
+Detector pixels run from the top-left; a ray goes in the pixel it strikes or, with pixel
+interpolation, is shared bilinearly among the four nearest centres (shares falling off the detector
+go to the edge pixel). Geometric Image Analysis values are watts per pixel, total watts × weight / Σ
+launched weight; the efficiency is detected weight over launched weight (every unvignetted ray for
+the spot diagram). Bitmap: RGB adds 0.656, 0.587 and 0.486 µm; 1+2+3 with fewer than three
+wavelengths reverts to RGB; a single wavelength reads blue for 1, green for 2, red for 3 and above;
+"Peak" scales the largest pixel to full scale (255), "Average" makes the mean equal the source's and
+clips at full scale.
+
+**Diffraction images** (`DiffractionImaging`, `CoherentTransferFunction`). On a periodic N × N grid
+of pitch d, sample [r, c] sits at x = c·d, y = −r·d; DFT index (kr, kc) is fx = kc/(Nd), fy =
+−kr/(Nd). The coherent transfer function is the help's H(f) = P(λ·di·f)·e^{ikW}: with OP-38's pupil
+function (node P stands for the direction offset a·P), H(f) is the pupil at P = −λf/(n·a), zero
+outside the unit circle, A and W interpolated bilinearly over the lit nodes around P (cutoff
+n·|a|/λ). Coherent image |IDFT(H·DFT(√I₀))|²; incoherent IDFT(OTF·DFT(I₀)) with OTF = DFT(|IDFT(H)|²)
+normalised to 1 at zero frequency. Partially coherent, from the help's I(r) =
+∬√I₀(r₁)√I₀(r₂)γ(r₁ − r₂)h*(r − r₁)h(r − r₂): "Mostly coherent" is Abbe's sum
+Σ_s S_s·|IDFT(H_k·Â_{k+s})|², S = DFT(γ)/N²; "Mostly incoherent" the sum over separations
+Σ_Δ γ(−Δ)·(g_Δ ⊛ q_Δ), g_Δ(r) = a(r)a(r + Δ), q_Δ(u) = h*(u)h(u − Δ). Both are exact on the grid
+with every term kept; Fraction keeps the largest terms (|S| or γ²) up to that share. γ is
+e^{−r·r/α²} or SINC(x/α)·SINC(y/α), α in lens units.
+
+**Partially Coherent Image Analysis** (`PartiallyCoherentImaging`): the file's samples (pitch d =
+file size / (pixels × oversampling)) after oversampling and zero padding, padded with zeros to the
+next power of two; one transfer function, the chosen field's; the shown region is the zero-padded
+file. **Extended Diffraction Image Analysis** (`ExtendedDiffractionImaging`): the display holds 2 ×
+OTF sampling × resolution samples across the display size, on a periodic grid the next power of two
+at least as wide as display plus file; the file's pixels are luminous squares or delta functions,
+transformed exactly (`ObjectSpectrum`, with sinc factors for squares); OTF grid points span the file
+in image space at fields f₀ + J_par⁻¹·(u, v) (J_par the paraxial chief ray's Jacobian at f₀); the
+image spectrum is Σ_g T_g·Â_g, Â_g the transform of the file weighted by point g's tent, T_g its CTF
+or OTF, times √RI or RI, times e^{−2πif·Δ_g} with Δ_g its real chief ray's departure from the linear
+placement ("Consider Distortion"). Both warn when the band (f_c coherent, 2f_c incoherent) passes
+the grid's Nyquist frequency.
+
+**Viewers.** IMA/BIM: each map over the file's largest value. Bitmap: the stored values, a map per
+channel.
+
+**Not built:** polarization (refused), ray scattering, JPG and palette bitmaps, ZBF input and output
+(physical optics, OP-49), Light Source Analysis (Premium; non-sequential DAT, SDF and TM25RAY source
+files; listed in `ExtendedSceneNotBuilt`), afocal image space, the image surface aperture's energy
+cut in the partially coherent analysis, the help's per-pixel OPD-spread check of the Extended
+Diffraction analysis, surface plots, the Suppress Frame switch, true-colour pictures (each colour is
+its own map plot), the Geometric Image Analysis's ray listing. Readings in §10 item 63.

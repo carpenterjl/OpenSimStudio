@@ -177,6 +177,15 @@ public sealed class OpticsAnalysisRegistry
         // OP-49: physical optics propagation and the beam file viewer.
         registry.Register(new PhysicalOptics.PhysicalOpticsPropagationAnalysis());
         registry.Register(new PhysicalOptics.BeamFileViewerAnalysis());
+
+        // OP-42: extended scenes (Light Source Analysis is not built: ExtendedSceneNotBuilt).
+        registry.Register(new ImageSimulationAnalysis());
+        registry.Register(new GeometricImageAnalysis());
+        registry.Register(new GeometricBitmapImageAnalysis());
+        registry.Register(new PartiallyCoherentImageAnalysis());
+        registry.Register(new ExtendedDiffractionImageAnalysis());
+        registry.Register(new ImaBimFileViewerAnalysis());
+        registry.Register(new BitmapFileViewerAnalysis());
         return registry;
     }
 }
