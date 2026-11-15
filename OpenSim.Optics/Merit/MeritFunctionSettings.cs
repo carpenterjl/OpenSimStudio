@@ -43,7 +43,10 @@ public static class MeritFunctionSettings
             var definition = registry.Find(code);
             if (definition is null)
             {
-                notes.Add($"Merit function row {i + 1}: operand '{code}' is not one this version knows; the row became OOFF (unused).");
+                // OP-55B: a not-built OpticStudio operand is named with what it waits for.
+                notes.Add(Catalogue.MeritOperandCatalogue.IsNotBuilt(code)
+                    ? $"Merit function row {i + 1}: {Catalogue.MeritOperandCatalogue.Unknown(code)} The row became OOFF (unused)."
+                    : $"Merit function row {i + 1}: operand '{code}' is not one this version knows; the row became OOFF (unused).");
                 code = "OOFF";
             }
             else code = definition.Code;

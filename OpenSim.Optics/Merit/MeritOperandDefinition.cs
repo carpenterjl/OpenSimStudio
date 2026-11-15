@@ -153,6 +153,11 @@ public sealed class MeritRowContext
     /// configurations do not supply them (<see cref="IMeritConfigurations.Catalogs"/>).</summary>
     public IReadOnlyList<OpenSim.Optics.Materials.OpticalCatalog>? Catalogs { get; internal init; }
 
+    // OP-55B
+    /// <summary>Every configuration of the evaluation, for the operands that read across them
+    /// (ZTHI) or read the multi-configuration table (MCOG, MCOL, MCOV); null when not supplied.</summary>
+    public IMeritConfigurations? Configurations { get; internal init; }
+
     /// <summary>A length in meters, in lens units.</summary>
     public double Length(double meters) => OpticsConventions.FromMeters(meters, Unit);
 

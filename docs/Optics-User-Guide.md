@@ -2107,6 +2107,42 @@ modes), drawing the crystal axis, optical activity, stress birefringence, non-se
 birefringent objects, and these types in .zmx, CODE V and OSLO files and macros. The readings not
 yet checked against OpticStudio are listed in docs/Optics-Conventions.md §10 item 58.
 
+## Operand catalogue (constraints and system data)
+
+### Constraint and system operands
+
+The Merit Function Editor offers OpticStudio's constraint and system-data operands with their
+four-letter codes: type the code or the name in the Operand column, or search for it.
+
+- **Lens data:** conic bounds (COGT, COLT), diameters (DMGT, DMLT, DMVA), edge thickness along an
+  axis (ETGT, ETLT, ETVA) and round the perimeter (XNET, XNEA, XNEG, XXET, XXEA, XXEG), full and
+  blank thickness (FTGT, FTLT, BLTH), range bounds on curvature, edge thickness and semi-diameters
+  (MNCV, MXCV, MNET, MXET, MXEA, MXEG, MNSD, MXSD, OMMI, OMMX), the mechanical semi-diameter
+  (OMSD), the glass thickness sum (TGTH), total thickness (TTGT, TTLT, TTVA) and the spread of a
+  thickness sum over the configurations (ZTHI).
+- **Lens properties:** cylinder volume (CVOL), diameter-to-thickness ratio (MNDT, MXDT), sag at
+  the edge (SAGX, SAGY), sag, slope and curvature at a point (SSAG, SSLP, SCRV), surface curvature
+  and derivatives (SCUR, SDRV), thickness at a point (STHI), the surface normal (NORX, NORY, NORZ)
+  and the distance along it to the next surface (NORD), volume and mass (VOLU, TMAS), and the phase
+  and phase slope of a diffractive surface (SPHS, PSLP).
+- **Other data:** surface parameters (PMGT, PMLT, PMVA), glass data (GTCE, INDX, MNAB, MXAB, MNIN,
+  MXIN, MNPD, MXPD), global vertex and orientation (GLCX, GLCY, GLCZ, GLCA, GLCB, GLCC, GLCR), the
+  wavelength (WLEN), multi-configuration values (MCOG, MCOL, MCOV), the paraxial Gaussian beam
+  (GBPD, GBPP, GBPR, GBPS, GBPW, GBPZ) and the surface TCE (TCGT, TCLT, TCVA).
+
+The editor names each operand's parameter columns in its header when the row is selected. Global
+coordinates are relative to surface 1. Lengths are in lens units, VOLU in cm³ and TMAS in grams.
+
+When you type, load or import an OpticStudio operand this version does not have, the message says
+what it computes and what it waits for, for example "NSDD (OpticStudio: Non-sequential incoherent
+detector data…) is not built yet: needs OP-79". A loaded row with such a code becomes OOFF.
+
+**Not built:** DCRV, DSAG, DSLP, DPHS, QSLP, TSAG; IMSF, PRIM, SVIG, CVIG, FDMO, FDRE (operands
+that change the system data for later rows); EQUA; the skew Gaussian beam operands (GBSD, GBSP,
+GBSR, GBSS, GBSW); the gradient-index, fiber-coupling, POP, non-sequential, hologram-construction
+and coating operands (CMGT to CIVA, CODA); UDOC; off-axis coordinates and the Base/Composite sag
+removal in SSAG, SSLP and SCRV; the removal of fitted terms in SPHS and PSLP.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -2125,6 +2161,9 @@ Not built yet, and not to be relied on until they appear in this guide:
   energy criteria, Monte Carlo tolerancing, the tolerance wizard, summary, data viewer and Quick
   Yield, tolerance scripts and the contrast (MTF) wizard criterion are built; the rest of the
   operand catalogue is not, see Operand catalogue);
+
+  Yield, tolerance scripts and the contrast (MTF) wizard criterion are built; the constraint and system operands are built; the rest of the operand catalogue and the
+  encircled-energy merit operands are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

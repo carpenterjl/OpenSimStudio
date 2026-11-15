@@ -165,9 +165,29 @@ public sealed class OpticsMeritEditorTests : IDisposable
     public void FindingAnOperand_SearchesCodesAndNames()
     {
         var m = Optics.MeritEditor;
-        m.FindText = "total";
+        m.FindText = "total track";   // OP-55B: "total" alone also finds TTGT, TTLT, TTVA and TMAS
         Assert.StartsWith("TOTR", Assert.Single(m.FindResults));
         m.FindText = "";
         Assert.Empty(m.FindResults);
+    }
+
+    // OP-55B
+    /// <summary>A typed OpticStudio code that is not built is named with the plan item it waits
+    /// for; an unknown code keeps the generic message.</summary>
+    [Fact]
+    public void TypingANotBuiltCode_SaysWhatItWaitsFor()
+    {
+        var m = WithSinglet();
+        var doc = m.Document;
+        m.InsertOperandCommand.Execute(null);
+        var result = doc.SetText(0, 0, "NSDD");
+        Assert.False(result.Succeeded);
+        Assert.StartsWith("Row 1: NSDD (OpticStudio:", result.Message);
+        Assert.Contains("needs OP-79", result.Message);
+        var unknown = doc.SetText(0, 0, "QQQQ");
+        Assert.False(unknown.Succeeded);
+        Assert.Contains("there is no row type 'QQQQ'", unknown.Message);
+        Type(doc, 0, -1, "ETVA");
+        Assert.Equal("ETVA", m.DefinitionOf(doc.Rows[0]).Code);
     }
 }

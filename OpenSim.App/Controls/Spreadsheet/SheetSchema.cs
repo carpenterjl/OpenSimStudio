@@ -48,6 +48,11 @@ public sealed class SheetSchema
     /// <summary>The number of grid columns, the type column included.</summary>
     public int ColumnCount => SlotHeaders.Count + 1;
 
+    // OP-55B
+    /// <summary>A message for typed text that names no row type (the merit editor names a
+    /// not-built OpticStudio operand), or null for the generic list of types; null by default.</summary>
+    public Func<string, string?>? UnknownTypeMessage { get; init; }
+
     /// <summary>The type new rows get.</summary>
     public SheetRowType DefaultRowType => RowTypes[0];
 

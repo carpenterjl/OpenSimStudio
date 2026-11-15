@@ -39,7 +39,13 @@ public static class OpticsMeritEditorSchema
     {
         ArgumentNullException.ThrowIfNull(registry);
         var ordered = registry.All.Where(d => d.Code == "BLNK").Concat(registry.All.Where(d => d.Code != "BLNK"));
-        return new SheetSchema("Operand", SlotHeaders, ordered.Select(RowType).ToArray()) { FirstRowNumber = 1 };
+        return new SheetSchema("Operand", SlotHeaders, ordered.Select(RowType).ToArray())
+        {
+            FirstRowNumber = 1,
+            // OP-55B: a not-built OpticStudio operand is named with what it waits for.
+            UnknownTypeMessage = text => OpenSim.Optics.Merit.Catalogue.MeritOperandCatalogue.IsNotBuilt(text)
+                ? OpenSim.Optics.Merit.Catalogue.MeritOperandCatalogue.Unknown(text) : null,
+        };
     }
 
     /// <summary>The row type's name for an operand.</summary>

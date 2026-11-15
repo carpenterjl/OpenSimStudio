@@ -226,6 +226,14 @@ public sealed partial class SheetDocument
         return SheetEditResult.Ok;
     }
 
+    // OP-55B
+    /// <summary>The message for typed text that names no row type: the schema's own
+    /// (<see cref="SheetSchema.UnknownTypeMessage"/>) when it has one, else the list of types.</summary>
+    private string UnknownType(int rowNumber, string text) =>
+        Schema.UnknownTypeMessage?.Invoke(text.Trim()) is { } own
+            ? $"Row {rowNumber}: {own}"
+            : $"Row {rowNumber}: there is no row type '{text.Trim()}'. The types are {string.Join(", ", Schema.RowTypes.Select(t => t.Name))}.";
+
     // ------------------------------------------------------------------ cells
 
     /// <summary>Sets a cell from typed text: the type name in column 0, else a value of the
@@ -239,7 +247,7 @@ public sealed partial class SheetDocument
         {
             var type = Schema.FindRowType(text);
             return type is null
-                ? SheetEditResult.Fail($"Row {r.Number}: there is no row type '{text.Trim()}'. The types are {string.Join(", ", Schema.RowTypes.Select(t => t.Name))}.")
+                ? SheetEditResult.Fail(UnknownType(r.Number, text))   // OP-55B
                 : SetRowType(row, type);
         }
         var cell = r.Cells[column - 1];
@@ -489,7 +497,7 @@ public sealed partial class SheetDocument
                         if (type is null)
                         {
                             group.Rollback();
-                            return SheetEditResult.Fail($"Row {r.Number}: there is no row type '{text.Trim()}'. The types are {string.Join(", ", Schema.RowTypes.Select(t => t.Name))}.");
+                            return SheetEditResult.Fail(UnknownType(r.Number, text));   // OP-55B
                         }
                         if (!ReferenceEquals(after.Type, type)) { after = after.Retyped(type); rowChanged = true; changed++; }
                         continue;

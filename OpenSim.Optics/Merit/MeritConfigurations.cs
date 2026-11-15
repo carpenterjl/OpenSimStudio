@@ -27,6 +27,14 @@ public interface IMeritConfigurations
     /// <summary>The active glass catalogs the glass operands (RGLA) compare against; null when
     /// not known.</summary>
     IReadOnlyList<OpticalCatalog>? Catalogs => null;
+
+    // OP-55B
+    /// <summary>The value of row <paramref name="operand"/> (1-based) of the multi-configuration
+    /// table in configuration <paramref name="configuration"/>, pickups evaluated, in the saved
+    /// record's units as the editor shows it (MCOG, MCOL, MCOV). Throws
+    /// <see cref="ArgumentException"/> naming why there is none; by default there is no table.</summary>
+    double MultiConfigValue(int operand, int configuration) =>
+        throw new ArgumentException("these configurations have no multi-configuration table to read (the evaluation was given a lens, not a project).");
 }
 
 /// <summary>One configuration: a lens and its system data.</summary>
@@ -81,6 +89,8 @@ public sealed class SingleMeritConfiguration : IMeritConfigurations
 public sealed class ProjectMeritConfigurations : IMeritConfigurations
 {
     private readonly Lazy<(SequentialLens Lens, OpticalSystemData System)>[] _built;
+    private readonly OpticsSettings _optics;   // OP-55B: MCOG, MCOL, MCOV read the table
+    private readonly IReadOnlyList<OpticalCatalog> _catalogs;   // OP-55B
 
     // OP-59
     /// <summary>The active glass catalogs the configurations are built with.</summary>
@@ -91,6 +101,8 @@ public sealed class ProjectMeritConfigurations : IMeritConfigurations
         ArgumentNullException.ThrowIfNull(optics);
         ArgumentNullException.ThrowIfNull(catalogs);
         Catalogs = catalogs;   // OP-59
+        _optics = optics;   // OP-55B
+        _catalogs = catalogs;   // OP-55B
         int count = MultiConfig.MultiConfiguration.ConfigurationCount(optics);
         _built = new Lazy<(SequentialLens, OpticalSystemData)>[count];
         for (int k = 1; k <= count; k++)
@@ -107,6 +119,25 @@ public sealed class ProjectMeritConfigurations : IMeritConfigurations
     }
 
     public int Count => _built.Length;
+
+    // OP-55B
+    /// <summary>The table's row <paramref name="operand"/> in configuration
+    /// <paramref name="configuration"/> (<see cref="MultiConfig.MultiConfiguration.ValuesIn(OpticsSettings, int, IReadOnlyList{OpticalCatalog}?)"/>).</summary>
+    public double MultiConfigValue(int operand, int configuration)
+    {
+        if (_optics.MultiConfiguration is null)
+            throw new ArgumentException("the system has no multi-configuration table; add one in the Multi-Configuration Editor.");
+        if (configuration < 1 || configuration > _built.Length)
+            throw new ArgumentException($"Cfg# {configuration} is not a configuration; there are {_built.Length}.");
+        var values = MultiConfig.MultiConfiguration.ValuesIn(_optics, configuration, _catalogs);
+        if (operand < 1 || operand > values.Count)
+            throw new ArgumentException($"Op# {operand} is not a row of the multi-configuration table; it has rows 1 to {values.Count}.");
+        var (value, error) = values[operand - 1];
+        if (error is not null) throw new ArgumentException($"multi-configuration row {operand}, configuration {configuration}: {error}");
+        double v = value.Number;
+        return double.IsFinite(v) ? v
+            : throw new ArgumentException($"multi-configuration row {operand}, configuration {configuration} holds {value}, not a finite number.");
+    }
 
     public SequentialLens LensFor(int configuration) => At(configuration).Lens;
 

@@ -216,6 +216,9 @@ public sealed class MeritOperandRegistry
 
         // OP-55A: imaging and ray operands (ImagingOperands).
         foreach (var definition in ImagingOperands.Definitions()) r.Register(definition);
+
+        // OP-55B: constraint and system-data operands (Catalogue/Constraint*.cs).
+        foreach (var definition in Catalogue.ConstraintOperands.Definitions()) r.Register(definition);
         return r;
     }
 

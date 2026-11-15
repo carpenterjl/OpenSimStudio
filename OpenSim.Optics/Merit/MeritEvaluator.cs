@@ -136,7 +136,7 @@ public static class MeritEvaluator
             var d = registry.Find(row.Code);
             if (d is null)
             {
-                problems.Add($"Row {n}: there is no operand '{row.Code}'.");
+                problems.Add($"Row {n}: {Catalogue.MeritOperandCatalogue.Unknown(row.Code)}");   // OP-55B: names a not-built OpticStudio operand
                 continue;
             }
             string at = $"Row {n} ({d.Code})";
@@ -271,7 +271,7 @@ public static class MeritEvaluator
                     request => keyIndex.TryGetValue((c, request), out int i)
                         ? traced[i].Path ?? throw new MeritOperandException(traced[i].Error!)
                         : throw new InvalidOperationException($"{at}: its ray was not collected for tracing."),
-                    state.Paraxial) { Catalogs = configurations.Catalogs };   // OP-59: the catalogs for RGLA
+                    state.Paraxial) { Catalogs = configurations.Catalogs, Configurations = configurations };   // OP-59: the catalogs for RGLA; OP-55B: the configurations
                 double value = d.Compute!(context);
                 if (!double.IsFinite(value)) throw new MeritOperandException($"the value is {value.ToString(CultureInfo.InvariantCulture)}.");
                 results[n - 1] = new MeritRowResult { Number = n, Row = row, Status = MeritRowStatus.Evaluated, Configuration = c, Value = value };

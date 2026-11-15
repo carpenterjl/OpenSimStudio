@@ -1505,6 +1505,46 @@ single place in the code, so a correction is one line and its test.
     Check: the help's Wollaston prism sample and a calcite plate traced in OpticStudio in modes 0–3,
     ray positions, optical path and Polarization Ray Trace transmission compared.
 
+60. **Constraint and system operand readings** (OP-55B, section 64). The definitions follow the
+    category pages of OpticStudio 2025 R2's help (saved under `plans/sources/optics/op-54-help/` and
+    `op-55b-help/`); no operand has been evaluated in OpticStudio to compare. Where the help leaves a
+    point open this program reads it so:
+    - *Columns.* Integers in Int1 then Int2 in the order the help names them, the rest in Data1 on;
+      Wave alone in Int2 (as EFFL). So: COGT, COLT, OMSD, SAGX, SAGY, GTCE, GLCA/B/C/X/Y/Z and
+      TCGT/LT/VA take Surf in Int1; DMGT/LT/VA, FTGT/LT Surf, Mode; ETGT/LT/VA and BLTH Surf, Code,
+      Data1 Mode; TTGT/LT/VA Surf, Code; MNCV, MXCV, MNSD, MXSD, OMMI, OMMX, TGTH, ZTHI, VOLU, MNAB,
+      MXAB, MNIN, MXIN, MNPD, MXPD Surf1, Surf2; MNET, MXET, MXEA, MXEG and the XN/XX family Surf1,
+      Surf2, Data1 Zone, Data2 Mode (as OP-56's MNEG); CVOL, MNDT, MXDT, TMAS Surf1, Surf2, Data1
+      Mode; SSAG Surf, Mode, X, Y, Off-axis, Remove, BFS; SSLP and SCRV the same plus Data6
+      Orientation; SPHS Surf, Mode, X, Y, Data, Remove; PSLP Surf, Mode, X, Y, Remove, Orientation;
+      STHI Surf, Mode, X, Y; NORX/Y/Z Surf, Global, X, Y; NORD Surf, X, Y; SCUR and SDRV Surf, Data,
+      X, Y; PMGT/LT/VA Surf, Param; GLCR Surf, Data; INDX Surf, Wave; WLEN Int2 Wave; MCOG/L/V Op#,
+      Cfg#; GBPD to GBPZ Surf, Wave, Data1 UseX, W0, S1toW, M2 Factor.
+    - *Edges and thicknesses.* An edge thickness is the axial distance to the next surface plus its
+      sag minus this one's at the chosen radius (OP-56's rule); the next surface must be coaxial.
+      The XN/XX family samples 64 points round the perimeter (the help: "numerous points") and
+      takes the least or greatest per surface; range bounds sum the violations as MNCT does. FTGT
+      is the least, FTLT the greatest, of the 200 points; BLTH is the greatest z of the next face
+      minus the least z of this face over 200 radii per axis, both faces sampled to this surface's
+      radius; TTGT/LT/VA is the axial extent of the two vertices and the two points at each face's
+      own clear semi-diameter, taken the other way round in a mirror space. STHI treats each face as
+      flat beyond its selected semi-diameter. A missing mechanical semi-diameter is the clear one
+      plus the chip zone.
+    - *Point operands.* SSLP and SCRV with Remove subtract the sphere's slope or curvature, as
+      OP-43's maps do; SCUR's "tangential-sagittal" is T − S, its maxima the largest absolute value
+      over 50 points from the vertex to (X, Y), both included.
+    - *Phase.* SPHS is Φ/2π with the diffraction order included; PSLP the derivative of Φ along the
+      vertex plane, ∂Φ/∂x + ∂Φ/∂z·z_x (likewise in y), over 2π.
+    - *Global frame.* GLC* and NORX/Y/Z with Global 1 use surface 1's local frame (OpticStudio's
+      default global reference surface; a file's own reference surface is not read, as in ZPL).
+      GLCA, GLCB and GLCC are the components of the surface's local z axis.
+    - *Glass operands* skip air, constant indices, mirrors and coordinate breaks, as RGLA does.
+    - *Gaussian beam.* W0 is the embedded waist and S1toW is negative before surface 1, as the
+      Paraxial Gaussian Beam page's "Waist Size" and "Surf 1 to Waist" say; the real waist is
+      W0·√M². An M2 Factor of 0 is read as 1. GBPR fails at a waist (infinite radius).
+    - *ZTHI* returns the spread when it exceeds the target, else the target (the help's example).
+    Check: each operand evaluated in OpticStudio on one lens with the same columns.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -5720,3 +5760,48 @@ FEA stress data and the stress-optical coefficients K11 and K12 of the material 
 nor those coefficients exist here), NSC birefringent media (no non-sequential mode), and these
 types in .zmx, CODE V and OSLO files and in ZPL. Readings not checked against OpticStudio: §10
 item 58.
+
+## 64. Operand catalogue: constraint and system operands
+
+OP-55B adds the constraint and system-data half of OpticStudio's operand catalogue
+(`OpenSim.Optics/Merit/Catalogue/Constraint*.cs`, registered by one line in
+`MeritOperandRegistry.CreateDefault`). Each operand adapts an engine already built:
+
+- **Lens data** (`ConstraintLensData.cs`): COGT, COLT, DMGT, DMLT, DMVA, ETGT, ETLT, ETVA, FTGT,
+  FTLT, BLTH, MNCV, MXCV, MNET, MXET, MXEA, MXEG, XNET, XNEA, XNEG, XXET, XXEA, XXEG, MNSD, MXSD,
+  OMMI, OMMX, OMSD, TGTH, TTGT, TTLT, TTVA, ZTHI. They read the surface placement (§13, OP-21),
+  the clear semi-diameters as the report analyses size them (`LensGeometry`) and the sags of
+  `ElementVolume.Sag` (composite add-ons included).
+- **Lens properties** (`ConstraintLensProperties.cs`): CVOL, MNDT, MXDT, SAGX, SAGY, SSAG, SSLP,
+  SCRV, SPHS, PSLP, STHI, TMAS, VOLU, NORX, NORY, NORZ, NORD, SCUR, SDRV, over `SurfaceProbe` and
+  `BestFitSphere` (§28), `ElementVolume` (§29) and `DiffractiveShape.TryPhase` (§57).
+- **Parameter, glass, positions, system, multi-configuration, Gaussian beam, TCE**
+  (`ConstraintSystemData.cs`): PMGT, PMLT, PMVA (the parameter as the solves read it, shown in lens
+  units by its layout's length power); GTCE, INDX, MNAB, MXAB, MNIN, MXIN, MNPD, MXPD (the glass
+  map of `GlassDistance`, the paraxial indices); GLCA, GLCB, GLCC, GLCR, GLCX, GLCY, GLCZ (the
+  placement relative to surface 1); WLEN; MCOG, MCOL, MCOV (the multi-configuration table through
+  `IMeritConfigurations.MultiConfigValue`); GBPD, GBPP, GBPR, GBPS, GBPW, GBPZ (OP-48's
+  `GaussianBeamTrace`); TCGT, TCLT, TCVA (the surface's TCE column).
+
+Two additive members carry the context these need: `MeritRowContext.Configurations` (set by the
+evaluator; read by ZTHI and MCOG/L/V) and `IMeritConfigurations.MultiConfigValue` (a default that
+refuses; `ProjectMeritConfigurations` reads its table with pickups evaluated).
+
+Units: lengths in lens units, curvatures in 1/lens unit, VOLU in cm³, CVOL in cubic lens units,
+TMAS in grams, slopes dimensionless, phase in waves, phase slope in periods of 2π per lens unit,
+beam divergence in radians, WLEN in micrometers, TCE in 10⁻⁶/K as entered or printed. A row that
+cannot be computed fails naming the surface and the reason.
+
+**Not-built table.** `NotBuiltOperands` lists every summary-table code this build does not
+register, with the help's description, the reason and the plan item it waits for: DCRV, DSAG,
+DSLP, DPHS, QSLP, TSAG, GOPT, IMSF, PRIM, SVIG, CVIG, FDMO, FDRE, EQUA, the skew Gaussian beam
+operands, the gradient-index operands, fiber coupling and POP, UDOC, the non-sequential operands,
+CMFV, the coating operands and CODA, and the obsolete PnGT, PnLT, PnVA. OP-55A's not-built codes
+join through its `Imaging` hook. `MeritOperandCatalogue.Describe` and `Unknown` turn a code into
+"NSDD (OpticStudio: …) is not built yet: needs OP-79: …"; the merit function editor's operand
+column, `MeritEvaluator.Validate` and `MeritFunctionSettings.FromSettings` (and so the command line
+and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
+
+**Not built:** off-axis coordinates and the Base/Composite sag removal of SSAG, SSLP and SCRV; the
+fitted-term removals of SPHS and PSLP; OpticStudio's global reference surface. Readings in §10
+item 60.
