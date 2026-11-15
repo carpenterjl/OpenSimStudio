@@ -207,6 +207,9 @@ public sealed class MeritOperandRegistry
         // OP-62: the High-Yield operand (help: Constraints on Real Ray Data, HYLD; Zemax
         // Knowledgebase KA-01837; HighYieldOperands).
         r.Register(HighYieldOperands.HighYield());
+
+        // OP-46: ghost focus operands and YNIP (help: Ghost Focus Control; GhostOperands).
+        foreach (var definition in GhostOperands.Definitions()) r.Register(definition);
         return r;
     }
 

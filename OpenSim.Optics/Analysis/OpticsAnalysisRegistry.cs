@@ -157,6 +157,12 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new GeometricMtfVsFieldAnalysis());
         registry.Register(new GeometricMtfMapAnalysis());
         registry.Register(new ContrastLossMapAnalysis());
+
+        // OP-46: stray-light and application analyses.
+        registry.Register(new StrayLight.GhostFocusAnalysis());
+        registry.Register(new StrayLight.YniContributionsAnalysis());
+        registry.Register(new StrayLight.PowerPupilMapAnalysis());
+        registry.Register(new StrayLight.PowerFieldMapAnalysis());
         return registry;
     }
 }

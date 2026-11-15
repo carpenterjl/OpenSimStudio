@@ -1178,6 +1178,36 @@ single place in the code, so a correction is one line and its test.
     - *Column order.* Surf in Int1, Wave in Int2, Hx Hy Px Py in Data1–4, from the screenshot.
     Check: OpticStudio's HYLD values on a lens, ray by ray, and the rows its wizard writes.
 
+45. **Stray-light and application readings** (OP-46, section 49). Read from the help pages
+    saved under `plans/sources/optics/op-46-help/`; nothing is compared with OpticStudio's output.
+    - *Ghost apertures.* Fixed apertures are copied into a ghost system; a floating aperture with
+      an automatic semi-diameter is dropped, read as OpticStudio's ghost file sizing its automatic
+      semi-diameters for the ghost's own beam.
+    - *Ghost outputs.* The help lists the paraxial marginal height, the paraxial ray F/#, the
+      on-axis real RMS spot radius, internal focus and, at the image, the marginal and chief
+      heights, the ghost distance and the ghost EFL, without formulas: F/# is read as 1/(2|n·u|)
+      of the marginal ray, the RMS radius as about the centroid on each surface, an internal
+      focus as a sign change of the marginal height across a glass space, the chief ray as the
+      full-field one. Relative intensity (R1·R2 at normal incidence, unpolarized), pupil ghost size
+      (2|y| of the marginal ray on the image surface) and the ghost pupil are this program's.
+    - *Operand columns.* The help names GPIM's Surf1, Surf2 and Mode, GPRT–GPSY's Surf1, Surf2,
+      Hx, Hy, Px, Py and GAOI's Surf1, Surf2, Surf3, SetVig, Hx, Hy, Px, Py without columns:
+      integers in Int1 and Int2, the rest in Data1 onward in the help's order (as item 37).
+    - *GPIM Mode 2.* "Worst" for a magnification is read as the magnification of the ghost whose
+      pupil ghost lies closest to the image. The wildcard does not include the image surface (it
+      has no index change).
+    - *GPRT* uses uncoated Fresnel interfaces at the ray's angles (the merit evaluation has no
+      coating catalog; a coated surface is refused) and no bulk absorption.
+    - *YNI* is y·n·i with the paraxial angle of incidence i = u + y·c and n the signed index
+      before the surface; n·i is the same on either side, so the help's unnamed side does not
+      matter. The help's cold-return equation is an image and is not evaluated.
+    - *Power maps.* The help's ring of rays is read as a parallel pencil about the reference ray
+      (so the power does not depend on the object distance), the power in a direction as the
+      central difference of n′ times the exit direction, and the average, maximum and minimum
+      from the fitted form A + B cos 2θ + C sin 2θ. The spherical EFL is 1/(average power).
+    Check: OpticStudio's Ghost Focus Generator on a cemented doublet (focus distances, EFLs, RMS
+    radii), GPIM in each mode, YNIP on a germanium lens, and both power maps on a toroidal lens.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -4121,3 +4151,58 @@ automated fetches; the archived Zemax copy was used instead.
 **Not built.** The "Improve Manufacturing Yield" choice inside the Optimization Wizard itself
 (the rows are added from the Optimize window, from the wizard's saved options); TOLR; HYLD at
 mirrors; OpticStudio's exact HYLD pupil sampling; a command-line arm.
+
+## 49. Stray-light and application analyses
+
+OP-46 (`OpenSim.Optics/Analysis/StrayLight/`, `OpenSim.Optics/Merit/GhostOperands.cs`). The
+features follow OpticStudio 2025 R2's help pages saved under `plans/sources/optics/op-46-help/`
+("Ghost Focus Generator", "Ghost Focus Control", "YNI Contributions", "Power Pupil Map",
+"Power Field Map"); readings where they are short are in §10 item 45.
+
+- **Ghost systems** (`GhostSystems.Build`). A ghost path is a sequential lens of its own, built
+  by the double-pass construction on the `SequentialLens` (OP-51's Make Double Pass works on the
+  saved surfaces and drops the data after the mirror, so it is not reused). For a first bounce at
+  j and a second at i < j: surfaces 0 … j − 1; j as a mirror with thickness −t(j−1); copies of
+  j − 1 down to i + 1 with the effective medium after k − 1 and thickness −t(k−1); i as a mirror
+  with t(i); then i + 1 … image − 1 as they are and the image. A single bounce ends after the
+  copy of surface 1 with thickness −t(0) (the ghost image surface on the object plane), 0 with
+  the object at infinity. Copies keep curvature, conic and shape: no frame turns at a mirror
+  (§3), so each copy sits on its original. The stop flag stays on the original stop before j,
+  else goes to j or to the stop's copy on the way out (it only satisfies the lens rules: rays are
+  launched by the original lens's launcher). Fixed apertures are copied; automatic floating ones
+  are dropped. Coordinate breaks and surface tilts are refused, as is a bounce on a mirror, an
+  ignored surface or a coordinate break.
+- **Candidates.** Surfaces whose indices before and after differ at the wavelength (mirrors and
+  dummies excepted) between First and Last Surface, plus the image surface (help). Double bounce
+  enumerates every pair j > i: n(n − 1)/2 for n candidates.
+- **Paraxial ghost data** (`GhostParaxial`). The original's marginal ray and full-field chief ray
+  as they enter surface 1 are traced through the ghost with §11's equations (signed indices,
+  transfer t/n, power c·(n′ − n)); a thin-lens or ABCD surface is refused. Focus and ghost pupil
+  positions are axis crossings after the last surface, along z from the ghost's image surface.
+  Ghost EFL = 1/Φ with Φ = −ν after the last surface of the ray (y, ν) = (1, 0). Ghost pupil
+  magnification = the ghost exit pupil diameter over the entrance pupil diameter.
+- **Intensity** (`GhostIntensity`). Unpolarized reflectance of each bounce from the surface's
+  OP-15 coating, or the uncoated interface (`CoatingEvaluator` with no coating), at normal
+  incidence for the analysis and at the ray's angle for GPRT; light meets a surface from the side
+  it travels from, and the layers are reversed from glass to air. Relative intensity = R1·R2;
+  "with transmission" multiplies in the transmittance of every other surface crossed. A Ghost
+  Reflector Coating replaces the bounces' coatings; the help's I.xx shorthand is accepted.
+- **Real rays.** On-axis rays on a square pupil grid, launched in the original lens, traced
+  through the ghost; RMS radius about the centroid on each surface; failures counted by kind and
+  ghost surface.
+- **Operands.** GPIM (1/|distance| of the closest pupil or image ghost, or the ghost pupil
+  magnification; −1 wildcards), GPRT, GPRX, GPRY (real), GPSX, GPSY (paraxial), GAOI (angle of
+  incidence after the double bounce), all at the primary wavelength; YNIP. WFB/WSB and GAOI's
+  SetVig = 1 are not built.
+- **YNI** (`YniContributions`): y·n·i of the paraxial marginal ray, i = u + y·c, n signed, so
+  n·i is the refraction invariant A of §32.
+- **Power maps** (`LocalPower`, `PowerPupilMapAnalysis`, `PowerFieldMapAnalysis`). At each pupil
+  point (one field) or each field point (chief ray), a parallel ring of rays offset by ±δ
+  (10⁻⁴ of the entrance pupil radius) in 8 directions; P(θ) = −n′(d′₊ − d′₋)·ê′/(2δ) after the
+  chosen surface, fitted to A + B cos 2θ + C sin 2θ: spherical A, maximum and minimum
+  A ± √(B² + C²), cylinder their difference, X at θ = 0, Y at 90°, astigmatic X − Y, tangential
+  in the plane of the ray and object-space z, sagittal at right angles. Diopters with lengths in
+  meters; EFL 1/P in lens units (cylinder and astigmatic EFL as differences of focal lengths).
+- **Not built.** Biocular Field of View and Biocular Dipvergence/Convergence; Save Files (no
+  GHfffsss.ZMX files); ghosts of lenses with coordinate breaks or tilts; the power maps' surface
+  plot, grey scale and scan displays.

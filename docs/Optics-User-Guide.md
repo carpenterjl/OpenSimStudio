@@ -1563,6 +1563,37 @@ Not built: the "Improve Manufacturing Yield" choice inside the Optimization Wiza
 the TOLR operand (a tolerance estimate inside the merit function), HYLD at mirrors, and a
 command-line option.
 
+## Stray light and PAL/freeform analyses
+
+Four analyses under **Stray light** and **PAL/Freeform** in the analysis list, on the project's
+lens in its current configuration.
+
+- **Ghost focus generator** (OpticStudio's Ghost Focus Generator). Settings: Bounces (double or
+  single), First and Last Surface (0 = the image), Image Surface Only, Ghost Reflector Coating
+  (e.g. I.99 for 1 % on every bounce; blank for the surfaces' own coatings or bare Fresnel),
+  Wavelength and the pupil grid of the real rays. Each ghost (every pair of surfaces that change
+  the index, plus the image surface) is built as its own lens with the bounce surfaces made
+  mirrors. The table lists per ghost: the two reflectances, the relative intensity R1·R2, the
+  same with the other surfaces' transmission, the ghost focus distance from the image surface,
+  the pupil ghost size on the image, the ghost EFL and where the ghost images the pupil. Below,
+  each ghost's surfaces: marginal and chief heights, F/#, real RMS spot radius on axis and possible
+  internal focus. A scatter plot shows intensity against focus distance. A ghost that cannot be
+  built or traced is listed with the reason; failed rays are counted by surface.
+- **YNI contributions**: y·n·i of the paraxial marginal ray at each surface (related to
+  narcissus in cooled infrared systems) and their sum.
+- **Power pupil map** and **Power field map**: the local optical power (diopters) or EFL along
+  the rays across the pupil of one field, or along the chief ray across the field: spherical,
+  cylinder, maximum, minimum, tangential, sagittal, X, Y or astigmatic, with an offset, as a false
+  colour or contour map. Set Surface to the last surface with power, as the help advises.
+
+Merit operands: GPIM (ghost pupil and image ghost distance, ghost pupil magnification), GPRT,
+GPRX, GPRY, GPSX, GPSY, GAOI and YNIP. Definitions in docs/Optics-Conventions.md §49; readings
+where the help is short in §10 item 45.
+
+Not built: Biocular Field of View and Dipvergence/Convergence, saving the ghost lens files,
+ghosts of tilted or decentered lenses, GPIM's worst-pair columns, GAOI with vignetting factors,
+coated surfaces in GPRT.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
