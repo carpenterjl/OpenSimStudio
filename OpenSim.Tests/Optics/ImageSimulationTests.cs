@@ -484,7 +484,11 @@ public sealed class ImageSimulationTests
             Assert.Equal(1, k.Columns);
             Close(1, k.Weights[0, 0], 1e-12, "the whole PSF in the pixel");
         }
-        Assert.Empty(result.Warnings);
+        // OP-38's Huygens engine warns, rightly, that its planar phase reference is off by more
+        // than λ/4 across the image window at the off-axis grid points; that is the PSF engine's
+        // own note and does not touch the delta kernels. Nothing else may warn.
+        var unexpected = result.Warnings.Where(w => !(engine == DiffractionPsfEngine.Huygens && w.Contains("spherical phase reference"))).ToList();
+        Assert.True(unexpected.Count == 0, string.Join(" | ", unexpected));
     }
 
     // ---- The analyses ----
