@@ -42,6 +42,7 @@ public sealed class SequentialTrace
     private readonly RigidTransform[] _step;
     private readonly RigidTransform[] _global;
     private readonly double[] _semiDiameter;
+    private readonly SurfaceShape?[] _shape;   // OP-32: each surface's effective (composite) shape
 
     /// <summary>A ray whose local z direction cosine is below this in magnitude is taken as
     /// parallel to a coordinate break's plane.</summary>
@@ -104,6 +105,13 @@ public sealed class SequentialTrace
             _step[j] = Placement.Step(j);
             _global[j] = Placement.Global(j);
         }
+
+        // OP-32: the shape each surface is traced with, its own unless active composite add-ons
+        // add to it (Composite.CompositeSurfaces.EffectiveShape returns the surface's own
+        // instance otherwise, so such a surface is traced exactly as before).
+        _shape = new SurfaceShape?[count];
+        for (int j = 0; j < count; j++)
+            _shape[j] = Composite.CompositeSurfaces.EffectiveShape(lens.Surfaces[j]);
 
         _semiDiameter = new double[count];
         for (int j = 0; j < count; j++)
@@ -206,7 +214,7 @@ public sealed class SequentialTrace
             double s0 = parallel ? 0 : -p.Z / d.Z;
             double x = p.X + s0 * d.X, y = p.Y + s0 * d.Y;
             double c = dummy ? 0 : s.Curvature;
-            var shape = dummy ? null : s.Shape;
+            var shape = dummy ? null : _shape[j];   // OP-32: s.Shape unless composite add-ons add to it
             Vector3D point;
             double delta;
             bool met;

@@ -108,6 +108,13 @@ public sealed record SequentialSurface
     /// for none. Not on a coordinate break, the object or the image surface.</summary>
     public SurfaceTiltAfter? TiltAfter { get; init; }
 
+    // OP-32
+    /// <summary>The composite add-ons whose sags are added to this surface's, in order, or null
+    /// for none (docs/Optics-Conventions.md §58). The trace, the paraxial model and the sag
+    /// analyses use <see cref="Composite.CompositeSurfaces.EffectiveShape"/>; a surface with no
+    /// active add-on is traced exactly as without the list.</summary>
+    public IReadOnlyList<Composite.CompositeAddOn>? AddOns { get; init; }
+
     /// <summary>True for a coordinate-break surface.</summary>
     public bool IsCoordinateBreak => CoordinateBreak is not null;
 

@@ -1889,6 +1889,34 @@ and 4, Grid Phase, Zone Plate, Optically Fabricated Hologram, the volume hologra
 diffraction efficiency, and these types in .zmx, CODE V and OSLO files. The readings not yet
 checked against OpticStudio are listed in docs/Optics-Conventions.md §10 item 53.
 
+## Composite surfaces
+
+A surface can carry composite add-ons: further surface shapes whose sags are added to its own,
+the way OpticStudio's Composite Surface stacks add-on rows on a base (docs/Optics-Conventions.md
+§58). In the Lens Data Editor, open **Composite add-ons (current surface)**, pick the base row in
+the sheet, and use **Add** (a new add-on is a Standard plane, which adds nothing), then set its
+type, radius, conic, parameters (number=value pairs in lens units, e.g. `2=1e-5; 3=-2e-8`),
+decenter X and Y (lens units) and tilts X, Y, Z (degrees) relative to the base, and press
+**Apply**. **Remove** deletes the selected add-on; **Activate all add-ons** and **Ignore all
+add-ons** clear or set every add-on's ignore flag (an ignored add-on adds nothing). Each change is
+one undo step, and the add-ons are saved with the lens.
+
+The trace, the paraxial data, the sag analyses (which show the summed sag), edge thicknesses and
+OPD use the summed surface. An untilted add-on adds its sag shifted by its decenter; a tilted one
+adds its height above its own tilted vertex plane, measured along the base's axis (a reading of
+the help, §10 item 54). A decentered or tilted add-on makes the surface non-symmetric: paraxial
+data are then refused, naming the add-on, while the lens still traces. Types that can be bases
+and add-ons are those of OpticStudio's supported list that this program builds (Standard, the
+aspheres, Biconic, Toroidal, Irregular, the polynomial, Zernike and Grid Sag freeforms, Radial
+NURBS, …); others are refused by name. The multi-configuration operands CSDX, CSDY, CSTX, CSTY
+and CSTZ change an add-on's placement (arguments: the base surface and the add-on's number).
+
+Not built: add-ons as their own editor rows, "Set Tilt/Decenter to follow Base surface aperture"
+and "Update Tilt", drawing add-ons in the layouts (the base is drawn), the sag analyses' Remove
+"Composite Sag", Seidel sums of composite surfaces, Reverse Elements and Make Double Pass of
+surfaces with add-ons, the COMPOSITEON/COMPOSITEOFF macro keywords, add-ons in .zmx, CODE V and
+OSLO files, and diffractive phase add-ons.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

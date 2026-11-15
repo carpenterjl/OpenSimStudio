@@ -40,6 +40,8 @@ public static class ReverseElements
                 throw new ArgumentException($"Reverse Elements: surface {j} is a '{surfaces[j].Type}' surface; only Standard surfaces can be reversed in this build.");
             if (SavedSurfaces.IsMirror(surfaces[j]))
                 throw new ArgumentException($"Reverse Elements: surface {j} is a mirror; a group with a mirror cannot be reversed.");
+            if (surfaces[j].AddOns is { Count: > 0 })   // OP-32
+                throw new ArgumentException($"Reverse Elements: surface {j} has composite add-ons; reversing them is not built.");
             if (surfaces[j].TiltBefore is not null || surfaces[j].TiltAfter is not null)
                 throw new ArgumentException($"Reverse Elements: surface {j} has a surface tilt or decenter; a group with tilts cannot be reversed in this build.");
         }

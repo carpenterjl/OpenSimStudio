@@ -115,6 +115,12 @@ public sealed record OpticsSurfaceSettings
     /// <summary>A Grid Sag surface's imported grid, or null; read only on a surface of type
     /// "Grid Sag".</summary>
     public OpticsGridSagSettings? GridSag { get; init; }
+
+    // OP-32
+    /// <summary>The surface's composite add-ons, in order, or null for none: surfaces whose sag
+    /// is added to this one's (OpticStudio's Composite Add-on surfaces, which there are rows
+    /// above this one with "Add sag to next surface" checked).</summary>
+    public List<OpticsCompositeAddOnSettings>? AddOns { get; init; }
 }
 
 /// <summary>

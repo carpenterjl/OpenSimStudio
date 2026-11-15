@@ -181,6 +181,7 @@ public static class SavedSurfaces
                 aperture = Aperture(a, perUnit, where, problems);
             TiltDecenter? tiltBefore = s.TiltBefore is { } tb ? ToTiltDecenter(tb, perUnit, where + ", tilt/decenter before", problems) : null;
             SurfaceTiltAfter? tiltAfter = s.TiltAfter is { } ta ? TiltAfter(ta, perUnit, where, problems) : null;
+            var addOns = s.AddOns is { Count: > 0 } savedAddOns ? AddOnsFrom(savedAddOns, perUnit, where, problems) : null;   // OP-32
             result[j] = new SequentialSurface
             {
                 Shape = shape,
@@ -202,6 +203,7 @@ public static class SavedSurfaces
                 Coating = string.IsNullOrWhiteSpace(s.Coating) ? null : s.Coating,
                 ThermalExpansion = s.Tce,
                 Comment = s.Comment ?? "",
+                AddOns = addOns,   // OP-32
             };
         }
         if (problems.Count == 0)
@@ -420,9 +422,107 @@ public static class SavedSurfaces
                 IsIgnored = s.IsIgnored,
                 SkipRaysTo = s.SkipRaysTo,
                 Aperture = s.Aperture is { } a ? FromAperture(a, perUnit) : null,
+                AddOns = s.AddOns is { Count: > 0 } addOns ? addOns.Select((x, k) => FromAddOn(x, perUnit, $"{Where(j, lens.Surfaces.Count)}, composite add-on {k + 1}")).ToList() : null,   // OP-32
             });
         }
         return list;
+    }
+
+    // ------------------------------------------------------------------ OP-32: composite add-ons
+
+    /// <summary>The saved add-ons as the trace's (<see cref="Composite.CompositeAddOn"/>), each
+    /// shape built from its type and parameters exactly as a surface's is; problems name the
+    /// surface and the add-on. The rules on which types may be add-ons are
+    /// <see cref="Composite.CompositeSurfaces.Check"/>'s (run by the lens check).</summary>
+    private static List<Composite.CompositeAddOn> AddOnsFrom(List<OpticsCompositeAddOnSettings> saved, double perUnit, string where, List<string> problems)
+    {
+        var list = new List<Composite.CompositeAddOn>(saved.Count);
+        for (int k = 0; k < saved.Count; k++)
+        {
+            var a = saved[k] ?? new OpticsCompositeAddOnSettings();
+            string w = $"{where}, composite add-on {k + 1}";
+            var asSurface = new OpticsSurfaceSettings
+            {
+                Type = a.Type, Radius = a.Radius, Conic = a.Conic,
+                Parameters = a.Parameters, ExtraData = a.ExtraData, GridSag = a.GridSag,
+            };
+            SurfaceShape? shape = null;
+            if (IsStandard(asSurface))
+            {
+                if (a.Parameters?.FirstOrDefault(p => p.Value != 0) is { } p)
+                    problems.Add($"{w}: a {StandardType} add-on has no parameters, but parameter {p.Number} is {p.Value.ToString("R", CultureInfo.InvariantCulture)}.");
+                if (a.ExtraData?.FirstOrDefault(p => p.Value != 0) is { } x)
+                    problems.Add($"{w}: a {StandardType} add-on has no extra data, but extra data {x.Number} is {x.Value.ToString("R", CultureInfo.InvariantCulture)}.");
+                if (a.GridSag is not null)
+                    problems.Add($"{w}: only a {Freeform.FreeformLayouts.GridSag} add-on has grid data; remove it or make the add-on a {Freeform.FreeformLayouts.GridSag}.");
+            }
+            else if (SurfaceTypes.Find(a.Type) is not { } layout)
+            {
+                problems.Add($"{w}: the surface type '{a.Type}' is not one this build traces (the composite types are {string.Join(", ", Composite.CompositeSurfaces.SupportedTypes)}).");
+                continue;
+            }
+            else if (layout.IsCoordinateBreak)
+            {
+                problems.Add($"{w}: a {SurfaceTypes.CoordinateBreak} cannot be a composite add-on.");
+                continue;
+            }
+            else if (!TypedSurface(asSurface, layout, perUnit, w, problems, out shape, out _))
+                continue;
+            if (a.Radius is double rr && double.IsNaN(rr)) problems.Add($"{w}: the radius must be a number.");
+            list.Add(new Composite.CompositeAddOn
+            {
+                Shape = shape,
+                Curvature = a.Radius is double r ? OpticsConventions.CurvatureFromRadius(r * perUnit) : 0,
+                Conic = a.Conic,
+                Placement = new TiltDecenter(a.DecenterX * perUnit, a.DecenterY * perUnit, a.TiltX, a.TiltY, a.TiltZ),
+                IsIgnored = a.IsIgnored,
+                SemiDiameter = a.SemiDiameter * perUnit,
+                Comment = a.Comment ?? "",
+            });
+        }
+        return list;
+    }
+
+    /// <summary>One add-on in the saved form (lens units), its type and parameters written as a
+    /// surface's are.</summary>
+    private static OpticsCompositeAddOnSettings FromAddOn(Composite.CompositeAddOn a, double perUnit, string where)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        if (a.Placement.Order != TiltDecenterOrder.DecenterThenTilt)
+            throw new ArgumentException($"{where}: an add-on's placement is saved as decenter then tilt; this one is {a.Placement.Order}.");
+        string? type = null;
+        List<OpticsSurfaceParameterSettings>? parameters = null, extra = null;
+        if (a.Shape is { } shape)
+        {
+            var layout = SurfaceTypes.Find(shape.TypeName)
+                ?? throw new ArgumentException($"{where}: the surface type '{shape.TypeName}' cannot be saved by this build; it has no parameter layout.");
+            type = layout.Name;
+            foreach (var (number, v) in layout.Read(shape).OrderBy(p => p.Key))
+            {
+                if (v == 0) continue;
+                var info = layout.Parameter(number)!;
+                var entry = new OpticsSurfaceParameterSettings { Number = number, Value = v / SurfaceTypes.Factor(info.LengthPower, perUnit) };
+                if (info.IsExtraData) (extra ??= new()).Add(entry);
+                else (parameters ??= new()).Add(entry);
+            }
+        }
+        return new OpticsCompositeAddOnSettings
+        {
+            Type = type,
+            Parameters = parameters,
+            ExtraData = extra,
+            GridSag = a.Shape is Freeform.GridSagSurface gridSag ? Freeform.GridSagSaved.FromData(gridSag.Data) : null,
+            Radius = a.Curvature == 0 ? null : 1.0 / a.Curvature / perUnit,
+            Conic = a.Conic,
+            SemiDiameter = a.SemiDiameter / perUnit,
+            DecenterX = a.Placement.DecenterX / perUnit,
+            DecenterY = a.Placement.DecenterY / perUnit,
+            TiltX = a.Placement.TiltXDegrees,
+            TiltY = a.Placement.TiltYDegrees,
+            TiltZ = a.Placement.TiltZDegrees,
+            IsIgnored = a.IsIgnored,
+            Comment = a.Comment.Length > 0 ? a.Comment : null,
+        };
     }
 
     private static OpticsTiltDecenterSettings FromTiltAfter(SurfaceTiltAfter t, double perUnit) => t.Kind switch

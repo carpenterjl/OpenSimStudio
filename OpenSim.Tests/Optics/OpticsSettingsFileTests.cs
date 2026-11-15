@@ -32,6 +32,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.NotNull(optics.Surfaces[0].TiltBefore);                       // TC-6: tilts and returns
         Assert.NotNull(optics.Surfaces[0].TiltAfter!.Mode);
         Assert.NotNull(optics.Surfaces[0].CoordinateReturn!.Mode);
+        Assert.Equal(2, optics.Surfaces[0].AddOns!.Count);                    // OP-32: composite add-ons
+        Assert.Equal(2, optics.Surfaces[0].AddOns![0].Parameters!.Count);
         Assert.Equal(2, optics.MeritFunction!.Operands!.Count);              // OP-54
         Assert.Equal(2, optics.MeritFunction.Operands[1].Data!.Count);
         Assert.Equal(2, optics.MultiConfiguration!.Operands![0].Values!.Count);   // OP-30: the table

@@ -60,6 +60,9 @@ public static class OpticsLensEditorSchema
     public const string SkipRaysProperty = "SkipRaysTo";
     public const string HideRaysProperty = "HideRaysTo";
     public const string DoNotDrawProperty = "DoNotDraw";
+    // OP-32: the surface's composite add-ons, as JSON (edited in the editor's Composite add-ons
+    // panel; a property so that add-on edits are on the sheet's undo stack).
+    public const string CompositeAddOnsProperty = "CompositeAddOns";
 
     // Tilt/decenter before and after (OpticStudio's Surface Properties › Tilt/Decenter).
     public const string BeforeDecenterXProperty = "BeforeDecenterX";
@@ -269,6 +272,11 @@ public static class OpticsLensEditorSchema
         DrawProperty(SkipRaysProperty),
         DrawProperty(HideRaysProperty),
         DrawProperty(DoNotDrawProperty),
+        new SheetColumn(CompositeAddOnsProperty, "Composite add-ons")   // OP-32
+        {
+            Kind = CellKind.Text, IsReadOnly = true,
+            ToolTip = "The surface's composite add-ons; edit them in the Composite add-ons panel of the Lens Data Editor.",
+        },
     };
 
     /// <summary>The coordinate break's flyout: its Coordinate Return and the drawing flags.</summary>

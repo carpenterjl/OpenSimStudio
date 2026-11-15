@@ -114,7 +114,7 @@ public static class CoddingtonTrace
             var hit = hits[j];
             s -= hit.SegmentLength;
             t -= hit.SegmentLength;
-            var surface = lens.Surfaces[j];
+            var surface = OpenSim.Optics.Sequential.Composite.CompositeSurfaces.WithEffectiveShape(lens.Surfaces[j]);   // OP-32: composite add-ons
             if (surface.IsIgnored || surface.IsCoordinateBreak) continue;
             if (surface.Shape is { } shape && TurnsRaysItself(shape))
                 throw new InvalidOperationException($"Coddington trace, {where}: surface {j} is a {shape.TypeName} surface, which turns rays by its own rule rather than by refraction at a curved surface; field curvature by Coddington's equations is not built for it.");

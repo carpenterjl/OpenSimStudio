@@ -118,7 +118,7 @@ public sealed record SequentialLens
         {
             var s = Surfaces[j];
             bool dummy = s.IsIgnored || s.IsCoordinateBreak;
-            var equivalent = dummy || s.Shape is null || j == 0 || j == image
+            var equivalent = dummy || EffectiveShapeOrOwn(s) is null || j == 0 || j == image   // OP-32: composite add-ons
                 ? new ParaxialShapeEquivalent { Curvature = dummy ? 0 : s.Curvature }
                 : forValidation ? ShapeEquivalentOrVertex(s) : ShapeEquivalent(s, j);
             surfaces[j] = new ParaxialSurface
@@ -138,9 +138,17 @@ public sealed record SequentialLens
         return new ParaxialLens { Surfaces = surfaces };
     }
 
+    // OP-32: the shape with its composite add-ons; the surface's own when the add-ons cannot be
+    // combined (Validate reports why through CompositeSurfaces.Check).
+    private static SurfaceShape? EffectiveShapeOrOwn(SequentialSurface s)
+    {
+        try { return Composite.CompositeSurfaces.EffectiveShape(s); }
+        catch (ArgumentException) { return s.Shape; }
+    }
+
     private static ParaxialShapeEquivalent ShapeEquivalentOrVertex(SequentialSurface s)
     {
-        try { return s.Shape!.ParaxialEquivalent(s); }
+        try { return EffectiveShapeOrOwn(s)!.ParaxialEquivalent(s); }
         catch (ArgumentException) { return new ParaxialShapeEquivalent { Curvature = s.Curvature }; }
     }
 
@@ -150,7 +158,7 @@ public sealed record SequentialLens
     {
         try
         {
-            return s.Shape!.ParaxialEquivalent(s);
+            return Composite.CompositeSurfaces.EffectiveShape(s)!.ParaxialEquivalent(s);   // OP-32
         }
         catch (ArgumentException e)
         {
@@ -201,7 +209,7 @@ public sealed record SequentialLens
             segment[j] = length;
             if (dummy || j == image) continue;
 
-            bool plane = s.Curvature == 0 && s.Shape is null;
+            bool plane = s.Curvature == 0 && s.Shape is null && !Composite.CompositeSurfaces.HasActiveAddOns(s);   // OP-32
             bool alongZ = Math.Abs(d.X) <= directionTolerance && Math.Abs(d.Y) <= directionTolerance;
             if (!plane)
             {
@@ -291,6 +299,7 @@ public sealed record SequentialLens
         }
         // Coordinate breaks and tilts (OP-21).
         SurfacePlacement.Validate(Surfaces, ObjectAtInfinity, Where, problems);
+        Composite.CompositeSurfaces.Check(Surfaces, Where, problems);   // OP-32
         // Curvature, thickness, media, stop count and semi-diameters: the paraxial lens's own rules.
         foreach (var p in ToParaxialLensAsEntered(forValidation: true).Validate())
             problems.Add(p.Replace("Paraxial lens:", "Sequential lens:"));

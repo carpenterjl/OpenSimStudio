@@ -176,7 +176,8 @@ public static class MeritEvaluator
     {
         ArgumentNullException.ThrowIfNull(lens);
         if (SurfacePlacement.HasPlacementData(lens)) return false;
-        return lens.Surfaces.All(s => s.IsIgnored || s.Shape is null or RadialSagShape or ParaxialShape);
+        return lens.Surfaces.All(s => s.IsIgnored || (s.Shape is null or RadialSagShape or ParaxialShape)
+            && !Sequential.Composite.CompositeSurfaces.HasActiveAddOns(s));   // OP-32: add-ons may be placed off axis
     }
 
     /// <summary>Evaluates <paramref name="function"/>. Throws <see cref="ArgumentException"/>

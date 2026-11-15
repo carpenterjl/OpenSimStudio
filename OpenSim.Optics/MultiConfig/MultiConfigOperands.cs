@@ -59,12 +59,9 @@ public static class MultiConfigOperands
     {
         // ---- not supported: no target in OpenSim today ----
         const string inventor = "Autodesk Inventor and Creo Parametric parts have no equivalent in OpenSim (plan section 3).";
-        const string composite = "composite add-on surfaces are not built (OP-32).";
         const string nsc = "non-sequential objects are not built (OP-70 on).";
         Unsupported("AICN", "iPartFactory number of an Autodesk Inventor part", MultiConfigValueKind.Integer, new[] { "Surface", "Object" }, inventor);
         Unsupported("CPCN", "Family table instance number of a Creo Parametric part", MultiConfigValueKind.Integer, new[] { "Surface", "Object" }, inventor);
-        foreach (var (code, what) in new[] { ("CSDX", "decenter x"), ("CSDY", "decenter y"), ("CSTX", "tilt x"), ("CSTY", "tilt y"), ("CSTZ", "tilt z") })
-            Unsupported(code, $"Composite add-on surface {what}", MultiConfigValueKind.Number, Surface1, composite);
         Unsupported("FCMM", "Field comment", MultiConfigValueKind.Text, Field1, "the saved fields have no comment in this build.");
         Unsupported("GCRS", "Global coordinate reference surface", MultiConfigValueKind.Integer, None, "the global coordinate reference surface is not part of this build's saved system data.");
         Unsupported("GPEX", "Obsolete", MultiConfigValueKind.Number, None, "obsolete in OpticStudio; the help gives it no meaning.");
@@ -90,6 +87,16 @@ public static class MultiConfigOperands
         Add(new MultiConfigOperand("PUCN", "Picks up the rows below from a previous configuration", MultiConfigValueKind.Integer, None) { HasNoTarget = true });
 
         // ---- surface data ----
+        // OP-32: the composite add-on placement (help: "Decenter value in X direction for composite
+        // add-on surface", and so for CSDY, CSTX, CSTY, CSTZ). OpticStudio's add-on is its own
+        // surface row; here it is an entry of its base's list, so the operand takes the base
+        // surface and the add-on's number (1-based) in its list.
+        CompositeAddOnNumber("CSDX", "Composite add-on surface decenter x", a => a.DecenterX, (a, v) => a with { DecenterX = v });
+        CompositeAddOnNumber("CSDY", "Composite add-on surface decenter y", a => a.DecenterY, (a, v) => a with { DecenterY = v });
+        CompositeAddOnNumber("CSTX", "Composite add-on surface tilt x", a => a.TiltX, (a, v) => a with { TiltX = v });
+        CompositeAddOnNumber("CSTY", "Composite add-on surface tilt y", a => a.TiltY, (a, v) => a with { TiltY = v });
+        CompositeAddOnNumber("CSTZ", "Composite add-on surface tilt z", a => a.TiltZ, (a, v) => a with { TiltZ = v });
+
         SurfaceNumber("CRVT", "Curvature", SavedSurfaces.RadiusColumn,
             s => SavedSurfaces.IsPlane(s) ? 0 : 1 / s.Radius!.Value,
             (s, v) => s with { Radius = v == 0 ? null : 1 / v });
@@ -368,6 +375,43 @@ public static class MultiConfigOperands
             Setter = (sys, n, _, _, v) => { Finite(v, code); return WithSurface(sys, n, code, s => DropFlags(Wrap(code, n, () => set(s, v.Number)), column)); },
             Targets = sys => SurfacesWhere(sys, (_, s, _) => hasData?.Invoke(s) ?? true),
         });
+
+    // OP-32
+    private static readonly string[] SurfaceAddOn = { "Surface", "Add-on" };
+
+    private static void CompositeAddOnNumber(string code, string description,
+        Func<OpticsCompositeAddOnSettings, double> get, Func<OpticsCompositeAddOnSettings, double, OpticsCompositeAddOnSettings> set) =>
+        Add(new MultiConfigOperand(code, description, MultiConfigValueKind.Number, SurfaceAddOn)
+        {
+            Getter = (sys, n, k, _) => MultiConfigValue.Of(get(AddOnOf(Surf(sys, n, code), n, k, code))),
+            Setter = (sys, n, k, _, v) =>
+            {
+                Finite(v, code);
+                return WithSurface(sys, n, code, s =>
+                {
+                    var list = s.AddOns!.ToList();
+                    list[k - 1] = set(AddOnOf(s, n, k, code), v.Number);
+                    return s with { AddOns = list };
+                });
+            },
+            Targets = sys =>
+            {
+                var surfaces = sys.Surfaces ?? new List<OpticsSurfaceSettings>();
+                var targets = new List<(int, int, int)>();
+                for (int j = 0; j < surfaces.Count; j++)
+                    for (int k = 1; k <= (surfaces[j]?.AddOns?.Count ?? 0); k++)
+                        targets.Add((j, k, 0));
+                return targets;
+            },
+        });
+
+    private static OpticsCompositeAddOnSettings AddOnOf(OpticsSurfaceSettings s, int n, int k, string code)
+    {
+        int count = s.AddOns?.Count ?? 0;
+        if (k < 1 || k > count)
+            throw new ArgumentException($"{code}: surface {n} has {count} composite add-on{(count == 1 ? "" : "s")}; add-on {k} does not exist (they count from 1).");
+        return s.AddOns![k - 1] ?? new OpticsCompositeAddOnSettings();
+    }
 
     private static void SurfaceText(string code, string description, string column,
         Func<OpticsSurfaceSettings, string> get, Func<OpticsSurfaceSettings, string, OpticsSurfaceSettings> set,

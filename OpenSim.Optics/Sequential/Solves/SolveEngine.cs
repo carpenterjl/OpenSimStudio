@@ -789,7 +789,8 @@ public static class SolveEngine
         private static double Sag(SequentialLens lens, int j, double r)
         {
             var s = lens.Surfaces[j];
-            double z = s.IsIgnored ? 0 : s.Shape is { } shape ? shape.Sag(0, r, s) : new ConicSag(s.Curvature, s.Conic).SagAtRadius(r);
+            // OP-32: composite add-ons
+            double z = s.IsIgnored ? 0 : Composite.CompositeSurfaces.EffectiveShape(s) is { } shape ? shape.Sag(0, r, s) : new ConicSag(s.Curvature, s.Conic).SagAtRadius(r);
             if (!double.IsFinite(z))
                 throw Fail($"surface {j} is not defined at a radial height of {r:g6} m (beyond its hemisphere or the edge of its shape), so the edge thickness has no meaning there.");
             return z;

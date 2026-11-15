@@ -1365,6 +1365,25 @@ single place in the code, so a correction is one line and its test.
     Check: the diffracted direction cosines and OPD of a few rays through each type against
     OpticStudio's Single Ray Trace.
 
+54. **Composite surface readings** (OP-32, section 58). The help pages "Composite Surface",
+    "Activate Composite Add-ons" and "Ignore Composite Add-ons" (saved under
+    `plans/sources/optics/op-32-help/`) say the sags add and the tilts and decenters are taken
+    "with respect to the coordinate system of the Base surface", but not how a tilted sag is
+    summed. Where they leave it open this program reads it so:
+    - *A tilted add-on* adds, along the base's z, its departure from its own tilted vertex plane
+      (so a tilted plane adds nothing); an untilted add-on adds f(x − dx, y − dy).
+    - *Order of the placement*: decenter, then tilt about x, the new y, the new z (the order of
+      the page's fields and of OpticStudio's coordinate break order 0); Decenter Z is not kept (the
+      help greys it out: "Decenter Z does not contribute to overall system length").
+    - *Each add-on has its own placement.* The help stacks all add-ons by the placement of "the
+      lowest Add-on in the LDE" and greys out the others' fields; this program places each one by
+      its own (giving every add-on the lowest one's values reproduces OpticStudio's stack).
+    - *Add-ons are a list on the base surface*, not rows of their own, so surface numbers count the
+      traced surfaces only; CSDX–CSTZ take the base surface and the add-on's number.
+    - *An add-on's own semi-diameter* (which Irregular normalises to) defaults to the base's.
+    Check: a base with a decentered and a tilted add-on traced in OpticStudio, and its Surface
+    Sag map, against this program's.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2457,7 +2476,7 @@ the pages under "Multiple Configuration Editor", saved in `plans/sources/optics/
   user-defined or floating aperture. APER under float by stop size is the stop's semi-diameter
   (help). SDIA and MCSD read no value from an automatic semi-diameter.
 - **Not supported** (registered, so a table naming them fails with the code and the reason):
-  AICN and CPCN (Inventor and Creo parts), CSDX–CSTZ (composite surfaces, OP-32), FCMM (fields
+  AICN and CPCN (Inventor and Creo parts), FCMM (fields
   have no comment), GCRS, MCHI and OPDR (not in the saved system data), GQPO (the default merit
   function, OP-54), HLGV (no optically fabricated hologram), IGTO (tolerancing, OP-63), NCOM,
   NCOT, NGLS, NPAR, NPOS, NPRO (non-sequential, OP-70 on), PXAR (no physical optics), UDAF
@@ -2795,7 +2814,7 @@ Section", "Surface Slope Cross Section" and the operand page "Best Fit Sphere Da
 
 **Not built.** Surface Phase, Phase Slope and their cross-sections (no surface type carries a
 phase: there are no diffractive surfaces yet); Off-Axis Coordinates; Remove "Base Sag" and
-"Composite Sag" (no STAR data or composite surfaces); Show As surface plot and grey scale; the
+"Composite Sag" (no STAR data; the sag analyses show a composite surface's summed sag, section 58); Show As surface plot and grey scale; the
 BFSD operand (a merit-function item); a best-fit sphere of a surface that is not rotationally
 symmetric beyond its y profile. The readings in §10 item 24 are not compared with OpticStudio's
 output.
@@ -5113,3 +5132,68 @@ limited (`OpdLimitation` is the substrate's, null for all eleven).
 - *Optically Fabricated Hologram*: needs construction optics nested in the lens.
 - The volume hologram option (efficiency only), a negative construction wavelength, efficiency
   and multiple orders, and the diffractive types in .zmx, CODE V and OSLO files and macros.
+
+## 58. Composite surfaces
+
+OP-32 adds composite add-ons (`OpenSim.Optics/Sequential/Composite/`), after OpticStudio 2025 R2
+help, "Composite Surface" (saved under `plans/sources/optics/op-32-help/`): "The sag profile of
+the Add-on surfaces will be added …, and the total sag will finally be added to the first
+non-composite surface (… 'Composite Base')". Here the add-ons are a list on the base surface,
+`SequentialSurface.AddOns` (`CompositeAddOn`: a shape like a surface's, its curvature and conic,
+a decenter-then-tilt placement relative to the base, an ignore flag, an optional own
+semi-diameter), saved as `OpticsSurfaceSettings.AddOns` (`OpticsCompositeAddOnSettings`, lens
+units and degrees) by `SavedSurfaces`, each shape built from its type and parameters as a
+surface's is.
+
+**Effective shape.** `CompositeSurfaces.EffectiveShape(surface)` is the surface's own shape
+(the same instance) unless it has an active add-on whose sag is not zero everywhere (a Standard
+plane is skipped); then it is a `CompositeSurfaceShape`, a sag surface (section 17) with
+
+  z(x, y) = z_base(x, y) + Σₖ δₖ(x, y),
+
+over the add-ons that are not ignored. An untilted add-on gives δ = f(x − dx, y − dy), f its sag
+in its own frame. A tilted one (transform T from its frame to the base's) gives the distance along
+the base's z, on the line through (x, y, 0), from its tilted vertex plane to its surface: with
+q = T⁻¹(x, y, 0) and a = T⁻¹ẑ the line meets the plane at s = −q_z/a_z, and δ is the add-on's
+own intersection distance from (q_x + s·a_x, q_y + s·a_y, 0) along a, found by the routine that
+traces its type. The slopes are ∂δ/∂x = −n_x/n_z + p_x/p_z (and so for y), n the add-on's normal
+there and p = Tẑ, both in the base frame (section 10 item 54). The normal is (−∂z/∂x, −∂z/∂y,
+1)/|…| from the summed gradient; the intersection is section 17's damped Newton with bisection,
+started at the base conic's root. Where the base or an active add-on has no sag the ray misses.
+A zero term leaves the sum's bits as they were, so an add-on whose sag is zero changes no bit.
+
+**Who uses it.** The real trace (`SequentialTrace` keeps each surface's effective shape; a
+surface without active add-ons is traced exactly as before), the paraxial model, the Coddington
+trace, the sag analyses' `SurfaceProbe` (so Surface Sag shows the summed sag, OpticStudio's
+default), element volumes and edge thicknesses, the edge-thickness solve, the image-surface
+normal of the PSF and relative illumination. OPD is the trace's optical path through the summed
+surface, so it is true (`OpdLimitation` is the base's). The Seidel sums refuse a composite
+surface by name; SKIS/SKIN count a surface with active add-ons as not symmetric.
+
+**Paraxial.** The base's first-order model plus each add-on's own vertex curvature (their sags
+add, so their second-order terms add). An add-on that is decentered or tilted is refused by name,
+as a tilted or decentered surface with power is; the lens still traces.
+
+**Types.** Base and add-on types are the help's Supported Surfaces table limited to the types
+built here (`CompositeSurfaces.SupportedTypes`): Standard, Even, Odd, Extended and Extended Odd
+Asphere, Q-Type Asphere, Superconic, Periodic, Odd Cosine, Biconic, Biconic Zernike, Toroidal,
+Irregular, Polynomial, Extended Polynomial, Chebyshev Polynomial, the three Zernike sags,
+Off-Axis Conic Freeform, Grid Sag and Radial NURBS. Any other is refused by name (lens check);
+the object surface and coordinate breaks cannot have add-ons.
+
+**Activate / Ignore Composite Add-ons** (`CompositeSurfaces.SetAllIgnored`, and two buttons in
+the Lens Data Editor) clear or set every add-on's ignore flag, as the help pages of those names
+describe. **Multi-configuration operands** CSDX, CSDY, CSTX, CSTY and CSTZ ("Decenter value in X
+direction for composite add-on surface", … , help "Multi-Configuration Operands") set an
+add-on's placement; their arguments are the base surface and the add-on's number from 1. Scale
+Lens and the lens-unit change scale the add-ons' lengths and parameters as a surface's.
+
+**Not built.** OpticStudio's add-on rows in the editor (Hide/Unhide/Delete All Composite
+Surfaces), "Set Tilt/Decenter to follow Base surface aperture" and "Update Tilt", Decenter Z,
+drawing add-ons or composite surfaces in the layouts (the layouts draw the base), the Remove
+"Base Sag"/"Composite Sag" options of the sag analyses, Seidel sums of composite surfaces,
+Reverse Elements and Make Double Pass of surfaces with add-ons (refused by name), the ZPL keywords
+COMPOSITEON, COMPOSITEOFF and COMPOSITEOFFAXISAPERTUREON, tolerancing irregularity through
+inserted add-ons (TIRR, TEXI, TEZI on other types), .zmx/CODE V/OSLO reading and writing of
+add-ons, and diffractive phase add-ons (OP-26's phase types would need the composite to sum
+their phases in `TryRedirect`).

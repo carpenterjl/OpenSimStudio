@@ -309,6 +309,10 @@ public static class SeidelEngine
     {
         ArgumentNullException.ThrowIfNull(surface);
         if (surface.IsIgnored || surface.IsCoordinateBreak) return 0;
+        // OP-32: the fourth-order sag of a composite surface is not summed here; refuse it by name.
+        if (Sequential.Composite.CompositeSurfaces.EffectiveShape(surface) is Sequential.Composite.CompositeSurfaceShape composite)
+            throw new InvalidOperationException(
+                $"Seidel coefficients: surface {index} is a composite surface ({composite.TypeName}); third-order theory for composite add-ons is not built. Leave the Seidel analyses out for this lens or set the add-ons to Ignore.");
         double c = surface.Curvature, k = surface.Conic;
         double conic4 = (1 + k) * c * c * c / 8;
         double a2, a4;

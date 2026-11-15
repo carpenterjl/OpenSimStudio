@@ -205,6 +205,7 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
         catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException or ArithmeticException) { problems.Add(ex.Message); }
         Problems = problems;
         OnPropertyChanged(nameof(SurfaceCount));
+        RefreshCompositeAddOns();   // OP-32
         if (publish) _publish();
     }
 
@@ -322,6 +323,7 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
             Aperture = ReadAperture(row, b.Aperture),
             GridSag = sameType ? b.GridSag : null, // OP-25: a Grid Sag's grid goes with its type
         };
+        s = s with { AddOns = ReadAddOns(row, b.AddOns) };   // OP-32
 
         // The material: kept exactly as the file had it while its text is unchanged.
         string material = Text(S.MaterialSlot);
@@ -568,6 +570,9 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
         Prop(S.SkipRaysProperty, YesNo(s.SkipRaysTo));
         Prop(S.HideRaysProperty, YesNo(s.HideRaysTo));
         Prop(S.DoNotDrawProperty, YesNo(s.DoNotDraw));
+        // OP-32: written only when there are add-ons or were, so a lens without them gains no edit.
+        if (s.AddOns is { Count: > 0 } || row.Properties.ContainsKey(S.CompositeAddOnsProperty))
+            Prop(S.CompositeAddOnsProperty, FormatAddOns(s.AddOns));
         var a = s.Aperture;
         string apertureType = a is null ? S.NoAperture : a.Type ?? "";
         if (!S.ApertureChoices.Contains(apertureType))

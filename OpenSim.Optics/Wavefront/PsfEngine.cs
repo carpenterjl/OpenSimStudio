@@ -1016,7 +1016,8 @@ public static class PsfEngine
     private static Vector3D SurfaceNormal(SequentialLens lens, Vector3D point)
     {
         var image = lens.Surfaces[lens.ImageIndex];
-        var normal = image.Shape is { } shape ? shape.Normal(point, image) : ConicIntersection.Normal(point, image.Curvature, image.Conic);
+        // OP-32: composite add-ons
+        var normal = OpenSim.Optics.Sequential.Composite.CompositeSurfaces.EffectiveShape(image) is { } shape ? shape.Normal(point, image) : ConicIntersection.Normal(point, image.Curvature, image.Conic);
         return normal.Normalized();
     }
 

@@ -80,6 +80,7 @@ public static class ElementVolume
     /// <summary>The sag of a face at (x, y), meters, or NaN where undefined.</summary>
     public static double Sag(SequentialSurface face, double x, double y)
     {
+        face = OpenSim.Optics.Sequential.Composite.CompositeSurfaces.WithEffectiveShape(face);   // OP-32: composite add-ons
         if (face.Shape is { } shape) return shape.Sag(x, y, face);
         return ConicSagClosed(Math.Sqrt(x * x + y * y), face.Curvature, face.Conic);
     }
@@ -97,6 +98,7 @@ public static class ElementVolume
     private static (double W, bool Exact, string Method) FaceIntegral(SequentialSurface face, double a, double edge, string what)
     {
         double ring = 0.5 * (edge * edge - a * a);
+        face = OpenSim.Optics.Sequential.Composite.CompositeSurfaces.WithEffectiveShape(face);   // OP-32: composite add-ons
         if (face.Shape is null)
         {
             double c = face.Curvature, k = face.Conic;

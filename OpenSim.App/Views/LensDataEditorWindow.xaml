@@ -62,6 +62,47 @@
             </DockPanel>
         </Expander>
 
+        <!-- OP-32: composite add-ons of the current surface (their sags add to its sag). -->
+        <Expander DockPanel.Dock="Top" Header="Composite add-ons (current surface)" Margin="0,0,0,4">
+            <DockPanel Margin="4">
+                <StackPanel DockPanel.Dock="Left" Width="320" Margin="0,0,12,0">
+                    <ListBox ItemsSource="{Binding AddOnList}" SelectedIndex="{Binding SelectedAddOn}" Height="96"/>
+                    <WrapPanel Margin="0,4,0,0">
+                        <Button Content="Add" Command="{Binding AddCompositeAddOnCommand}" Margin="0,0,4,4"/>
+                        <Button Content="Remove" Command="{Binding RemoveCompositeAddOnCommand}" Margin="0,0,4,4"/>
+                        <Button Content="Apply" Command="{Binding ApplyCompositeAddOnCommand}" Margin="0,0,4,4"
+                                ToolTip="Write the fields into the selected add-on."/>
+                        <Button Content="Activate all add-ons" Command="{Binding ActivateCompositeAddOnsCommand}" Margin="8,0,4,4"/>
+                        <Button Content="Ignore all add-ons" Command="{Binding IgnoreCompositeAddOnsCommand}" Margin="0,0,4,4"/>
+                    </WrapPanel>
+                </StackPanel>
+                <controls:FormGrid Width="360" HorizontalAlignment="Left">
+                    <Label Content="Type"/>
+                    <ComboBox ItemsSource="{Binding AddOnTypes}" SelectedItem="{Binding AddOnType}"/>
+                    <Label Content="Radius [lens units]"/>
+                    <TextBox Text="{Binding AddOnRadius}" ToolTip="Empty for a plane."/>
+                    <Label Content="Conic"/>
+                    <TextBox Text="{Binding AddOnConic}"/>
+                    <Label Content="Parameters"/>
+                    <TextBox Text="{Binding AddOnParameters}" ToolTip="number=value pairs separated by ';', in lens units, e.g. 2=1e-5; 3=-2e-8"/>
+                    <Label Content="Decenter X [lens units]"/>
+                    <TextBox Text="{Binding AddOnDecenterX}"/>
+                    <Label Content="Decenter Y [lens units]"/>
+                    <TextBox Text="{Binding AddOnDecenterY}"/>
+                    <Label Content="Tilt X [deg]"/>
+                    <TextBox Text="{Binding AddOnTiltX}"/>
+                    <Label Content="Tilt Y [deg]"/>
+                    <TextBox Text="{Binding AddOnTiltY}"/>
+                    <Label Content="Tilt Z [deg]"/>
+                    <TextBox Text="{Binding AddOnTiltZ}"/>
+                    <Label Content="Ignore this add-on"/>
+                    <CheckBox IsChecked="{Binding AddOnIgnored}"/>
+                    <Label Content="Comment"/>
+                    <TextBox Text="{Binding AddOnComment}"/>
+                </controls:FormGrid>
+            </DockPanel>
+        </Expander>
+
         <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Margin="0,2,0,0">

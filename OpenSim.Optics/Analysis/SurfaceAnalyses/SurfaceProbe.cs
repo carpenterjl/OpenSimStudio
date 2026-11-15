@@ -78,7 +78,10 @@ public sealed class SurfaceProbe
         if (surface.Shape is not null && !(differenceStep > 0 && double.IsFinite(differenceStep)))
             throw new ArgumentOutOfRangeException(nameof(differenceStep), differenceStep,
                 "The difference step for the second derivatives must be positive and finite.");
-        Surface = surface;
+        Surface = OpenSim.Optics.Sequential.Composite.CompositeSurfaces.WithEffectiveShape(surface);   // OP-32: the composite sum, as OpticStudio's sag analyses show by default
+        if (Surface.Shape is not null && !(differenceStep > 0 && double.IsFinite(differenceStep)))
+            throw new ArgumentOutOfRangeException(nameof(differenceStep), differenceStep,
+                "The difference step for the second derivatives must be positive and finite.");
         DifferenceStep = differenceStep;
     }
 

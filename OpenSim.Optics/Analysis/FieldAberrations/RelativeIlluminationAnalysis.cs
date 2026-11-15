@@ -161,7 +161,8 @@ public static class RelativeIllumination
                     var (vx, vy) = launcher.VignettedPupil(hx, hy, px, py);
                     double amplitude = apodization(Math.Sqrt(vx * vx + vy * vy));
                     var d = ray.Direction;
-                    var normal = image.Shape is { } shape ? shape.Normal(ray.Position, image) : ConicIntersection.Normal(ray.Position, image.Curvature, image.Conic);
+                    // OP-32: composite add-ons
+                    var normal = OpenSim.Optics.Sequential.Composite.CompositeSurfaces.EffectiveShape(image) is { } shape ? shape.Normal(ray.Position, image) : ConicIntersection.Normal(ray.Position, image.Curvature, image.Conic);
                     double obliquity = Math.Abs(Vector3D.Dot(d, normal)) / Math.Abs(d.Z);
                     var (lx, mx) = Derivative(trace, launcher, hx, hy, px, py, true, d, unapertured, who, wl);
                     var (ly, my) = Derivative(trace, launcher, hx, hy, px, py, false, d, unapertured, who, wl);

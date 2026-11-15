@@ -36,6 +36,9 @@ public static class ScaleLens
         for (int j = a; j <= b; j++)
             if (!SavedSurfaces.IsStandard(surfaces[j]) && SurfaceTypes.Find(surfaces[j].Type) is null)
                 throw new ArgumentException($"Scale Lens: surface {j} is a '{surfaces[j].Type}' surface, a type whose parameters' units this build does not know; scale it by hand.");
+        for (int j = a; j <= b; j++)   // OP-32: the same for a composite add-on's type
+            if (surfaces[j].AddOns?.FirstOrDefault(x => x is not null && !string.IsNullOrEmpty(x.Type) && x.Type != SavedSurfaces.StandardType && SurfaceTypes.Find(x.Type) is null) is { } unknown)
+                throw new ArgumentException($"Scale Lens: surface {j} has a composite add-on of type '{unknown.Type}', a type whose parameters' units this build does not know; scale it by hand.");
         return Scaled(surfaces, factor, a, b, out _);
     }
 
@@ -78,6 +81,7 @@ public static class ScaleLens
                     Sag = g.Sag?.Select(v => v * factor).ToList(),
                     Cross = g.Cross?.Select(v => v / factor).ToList(),
                 } : s.GridSag,
+                AddOns = s.AddOns?.Select(x => x is null ? x! : ScaleAddOn(x, factor, scaleGrids, j, skipped)).ToList(),   // OP-32
             };
             solves += s.Flags?.Count(f => SurfaceFlags.IsKind(f, SavedSurfaces.SolveFlag) && f.SolveParameters is { Count: > 0 }) ?? 0;
         }
@@ -85,6 +89,37 @@ public static class ScaleLens
         var notes = new List<string> { FormattableString.Invariant($"Surfaces {a} to {b} scaled by {factor:G10}.") };
         if (solves > 0) notes.Add($"{solves} solve{(solves == 1 ? "" : "s")} kept with unscaled parameters; check them.");
         return new LensEditResult(result, notes);
+    }
+
+    // OP-32
+    /// <summary>A composite add-on scaled as a surface is: radius, semi-diameter and decenters
+    /// by the factor, a registered type's parameters by their units, a grid as the surface's
+    /// (tilts are angles and stay). An unregistered type's parameters are left, and its base
+    /// surface's number goes in <paramref name="skipped"/>.</summary>
+    private static OpticsCompositeAddOnSettings ScaleAddOn(OpticsCompositeAddOnSettings x, double factor, bool scaleGrids, int surface, List<int> skipped)
+    {
+        var layout = SurfaceTypes.Find(x.Type);
+        bool standard = string.IsNullOrEmpty(x.Type) || x.Type == SavedSurfaces.StandardType;
+        if (layout is null && !standard && (x.Parameters is { Count: > 0 } || x.ExtraData is { Count: > 0 }) && !skipped.Contains(surface)) skipped.Add(surface);
+        double ParameterFactor(int number) => layout?.Parameter(number) is { } info && !info.IsInteger ? Power(factor, info.LengthPower) : 1;
+        List<OpticsSurfaceParameterSettings>? Each(List<OpticsSurfaceParameterSettings>? list) =>
+            layout is null ? list : list?.Select(p => p with { Value = p.Value * ParameterFactor(p.Number) }).ToList();
+        return x with
+        {
+            Radius = x.Radius * factor,
+            SemiDiameter = x.SemiDiameter * factor,
+            DecenterX = x.DecenterX * factor,
+            DecenterY = x.DecenterY * factor,
+            Parameters = Each(x.Parameters),
+            ExtraData = Each(x.ExtraData),
+            GridSag = x.GridSag is { } g && scaleGrids ? g with
+            {
+                DeltaX = g.DeltaX * factor, DeltaY = g.DeltaY * factor,
+                DecenterX = g.DecenterX * factor, DecenterY = g.DecenterY * factor,
+                Sag = g.Sag?.Select(v => v * factor).ToList(),
+                Cross = g.Cross?.Select(v => v / factor).ToList(),
+            } : x.GridSag,
+        };
     }
 
     /// <summary>factor^power by repeated multiplication (factor^0 = 1 exactly).</summary>

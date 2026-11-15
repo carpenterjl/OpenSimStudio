@@ -50,6 +50,8 @@ public sealed class MultiConfigOperandTests
                         new() { Column = SavedSurfaces.ThicknessColumn, Kind = SavedSurfaces.SolveFlag, Solve = "Marginal ray height", SolveParameters = new() { 0, 0 } },
                         new() { Column = SavedSurfaces.ParameterColumn(2), Kind = SavedSurfaces.PickupFlag, PickupSurface = 1, PickupScale = 1 },
                     },
+                    // OP-32: one composite add-on for CSDX–CSTZ.
+                    AddOns = new() { new() { Type = "Even Asphere", Parameters = new() { new() { Number = 2, Value = 2e-6 } }, DecenterX = 0.25, TiltY = 1 } },
                 },
                 new() { Type = SurfaceTypes.CoordinateBreak, CoordinateReturn = new() { Mode = "None", Surface = 1 } },
                 new(),
@@ -73,6 +75,12 @@ public sealed class MultiConfigOperandTests
         yield return N("TCEX", 1, 0, 8.25);
         yield return T("COTN", 1, "MGF2");
         yield return T("MCOM", 1, "rear");
+        // OP-32: composite add-on 1 of surface 2.
+        yield return N("CSDX", 2, 1, 0.5);
+        yield return N("CSDY", 2, 1, -0.75);
+        yield return N("CSTX", 2, 1, 2.5);
+        yield return N("CSTY", 2, 1, -3);
+        yield return N("CSTZ", 2, 1, 45);
         yield return N("PRAM", 2, 3, 2.5e-7);
         for (int k = 1; k <= 8; k++) yield return N("PAR" + k, 2, 0, k * 0.125);
         yield return N("MIND", 2, 0, 1.7);
@@ -174,7 +182,7 @@ public sealed class MultiConfigOperandTests
     {
         Assert.Equal(116, MultiConfigOperands.All.Count);
         Assert.Equal(MultiConfigOperands.All.Count, MultiConfigOperands.All.Select(o => o.Code).Distinct().Count());
-        foreach (var code in new[] { "AICN", "CPCN", "CSDX", "CSTZ", "FCMM", "GCRS", "GPEX", "GPEY", "GQPO", "HLGV", "IGTO", "MCHI",
+        foreach (var code in new[] { "AICN", "CPCN", "FCMM", "GCRS", "GPEX", "GPEY", "GQPO", "HLGV", "IGTO", "MCHI",
                                      "NCOM", "NCOT", "NGLS", "NPAR", "NPOS", "NPRO", "OPDR", "PXAR", "UDAF" })
             Assert.False(MultiConfigOperands.Find(code)!.IsSupported, code);
     }
@@ -240,6 +248,8 @@ public sealed class MultiConfigOperandTests
     [InlineData("TSP1", 1, 0)]      // surface 1's thickness has no solve
     [InlineData("APDX", 2, 0)]      // surface 2 has no aperture
     [InlineData("STPS", 0, 0)]      // the stop cannot be the object
+    [InlineData("CSDX", 2, 2)]      // OP-32: surface 2 has one composite add-on
+    [InlineData("CSTZ", 1, 1)]      // OP-32: surface 1 has none
     public void AMissingTarget_FailsNamingIt(string code, int a, int b)
     {
         var ex = Assert.Throws<ArgumentException>(() => MultiConfigOperands.Find(code)!.Set(Fixture(), a, b, 0, MultiConfigValue.Of(0)));
