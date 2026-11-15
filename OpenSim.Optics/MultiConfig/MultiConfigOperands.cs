@@ -71,7 +71,7 @@ public static class MultiConfigOperands
         Unsupported("GPEY", "Obsolete", MultiConfigValueKind.Number, None, "obsolete in OpticStudio; the help gives it no meaning.");
         Unsupported("GQPO", "Gaussian quadrature obscuration of the default merit function", MultiConfigValueKind.Number, None, "the default merit function's pupil sampling is not saved with the system (OP-54).");
         Unsupported("HLGV", "Hologram construction-file variable", MultiConfigValueKind.Number, new[] { "Surface", "File", "Variable" }, "the Optically Fabricated Hologram surface is not built.");
-        Unsupported("IGTO", "Ignore tolerance operands from line to line", MultiConfigValueKind.Integer, new[] { "First operand", "Last operand" }, "tolerance operands are not built (OP-63).");
+        Unsupported("IGTO", "Ignore tolerance operands from line to line", MultiConfigValueKind.Integer, new[] { "First operand", "Last operand" }, "the tolerance analyses that would read it are not built (OP-63 builds the operands only).");
         Unsupported("MCHI", "Huygens integral method", MultiConfigValueKind.Integer, None, "the Huygens integral method is not part of this build's saved system data.");
         Unsupported("NCOM", "Non-sequential object comment", MultiConfigValueKind.Text, new[] { "Surface", "Object" }, nsc);
         Unsupported("NCOT", "Non-sequential object face coating", MultiConfigValueKind.Text, new[] { "Surface", "Object", "Face" }, nsc);

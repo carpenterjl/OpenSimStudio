@@ -190,7 +190,7 @@ public static class MultiConfiguration
         return Enumerable.Range(0, rows).Select(i => (e.Values[i, configuration - 1], e.Errors[i, configuration - 1])).ToArray();
     }
 
-    /// <summary>The cells flagged Variable, row by row (OP-54's optimizer varies them).</summary>
+    /// <summary>The cells flagged Variable, row by row (OP-57's optimizer varies them).</summary>
     public static IReadOnlyList<MultiConfigCell> Variables(OpticsSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
