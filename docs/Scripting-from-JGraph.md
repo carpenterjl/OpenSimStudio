@@ -78,6 +78,112 @@ cold.FaceIds = faces;
 **Delegates.** Where a method takes `Action<string>` (the log) or `IProgress<T>`, pass a function
 handle (`@(s) disp(s)`) or `[]`.
 
+## Optics
+
+The optics model joins the surface (OP-98). A script works on the saved records the editors edit
+— `OpenSim.Core.Model.OpticsSettings` and its parts — and hands them, with a list of glass
+catalogs, to the engines, which build the lens from them as the application does. The worked
+script is [`examples/jgraph/optics_from_jgraph.m`](../examples/jgraph/optics_from_jgraph.m): it
+builds a fused-silica singlet, adds the default merit function to a focal-length row, optimises
+it, traces one ray, runs Quick Sensitivity on the two radii and plots the FFT MTF. It was run
+with `jgraph -batch` on 2026-11-14 against the Debug build of this commit and printed:
+
+```
+RESULT merit rows = 40, start merit = 4.65323
+RESULT merit 4.65323 -> 0.0282677 after 21 cycles (Converged)
+RESULT R1 = 56.0911 mm, R2 = -245.387 mm
+RESULT marginal ray of field 2: RAYE = 0, RAYV = 0
+RESULT nominal RMS spot radius = 0.0302453 mm
+RESULT tolerance row 1 (TRAD): change 7.13579e-05 at min, -6.92547e-05 at max
+RESULT tolerance row 2 (TRAD): change -3.61436e-06 at min, 3.63611e-06 at max
+RESULT Field 1 (0, 0°) T: MTF(0) = 1, min = 2.86042e-18, max = 1
+RESULT Field 1 (0, 0°) S: MTF(0) = 1, min = 4.97391e-18, max = 1
+RESULT Field 2 (0, 3°) T: MTF(0) = 1, min = 1.50864e-18, max = 1
+RESULT Field 2 (0, 3°) S: MTF(0) = 1, min = 3.33819e-18, max = 1
+RESULT Diffraction limit: MTF(0) = 1, min = 4.88386e-17, max = 1
+```
+
+and wrote the plot to `optics_from_jgraph_mtf.png` in the working folder. (The run used JGraph
+built from source on 2026-11-11, `JGraph.Cli/bin/Release/net8.0/jgraph.exe`; the JGraph 0.2.2
+installed under `C:\Program Files\JGraph` has no `NET` interop and stops at the first
+`NET.addAssembly`.) `ScriptingSurfaceTests.TheOpticsScript_ByDirectCall_BuildsOptimisesAndPlotsMtf`
+makes the same calls and checks that the merit falls, EFFL moves toward its target, the ray has no
+error code, every tolerance trial succeeds, and every MTF curve is 1 at zero frequency and stays in
+[0, 1]; the optimizer's numbers above are not asserted (its own gates pin it).
+
+### Loading
+
+```matlab
+NET.addAssembly([bin 'OpenSim.Core.dll']);
+NET.addAssembly([bin 'OpenSim.Optics.dll']);
+```
+
+`OpenSim.Optics.dll` sits next to the others in `OpenSim.Cli/bin/Debug/net8.0/`. Core goes first,
+for the reason given above.
+
+### Entry points
+
+`OpenSim.Optics.Scripting.OpticsScripting` (called `S` below) is a small facade over steps a script
+would otherwise repeat; everything else is the library's own public types.
+
+| Step | Call |
+|---|---|
+| A project's lens | `optics = S.Load(path)` — `SimProject.Optics` of a saved project; save with `ProjectSerializer().Save(project, path)` after setting `project.Optics` |
+| Glass catalogs | `S.Catalogs(optics)` — the user's library narrowed to the lens's active catalogs; or `OpenSim.Optics.Materials.GlassCatalogLibrary.BuiltInCatalogs` |
+| System data | `OpenSim.Core.Model.OpticsSystemSettings()`: `ApertureType`, `ApertureValue`, `Fields` (a `List<OpticsFieldSettings>`), `Wavelengths` (a `List<OpticsWavelengthSettings>`), `PrimaryWavelength`; named lines in `OpenSim.Optics.SpectralLines` (`F`, `LowerD`, `C`, …) |
+| Lens data | `OpticsSurfaceSettings()`: `Radius`, `Thickness`, `ThicknessIsInfinite`, `Material` (a catalog glass name) or `Index`, `IsStop`, `Flags` (a `List<OpticsCellFlagSettings>`: `Column`, `Kind` = `Variable` / `Solve` / `Pickup`, `Solve`, `SolveParameters`) |
+| Merit function | rows `OpenSim.Optics.Merit.MeritOperandRow.Of(code, int1, int2, target, weight, data)` into `MeritFunction(rows)`, saved with `MeritFunctionSettings.ToSettings`; the wizard: `optics = S.WithDefaultMerit(optics, catalogs, options)` (`options` a `DefaultMeritOptions`, or `[]`); evaluate: `S.EvaluateMerit(optics, catalogs)` (`.Value`, `.Rows`) |
+| Multi-configuration | `optics.MultiConfiguration` (`OpticsMultiConfigSettings`: `ConfigurationCount`, `CurrentConfiguration`, `Operands`); `OpenSim.Optics.MultiConfig.MultiConfiguration.SettingsFor(optics, k, catalogs)` is configuration k's record, `.WithValue` sets a cell |
+| Local optimizer (OP-57) | `opt = OpenSim.Optics.Optimization.LocalOptimizer.Run(optics, catalogs)` (optional `LocalOptimizationOptions`); `opt.StartMerit`, `opt.Merit`, `opt.Cycles`, `opt.Stop`, `opt.Optimized` (the record with the variables set) |
+| Any analysis by id | `S.AnalysisIds()` lists the ids; `s = S.AnalysisSettings('FftMtf')` gives the defaults to change; `r = S.Analyze(optics, catalogs, 'FftMtf', s)` (`s` may be `[]`) — `r.Text`, `r.Plots` (`LinePlot`: `Curves`, each with `Name`, `X`, `Y`; `AnalysisScatterPlot`; `AnalysisMapPlot`), `r.Assumptions` |
+| One ray | `S.TraceRay(optics, catalogs, hx, hy, px, py, wavelength)` — `.Path` (surface by surface, meters), `.Error` (OpticStudio's RAYE: 0, +n missed surface n, −n total internal reflection at n, −9999 not launched), `.Vignetted` (RAYV) |
+| Tolerance data | `OpenSim.Optics.Tolerancing.ToleranceOperandRow()` (`Code`, `Int1`, `Int2`, `Min`, `Max`) into `ToleranceTable(rows)`; the saved table: `ToleranceDataSettings.FromSettings(optics.Tolerances, notes)` |
+| Tolerancer (OP-64) | `ToleranceAnalysis.QuickSensitivity(optics, table, catalogs)` or `.Run(optics, table, catalogs, options)` (`ToleranceRunOptions`: `Mode`, `Criterion`, …) — `.Nominal`, `.Unit`, `.Rows` (each `.Row`, `.Code`, `.AtMin.Change`, `.AtMax.Change`), `.ReportLines()` |
+
+Not on the surface yet: **global optimization** (OP-58, Global Search and Hammer) and **Monte Carlo
+tolerancing** (OP-65), being built; the reflection test marks where their entry points will be
+pinned. docs/Optics-Conventions.md §47 gives the facade's rules.
+
+### What the interop needs (found 2026-11-14)
+
+- **Records.** The optics records are C# records with init-only setters; JGraph sets them with a
+  dot like any property (`front.Radius = 50`). A nullable number (`Radius`) reads back as a
+  `System.Nullable<Double>`: use `.Value`.
+- **Arrays and lists.** A property declared as a list may hold a .NET array at run time. Arrays
+  index from 1 with parentheses and count with `.Length` (`result.Plots(1)`, `eval.Rows.Length`);
+  lists index from 0 with `.Item` and count with `.Count` (`plot.Curves.Item(0)`). `double(x)`
+  turns a `System.Double[]` (a curve's `X` and `Y`) into a numeric vector.
+- **`params` arrays are not filled in.** `MeritOperandRow.Of` ends in `params double[] data`; pass
+  the six values (`[0 0 0 0 0 0]`) — called without them, the interop finds no matching method.
+  Optional parameters may be left out, as elsewhere.
+- **Lists of OpenSim types** come from `NET.createGeneric('System.Collections.Generic.List',
+  {'OpenSim.Core.Model.OpticsSurfaceSettings'}, n)`, as for the `List<int>` above.
+
+### Python (pythonnet)
+
+Python reaches the same assemblies through [pythonnet](https://pythonnet.github.io/) 3 on .NET 8;
+nothing in OpenSim is specific to it. This sketch has **not been run** (pythonnet is not installed
+where OP-98 was written):
+
+```python
+from pythonnet import load
+load("coreclr")                                    # .NET 8, not .NET Framework
+import clr, sys
+sys.path.append(r"D:\...\OpenSimStudio\OpenSim.Cli\bin\Debug\net8.0")
+clr.AddReference("OpenSim.Core")
+clr.AddReference("OpenSim.Optics")
+from OpenSim.Optics.Scripting import OpticsScripting as S
+from OpenSim.Optics.Optimization import LocalOptimizer
+
+optics = S.Load(r"C:\work\singlet.ossproj")        # a project saved with variables and a merit function
+catalogs = S.Catalogs(optics)
+opt = LocalOptimizer.Run(optics, catalogs)
+print(opt.StartMerit, "->", opt.Merit)
+mtf = S.Analyze(opt.Optimized, catalogs, "FftMtf", None)
+for curve in mtf.Plots[0].Curves:
+    print(curve.Name, list(curve.X)[:3], list(curve.Y)[:3])
+```
+
 ## Running headless
 
 `jgraph -batch "script.m"` runs a script with no window and exits; `-logfile run.log` tees the

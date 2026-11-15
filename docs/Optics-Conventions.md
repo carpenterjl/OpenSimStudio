@@ -234,7 +234,8 @@ surface's "before" values. Section 15 gives how the tracer applies them (OP-21).
 
 OpticStudio's older interfaces report a miss as the positive surface number, total internal
 reflection as the negative surface number, and vignetting as a separate surface number. The
-scripting item (OP-98) maps `RayStatus` and `FailedAtSurface` to those codes.
+scripting surface (OP-98, `OpticsScripting.TraceRay`) maps `RayStatus` and `FailedAtSurface` to
+those codes (section 47).
 
 ## 6. Optical path difference
 
@@ -333,7 +334,8 @@ single place in the code, so a correction is one line and its test.
    documentation), not from Zemax. Check: the sign of the OPD fan of a singlet with known
    spherical aberration. Planned with OP-35 and OP-102.
 3. **Error codes of the current scripting interface.** The positive/negative surface-number
-   rule is documented for the older interfaces only. Planned with OP-98.
+   rule is documented for the older interfaces only. OP-98 took it from the ZPL help (RAYTRACE,
+   RAYE and RAYV); item 43 lists what that page does not settle.
 4. **Dispersion formula 4 (Sellmeier 2).** The two readers above disagree on its second term:
    AGFFileReader has C4 λ²/(λ² − C5²), ZemaxGlass C4/(λ² − C5²). The code uses AGFFileReader's
    form (`DispersionFormulas.Evaluate`, marked unverified), and the AGF reader names every glass
@@ -1051,6 +1053,21 @@ single place in the code, so a correction is one line and its test.
       wavefront), encircled only, on the pupil grid.
     Check: a lens toleranced by OpticStudio in each mode with each compensator choice, its report's
     nominal, per-tolerance changes, RSS estimate and inverse limits compared with this program's.
+43. **Scripting ray error codes** (OP-98, section 47). The ZPL help page "RAYTRACE" (2025 R2,
+    saved under `plans/sources/optics/op-98-help/`) gives RAYE: zero, the surface missed
+    (positive), the surface of total internal reflection (negative), −9999 when the ray cannot be
+    launched; and RAYV: the surface of vignetting, or zero. These are this program's readings
+    where the page is silent:
+    - *No convergence and evanescent orders.* The page names no code for an iterative
+      intersection that does not converge or a diffraction order that does not propagate; both
+      are reported as RAYE = +n (the ray found no intercept at surface n).
+    - *Cannot be launched* is read as the ray aimer failing to converge (`RayLauncher.LaunchAimed`
+      reporting a failure); an object in the entrance-pupil plane throws instead, as the Single
+      Ray Trace does.
+    - *Vignetting with RAYE.* A vignetted ray has RAYE = 0 and RAYV = n; the page keeps the two
+      apart ("Values returned for surfaces past the surface of vignetting may not be accurate").
+    Check: OpticStudio's RAYTRACE on a lens built to miss, totally reflect and vignette one ray
+    each, and one whose aim fails, RAYE and RAYV compared.
 
 ## 11. Paraxial optics
 
@@ -3621,3 +3638,46 @@ command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics
   (OP-65) exit 1 saying so; each has a one-arm hook (`// OP-58 hook`, `// OP-65 hook`) in
   `CliRunner.Optics.cs`. Multi-configuration cells as sweep targets, lens files (`.osslens`) as
   input, and CSV of the analyses' tables (their text is written) are not built.
+
+## 47. Scripting surface
+
+`OpenSim.Optics/Scripting/OpticsScripting.cs` (OP-98) is the small facade a script calls besides
+the library's own public types; `docs/Scripting-from-JGraph.md` ("Optics") lists the whole
+surface and `OpenSim.Tests/Cli/ScriptingSurfaceTests.cs` pins it by reflection. A script works on
+the saved records (`OpticsSettings` and its parts), the same data the editors edit; the engines
+build the lens from them through `ProjectLens` as the application does.
+
+- **Load** returns `SimProject.Optics` of a saved project; a project without one is refused.
+- **Catalogs** loads the user's glass library (`GlassCatalogLibrary`: the built-in catalogs and
+  the catalog folder) and narrows it to the record's active catalogs
+  (`GlassLookup.ActiveCatalogs`); active names of which none is loaded are refused.
+  `GlassCatalogLibrary.BuiltInCatalogs` alone gives a result independent of the user's folder.
+- **Analyze** runs any registry analysis (`OpticsAnalysisRegistry.CreateDefault`) by its saved id
+  on an `OpticsAnalysisContext` of the record and the catalogs, with the given settings record or
+  the analysis's defaults; the current configuration is used, as every analysis does (§24).
+  `AnalysisIds` lists the ids; `AnalysisSettings` gives a defaults record to change. An unknown id
+  is refused, naming where the list is.
+- **WithDefaultMerit** runs the Optimization Wizard (§40) on the record's configurations and
+  inserts the rows at Start At (null: the row after DMFS, else the end) with
+  `DefaultMeritWizard.Insert`, as the Merit Function Editor does. **EvaluateMerit** evaluates the
+  saved merit function over every configuration (`ProjectMeritConfigurations`). Both refuse a
+  saved row whose operand this version does not know, rather than reading it as OOFF as the
+  editor's load does.
+- **TraceRay** traces one ray of normalised field and pupil at a wavelength row (0 the primary)
+  through the current configuration, as the Single Ray Trace analysis does (automatic
+  semi-diameters sized first when a floating aperture needs them), and maps the ray's status to
+  OpticStudio's ZPL codes (help, "RAYTRACE"): RAYE = 0 for a ray that reached the image or was
+  vignetted, +n for a miss at surface n, −n for total internal reflection at n, −9999 when the
+  aimer fails; RAYV = n for vignetting at n, else 0. No convergence and evanescent orders give
+  +n (§10 item 43). The path stays in meters (§1).
+- **Optimization and tolerancing** are called directly: `LocalOptimizer.Run` (§35),
+  `ToleranceAnalysis.Run` and `QuickSensitivity` (§42) on a `ToleranceTable`
+  (`ToleranceDataSettings.FromSettings` reads the saved one).
+- **Records from a script.** The settings records have init-only setters. JGraph's interop and
+  pythonnet set properties by reflection, which writes init-only setters, so a script builds a
+  record with `r = Type(); r.Property = value` (checked under JGraph on 2026-11-14; pythonnet not
+  run). A record is then changed in place, which C# code never does; a script should build a
+  record before handing it to an engine and not change it while one holds it.
+- **Not on the surface yet.** Global optimization (OP-58) and Monte Carlo tolerancing (OP-65); the
+  reflection test marks where their entry points go. The non-sequential model, macro language
+  (OP-99) and plug-ins (OP-100) are not built.

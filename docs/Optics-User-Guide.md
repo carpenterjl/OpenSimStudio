@@ -1361,6 +1361,20 @@ Not built: global optimization and Hammer (`--global`, `--hammer`) and Monte Car
 (`--montecarlo`), which say so; multi-configuration cells as sweep targets; lens files
 (`.osslens`) as input. The definitions are in docs/Optics-Conventions.md §46.
 
+## Scripting
+
+The optics model can be driven from a script outside the program: JGraph (MATLAB-style) or
+Python through pythonnet load OpenSim's libraries and call them directly. A script can load a
+saved project's lens or build one, write the default merit function, run the local optimizer,
+run any analysis by its id and read its plots and text, trace one ray (with OpticStudio's RAYE and
+RAYV error codes), and run the tolerancer. docs/Scripting-from-JGraph.md lists the calls and how
+the interop wants them; `examples/jgraph/optics_from_jgraph.m` builds a singlet, optimises it and
+plots its MTF. A script works on its own copy of the lens: to see the result in the program, save
+it into a project (`project.Optics = …`, then the project serializer's Save) and open that.
+
+Not built: global optimization and Monte Carlo tolerancing from a script; the macro language
+(ZPL); plug-ins.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
