@@ -1053,21 +1053,6 @@ single place in the code, so a correction is one line and its test.
       wavefront), encircled only, on the pupil grid.
     Check: a lens toleranced by OpticStudio in each mode with each compensator choice, its report's
     nominal, per-tolerance changes, RSS estimate and inverse limits compared with this program's.
-43. **Scripting ray error codes** (OP-98, section 47). The ZPL help page "RAYTRACE" (2025 R2,
-    saved under `plans/sources/optics/op-98-help/`) gives RAYE: zero, the surface missed
-    (positive), the surface of total internal reflection (negative), −9999 when the ray cannot be
-    launched; and RAYV: the surface of vignetting, or zero. These are this program's readings
-    where the page is silent:
-    - *No convergence and evanescent orders.* The page names no code for an iterative
-      intersection that does not converge or a diffraction order that does not propagate; both
-      are reported as RAYE = +n (the ray found no intercept at surface n).
-    - *Cannot be launched* is read as the ray aimer failing to converge (`RayLauncher.LaunchAimed`
-      reporting a failure); an object in the entrance-pupil plane throws instead, as the Single
-      Ray Trace does.
-    - *Vignetting with RAYE.* A vignetted ray has RAYE = 0 and RAYV = n; the page keeps the two
-      apart ("Values returned for surfaces past the surface of vignetting may not be accurate").
-    Check: OpticStudio's RAYTRACE on a lens built to miss, totally reflect and vignette one ray
-    each, and one whose aim fails, RAYE and RAYV compared.
 
 39. **Global optimization readings** (OP-58, section 43). Section 43 reads OpticStudio's help
     pages for the two dialogs' settings and behaviour; the algorithms are this program's own and
@@ -1089,6 +1074,26 @@ single place in the code, so a correction is one line and its test.
     Check: none possible beyond the settings, since the algorithms differ; a common benchmark
     (the same triplet or double-Gauss start and merit function) run in both, comparing the best
     merit reached and the forms found.
+
+40. **Interactive adjustment readings** (OP-60, section 44). Read from the help pages' wording
+    ("Quick Focus", "Quick Adjust", "Slider", "Visual Optimizer"); nothing is compared with
+    OpticStudio's output, and these are this program's readings where the help is short:
+    - *Combining fields.* Both Quick tools compute "a polychromatic average over the field, using
+      the defined fields, wavelengths, and weights"; here the fields' RMS values are combined as
+      √(Σ w v² / Σ w), the merit function's form (as §42 does for tolerancing).
+    - *Sampling.* The help gives none; here Gaussian quadrature, 6 rings by default (the RMS
+      analyses' default), 1 to 20.
+    - *Quick Adjust's criteria.* The help names "best transverse or angular ray focus" and says
+      every criterion uses the centroid, but lists no choices; radial, x and y of each are this
+      program's, by analogy with Quick Focus. "Angular" is read as the spread of the direction
+      cosines after refraction into the evaluation surface.
+    - *Quick Focus in afocal image space.* The help lists four criteria at the image surface and
+      no angular one; the thickness before the image does not change ray angles, so afocal
+      systems are refused and pointed to Quick Adjust's angular criteria.
+    - *Slider and Visual Optimizer ranges.* The help gives no default range; here ±10 % of the
+      value (±1, or ±0.01 per lens unit for a curvature, when it is zero).
+    Check: Quick Focus and Quick Adjust on a lens in OpticStudio with each criterion, the
+    adjusted thickness or radius compared with this program's.
 
 41. **Monte Carlo readings** (OP-65). Section 45 follows OpticStudio's help pages; nothing is
     compared with OpticStudio's Monte Carlo output, and these are this program's readings where
@@ -1114,25 +1119,21 @@ single place in the code, so a correction is one line and its test.
     Check: a lens with a seeded Monte Carlo run in OpticStudio, the spread of its criterion (mean,
     standard deviation) compared with this program's over the same tolerances and statistics.
 
-40. **Interactive adjustment readings** (OP-60, section 44). Read from the help pages' wording
-    ("Quick Focus", "Quick Adjust", "Slider", "Visual Optimizer"); nothing is compared with
-    OpticStudio's output, and these are this program's readings where the help is short:
-    - *Combining fields.* Both Quick tools compute "a polychromatic average over the field, using
-      the defined fields, wavelengths, and weights"; here the fields' RMS values are combined as
-      √(Σ w v² / Σ w), the merit function's form (as §42 does for tolerancing).
-    - *Sampling.* The help gives none; here Gaussian quadrature, 6 rings by default (the RMS
-      analyses' default), 1 to 20.
-    - *Quick Adjust's criteria.* The help names "best transverse or angular ray focus" and says
-      every criterion uses the centroid, but lists no choices; radial, x and y of each are this
-      program's, by analogy with Quick Focus. "Angular" is read as the spread of the direction
-      cosines after refraction into the evaluation surface.
-    - *Quick Focus in afocal image space.* The help lists four criteria at the image surface and
-      no angular one; the thickness before the image does not change ray angles, so afocal
-      systems are refused and pointed to Quick Adjust's angular criteria.
-    - *Slider and Visual Optimizer ranges.* The help gives no default range; here ±10 % of the
-      value (±1, or ±0.01 per lens unit for a curvature, when it is zero).
-    Check: Quick Focus and Quick Adjust on a lens in OpticStudio with each criterion, the
-    adjusted thickness or radius compared with this program's.
+43. **Scripting ray error codes** (OP-98, section 47). The ZPL help page "RAYTRACE" (2025 R2,
+    saved under `plans/sources/optics/op-98-help/`) gives RAYE: zero, the surface missed
+    (positive), the surface of total internal reflection (negative), −9999 when the ray cannot be
+    launched; and RAYV: the surface of vignetting, or zero. These are this program's readings
+    where the page is silent:
+    - *No convergence and evanescent orders.* The page names no code for an iterative
+      intersection that does not converge or a diffraction order that does not propagate; both
+      are reported as RAYE = +n (the ray found no intercept at surface n).
+    - *Cannot be launched* is read as the ray aimer failing to converge (`RayLauncher.LaunchAimed`
+      reporting a failure); an object in the entrance-pupil plane throws instead, as the Single
+      Ray Trace does.
+    - *Vignetting with RAYE.* A vignetted ray has RAYE = 0 and RAYV = n; the page keeps the two
+      apart ("Values returned for surfaces past the surface of vignetting may not be accurate").
+    Check: OpticStudio's RAYTRACE on a lens built to miss, totally reflect and vignette one ray
+    each, and one whose aim fails, RAYE and RAYV compared.
 
 ## 11. Paraxial optics
 
@@ -3652,6 +3653,192 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
   .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
   CEDV (deprecated) compensators.
 
+## 43. Global optimization
+
+`OpenSim.Optics/Optimization/Global/` (OP-58) searches for better design forms than the local
+optimizer reaches. The help read is OpticStudio 2025 R2's, saved under
+`plans/sources/optics/op-58-help/` (Global Optimizer, Hammer Optimizer, Global Optimization,
+Global Optimization Capabilites of OpticStudio, The Global Optimization Algorithm, The Hammer
+Optimization algorithm, Suggestions for Using Global Optimizers). OpticStudio's two algorithms
+are unpublished; the algorithms below are this program's own, chosen from published methods,
+and are not OpticStudio's.
+
+- **Global search** (`GlobalSearch`). Differential evolution DE/rand/1/bin (R. Storn and K. Price,
+  "Differential Evolution – A Simple and Efficient Heuristic for Global Optimization over
+  Continuous Spaces", J. Global Optim. 11, 341–359, 1997, eqs. 1–4; copy under
+  `op-58-help/storn-price-de.pdf`) over the variables of `LensVariables`. Population NP (default
+  max(8, 2D), at least 4); the first population uniform in the ranges, member 0 the start; for
+  target i the mutant x_r1 + F(x_r2 − x_r3), r1, r2, r3 distinct and ≠ i, clipped into the ranges;
+  binomial crossover with CR, at least one coordinate from the mutant; F = 0.5 and CR = 0.9 by the
+  paper's §4. Each trial vector is locally optimized by `LocalOptimizer` (§35) and the
+  population holds the optimized designs: the evolution runs on basin hopping's transformed
+  surface Ẽ(X) = min{E(X)} (D. J. Wales and J. P. K. Doye, J. Phys. Chem. A 101, 5111, 1997;
+  arXiv:cond-mat/9803344, eq. 2; `op-58-help/wales-doye-1997.pdf`). Generations after the first
+  population: default 10. Global does not change glasses.
+- **Hammer search** (`HammerSearch`). Monotonic basin hopping (Wales and Doye 1997): the start
+  is re-optimized (trial 0); each round runs K trials (default 8) from the current design; a trial
+  either moves every variable by a uniform number in [−1, 1] times the step (default 0.1 of the
+  variable's range) or, with surfaces flagged Substitute and with probability 0.5 (1 when there
+  are no variables), replaces one of their glasses, chosen uniformly, by a candidate chosen
+  uniformly from OP-59's `GlassSubstitutionTemplate.Candidates` (§41) through
+  `GlassVariables.WithGlass`; then the design is re-optimized. The round's best trial replaces the
+  current design when it is better by more than 1e-9 relative; Wales and Doye's Metropolis test
+  at a finite temperature is replaced by accepting only improvements. While the current design
+  misses its exact constraints a glass trial starts from the start's variables, as §41's search
+  does. Model-glass variables move like any variable; a surface flagged Substitute may not also
+  vary its model glass. Default 25 rounds.
+- **Ranges** (`GlobalTrials.DefaultRanges`, this program's choices; per variable through
+  `Ranges`). Curvature ±3/|EFL| of the start (configuration 1, lens units) or ±the curvature
+  limit given, widened to contain the start's value; thickness 0.5 to 1.5 times its value (0 to
+  |EFL|/10 when zero); a model glass's nd with n − 1 from 0.5 to 1.5 times; anything else ±50 % of
+  its value, or ±1 when zero. Ranges bound only the drawing; the local optimizer may leave them.
+- **Ranking and the best list** (`GlobalDesign.Compare`, `GlobalBestList`). A design that meets
+  every negative-weight row (|V − T| ≤ the local optimizer's tolerance × max(1, |T|)) ranks above
+  one that does not (the rule of §41), then the lower merit, then the earlier trial. The list
+  keeps `SaveCount` designs (default 10); a design of the same form as one listed (§10 item 39)
+  replaces it when better and is dropped otherwise. A trial that cannot be built or evaluated is
+  counted and named in the log (the first 20), never listed; in the Global search it never
+  replaces its target, and a failed member of the first population keeps its unoptimized vector
+  with an infinite merit.
+- **Local optimization inside.** The caller's algorithm and cycles (infinite runs as
+  automatic), scales and constraint settings; one thread per trial; an evaluation limit per
+  trial (default 2000); solves and pickups re-evaluated as in §35.
+- **Determinism.** Trial t draws only from `SplitMix64.ForStream(seed, t)` (Global: t = generation
+  × NP + member; Hammer: t − 1 = (round − 1)K + k); the trials of a generation or round run in
+  `ParallelSlots` from the previous state, and selection and the best list take them in index
+  order. A seed and settings reproduce a run bitwise at any thread count. The time limit is
+  checked between generations or rounds, so a timed run equals an untimed one with as many.
+- **Stop** keeps the designs finished before it; a trial cut off by Stop is discarded.
+- **Not built.** OpticStudio's GLOPT and _HAMMER files, Resume, the Global search's periodic
+  return to listed designs, Auto Update of open windows during a run, glass changes in the
+  Global search, saved search settings, a finite-temperature (Metropolis) Hammer.
+
+## 44. Interactive adjustment tools
+
+`OpenSim.Optics/Optimization/Interactive/` (OP-60) holds Quick Focus and Quick Adjust; the
+Slider and the Visual Optimizer are app view models (`OpenSim.App/ViewModels/OpticsSliderViewModel.cs`).
+The definitions were read from OpticStudio's 2025 R2 help pages "Quick Focus", "Quick Adjust",
+"Slider", "Visual Optimizer" and "Manual Adjustment Group", saved under
+`plans/sources/optics/op-60-help/`.
+
+- **Quick Focus** (`QuickFocus`). The help: "This feature adjusts the thickness of the surface
+  prior to the image surface. The thickness chosen is that which minimizes the RMS aberration."
+  Criteria (help, Settings): spot size radial, spot size x only, spot size y only, wavefront
+  error; Use Centroid references them to the centroid instead of the chief ray. One field's
+  value is OP-40's RMS (§34, `RmsCore.Evaluate`, the engine of RMS vs Focus) at the field row,
+  over every wavelength with its weight (polychromatic when there are several), the trial shift
+  added to the thickness before the image (as RMS vs Focus adds it). Fields with a positive
+  weight combine as √(Σ w_f v_f² / Σ w_f); a single field is its own value, so on a one-field
+  lens the criterion is exactly the RMS vs Focus curve. Afocal image space is refused.
+- **Quick Adjust** (`QuickAdjust`). The help: "adjusts any radius or thickness to minimize the
+  RMS aberration at any subsequent surface"; "All criterion use the image centroid for a
+  reference"; angular data are "computed after refraction into the specified evaluation
+  surface". The rays are OP-34's (`RaySampler`: field rows and wavelengths with a positive
+  weight, the quadrature's pupil points, read at the evaluation surface in its local frame).
+  Spot: RMS of the positions about their centroid, radial, x or y; angular: the same of the
+  direction cosines (L, M) after the surface, shown in milliradians (cosine × 1000).
+  Wavelengths pool with weight pupil weight × wavelength weight; fields combine as for Quick
+  Focus. A radius is searched as its curvature (it may pass through a plane); the evaluation
+  surface must come after the adjusted one. Floating semi-diameters are sized again at every
+  trial.
+- **Sampling.** Gaussian quadrature (§34), 1 to 20 rings with 4 arms each, default 6; a trial
+  where any ray fails has no value.
+- **Search** (`InteractiveSearch`). The variable is x₀ + t·h, h = 1 % of the lens's length
+  scale L (the sum of its finite thicknesses from surface 1 to the one before the image; 1 mm
+  when zero) for a thickness, 1 % of max(|c|, 1/L) for a curvature.
+  `BrentMinimizer.LineSearch` takes unit steps either way from t = 0, widens the bracket by the
+  golden ratio while the criterion falls, and runs Brent's localmin on the bracket to
+  tol = 1.49e-8·|t| + 1e-11; the minimum of a unimodal criterion lies within 2·tol·h of the
+  answer (`PositionTolerance`). A trial without a value counts as +∞ (a wall); the start must
+  have a value; a search that does not improve leaves the cell unchanged and says so.
+- **On the project record** (`QuickFocus.Run`, `QuickAdjust.Run`). The lens is the current
+  configuration's solved lens. The adjusted cell is refused when a solve or pickup sets it, when
+  the multi-configuration table sets it in the current configuration (the new value would be
+  overwritten), and in non-sequential mode. The new value is written into the saved cell in lens
+  units (thickness: the old value plus the shift; radius: 1/curvature, a plane at 0). A change
+  that moves other cells through their solves (a pickup of the adjusted cell, say) is not
+  searched with those solves re-evaluated: the search runs on the solved lens with only the
+  adjusted cell changed.
+- **Slider** (help, "Slider"). Drags one surface value (radius, curvature, thickness, conic,
+  Par 1–8) between a start and a stop. "A copy is made of the data to be modified": each move
+  publishes the editors' record with that value to the session (`ProjectSession.PublishOptics`)
+  without changing the editors, so every analysis window with auto-update on recomputes; Save
+  (and Keep and Exit) writes the value through the Lens Data Editor as one undoable edit; Exit,
+  closing the window or choosing another surface or parameter publishes the editors' record
+  again. Animate steps the value by 1/50 of the range every 400 ms, wrapping at the stop.
+- **Visual Optimizer** (help, "Visual Optimizer"). One to eight sliders ("between 1 and 8") on
+  the lens's variables (`LensVariables.Find`; "the variable status of each value must be set
+  prior"), radius variables as curvatures ("radius variables are always varied as
+  curvatures"), moved together, published and kept as the Slider's are (a multi-configuration
+  variable is written through the Multi-Configuration Editor).
+- **Update budget.** The analysis windows' debounce, `OpticsAnalysesViewModel.DefaultDebounce`
+  = 250 ms (OP-9's value, named by OP-60; this program's own, not OpticStudio's): a move issues
+  each window's request at once, the compute starts after 250 ms without a further move, and
+  moves inside it coalesce into one compute of the last value; a compute overtaken by a move is
+  cancelled. OpticStudio's Visual Optimizer instead waits for each update to finish ("will not
+  allow another update to be performed until the current update is completed").
+- **Not built.** NSC Quick Focus and every non-sequential part (no non-sequential mode yet); the
+  Slider's system, configuration and NSC data types (aperture, fields, wavelengths,
+  apodization, temperature, pressure, multi-configuration operands) and its Window choice
+  (every open window with auto-update on updates); the Visual Optimizer's Window choice and
+  Animate; Quick Focus's angular form for afocal systems; a wavefront criterion in Quick Adjust
+  (the help names none).
+
+## 45. Monte Carlo tolerancing
+
+`OpenSim.Optics/Tolerancing/MonteCarloAnalysis.cs` and `MonteCarloDistributions.cs` (OP-65).
+Sources: OpticStudio 2025 R2 help, "Monte Carlo Analysis", "Normal Statistical Distribution",
+"Uniform Statistical Distribution", "Parabolic Statistical Distribution" (and its equation image),
+"User Defined Statistical Distribution", "Discussion of Monte Carlo Analysis Method", "Histogram",
+"Yield", "Tolerance Data Viewer" (saved under `plans/sources/optics/op-65-help/`), "STAT",
+"SEED", "Nesting Rules for Monte Carlo Analysis", "TIRR" (`op-63-help/`) and "Tolerancing", the
+dialog's Monte Carlo tab (`op-64-help/Tolerancing.txt`).
+
+- **Set-up.** The criterion, compensators, fields and sampling are OP-64's (§42), built by the
+  same code (`ToleranceAnalysis.Prepare`); the compensated nominal lens gives N.
+- **Distributions.** Offsets from the midpoint of Min and Max, Δ = (Max − Min)/2. Normal: σ = Δ/n,
+  n from the STAT row's Int2 (1 to 10) or the run's default 2, truncated at ±Δ. Uniform: equal
+  probability over ±Δ. Parabolic: p(x) = 3x²/(2Δ³), drawn as Δ·∛(2u − 1). User defined: the .UDD
+  table named in the STAT row's comment (two columns X, T; X from 0 to 1, first 0, last 1),
+  mapped onto [Min, Max]. Rows no STAT row governs use the run's statistics (normal, uniform or
+  parabolic; default normal).
+- **A trial.** Every tolerance row (not ignored, not a control row) draws its value in row order;
+  radial operands also draw a direction and TIRR its astigmatism angle, uniform over 0–360°. The
+  rows are applied one after another by `TolerancePerturber` to the compensated nominal, each
+  change's `MapSurface` composed so later rows find their surfaces (§36); the compensators are
+  evaluated (§42) and the criterion and its change recorded. Rows whose operand this version
+  cannot apply are left out of every trial and named.
+- **Random numbers and determinism.** Rows under one SEED value draw from
+  `SplitMix64.ForStream(seed, k)` for trial k; SEED 0 and rows under no SEED use the run's seed
+  (0 draws one from the clock, reported). Trial k is therefore the same alone
+  (`MonteCarloAnalysis.Trial`), in sequence or in parallel. Trials run on `ParallelSlots`, one
+  thread each, and the statistics are reduced in trial order: the result is bitwise identical at
+  any thread count.
+- **Failures.** A trial whose perturbation or evaluation fails keeps its draws and reason and is
+  left out of the statistics and the yield, with the count reported. Element decenters and tilts
+  make the lens non-axial, which the ray launcher refuses (§15), so such trials fail by name.
+- **Results.** Mean, sample standard deviation, min, max, percentiles (linear interpolation
+  between order statistics, as `ParameterSweep`'s statistics), best and worst trial, each
+  compensator's statistics, the yield (criterion ≤ limit, or ≥ where larger is better) over the
+  evaluated trials, a histogram (bins between Min Value and Max Value, results outside counted in
+  one bar each, help "Histogram"), and an MTF overlay (OP-39's FFT MTF of each compensated trial
+  lens at one field, every wavelength, the help's "Overlay MC Graphics"). `TrialLens` regenerates
+  trial k's compensated lens for saving (help, "# Monte Carlo Save"); with paraxial focus the
+  shift is written into the thickness before the image, refused for several configurations or a
+  thickness set by a solve, pickup or multi-configuration row.
+- **Distributions not in ParameterSweep.** The tolerance distributions stay in `Tolerancing`
+  (their ranges, truncation and radial rules are OpticStudio's); `ParameterSweep` is unchanged.
+  Its statistics are not reused directly because they take a sweep result; the percentile
+  definition is the same.
+- **Readings** where the help is short are in §10, item 41.
+
+**Not built.** TEZI's random per-term coefficients ("each polynomial term is assigned a
+coefficient randomly chosen between -1.0 and 1.0 ... normalized"; a trial applies the drawn RMS
+equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst
+Monte Carlo files by name and the File Prefix, the ZTD data file, the Tolerance Data Viewer and
+Yield curve (OP-66), tolerance scripts (OP-67), overlay of analyses other than the MTF, and
+evaluation of element decenter and tilt trials (the launcher, OP-22).
+
 ## 46. Command-line optics
 
 `OpenSim.Cli/CliRunner.Optics.cs`, `OpenSim.Cli/SweepSpec.cs` (`OpticsTargets`) and
@@ -3783,189 +3970,3 @@ build the lens from them through `ProjectLens` as the application does.
   record before handing it to an engine and not change it while one holds it.
 - **Not built.** The non-sequential model, macro language (OP-99) and plug-ins (OP-100). The
   global searches and Monte Carlo were pinned by reflection but not run under JGraph.
-
-## 43. Global optimization
-
-`OpenSim.Optics/Optimization/Global/` (OP-58) searches for better design forms than the local
-optimizer reaches. The help read is OpticStudio 2025 R2's, saved under
-`plans/sources/optics/op-58-help/` (Global Optimizer, Hammer Optimizer, Global Optimization,
-Global Optimization Capabilites of OpticStudio, The Global Optimization Algorithm, The Hammer
-Optimization algorithm, Suggestions for Using Global Optimizers). OpticStudio's two algorithms
-are unpublished; the algorithms below are this program's own, chosen from published methods,
-and are not OpticStudio's.
-
-- **Global search** (`GlobalSearch`). Differential evolution DE/rand/1/bin (R. Storn and K. Price,
-  "Differential Evolution – A Simple and Efficient Heuristic for Global Optimization over
-  Continuous Spaces", J. Global Optim. 11, 341–359, 1997, eqs. 1–4; copy under
-  `op-58-help/storn-price-de.pdf`) over the variables of `LensVariables`. Population NP (default
-  max(8, 2D), at least 4); the first population uniform in the ranges, member 0 the start; for
-  target i the mutant x_r1 + F(x_r2 − x_r3), r1, r2, r3 distinct and ≠ i, clipped into the ranges;
-  binomial crossover with CR, at least one coordinate from the mutant; F = 0.5 and CR = 0.9 by the
-  paper's §4. Each trial vector is locally optimized by `LocalOptimizer` (§35) and the
-  population holds the optimized designs: the evolution runs on basin hopping's transformed
-  surface Ẽ(X) = min{E(X)} (D. J. Wales and J. P. K. Doye, J. Phys. Chem. A 101, 5111, 1997;
-  arXiv:cond-mat/9803344, eq. 2; `op-58-help/wales-doye-1997.pdf`). Generations after the first
-  population: default 10. Global does not change glasses.
-- **Hammer search** (`HammerSearch`). Monotonic basin hopping (Wales and Doye 1997): the start
-  is re-optimized (trial 0); each round runs K trials (default 8) from the current design; a trial
-  either moves every variable by a uniform number in [−1, 1] times the step (default 0.1 of the
-  variable's range) or, with surfaces flagged Substitute and with probability 0.5 (1 when there
-  are no variables), replaces one of their glasses, chosen uniformly, by a candidate chosen
-  uniformly from OP-59's `GlassSubstitutionTemplate.Candidates` (§41) through
-  `GlassVariables.WithGlass`; then the design is re-optimized. The round's best trial replaces the
-  current design when it is better by more than 1e-9 relative; Wales and Doye's Metropolis test
-  at a finite temperature is replaced by accepting only improvements. While the current design
-  misses its exact constraints a glass trial starts from the start's variables, as §41's search
-  does. Model-glass variables move like any variable; a surface flagged Substitute may not also
-  vary its model glass. Default 25 rounds.
-- **Ranges** (`GlobalTrials.DefaultRanges`, this program's choices; per variable through
-  `Ranges`). Curvature ±3/|EFL| of the start (configuration 1, lens units) or ±the curvature
-  limit given, widened to contain the start's value; thickness 0.5 to 1.5 times its value (0 to
-  |EFL|/10 when zero); a model glass's nd with n − 1 from 0.5 to 1.5 times; anything else ±50 % of
-  its value, or ±1 when zero. Ranges bound only the drawing; the local optimizer may leave them.
-- **Ranking and the best list** (`GlobalDesign.Compare`, `GlobalBestList`). A design that meets
-  every negative-weight row (|V − T| ≤ the local optimizer's tolerance × max(1, |T|)) ranks above
-  one that does not (the rule of §41), then the lower merit, then the earlier trial. The list
-  keeps `SaveCount` designs (default 10); a design of the same form as one listed (§10 item 39)
-  replaces it when better and is dropped otherwise. A trial that cannot be built or evaluated is
-  counted and named in the log (the first 20), never listed; in the Global search it never
-  replaces its target, and a failed member of the first population keeps its unoptimized vector
-  with an infinite merit.
-- **Local optimization inside.** The caller's algorithm and cycles (infinite runs as
-  automatic), scales and constraint settings; one thread per trial; an evaluation limit per
-  trial (default 2000); solves and pickups re-evaluated as in §35.
-- **Determinism.** Trial t draws only from `SplitMix64.ForStream(seed, t)` (Global: t = generation
-  × NP + member; Hammer: t − 1 = (round − 1)K + k); the trials of a generation or round run in
-  `ParallelSlots` from the previous state, and selection and the best list take them in index
-  order. A seed and settings reproduce a run bitwise at any thread count. The time limit is
-  checked between generations or rounds, so a timed run equals an untimed one with as many.
-- **Stop** keeps the designs finished before it; a trial cut off by Stop is discarded.
-- **Not built.** OpticStudio's GLOPT and _HAMMER files, Resume, the Global search's periodic
-  return to listed designs, Auto Update of open windows during a run, glass changes in the
-  Global search, saved search settings, a finite-temperature (Metropolis) Hammer.
-
-## 45. Monte Carlo tolerancing
-
-`OpenSim.Optics/Tolerancing/MonteCarloAnalysis.cs` and `MonteCarloDistributions.cs` (OP-65).
-Sources: OpticStudio 2025 R2 help, "Monte Carlo Analysis", "Normal Statistical Distribution",
-"Uniform Statistical Distribution", "Parabolic Statistical Distribution" (and its equation image),
-"User Defined Statistical Distribution", "Discussion of Monte Carlo Analysis Method", "Histogram",
-"Yield", "Tolerance Data Viewer" (saved under `plans/sources/optics/op-65-help/`), "STAT",
-"SEED", "Nesting Rules for Monte Carlo Analysis", "TIRR" (`op-63-help/`) and "Tolerancing", the
-dialog's Monte Carlo tab (`op-64-help/Tolerancing.txt`).
-
-- **Set-up.** The criterion, compensators, fields and sampling are OP-64's (§42), built by the
-  same code (`ToleranceAnalysis.Prepare`); the compensated nominal lens gives N.
-- **Distributions.** Offsets from the midpoint of Min and Max, Δ = (Max − Min)/2. Normal: σ = Δ/n,
-  n from the STAT row's Int2 (1 to 10) or the run's default 2, truncated at ±Δ. Uniform: equal
-  probability over ±Δ. Parabolic: p(x) = 3x²/(2Δ³), drawn as Δ·∛(2u − 1). User defined: the .UDD
-  table named in the STAT row's comment (two columns X, T; X from 0 to 1, first 0, last 1),
-  mapped onto [Min, Max]. Rows no STAT row governs use the run's statistics (normal, uniform or
-  parabolic; default normal).
-- **A trial.** Every tolerance row (not ignored, not a control row) draws its value in row order;
-  radial operands also draw a direction and TIRR its astigmatism angle, uniform over 0–360°. The
-  rows are applied one after another by `TolerancePerturber` to the compensated nominal, each
-  change's `MapSurface` composed so later rows find their surfaces (§36); the compensators are
-  evaluated (§42) and the criterion and its change recorded. Rows whose operand this version
-  cannot apply are left out of every trial and named.
-- **Random numbers and determinism.** Rows under one SEED value draw from
-  `SplitMix64.ForStream(seed, k)` for trial k; SEED 0 and rows under no SEED use the run's seed
-  (0 draws one from the clock, reported). Trial k is therefore the same alone
-  (`MonteCarloAnalysis.Trial`), in sequence or in parallel. Trials run on `ParallelSlots`, one
-  thread each, and the statistics are reduced in trial order: the result is bitwise identical at
-  any thread count.
-- **Failures.** A trial whose perturbation or evaluation fails keeps its draws and reason and is
-  left out of the statistics and the yield, with the count reported. Element decenters and tilts
-  make the lens non-axial, which the ray launcher refuses (§15), so such trials fail by name.
-- **Results.** Mean, sample standard deviation, min, max, percentiles (linear interpolation
-  between order statistics, as `ParameterSweep`'s statistics), best and worst trial, each
-  compensator's statistics, the yield (criterion ≤ limit, or ≥ where larger is better) over the
-  evaluated trials, a histogram (bins between Min Value and Max Value, results outside counted in
-  one bar each, help "Histogram"), and an MTF overlay (OP-39's FFT MTF of each compensated trial
-  lens at one field, every wavelength, the help's "Overlay MC Graphics"). `TrialLens` regenerates
-  trial k's compensated lens for saving (help, "# Monte Carlo Save"); with paraxial focus the
-  shift is written into the thickness before the image, refused for several configurations or a
-  thickness set by a solve, pickup or multi-configuration row.
-- **Distributions not in ParameterSweep.** The tolerance distributions stay in `Tolerancing`
-  (their ranges, truncation and radial rules are OpticStudio's); `ParameterSweep` is unchanged.
-  Its statistics are not reused directly because they take a sweep result; the percentile
-  definition is the same.
-- **Readings** where the help is short are in §10, item 41.
-
-**Not built.** TEZI's random per-term coefficients ("each polynomial term is assigned a
-coefficient randomly chosen between -1.0 and 1.0 ... normalized"; a trial applies the drawn RMS
-equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst
-Monte Carlo files by name and the File Prefix, the ZTD data file, the Tolerance Data Viewer and
-Yield curve (OP-66), tolerance scripts (OP-67), overlay of analyses other than the MTF, and
-evaluation of element decenter and tilt trials (the launcher, OP-22).
-
-## 44. Interactive adjustment tools
-
-`OpenSim.Optics/Optimization/Interactive/` (OP-60) holds Quick Focus and Quick Adjust; the
-Slider and the Visual Optimizer are app view models (`OpenSim.App/ViewModels/OpticsSliderViewModel.cs`).
-The definitions were read from OpticStudio's 2025 R2 help pages "Quick Focus", "Quick Adjust",
-"Slider", "Visual Optimizer" and "Manual Adjustment Group", saved under
-`plans/sources/optics/op-60-help/`.
-
-- **Quick Focus** (`QuickFocus`). The help: "This feature adjusts the thickness of the surface
-  prior to the image surface. The thickness chosen is that which minimizes the RMS aberration."
-  Criteria (help, Settings): spot size radial, spot size x only, spot size y only, wavefront
-  error; Use Centroid references them to the centroid instead of the chief ray. One field's
-  value is OP-40's RMS (§34, `RmsCore.Evaluate`, the engine of RMS vs Focus) at the field row,
-  over every wavelength with its weight (polychromatic when there are several), the trial shift
-  added to the thickness before the image (as RMS vs Focus adds it). Fields with a positive
-  weight combine as √(Σ w_f v_f² / Σ w_f); a single field is its own value, so on a one-field
-  lens the criterion is exactly the RMS vs Focus curve. Afocal image space is refused.
-- **Quick Adjust** (`QuickAdjust`). The help: "adjusts any radius or thickness to minimize the
-  RMS aberration at any subsequent surface"; "All criterion use the image centroid for a
-  reference"; angular data are "computed after refraction into the specified evaluation
-  surface". The rays are OP-34's (`RaySampler`: field rows and wavelengths with a positive
-  weight, the quadrature's pupil points, read at the evaluation surface in its local frame).
-  Spot: RMS of the positions about their centroid, radial, x or y; angular: the same of the
-  direction cosines (L, M) after the surface, shown in milliradians (cosine × 1000).
-  Wavelengths pool with weight pupil weight × wavelength weight; fields combine as for Quick
-  Focus. A radius is searched as its curvature (it may pass through a plane); the evaluation
-  surface must come after the adjusted one. Floating semi-diameters are sized again at every
-  trial.
-- **Sampling.** Gaussian quadrature (§34), 1 to 20 rings with 4 arms each, default 6; a trial
-  where any ray fails has no value.
-- **Search** (`InteractiveSearch`). The variable is x₀ + t·h, h = 1 % of the lens's length
-  scale L (the sum of its finite thicknesses from surface 1 to the one before the image; 1 mm
-  when zero) for a thickness, 1 % of max(|c|, 1/L) for a curvature.
-  `BrentMinimizer.LineSearch` takes unit steps either way from t = 0, widens the bracket by the
-  golden ratio while the criterion falls, and runs Brent's localmin on the bracket to
-  tol = 1.49e-8·|t| + 1e-11; the minimum of a unimodal criterion lies within 2·tol·h of the
-  answer (`PositionTolerance`). A trial without a value counts as +∞ (a wall); the start must
-  have a value; a search that does not improve leaves the cell unchanged and says so.
-- **On the project record** (`QuickFocus.Run`, `QuickAdjust.Run`). The lens is the current
-  configuration's solved lens. The adjusted cell is refused when a solve or pickup sets it, when
-  the multi-configuration table sets it in the current configuration (the new value would be
-  overwritten), and in non-sequential mode. The new value is written into the saved cell in lens
-  units (thickness: the old value plus the shift; radius: 1/curvature, a plane at 0). A change
-  that moves other cells through their solves (a pickup of the adjusted cell, say) is not
-  searched with those solves re-evaluated: the search runs on the solved lens with only the
-  adjusted cell changed.
-- **Slider** (help, "Slider"). Drags one surface value (radius, curvature, thickness, conic,
-  Par 1–8) between a start and a stop. "A copy is made of the data to be modified": each move
-  publishes the editors' record with that value to the session (`ProjectSession.PublishOptics`)
-  without changing the editors, so every analysis window with auto-update on recomputes; Save
-  (and Keep and Exit) writes the value through the Lens Data Editor as one undoable edit; Exit,
-  closing the window or choosing another surface or parameter publishes the editors' record
-  again. Animate steps the value by 1/50 of the range every 400 ms, wrapping at the stop.
-- **Visual Optimizer** (help, "Visual Optimizer"). One to eight sliders ("between 1 and 8") on
-  the lens's variables (`LensVariables.Find`; "the variable status of each value must be set
-  prior"), radius variables as curvatures ("radius variables are always varied as
-  curvatures"), moved together, published and kept as the Slider's are (a multi-configuration
-  variable is written through the Multi-Configuration Editor).
-- **Update budget.** The analysis windows' debounce, `OpticsAnalysesViewModel.DefaultDebounce`
-  = 250 ms (OP-9's value, named by OP-60; this program's own, not OpticStudio's): a move issues
-  each window's request at once, the compute starts after 250 ms without a further move, and
-  moves inside it coalesce into one compute of the last value; a compute overtaken by a move is
-  cancelled. OpticStudio's Visual Optimizer instead waits for each update to finish ("will not
-  allow another update to be performed until the current update is completed").
-- **Not built.** NSC Quick Focus and every non-sequential part (no non-sequential mode yet); the
-  Slider's system, configuration and NSC data types (aperture, fields, wavelengths,
-  apodization, temperature, pressure, multi-configuration operands) and its Window choice
-  (every open window with auto-update on updates); the Visual Optimizer's Window choice and
-  Animate; Quick Focus's angular form for afocal systems; a wavefront criterion in Quick Adjust
-  (the help names none).

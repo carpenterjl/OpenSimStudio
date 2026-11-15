@@ -1213,6 +1213,70 @@ Rules and readings are in docs/Optics-Conventions.md §41. The Hammer search (Gl
 optimization below) also replaces Substitute glasses. Not built: a substitute catalog per surface, saving the template to a *.GST file, and the
 operands MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and INDX.
 
+## Global and Hammer optimization
+
+The **Global and Hammer** section of the Optimize window looks for better design forms than
+Start finds. Both run the algorithm and cycles chosen above for every trial, on the number of
+threads above (the designs do not depend on it), and list the ten best designs found: rank,
+merit, whether the exact (negative-weight) constraints are met, trial number and, for Hammer,
+the glasses. The lens is not changed until you select a design and press **Apply design** (the
+Lens Data Editor's undo takes it back). **Stop** keeps the designs found so far.
+
+- **Start Global** begins from random starts within the ranges and evolves them (differential
+  evolution); each start is optimized locally. Settings: generations (0 is a plain multi-start)
+  and population (empty: twice the number of variables, at least 8). Global does not change
+  glasses. As OpticStudio's help advises, begin from a rough design with the right number of
+  surfaces, glasses, fields and wavelengths and roughly the right focal length (a curvature
+  solve on the last surface holds it), and keep thicknesses physical with boundary operands.
+- **Start Hammer** re-optimizes the lens, then repeatedly moves all variables a random step and
+  re-optimizes, keeping each improvement. With glasses ticked Substitute in the Glasses section,
+  a trial may instead replace one of them by a candidate within the Glass Substitution
+  Template. Settings: rounds, trials per round, step (fraction of each variable's range), glass
+  change probability.
+- **Shared settings:** the seed (the same seed and settings give the same designs), the
+  curvature limit (random curvatures lie within ± this; empty is 3/|EFL| of the lens) and a time
+  limit in minutes.
+
+The algorithms are this program's own (OpticStudio's are unpublished); rules and readings are in
+docs/Optics-Conventions.md §43. Not built: OpticStudio's saved GLOPT and _HAMMER files and
+Resume, Auto Update of open windows during a run, glass changes in the Global search, and saving
+these settings with the lens.
+
+## Interactive adjustment
+
+Four buttons in the Optics panel open OpticStudio's manual adjustment tools. Each writes its
+result into the lens through the Lens Data Editor, so the editor's Undo takes it back.
+
+- **Quick Focus** adjusts the thickness of the surface before the image for the best RMS spot
+  radius, spot x, spot y or wavefront error, averaged over the fields and wavelengths with their
+  weights. *Use centroid* measures about the centroid instead of the chief ray (better when coma
+  dominates). The status line gives the thickness before and after and the RMS before and after;
+  the box below lists the assumptions.
+- **Quick Adjust** adjusts one radius or thickness (*Adjust surface*, *Radius / thickness*) for
+  the best RMS at a later surface (*Evaluate surface*; 0 is the image), about the centroid. The
+  *angular* criteria measure the spread of ray directions after the evaluation surface (in
+  milliradians): use them to collimate an afocal system, for example the spacing of a
+  telescope. The dialog can stay open while you edit; each Adjust reads the lens afresh.
+- **Slider** drags one value (radius, curvature, thickness, conic or a parameter of a surface)
+  between a start and a stop while every open analysis window with auto-update on recomputes.
+  The Lens Data Editor keeps the original until you press *Save* or *Keep and Exit*; *Exit*,
+  closing the window or choosing another surface or parameter puts the original back.
+  *Animate* steps through the range in a loop.
+- **Visual Optimizer** gives up to eight sliders on the lens's variables (flag cells Variable
+  first; radii appear as curvatures) and works like the Slider.
+
+Both Quick tools sample the pupil with Gaussian quadrature (rings, 1 to 20, default 6) and need
+every ray: a trial value where a ray fails is skipped, and a lens whose rays fail at the start is
+refused with the reason. They refuse a cell that a solve, a pickup or the multi-configuration
+table sets, and work in the current configuration. The analysis windows wait 250 ms after the
+last slider move before computing, so a fast drag computes once, on the value where it stops.
+Definitions are in docs/Optics-Conventions.md §44.
+
+Not built: NSC Quick Focus (there is no non-sequential mode yet); the Slider's system,
+configuration and NSC data (aperture, fields, wavelengths, temperature and the rest); updating
+only one chosen analysis window; Animate in the Visual Optimizer; Quick Focus in afocal image
+space (use Quick Adjust's angular criteria).
+
 ## Tolerance data
 
 **Tolerance Data Editor…** in the Optics panel opens the tolerance table: what may go wrong in
@@ -1290,6 +1354,54 @@ Separate Fields/Configs, the polynomial fit and cache, Force Ray Aiming and the 
 configurations choice; the tolerance data file and viewer. Element decenter and tilt tolerances
 (TEDX … TETZ and the rolls) cannot be evaluated yet: the ray launcher refuses the decentered lens
 they make, and the report names those rows.
+
+## Monte Carlo tolerancing
+
+The **Monte Carlo** section of the Tolerance Data Editor simulates production, as OpticStudio's
+Monte Carlo analysis does: each trial draws every tolerance row at random from its distribution,
+applies them all at once to the project's lens (its current configuration), compensates and
+evaluates the criterion. It uses the criterion, compensator, field, sampling and pupil grid
+settings of the Tolerance run section.
+
+- **Trials** (default 20, OpticStudio's default) and **Seed**. Trial k depends only on the seed
+  and k, so a run repeats exactly, and one trial run alone, in a run on one thread or in a run on
+  many is the same lens. Seed 0 draws a seed from the clock and the report names it. A SEED row
+  gives the rows below it a seed of their own (SEED 0: the run's seed).
+- **Statistics** for rows no STAT row governs: normal (default), uniform or parabolic, and **Std
+  devs to extremes** for the normal (default 2: the tolerance range is ±2σ, and draws beyond it
+  are drawn again). A STAT row sets the statistics of the rows below it: 0 normal with Int2
+  standard deviations (1 to 10), 1 uniform, 2 parabolic (more draws near the extremes), 3 user
+  defined, read from the .UDD file named in the STAT row's comment, in **Distribution folder**.
+  A .UDD file is two columns "X T", X from 0.0 to 1.0, T the probability at X; the range Min to
+  Max is mapped onto X.
+- Radial operands (TEDR, TSDR, TARR, TRLR) draw a random direction too, and TIRR a random
+  astigmatism angle. A radial operand with a zero limit is drawn about zero (normal, parabolic).
+- **Yield limit** (empty for none): the share of evaluated trials whose criterion is at or below
+  the limit (at or above it for the Strehl ratio, MTF and encircled energy). **Percentiles** lists
+  the percentiles reported.
+- **Run Monte Carlo**, **Stop** and the progress line. The statistics table gives the nominal, the
+  number of trials evaluated and failed, the mean, standard deviation (n − 1), min, max, the
+  percentiles, the best and worst trials, the yield and the seed. Beside it: a histogram of the
+  criterion (**Histogram bins**) and, with **Overlay MTF** on, the FFT MTF of the nominal (dashed)
+  and of the first **Overlay trials** trials at **Overlay field**, up to **Overlay max frequency**
+  (cycles/mm). The trials table lists each trial's criterion, change, compensators and, for a
+  failed trial, why. The report below repeats it all with the notes and assumptions.
+- **Save trial…** writes the trial named in **Trial to save** as a lens file (default name
+  MC_T0001 and so on, as OpticStudio names its Monte Carlo files): the perturbed, compensated
+  lens. With paraxial focus the focus shift is written into the thickness before the image; that
+  is refused for a multi-configuration lens or a thickness set by a solve or pickup.
+- Failed trials are listed with their reason and left out of the statistics and the yield, with
+  their count shown. Trials carrying element decenters and tilts fail for now: the ray launcher
+  refuses the decentered lens they make.
+- The settings are saved with the tolerance data.
+
+The definitions are in docs/Optics-Conventions.md §45, and the readings where OpticStudio's help
+is short in §10 item 41.
+
+Not built: TEZI's random per-term coefficients (a trial applies the drawn RMS equally over the
+terms), correlated draws, Save Best and Worst files by name, tolerance scripts, the Tolerance
+Data Viewer, the yield curve and the ZTD data file; rows whose operand cannot be applied in this
+version (coatings, TEXI, ISO 10110) are left out of every trial and named in the report.
 
 ## Thermal analysis
 
@@ -1390,118 +1502,6 @@ it into a project (`project.Optics = …`, then the project serializer's Save) a
 
 Not built: the macro language (ZPL); plug-ins. The global searches and Monte Carlo were not
 tried under JGraph itself; their calls are checked by the test suite.
-
-## Global and Hammer optimization
-
-The **Global and Hammer** section of the Optimize window looks for better design forms than
-Start finds. Both run the algorithm and cycles chosen above for every trial, on the number of
-threads above (the designs do not depend on it), and list the ten best designs found: rank,
-merit, whether the exact (negative-weight) constraints are met, trial number and, for Hammer,
-the glasses. The lens is not changed until you select a design and press **Apply design** (the
-Lens Data Editor's undo takes it back). **Stop** keeps the designs found so far.
-
-- **Start Global** begins from random starts within the ranges and evolves them (differential
-  evolution); each start is optimized locally. Settings: generations (0 is a plain multi-start)
-  and population (empty: twice the number of variables, at least 8). Global does not change
-  glasses. As OpticStudio's help advises, begin from a rough design with the right number of
-  surfaces, glasses, fields and wavelengths and roughly the right focal length (a curvature
-  solve on the last surface holds it), and keep thicknesses physical with boundary operands.
-- **Start Hammer** re-optimizes the lens, then repeatedly moves all variables a random step and
-  re-optimizes, keeping each improvement. With glasses ticked Substitute in the Glasses section,
-  a trial may instead replace one of them by a candidate within the Glass Substitution
-  Template. Settings: rounds, trials per round, step (fraction of each variable's range), glass
-  change probability.
-- **Shared settings:** the seed (the same seed and settings give the same designs), the
-  curvature limit (random curvatures lie within ± this; empty is 3/|EFL| of the lens) and a time
-  limit in minutes.
-
-The algorithms are this program's own (OpticStudio's are unpublished); rules and readings are in
-docs/Optics-Conventions.md §43. Not built: OpticStudio's saved GLOPT and _HAMMER files and
-Resume, Auto Update of open windows during a run, glass changes in the Global search, and saving
-these settings with the lens.
-
-## Monte Carlo tolerancing
-
-The **Monte Carlo** section of the Tolerance Data Editor simulates production, as OpticStudio's
-Monte Carlo analysis does: each trial draws every tolerance row at random from its distribution,
-applies them all at once to the project's lens (its current configuration), compensates and
-evaluates the criterion. It uses the criterion, compensator, field, sampling and pupil grid
-settings of the Tolerance run section.
-
-- **Trials** (default 20, OpticStudio's default) and **Seed**. Trial k depends only on the seed
-  and k, so a run repeats exactly, and one trial run alone, in a run on one thread or in a run on
-  many is the same lens. Seed 0 draws a seed from the clock and the report names it. A SEED row
-  gives the rows below it a seed of their own (SEED 0: the run's seed).
-- **Statistics** for rows no STAT row governs: normal (default), uniform or parabolic, and **Std
-  devs to extremes** for the normal (default 2: the tolerance range is ±2σ, and draws beyond it
-  are drawn again). A STAT row sets the statistics of the rows below it: 0 normal with Int2
-  standard deviations (1 to 10), 1 uniform, 2 parabolic (more draws near the extremes), 3 user
-  defined, read from the .UDD file named in the STAT row's comment, in **Distribution folder**.
-  A .UDD file is two columns "X T", X from 0.0 to 1.0, T the probability at X; the range Min to
-  Max is mapped onto X.
-- Radial operands (TEDR, TSDR, TARR, TRLR) draw a random direction too, and TIRR a random
-  astigmatism angle. A radial operand with a zero limit is drawn about zero (normal, parabolic).
-- **Yield limit** (empty for none): the share of evaluated trials whose criterion is at or below
-  the limit (at or above it for the Strehl ratio, MTF and encircled energy). **Percentiles** lists
-  the percentiles reported.
-- **Run Monte Carlo**, **Stop** and the progress line. The statistics table gives the nominal, the
-  number of trials evaluated and failed, the mean, standard deviation (n − 1), min, max, the
-  percentiles, the best and worst trials, the yield and the seed. Beside it: a histogram of the
-  criterion (**Histogram bins**) and, with **Overlay MTF** on, the FFT MTF of the nominal (dashed)
-  and of the first **Overlay trials** trials at **Overlay field**, up to **Overlay max frequency**
-  (cycles/mm). The trials table lists each trial's criterion, change, compensators and, for a
-  failed trial, why. The report below repeats it all with the notes and assumptions.
-- **Save trial…** writes the trial named in **Trial to save** as a lens file (default name
-  MC_T0001 and so on, as OpticStudio names its Monte Carlo files): the perturbed, compensated
-  lens. With paraxial focus the focus shift is written into the thickness before the image; that
-  is refused for a multi-configuration lens or a thickness set by a solve or pickup.
-- Failed trials are listed with their reason and left out of the statistics and the yield, with
-  their count shown. Trials carrying element decenters and tilts fail for now: the ray launcher
-  refuses the decentered lens they make.
-- The settings are saved with the tolerance data.
-
-The definitions are in docs/Optics-Conventions.md §45, and the readings where OpticStudio's help
-is short in §10 item 41.
-
-Not built: TEZI's random per-term coefficients (a trial applies the drawn RMS equally over the
-terms), correlated draws, Save Best and Worst files by name, tolerance scripts, the Tolerance
-Data Viewer, the yield curve and the ZTD data file; rows whose operand cannot be applied in this
-version (coatings, TEXI, ISO 10110) are left out of every trial and named in the report.
-
-## Interactive adjustment
-
-Four buttons in the Optics panel open OpticStudio's manual adjustment tools. Each writes its
-result into the lens through the Lens Data Editor, so the editor's Undo takes it back.
-
-- **Quick Focus** adjusts the thickness of the surface before the image for the best RMS spot
-  radius, spot x, spot y or wavefront error, averaged over the fields and wavelengths with their
-  weights. *Use centroid* measures about the centroid instead of the chief ray (better when coma
-  dominates). The status line gives the thickness before and after and the RMS before and after;
-  the box below lists the assumptions.
-- **Quick Adjust** adjusts one radius or thickness (*Adjust surface*, *Radius / thickness*) for
-  the best RMS at a later surface (*Evaluate surface*; 0 is the image), about the centroid. The
-  *angular* criteria measure the spread of ray directions after the evaluation surface (in
-  milliradians): use them to collimate an afocal system, for example the spacing of a
-  telescope. The dialog can stay open while you edit; each Adjust reads the lens afresh.
-- **Slider** drags one value (radius, curvature, thickness, conic or a parameter of a surface)
-  between a start and a stop while every open analysis window with auto-update on recomputes.
-  The Lens Data Editor keeps the original until you press *Save* or *Keep and Exit*; *Exit*,
-  closing the window or choosing another surface or parameter puts the original back.
-  *Animate* steps through the range in a loop.
-- **Visual Optimizer** gives up to eight sliders on the lens's variables (flag cells Variable
-  first; radii appear as curvatures) and works like the Slider.
-
-Both Quick tools sample the pupil with Gaussian quadrature (rings, 1 to 20, default 6) and need
-every ray: a trial value where a ray fails is skipped, and a lens whose rays fail at the start is
-refused with the reason. They refuse a cell that a solve, a pickup or the multi-configuration
-table sets, and work in the current configuration. The analysis windows wait 250 ms after the
-last slider move before computing, so a fast drag computes once, on the value where it stops.
-Definitions are in docs/Optics-Conventions.md §44.
-
-Not built: NSC Quick Focus (there is no non-sequential mode yet); the Slider's system,
-configuration and NSC data (aperture, fields, wavelengths, temperature and the rest); updating
-only one chosen analysis window; Animate in the Visual Optimizer; Quick Focus in afocal image
-space (use Quick Adjust's angular criteria).
 
 ## Coming
 
