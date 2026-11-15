@@ -1244,12 +1244,7 @@ Not built yet, and not to be relied on until they appear in this guide:
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);
 - global optimization and the tolerance analyses (the merit function, its editor, the local
-  optimizer, glass substitution and the tolerance data editor with its operands are built; the
-  full operand catalogue, the default merit function wizard, sensitivity, Monte Carlo and
-  compensator analyses are not);
-
-- global optimization, glass substitution and the tolerance analyses (the merit function, its
-  editor, the local optimizer, the tolerance data editor with its operands, and sensitivity and
+  optimizer, glass substitution, the tolerance data editor with its operands, and sensitivity and
   inverse sensitivity with compensators are built; the full operand catalogue, the default merit
   function wizard and Monte Carlo are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
