@@ -67,4 +67,10 @@ public sealed record OpticsSettings
     /// their expansion (OP-91, owner decision OQ-12). Null — every file written before OP-91 —
     /// links none, so every glass expands with its catalog TCE.</summary>
     public OpticsThermalSettings? Thermal { get; init; }
+
+    // OP-59
+    /// <summary>The Glass Substitution Template (OP-59): the limits on the glasses that glass
+    /// substitution and the model-to-real conversion may choose. Null — every file written before
+    /// OP-59 — is no template: any glass not excluded in its catalog.</summary>
+    public OpticsGlassSubstitutionSettings? GlassSubstitution { get; init; }
 }

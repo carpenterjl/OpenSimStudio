@@ -887,6 +887,22 @@ single place in the code, so a correction is one line and its test.
       built: a thermal pickup of a length in such a table fails.
     Check: a lens made thermal by OpticStudio, its thermal pickups' values read from its
     Multi-Configuration Editor and compared with this program's for the same lens and catalog.
+37. **Glass substitution readings** (OP-59). Section 41 follows OpticStudio's help pages, but
+    nothing is compared with OpticStudio's output, and these are this program's readings:
+    - *RGLA's columns and range.* Surf1 and Surf2 in Int1 and Int2, Wn, Wa and Wp in Data1 to
+      Data3; over a range of surfaces the value is the target plus the summed excesses (the help
+      defines one glass only).
+    - *Where a glass sits.* The printed nd, Vd and ΔPgF of the catalog first, computed values
+      where it prints none.
+    - *Conversion weights.* The model-to-real conversion uses RGLA's default Wn and Wa (the help
+      says only "similar to the RGLA definition", partial dispersion omitted).
+    - *The template.* A glass without a status, and a Melt glass, pass the status test; a missing
+      status counts as incomplete data only when a status box is clear.
+    - *The search order.* OpticStudio substitutes glasses inside its Hammer and Global
+      optimizers, whose order is not published; this program's coordinate search is its own.
+    Check: a lens with model glasses converted by OpticStudio and by this program against the
+    same catalog and template; RGLA and GCOS values read from OpticStudio's Merit Function
+    Editor for the same lens.
 
 ## 11. Paraxial optics
 
@@ -2792,8 +2808,8 @@ afocal units.
   (`MultiConfiguration.Variables`). Kinds: curvature (a Radius cell, varied as 1/R in 1/lens
   unit, 0 written as a plane), thickness, conic, semi-diameter, TCE, parameter (any "Par n",
   parameters and extra data, in the column's unit) and configuration (a real-number table
-  cell, in its operand's unit). Refused with the cell named: a material (glass variables are
-  OP-59), an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text,
+  cell, in its operand's unit). Refused with the cell named: the Material cell itself (glass variables are
+  §41), an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text,
   whole-number or infinite table cell, any other column.
 - **Evaluation.** Each trial design writes the variables into a copy of the optics record and
   builds every configuration through `ProjectMeritConfigurations` (the multi-configuration
@@ -2998,3 +3014,61 @@ Multi-Configuration pages "Make Thermal" and "Solve Types"; copies in
   (a one-line change in `OpenSim.Optics/Merit/MeritConfigurations.cs`, not made here), until
   then its thermal configurations at a changed temperature fail by name; the prescription
   report's thermal listing; coupling to OpenSim's own thermal and structural solvers (OP-92).
+
+## 41. Glass substitution
+
+`OpenSim.Optics/Optimization` and `Materials/Tools` (OP-59) let the optimizer change glasses. The
+help read is OpticStudio 2025 R2's, saved under `plans/sources/optics/op-59-help/` (Optimizing
+Using Model Glasses with its equation image, Glass Substitution Template (global optimizers
+group), Description of Catalog Data, Constraints on Glass Data, Restricting Selected Glasses,
+Using Glass Substitution, Global Optimization of Glass Selection) and
+`plans/sources/optics/solves/Material_Solves.html`.
+
+- **Saved flags** (`GlassVariables`). The Lens Data Editor's Material cell takes no Variable or
+  Solve flag, so glass flags name columns of their own, kept by the editor with the row:
+  `ModelNd`, `ModelVd`, `ModelDeltaPgF` (Variable, on a surface with a model glass) and
+  `Substitute` (Variable, on a surface with a glass). The Optimize window's Glasses section sets
+  them. No new surface field is saved.
+- **Model-glass variables** (`LensVariables`, kinds `ModelIndex`, `ModelAbbe`,
+  `ModelPartialDispersion`). The optimizer varies the model glass's nd, Vd or ΔPgF; the model is
+  this program's stand-in (`ModelGlassFit`), not OpticStudio's formula. A trial with nd ≤ 1 or
+  Vd ≤ 0 cannot be built and gets the failed-row penalty.
+- **Distance** (`GlassDistance`). d = [Wn(ΔNd)² + Wa(ΔVd)² + Wp(ΔPgF)²]^½ with zero weights
+  meaning 1, 1E-04 and 1E+02 (help: Optimizing Using Model Glasses). A glass's point is its
+  printed nd, Vd and ΔPgF, computed from its dispersion where the catalog prints none (§10 item 37).
+- **Template** (`OpticsSettings.GlassSubstitution`, `GlassSubstitutionTemplate`). Use template;
+  exclude glasses with incomplete data; the Standard, Preferred, Obsolete and Special boxes;
+  maximum relative cost, CR, FR, SR, AR and PR, each ignored when empty or zero. A datum the
+  catalog does not record (absent, or −1) fails a test only when incomplete data are excluded.
+  Substitution and conversion also always drop glasses flagged Exclude Substitution, tabulated
+  materials, and glasses whose valid range misses a wavelength of the lens. The AGF catalogs
+  record every datum the template reads (OD and NM lines); the refractiveindex.info seed records
+  none, so its materials pass unless incomplete data are excluded. The template's `Catalogs`
+  list (not OpticStudio's) restricts substitution to named catalogs; OpticStudio's per-surface
+  substitute catalog is not saved.
+- **Model to real glass** (`ModelGlassConversion`). The nearest candidate by the distance with
+  Wp = 0 and the RGLA defaults for Wn and Wa. If no glass meets the template, incomplete data are
+  allowed, then the template is ignored, as the help says; its last step (glass 1 of the catalog,
+  whatever it is) is not built: the conversion fails naming the surface. The conversion does not
+  re-optimize.
+- **Substitute solve** (`SubstituteGlassSolve`). With the active catalogs given, the solve fails
+  when no glass meets `SolveOptions.SubstitutionTemplate` (OpticStudio removes the solve
+  instead); the glass is unchanged. The saved lens does not produce this solve (its substitution
+  flag is the `Substitute` column above).
+- **Search** (`GlassSubstitution`). Re-optimize the start with its own glasses; then, round by
+  round, for each flagged surface try every candidate (written "catalog:glass"), each time from
+  the best design and re-optimized with `LocalOptimizer`, and keep the best when it lowers the
+  merit by more than 1e-9 relative. Rounds end when one changes nothing (at most three by
+  default). A trial that fails is listed with its reason. Sequential, so as deterministic as the
+  local optimizer; Stop keeps the best so far.
+- **Operands** (`GlassOperands`, registered under `// OP-59`). RGLA (Surf1, Surf2, Wn, Wa, Wp):
+  for each surface in the range with a glass, the distance to the nearest glass of the active
+  catalogs not excluded from substitution; the value is the target while every glass is within
+  it, else the target plus the excesses. GCOS (Surf): the catalog's relative cost of the glass
+  after the surface; fails for a non-catalog medium or a cost the catalog does not record. The
+  catalogs reach the operands through `IMeritConfigurations.Catalogs` (one added line in
+  `MeritEvaluator`).
+- **Not built.** The Hammer and Global optimizers (OP-58), which in OpticStudio run
+  substitution; a per-surface substitute catalog in the saved lens; the template's Save/Load
+  of *.GST files and "Save As New Glass Catalog"; MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and
+  INDX; the conversion's last-resort glass.

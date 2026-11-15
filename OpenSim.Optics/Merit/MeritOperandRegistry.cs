@@ -190,6 +190,10 @@ public sealed class MeritOperandRegistry
         r.Register(Trig("TANG", "Tangent", "Tangent of row Op#; radians, or degrees when Flag is not 0.", inverse: false, Math.Tan));
         r.Register(Unary("ABGT", "Absolute value greater than", "Absolute value of row Op#, bounded below by the target.", Math.Abs, bound: true, atLeast: true));
         r.Register(Unary("ABLT", "Absolute value less than", "Absolute value of row Op#, bounded above by the target.", Math.Abs, bound: true, atLeast: false));
+
+        // OP-59: glass operands (help: Constraints on Glass Data; GlassOperands).
+        r.Register(GlassOperands.ReasonableGlass());
+        r.Register(GlassOperands.GlassCost());
         return r;
     }
 

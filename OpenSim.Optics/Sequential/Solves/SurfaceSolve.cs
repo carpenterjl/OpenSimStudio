@@ -254,7 +254,9 @@ public sealed record ModelGlassSolve : SurfaceSolve
 
 /// <summary>Material: substitute. Not a value solve: it lets global optimization change the
 /// glass, from <see cref="Catalog"/> or every active catalog when empty ("Material Solves").
-/// The cell keeps its glass; glass substitution in optimization is not built.</summary>
+/// The cell keeps its glass; with <see cref="SolveOptions.Catalogs"/> the engine checks that at
+/// least one glass meets <see cref="SolveOptions.SubstitutionTemplate"/> (OP-59) and fails when
+/// none does. The search itself is <see cref="OpenSim.Optics.Optimization.GlassSubstitution"/>.</summary>
 public sealed record SubstituteGlassSolve : SurfaceSolve
 {
     public string Catalog { get; init; } = "";

@@ -394,7 +394,8 @@ public sealed class SolveEngineTests
         var ok = SolveEngine.Apply(lens, Sys(), new[] { new SubstituteGlassSolve { Surface = 1, Catalog = "SCHOTT" } }, new SolveOptions { Catalogs = catalogs });
         Assert.True(ok.Succeeded);
         Assert.Same(lens.Surfaces[1].Medium, ok.Lens.Surfaces[1].Medium);
-        Assert.Contains("not built", ok.Statuses[0].Note);
+        Assert.Contains("glass substitution", ok.Statuses[0].Note);   // OP-59: one glass (N-BK7) may replace it
+        Assert.Contains("1 glass may replace it", ok.Statuses[0].Note);
 
         var unknown = SolveEngine.Apply(lens, Sys(), new[] { new SubstituteGlassSolve { Surface = 1, Catalog = "hoya" } }, new SolveOptions { Catalogs = catalogs });
         Assert.False(unknown.Succeeded);

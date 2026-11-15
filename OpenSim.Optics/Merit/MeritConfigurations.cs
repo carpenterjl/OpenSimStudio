@@ -22,6 +22,11 @@ public interface IMeritConfigurations
 
     /// <summary>The system data of configuration <paramref name="configuration"/>.</summary>
     OpticalSystemData SystemFor(int configuration);
+
+    // OP-59
+    /// <summary>The active glass catalogs the glass operands (RGLA) compare against; null when
+    /// not known.</summary>
+    IReadOnlyList<OpticalCatalog>? Catalogs => null;
 }
 
 /// <summary>One configuration: a lens and its system data.</summary>
@@ -37,6 +42,10 @@ public sealed class SingleMeritConfiguration : IMeritConfigurations
     }
 
     public int Count => 1;
+
+    // OP-59
+    /// <summary>The active glass catalogs, for the glass operands; null when not given.</summary>
+    public IReadOnlyList<OpticalCatalog>? Catalogs { get; init; }
 
     public SequentialLens LensFor(int configuration) { Check(configuration); return _lens; }
 
@@ -58,7 +67,7 @@ public sealed class SingleMeritConfiguration : IMeritConfigurations
         var lens = ProjectLens.From(optics, catalogs)
             ?? throw new ArgumentException("The system has no sequential surfaces: add them in the Lens Data Editor, so there is something to evaluate.");
         var system = SystemDataSettings.FromSettings(optics.SystemData, new List<string>());
-        return new SingleMeritConfiguration(lens, system);
+        return new SingleMeritConfiguration(lens, system) { Catalogs = catalogs };   // OP-59: the catalogs for RGLA
     }
 }
 
@@ -73,10 +82,15 @@ public sealed class ProjectMeritConfigurations : IMeritConfigurations
 {
     private readonly Lazy<(SequentialLens Lens, OpticalSystemData System)>[] _built;
 
+    // OP-59
+    /// <summary>The active glass catalogs the configurations are built with.</summary>
+    public IReadOnlyList<OpticalCatalog>? Catalogs { get; }
+
     public ProjectMeritConfigurations(OpticsSettings optics, IReadOnlyList<OpticalCatalog> catalogs)
     {
         ArgumentNullException.ThrowIfNull(optics);
         ArgumentNullException.ThrowIfNull(catalogs);
+        Catalogs = catalogs;   // OP-59
         int count = MultiConfig.MultiConfiguration.ConfigurationCount(optics);
         _built = new Lazy<(SequentialLens, OpticalSystemData)>[count];
         for (int k = 1; k <= count; k++)

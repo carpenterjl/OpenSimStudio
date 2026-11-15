@@ -499,7 +499,18 @@ public static class SolveEngine
                     if (g.Catalog.Length > 0 && _options.Catalogs is { } catalogs
                         && !catalogs.Any(c => string.Equals(c.Name, g.Catalog, StringComparison.OrdinalIgnoreCase)))
                         throw Fail($"the catalog '{g.Catalog}' is not among the active catalogs ({string.Join(", ", catalogs.Select(c => c.Name))}).");
-                    return (lens, Done(null, "A flag for optimization: the glass is unchanged. Glass substitution in global optimization is not built."));
+                    // OP-59: at least one glass must meet the Glass Substitution Template. OpticStudio
+                    // removes the solve when none does ("Material Solves"); here it fails, naming why.
+                    if (_options.Catalogs is { } active)
+                    {
+                        var wavelengths = _system.Wavelengths.Wavelengths.Select(w => w.Micrometers).ToArray();
+                        var pool = GlassSubstitutionTemplate.Candidates(active, wavelengths, _options.SubstitutionTemplate, g.Catalog.Length > 0 ? g.Catalog : null);
+                        if (pool.Count == 0)
+                            throw Fail($"no glass of {(g.Catalog.Length > 0 ? $"the catalog '{g.Catalog}'" : "the active catalogs")} is free for substitution, valid at every wavelength"
+                                + $"{(_options.SubstitutionTemplate is { UseTemplate: true } ? " and within the Glass Substitution Template" : "")}.");
+                        return (lens, Done(null, $"A flag for glass substitution (GlassSubstitution): the glass is unchanged; {pool.Count} glass{(pool.Count == 1 ? "" : "es")} may replace it."));
+                    }
+                    return (lens, Done(null, "A flag for glass substitution (GlassSubstitution): the glass is unchanged."));
                 }
                 case GlassOffsetSolve o:
                 {

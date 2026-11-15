@@ -26,6 +26,14 @@ public enum LensVariableKind
     Parameter,
     /// <summary>A numeric cell of the multi-configuration table, in its operand's unit.</summary>
     Configuration,
+
+    // OP-59: model-glass parameters (GlassVariables.ModelNdColumn and the others).
+    /// <summary>A model glass's nd.</summary>
+    ModelIndex,
+    /// <summary>A model glass's Vd.</summary>
+    ModelAbbe,
+    /// <summary>A model glass's ΔP_g,F.</summary>
+    ModelPartialDispersion,
 }
 
 /// <summary>One variable cell: a cell of the Lens Data Editor flagged Variable
@@ -80,13 +88,14 @@ public static class LensVariables
             {
                 if (f is null || !string.Equals(f.Kind, SavedSurfaces.VariableFlag, StringComparison.Ordinal)) continue;
                 string column = f.Column ?? "";
+                if (column == GlassVariables.SubstituteColumn) continue;   // OP-59: discrete, for GlassSubstitution
                 string where = $"{SavedSurfaces.Where(j, surfaces.Count)}, {column}";
                 if (!seen.Add(column)) { problems.Add($"{where}: the cell is flagged Variable twice."); continue; }
                 if (Classify(s, column, out string? why) is not { } kind) { problems.Add($"{where}: {why}"); continue; }
                 variables.Add(new LensVariable
                 {
                     Kind = kind, Surface = j, Column = column,
-                    Label = $"Surface {j} {(kind == LensVariableKind.Curvature ? "curvature" : column)}",
+                    Label = $"Surface {j} {kind switch { LensVariableKind.Curvature => "curvature", LensVariableKind.ModelIndex => "model nd", LensVariableKind.ModelAbbe => "model Vd", LensVariableKind.ModelPartialDispersion => "model ΔPgF", _ => column }}",
                 });
             }
         }
@@ -121,8 +130,19 @@ public static class LensVariables
                 if (s.SemiDiameter is null) { why = "the semi-diameter is automatic; enter a value to vary it."; return null; }
                 return LensVariableKind.SemiDiameter;
             case SavedSurfaces.MaterialColumn:
-                why = "glass variables (model glasses and substitution) are plan item OP-59, not built.";
+                why = "the Material cell is not varied itself: a model glass varies through its nd, Vd and ΔPgF flags, a catalog glass through glass substitution.";
                 return null;
+            // OP-59: model-glass parameters.
+            case GlassVariables.ModelNdColumn:
+            case GlassVariables.ModelVdColumn:
+            case GlassVariables.ModelDeltaPgFColumn:
+                if (s.ModelGlass is null) { why = "the surface has no model glass; enter one ('nd, Vd' in the Material cell) to vary it."; return null; }
+                return column switch
+                {
+                    GlassVariables.ModelNdColumn => LensVariableKind.ModelIndex,
+                    GlassVariables.ModelVdColumn => LensVariableKind.ModelAbbe,
+                    _ => LensVariableKind.ModelPartialDispersion,
+                };
         }
         if (SavedSurfaces.ParameterNumber(column) is int n)
         {
@@ -156,6 +176,9 @@ public static class LensVariables
                 LensVariableKind.Tce => s.Tce,
                 LensVariableKind.SemiDiameter => s.SemiDiameter ?? 0,
                 LensVariableKind.Parameter => SavedSurfaces.Value(s, SavedSurfaces.ParameterNumber(v.Column)!.Value),
+                LensVariableKind.ModelIndex => Model(s, v).Nd,   // OP-59
+                LensVariableKind.ModelAbbe => Model(s, v).Vd,
+                LensVariableKind.ModelPartialDispersion => Model(s, v).DeltaPgF,
                 _ => throw new ArgumentException($"{v.Label}: not a surface variable."),
             };
         }
@@ -188,6 +211,9 @@ public static class LensVariables
                 LensVariableKind.Tce => s with { Tce = x },
                 LensVariableKind.SemiDiameter => s with { SemiDiameter = x },
                 LensVariableKind.Parameter => WithParameter(s, SavedSurfaces.ParameterNumber(v.Column)!.Value, x),
+                LensVariableKind.ModelIndex => s with { ModelGlass = Model(s, v) with { Nd = x } },   // OP-59
+                LensVariableKind.ModelAbbe => s with { ModelGlass = Model(s, v) with { Vd = x } },
+                LensVariableKind.ModelPartialDispersion => s with { ModelGlass = Model(s, v) with { DeltaPgF = x } },
                 _ => throw new ArgumentException($"{v.Label}: not a surface variable."),
             };
             result = result with { Surfaces = surfaces };
@@ -218,6 +244,9 @@ public static class LensVariables
                 LensVariableKind.SemiDiameter => s with { SemiDiameter = source.SemiDiameter },
                 LensVariableKind.Parameter => WithParameter(s, SavedSurfaces.ParameterNumber(v.Column)!.Value,
                     SavedSurfaces.Value(source, SavedSurfaces.ParameterNumber(v.Column)!.Value)),
+                LensVariableKind.ModelIndex => s with { ModelGlass = Model(s, v) with { Nd = Model(source, v).Nd } },   // OP-59
+                LensVariableKind.ModelAbbe => s with { ModelGlass = Model(s, v) with { Vd = Model(source, v).Vd } },
+                LensVariableKind.ModelPartialDispersion => s with { ModelGlass = Model(s, v) with { DeltaPgF = Model(source, v).DeltaPgF } },
                 _ => throw new ArgumentException($"{v.Label}: not a surface variable."),
             };
             result = result with { Surfaces = surfaces };
@@ -232,6 +261,10 @@ public static class LensVariables
             throw new ArgumentException($"{v.Label}: the system has no surface {v.Surface}.");
         return surfaces[v.Surface] ?? new OpticsSurfaceSettings();
     }
+
+    // OP-59
+    private static OpticsModelGlassSettings Model(OpticsSurfaceSettings s, LensVariable v) =>
+        s.ModelGlass ?? throw new ArgumentException($"{v.Label}: the surface no longer has a model glass.");
 
     private static OpticsSurfaceSettings WithParameter(OpticsSurfaceSettings s, int number, double value)
     {

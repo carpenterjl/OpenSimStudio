@@ -148,6 +148,11 @@ public sealed class MeritRowContext
 
     public LensUnit Unit => System.Units.LensUnit;
 
+    // OP-59
+    /// <summary>The active glass catalogs, for the glass operands (RGLA); null when the
+    /// configurations do not supply them (<see cref="IMeritConfigurations.Catalogs"/>).</summary>
+    public IReadOnlyList<OpenSim.Optics.Materials.OpticalCatalog>? Catalogs { get; internal init; }
+
     /// <summary>A length in meters, in lens units.</summary>
     public double Length(double meters) => OpticsConventions.FromMeters(meters, Unit);
 

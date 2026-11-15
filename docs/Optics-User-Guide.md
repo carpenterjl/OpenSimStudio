@@ -1072,8 +1072,8 @@ cell) is refused by name before anything runs.
 The starting design must evaluate with no failed row (as in OpticStudio); during the run a
 design that cannot be built or traced is scored with the failed-row penalty and avoided. Rows
 with a negative weight are met exactly (OpticStudio's Lagrangian multipliers); bound operands
-are ordinary weighted rows. Rules and readings are in docs/Optics-Conventions.md §35. Not built:
-glass variables (OP-59), global optimization (OP-58), analytic derivatives, per-type scale and
+are ordinary weighted rows. Rules and readings are in docs/Optics-Conventions.md §35. Glass
+variables and substitution are under Glass substitution below. Not built: global optimization (OP-58), analytic derivatives, per-type scale and
 derivative-increment settings in the window (the library takes them), saving the Optimize
 window's settings, and the "Auto Update" of open analysis windows during a run (they update
 when the result is applied).
@@ -1143,6 +1143,32 @@ as OpticStudio's Make Thermal does.
   thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
   thermal table at a changed temperature.
 
+## Glass substitution
+
+The **Glasses** section of the Optimize window lets the optimizer change glasses.
+
+- **Glass list.** Refresh lists the surfaces with a glass. For a model glass ("nd, Vd" or "nd,
+  Vd, ΔPgF" in the Material cell) tick Vary nd, Vary Vd or Vary ΔPgF; Start then varies them
+  with the other variables. Tick Substitute on any glass the search may replace. Apply flags
+  writes the ticks into the lens (one undo step of the Lens Data Editor).
+- **Convert model glasses** replaces each model glass by the nearest catalog glass (by nd and
+  Vd, OpticStudio's least-squares distance) within the template; optimize again afterwards.
+- **Substitute glasses** tries every candidate glass on each Substitute surface, re-optimizing
+  each time with the algorithm and cycles above, keeps the best, and repeats until a round
+  changes nothing. The best design is written into the lens; the Lens Data Editor's undo takes
+  it back. Stop keeps the best so far. Trials that fail are listed in the log.
+- **Glass substitution template** (saved with the lens): the statuses allowed, maximum relative
+  cost and CR, FR, SR, AR and PR codes (empty or 0 ignores a limit), whether glasses with
+  incomplete data are excluded, and the catalogs to draw from. Glasses flagged Exclude
+  Substitution in their catalog, tabulated materials and glasses that do not cover every
+  wavelength are never chosen.
+- **Operands.** RGLA (reasonable glass: distance from each glass of a surface range to the
+  nearest catalog glass) and GCOS (glass cost) are in the Merit Function Editor.
+
+Rules and readings are in docs/Optics-Conventions.md §41. Not built: the Hammer and Global
+optimizers, a substitute catalog per surface, saving the template to a *.GST file, and the
+operands MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and INDX.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1153,8 +1179,8 @@ Not built yet, and not to be relied on until they appear in this guide:
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);
-- global optimization, glass substitution and the tolerance analyses (the merit function, its
-  editor, the local optimizer and the tolerance data editor with its operands are built; the
+- global optimization and the tolerance analyses (the merit function, its editor, the local
+  optimizer, glass substitution and the tolerance data editor with its operands are built; the
   full operand catalogue, the default merit function wizard, sensitivity, Monte Carlo and
   compensator analyses are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several

@@ -2,12 +2,14 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:OpenSim.App.Controls"
-        Title="Local Optimization" Width="560" Height="520" MinWidth="420" MinHeight="320"
+        Title="Local Optimization" Width="620" Height="720" MinWidth="420" MinHeight="320"
         ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource PanelBgBrush}">
     <!-- OP-57: the Optimize tool. DataContext is the OpticsOptimizeViewModel. Start optimizes the
          project's lens against its merit function; Stop keeps the best design so far; the result
-         is written into the lens when the run ends, and Undo puts the variables back. -->
+         is written into the lens when the run ends, and Undo puts the variables back.
+         OP-59: the Glasses section: model-glass variables, the substitution flags, model to real
+         glass conversion, the glass substitution search and the Glass Substitution Template. -->
     <DockPanel Margin="8">
         <controls:FormGrid DockPanel.Dock="Top">
             <Label Content="Algorithm"/>
@@ -37,6 +39,64 @@
                     ToolTip="Put the variables back as they were before the last run."
                     AutomationProperties.AutomationId="OptimizeUndoButton"/>
         </WrapPanel>
+        <!-- OP-59 -->
+        <Expander DockPanel.Dock="Top" Header="Glasses" Margin="0,4,0,4" AutomationProperties.AutomationId="OptimizeGlassesExpander">
+            <StackPanel Margin="0,4,0,0">
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,4"
+                           Text="Model glasses vary by the ticked nd, Vd and ΔPgF. Substitute lets the glass search replace the glass. Apply writes the ticks into the lens."/>
+                <DataGrid ItemsSource="{Binding Glasses}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          MaxHeight="160" HeadersVisibility="Column" IsEnabled="{Binding IsIdle}"
+                          AutomationProperties.AutomationId="OptimizeGlassesGrid">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Surface" Binding="{Binding Surface}" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Material" Binding="{Binding Material}" IsReadOnly="True" Width="*"/>
+                        <DataGridCheckBoxColumn Header="Vary nd" Binding="{Binding VaryNd, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DataGridCheckBoxColumn Header="Vary Vd" Binding="{Binding VaryVd, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DataGridCheckBoxColumn Header="Vary ΔPgF" Binding="{Binding VaryDeltaPgF, UpdateSourceTrigger=PropertyChanged}"/>
+                        <DataGridCheckBoxColumn Header="Substitute" Binding="{Binding Substitute, UpdateSourceTrigger=PropertyChanged}"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <WrapPanel Margin="0,4,0,4">
+                    <Button Content="Refresh" Command="{Binding RefreshGlassesCommand}" Margin="0,0,4,4" MinWidth="70"
+                            ToolTip="Read the glasses and their flags from the lens."/>
+                    <Button Content="Apply flags" Command="{Binding ApplyGlassFlagsCommand}" Margin="0,0,4,4" MinWidth="70"
+                            ToolTip="Write the ticks into the lens (one undoable edit)."/>
+                    <Button Content="Convert model glasses" Command="{Binding ConvertModelGlassesCommand}" Margin="0,0,4,4"
+                            ToolTip="Replace each model glass by the nearest catalog glass within the template; optimize again afterwards."/>
+                    <Button Content="Substitute glasses" Command="{Binding SubstituteGlassesCommand}" Margin="0,0,4,4"
+                            ToolTip="Try every candidate glass on each Substitute surface, re-optimizing each time, and keep the best. Stop keeps the best so far."
+                            AutomationProperties.AutomationId="OptimizeSubstituteButton"/>
+                </WrapPanel>
+                <controls:FormGrid IsEnabled="{Binding IsIdle}">
+                    <Label Content="Use glass substitution template"/>
+                    <CheckBox IsChecked="{Binding UseTemplate}" VerticalAlignment="Center"/>
+                    <Label Content="Exclude glasses with incomplete data"/>
+                    <CheckBox IsChecked="{Binding ExcludeIncompleteData}" VerticalAlignment="Center"/>
+                    <Label Content="Standard"/>
+                    <CheckBox IsChecked="{Binding AllowStandard}" VerticalAlignment="Center"/>
+                    <Label Content="Preferred"/>
+                    <CheckBox IsChecked="{Binding AllowPreferred}" VerticalAlignment="Center"/>
+                    <Label Content="Obsolete"/>
+                    <CheckBox IsChecked="{Binding AllowObsolete}" VerticalAlignment="Center"/>
+                    <Label Content="Special"/>
+                    <CheckBox IsChecked="{Binding AllowSpecial}" VerticalAlignment="Center"/>
+                    <Label Content="Maximum relative cost"/>
+                    <TextBox Text="{Binding MaxRelativeCost, TargetNullValue=''}" ToolTip="Empty or 0 ignores it. N-BK7 is 1."/>
+                    <Label Content="Maximum climatic resistance (CR)"/>
+                    <TextBox Text="{Binding MaxClimaticResistance, TargetNullValue=''}" ToolTip="Empty or 0 ignores it."/>
+                    <Label Content="Maximum stain resistance (FR)"/>
+                    <TextBox Text="{Binding MaxStainResistance, TargetNullValue=''}" ToolTip="Empty or 0 ignores it."/>
+                    <Label Content="Maximum acid resistance (SR)"/>
+                    <TextBox Text="{Binding MaxAcidResistance, TargetNullValue=''}" ToolTip="Empty or 0 ignores it."/>
+                    <Label Content="Maximum alkali resistance (AR)"/>
+                    <TextBox Text="{Binding MaxAlkaliResistance, TargetNullValue=''}" ToolTip="Empty or 0 ignores it."/>
+                    <Label Content="Maximum phosphate resistance (PR)"/>
+                    <TextBox Text="{Binding MaxPhosphateResistance, TargetNullValue=''}" ToolTip="Empty or 0 ignores it."/>
+                    <Label Content="Substitution catalogs"/>
+                    <TextBox Text="{Binding TemplateCatalogs}" ToolTip="Catalog names, comma-separated; empty is every active catalog."/>
+                </controls:FormGrid>
+            </StackPanel>
+        </Expander>
         <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,0,0,4"/>
         <ListBox ItemsSource="{Binding Log}"/>
     </DockPanel>

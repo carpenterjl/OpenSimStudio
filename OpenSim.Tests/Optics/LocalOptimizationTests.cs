@@ -92,7 +92,7 @@ public sealed class LocalOptimizationTests
         surfaces[1] = surfaces[1] with { Flags = new() { F.Variable("Material"), F.Variable("SemiDiameter") } };
         surfaces[0] = surfaces[0] with { Flags = new() { F.Variable("Thickness") } };
         var e = Assert.Throws<ArgumentException>(() => LensVariables.Find(optics with { Surfaces = surfaces }));
-        Assert.Contains("OP-59", e.Message);
+        Assert.Contains("the Material cell is not varied itself", e.Message);   // OP-59: glasses vary through their own flags
         Assert.Contains("automatic", e.Message);
         Assert.Contains("infinite thickness", e.Message);
     }

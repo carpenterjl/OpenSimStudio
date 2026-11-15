@@ -111,7 +111,7 @@ public partial class OpticsViewModel : ObservableObject
     /// <summary>The Optimize tool (OP-57): local optimization of the project's lens against the
     /// merit function, its result written back through the editors.</summary>
     public OpticsOptimizeViewModel Optimize => _optimize ??=
-        new OpticsOptimizeViewModel(ToSettings, () => BuildLensEditContext().Catalogs, ApplyOptimization);
+        new OpticsOptimizeViewModel(ToSettings, () => BuildLensEditContext().Catalogs, ApplyOptimization, PublishFromMultiConfig);   // OP-59: the template publishes
 
     /// <summary>Writes an optimization (or its undo) into the workspace: the surfaces as one
     /// undo step of the Lens Data Editor, then the multi-configuration table when one of its
@@ -177,6 +177,7 @@ public partial class OpticsViewModel : ObservableObject
         Tolerances = ToleranceEditor?.ToSettings(),   // OP-63
         MultiConfiguration = withTable ? MultiConfig?.ToSettings() : null,
         Thermal = MultiConfig?.ToThermalSettings(),   // OP-91
+        GlassSubstitution = Optimize.TemplateToSettings(),   // OP-59
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -200,6 +201,7 @@ public partial class OpticsViewModel : ObservableObject
         LensEditor.LoadSettings(saved.Surfaces, notes);
         MeritEditor.LoadSettings(saved.MeritFunction, notes);   // OP-54
         ToleranceEditor.LoadSettings(saved.Tolerances, notes);   // OP-63
+        Optimize.LoadTemplate(saved.GlassSubstitution);   // OP-59
 
         MultiConfig.LoadThermalSettings(saved.Thermal);   // OP-91: before the table, whose thermal pickups read it
         MultiConfig.LoadSettings(saved.MultiConfiguration, notes);   // OP-30: null is one configuration
@@ -217,6 +219,7 @@ public partial class OpticsViewModel : ObservableObject
         LensEditor.Reset();
         MeritEditor.Reset();   // OP-54
         ToleranceEditor.Reset();   // OP-63
+        Optimize.LoadTemplate(null);   // OP-59
 
         MultiConfig.LoadThermalSettings(null);   // OP-91
         MultiConfig.Reset();

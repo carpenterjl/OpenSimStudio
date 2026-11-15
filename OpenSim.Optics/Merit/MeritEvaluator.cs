@@ -270,7 +270,7 @@ public static class MeritEvaluator
                     request => keyIndex.TryGetValue((c, request), out int i)
                         ? traced[i].Path ?? throw new MeritOperandException(traced[i].Error!)
                         : throw new InvalidOperationException($"{at}: its ray was not collected for tracing."),
-                    state.Paraxial);
+                    state.Paraxial) { Catalogs = configurations.Catalogs };   // OP-59: the catalogs for RGLA
                 double value = d.Compute!(context);
                 if (!double.IsFinite(value)) throw new MeritOperandException($"the value is {value.ToString(CultureInfo.InvariantCulture)}.");
                 results[n - 1] = new MeritRowResult { Number = n, Row = row, Status = MeritRowStatus.Evaluated, Configuration = c, Value = value };

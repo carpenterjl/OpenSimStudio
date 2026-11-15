@@ -30,6 +30,12 @@ public sealed record SolveOptions
     /// <summary>The active glass catalogs, against which a <see cref="SubstituteGlassSolve"/>'s
     /// catalog name is checked. Null skips the check.</summary>
     public IReadOnlyList<OpticalCatalog>? Catalogs { get; init; }
+
+    // OP-59
+    /// <summary>The Glass Substitution Template a <see cref="SubstituteGlassSolve"/> is checked
+    /// against (with <see cref="Catalogs"/>): the solve fails when no glass meets it. Null is no
+    /// template.</summary>
+    public OpenSim.Core.Model.OpticsGlassSubstitutionSettings? SubstitutionTemplate { get; init; }
 }
 
 /// <summary>What one solve did in the last pass.</summary>
