@@ -87,8 +87,8 @@ public sealed class HighYieldGateTests
 
         var before = MonteCarlo(start);
         var after = MonteCarlo(optimised);
-        Assert.Equal(0, before.Failed);
-        Assert.Equal(0, after.Failed);
+        Assert.True(before.Failed == 0, $"start: {before.Failed} trials failed, first: {before.Trials.FirstOrDefault(t => !t.Succeeded)?.Failure}");
+        Assert.True(after.Failed == 0, $"optimised: {after.Failed} trials failed, first: {after.Trials.FirstOrDefault(t => !t.Succeeded)?.Failure}");
         Assert.True(Math.Abs(after.Nominal - before.Nominal) <= 1e-9,
             $"nominal RMS spot radius {after.Nominal:R} {after.Unit} against {before.Nominal:R}");
         double sBefore = before.Statistics!.StandardDeviation, sAfter = after.Statistics!.StandardDeviation;
