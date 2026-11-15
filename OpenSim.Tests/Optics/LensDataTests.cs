@@ -125,10 +125,10 @@ public sealed class LensDataTests
     public void AnUnknownSurfaceType_OrGlass_IsRefusedByName()
     {
         var saved = Singlet();
-        saved[2] = saved[2] with { Type = "Zernike Standard Sag", Parameters = new() { new() { Number = 2, Value = 1e-5 } } };
+        saved[2] = saved[2] with { Type = "Toroidal NURBS", Parameters = new() { new() { Number = 2, Value = 1e-5 } } };
         saved[1] = saved[1] with { Index = null, Material = "N-NOTAGLASS" };
         var ex = Assert.Throws<ArgumentException>(() => SavedSurfaces.ToLens(saved, LensUnit.Millimeter, _ => null));
-        Assert.Contains("Surface 2: the surface type 'Zernike Standard Sag'", ex.Message);
+        Assert.Contains("Surface 2: the surface type 'Toroidal NURBS'", ex.Message);
         Assert.Contains("Surface 1: the glass 'N-NOTAGLASS' is not in the active catalogs", ex.Message);
 
         // A model glass needs catalogs to train on; a Standard surface has no parameters.
@@ -251,8 +251,8 @@ public sealed class LensDataTests
         var front = ScaleLens.Apply(lens, 3, 1, 1).Surfaces;
         Assert.Equal((120.0, -120.0), (front[1].Radius!.Value, front[2].Radius!.Value));
         var other = lens.ToList();
-        other[2] = other[2] with { Type = "Zernike Standard Sag" };   // TC-6: a type that is not registered
-        Assert.Contains("Zernike Standard Sag", Assert.Throws<ArgumentException>(() => ScaleLens.Apply(other, 2)).Message);
+        other[2] = other[2] with { Type = "Toroidal NURBS" };   // TC-6: a type that is not registered
+        Assert.Contains("Toroidal NURBS", Assert.Throws<ArgumentException>(() => ScaleLens.Apply(other, 2)).Message);
         Assert.Throws<ArgumentException>(() => ScaleLens.Apply(lens, 0));
         // The lens-unit change converts the shared columns of any type.
         Assert.Equal(-60, ScaleLens.ConvertUnits(other, 0.5).Surfaces[2].Radius);
