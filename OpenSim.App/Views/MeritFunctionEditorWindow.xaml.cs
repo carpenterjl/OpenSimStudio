@@ -30,6 +30,10 @@ public partial class MeritFunctionEditorWindow : Window
         Closed += (_, _) => _editor.PropertyChanged -= OnEditorChanged;
     }
 
+    /// <summary>Opens the Optimization Wizard (OP-56) on this editor.</summary>
+    private void OnWizard(object sender, RoutedEventArgs e) =>
+        new MeritWizardWindow(_editor.CreateWizard()) { Owner = this }.ShowDialog();
+
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(OpticsMeritEditorViewModel.CurrentRow) || _syncing) return;

@@ -929,9 +929,10 @@ row, a math row reading a later one) is refused with every problem named.
 
 Built: the control operands (BLNK, DMFS, ENDX, GOTO, OOFF, SKIN, SKIS, USYM), CONF, effective
 focal length, total track, a few lens-data constraints and bounds, real ray coordinates and the
-general math operands. Rules and readings are in docs/Optics-Conventions.md §31. Not built: the
-rest of the operand catalogue, the default merit function wizard, the merit function listing,
-and .MF files. Optimization is the next section.
+general math operands, and the ray-aberration and boundary operands of the Optimization Wizard
+(next section). Rules and readings are in docs/Optics-Conventions.md §31. Not built: the rest of
+the operand catalogue, the merit function listing, and .MF files. Optimization follows the
+wizard.
 
 ## Seidel and full-field aberrations
 
@@ -1270,6 +1271,41 @@ configurations, the coherent transfer function, the 3-D surface plot, the throug
 the contrast loss map's circles and OPD indicator, afocal through-focus and Huygens MTF, and
 the object-space cycles-per-milliradian unit of focal systems.
 
+## Optimization Wizard
+
+**Wizard** in the Merit Function Editor opens the Optimization Wizard, which writes the default
+merit function: an RMS image error at every field and wavelength, integrated over the pupil.
+
+- **Criterion**: wavefront (OPD in waves), spot radius, spot x, spot y, spot x + y, or angular
+  (for afocal image space). **Reference**: centroid (the field's weighted centroid; for the
+  wavefront the mean and tilt are removed), chief ray (the primary wavelength's chief ray; for
+  the wavefront the mean is removed), or unreferenced (wavefront only). **Ignore lateral
+  colour** gives each wavelength its own centroid.
+- **Pupil integration**: Gaussian quadrature (rings 1 to 20, arms 6, 8, 10 or 12; n rings
+  integrate aberrations up to order 2n − 1 when there are at least 4n arms) or a rectangular
+  array (rays across, 2 to 100; Delete vignetted leaves out the rays that fail now). Gaussian
+  quadrature assumes the whole pupil is traced: when any of its rays is vignetted, the wizard
+  writes the rectangular array instead and says so in its status line.
+- **Symmetry**: automatic (when the lens is rotationally symmetric), on or off. On, fields on the
+  y axis get half the rows at twice the weight, and the on-axis field one row per ring for the
+  radial criteria; on a symmetric lens the merit value does not change.
+- **Boundary values**: minimum and maximum center thickness and minimum edge thickness for glass
+  (MNCG, MXCG, MNEG) and air (MNCA, MXCA, MNEA), in lens units, over every surface.
+- **Configurations**: the current one or all (each after a CONF row). **Start at row**: where the
+  rows go; by default the row after a DMFS row, else the end (0). Later rows that refer to rows
+  by number are renumbered. **Overall weight** scales every weight. **Relative X/Y weight** weigh
+  the x and y rows of spot x + y and angular (0 leaves those rows out; both 0 write radial rows).
+
+**Apply** inserts the rows (one undo step in the editor); **OK** applies and closes. **Save
+Settings** keeps the dialog's settings with the project; **Load Settings** and **Reset
+Settings** show the saved ones and the defaults. Each row's weight is overall × field weight ×
+wavelength weight × the pupil point's weight, so for one field and one wavelength the merit value
+is the RMS of the RMS analyses; for spot x + y with equal relative weights it is the RMS radius
+divided by √2. Docs/Optics-Conventions.md §40 has the rules and §10 item 36 the readings.
+
+Not built: the contrast (MTF) criterion, the PTV type, Max Distortion, the manufacturing-yield
+goal, Add Favorite Operands and the Gaussian obscuration.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1282,10 +1318,10 @@ Not built yet, and not to be relied on until they appear in this guide:
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);
-- global optimization and the tolerance analyses (the merit function, its editor, the local
-  optimizer, glass substitution, the tolerance data editor with its operands, and sensitivity and
-  inverse sensitivity with compensators are built; the full operand catalogue, the default merit
-  function wizard and Monte Carlo are not);
+- global optimization and the tolerance analyses (the merit function, its editor, the default
+  merit function wizard, the local optimizer, glass substitution, the tolerance data editor with
+  its operands, and sensitivity and inverse sensitivity with compensators are built; the full
+  operand catalogue and Monte Carlo are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

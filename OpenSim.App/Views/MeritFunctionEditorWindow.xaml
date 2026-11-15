@@ -17,6 +17,9 @@
                     ToolTip="Insert a BLNK row before the current one."/>
             <Button Content="Insert after" Command="{Binding InsertOperandAfterCommand}" Margin="0,0,4,4"/>
             <Button Content="Delete operand" Command="{Binding DeleteOperandCommand}" Margin="0,0,4,4"/>
+            <Button Content="Wizard" Click="OnWizard" Margin="8,0,4,4"
+                    AutomationProperties.AutomationId="MeritWizardButton"
+                    ToolTip="Optimization Wizard: write the default merit function (RMS spot, wavefront or angular over the pupil, thickness boundaries)."/>
             <Button Content="Undo" Command="{Binding UndoCommand}" Margin="8,0,4,4"/>
             <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,4,4"/>
             <TextBlock Text="{Binding MeritValueText}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="12,0,4,4"/>

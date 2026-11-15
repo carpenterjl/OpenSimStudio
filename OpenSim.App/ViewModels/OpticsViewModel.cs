@@ -38,7 +38,8 @@ public partial class OpticsViewModel : ObservableObject
         LensEditor = new OpticsLensEditorViewModel(PublishFromLensEditor, BuildLensEditContext);
         // OP-54: the merit function editor, evaluated over the project's configurations (OP-30).
         MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
-            () => new OpenSim.Optics.Merit.ProjectMeritConfigurations(ToSettings(), BuildLensEditContext().Catalogs));
+            () => new OpenSim.Optics.Merit.ProjectMeritConfigurations(ToSettings(), BuildLensEditContext().Catalogs),
+            currentConfiguration: () => MultiConfig?.CurrentConfiguration ?? 1);   // OP-56: the wizard's current configuration
         // OP-63: the tolerance data editor; Update validates against the project's record.
         ToleranceEditor = new OpticsToleranceEditorViewModel(PublishFromLensEditor, ToSettings, () => BuildLensEditContext().Catalogs);   // OP-64: catalogs for the tolerance run
         // OP-30: the multi-configuration editor, applied to the entered system.
@@ -178,6 +179,7 @@ public partial class OpticsViewModel : ObservableObject
         MultiConfiguration = withTable ? MultiConfig?.ToSettings() : null,
         Thermal = MultiConfig?.ToThermalSettings(),   // OP-91
         GlassSubstitution = Optimize.TemplateToSettings(),   // OP-59
+        MeritWizard = MeritEditor?.WizardSettings,   // OP-56
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -200,6 +202,7 @@ public partial class OpticsViewModel : ObservableObject
         Coatings.LoadSettings(saved.Coatings, notes);
         LensEditor.LoadSettings(saved.Surfaces, notes);
         MeritEditor.LoadSettings(saved.MeritFunction, notes);   // OP-54
+        MeritEditor.LoadWizardSettings(saved.MeritWizard);   // OP-56
         ToleranceEditor.LoadSettings(saved.Tolerances, notes);   // OP-63
         Optimize.LoadTemplate(saved.GlassSubstitution);   // OP-59
 

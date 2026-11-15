@@ -73,4 +73,9 @@ public sealed record OpticsSettings
     /// substitution and the model-to-real conversion may choose. Null — every file written before
     /// OP-59 — is no template: any glass not excluded in its catalog.</summary>
     public OpticsGlassSubstitutionSettings? GlassSubstitution { get; init; }
+
+    // OP-56
+    /// <summary>The Optimization Wizard's saved settings (OP-56). Null — every file written
+    /// before OP-56, or settings never saved — is the wizard's defaults.</summary>
+    public OpticsMeritWizardSettings? MeritWizard { get; init; }
 }

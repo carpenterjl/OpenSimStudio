@@ -22,16 +22,21 @@ public sealed partial class OpticsMeritEditorViewModel : ObservableObject
 {
     private readonly Action _publish;
     private readonly Func<IMeritConfigurations> _configurations;
+    private readonly Func<int> _currentConfiguration;   // OP-56
     private readonly Dictionary<string, MeritOperandDefinition> _byTypeName = new(StringComparer.Ordinal);
     private bool _applying;
 
     /// <param name="publish">Called after every edit, to publish the system.</param>
     /// <param name="configurations">The configurations to evaluate over; may throw
     /// <see cref="ArgumentException"/> naming why the lens cannot be built.</param>
-    public OpticsMeritEditorViewModel(Action publish, Func<IMeritConfigurations> configurations, MeritOperandRegistry? registry = null)
+    /// <param name="currentConfiguration">The current configuration (1-based) the Optimization
+    /// Wizard writes for when asked for the current one; null is configuration 1 (OP-56).</param>
+    public OpticsMeritEditorViewModel(Action publish, Func<IMeritConfigurations> configurations, MeritOperandRegistry? registry = null,
+        Func<int>? currentConfiguration = null)
     {
         _publish = publish ?? throw new ArgumentNullException(nameof(publish));
         _configurations = configurations ?? throw new ArgumentNullException(nameof(configurations));
+        _currentConfiguration = currentConfiguration ?? (() => 1);
         Registry = registry ?? MeritOperandRegistry.CreateDefault();
         foreach (var d in Registry.All) _byTypeName[S.TypeName(d)] = d;
         _document = new SheetDocument(S.Build(Registry));
@@ -117,7 +122,11 @@ public sealed partial class OpticsMeritEditorViewModel : ObservableObject
         Load(MeritFunctionSettings.FromSettings(saved, Registry, notes), notes);
 
     /// <summary>A new project's merit function: empty.</summary>
-    public void Reset() => Load(new MeritFunction(), new List<string>());
+    public void Reset()
+    {
+        Load(new MeritFunction(), new List<string>());
+        LoadWizardSettings(null);   // OP-56
+    }
 
     /// <summary>Replaces the rows with <paramref name="function"/>'s, without an undo step.</summary>
     public void Load(MeritFunction function, ICollection<string> notes)
@@ -229,6 +238,90 @@ public sealed partial class OpticsMeritEditorViewModel : ObservableObject
     }
 
     private static string Format(double x) => x.ToString("G10", CultureInfo.InvariantCulture);
+
+    // ------------------------------------------------------------------ OP-56: the Optimization Wizard
+
+    private OpticsMeritWizardSettings? _wizardSettings;
+
+    /// <summary>The Optimization Wizard's saved settings (its Save Settings), saved with the
+    /// project; null is the wizard's defaults. Setting it publishes the system.</summary>
+    public OpticsMeritWizardSettings? WizardSettings
+    {
+        get => _wizardSettings;
+        set
+        {
+            if (Equals(_wizardSettings, value)) return;
+            _wizardSettings = value;
+            OnPropertyChanged();
+            _publish();
+        }
+    }
+
+    /// <summary>Loads a file's wizard settings without publishing (null: the defaults).</summary>
+    public void LoadWizardSettings(OpticsMeritWizardSettings? saved)
+    {
+        _wizardSettings = saved;
+        OnPropertyChanged(nameof(WizardSettings));
+    }
+
+    /// <summary>A new Optimization Wizard dialog on this editor.</summary>
+    public OpticsMeritWizardViewModel CreateWizard() => new(this);
+
+    /// <summary>
+    /// Generates the default merit function (<see cref="DefaultMeritWizard.Generate"/>) on the
+    /// project's configurations and inserts it at <see cref="DefaultMeritOptions.StartAt"/> (null:
+    /// the row after DMFS, else the end), renumbering rows that refer to later rows, as one undo
+    /// step. Throws <see cref="ArgumentException"/> naming why nothing was inserted.
+    /// </summary>
+    public DefaultMeritResult ApplyDefaultMerit(DefaultMeritOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var configurations = _configurations();
+        int current = Math.Clamp(_currentConfiguration(), 1, configurations.Count);
+        var result = DefaultMeritWizard.Generate(configurations, current, options);
+        var existing = ToFunction();
+        int startAt = options.StartAt ?? DefaultMeritWizard.DefaultStartAt(existing);
+        Replace(DefaultMeritWizard.Insert(existing, result.Rows, startAt, Registry), "Optimization Wizard");
+        Status = $"Optimization Wizard: {result.Rows.Count} rows inserted.";
+        return result;
+    }
+
+    /// <summary>Replaces the rows with <paramref name="function"/>'s as one undo step named
+    /// <paramref name="description"/>; publishes once.</summary>
+    private void Replace(MeritFunction function, string description)
+    {
+        var doc = Document;
+        _applying = true;
+        try
+        {
+            using var group = doc.History.BeginGroup(description);
+            if (doc.RowCount > 0) doc.DeleteRows(Enumerable.Range(0, doc.RowCount));
+            for (int i = 0; i < function.Rows.Count; i++)
+            {
+                var r = function.Rows[i];
+                var type = doc.Schema.FindRowType(S.TypeName(Registry.Get(r.Code)));
+                var inserted = doc.InsertRows(i, 1, type);
+                if (!inserted.Succeeded) throw new InvalidOperationException($"Merit function row {i + 1}: {inserted.Message}");
+                var row = doc.Rows[i];
+                void Set(int slot, CellValue value)
+                {
+                    if (row.Cells[slot].Definition is null) return;
+                    var set = doc.SetValue(i, slot + 1, value);
+                    if (!set.Succeeded) throw new InvalidOperationException($"Merit function row {i + 1}: {set.Message}");
+                }
+                Set(S.CommentSlot, CellValue.Of(r.Comment));
+                Set(S.Int1Slot, CellValue.Of(r.Int1));
+                Set(S.Int2Slot, CellValue.Of(r.Int2));
+                for (int k = 1; k <= MeritOperandRow.DataCount; k++) Set(S.Data1Slot + k - 1, CellValue.Of(r.DataAt(k)));
+                Set(S.TargetSlot, CellValue.Of(r.Target));
+                Set(S.WeightSlot, CellValue.Of(r.Weight));
+            }
+        }
+        finally { _applying = false; }
+        Invalidate();
+        OnPropertyChanged(nameof(OperandCount));
+        _publish();
+    }
 
     [RelayCommand]
     private void InsertOperand()

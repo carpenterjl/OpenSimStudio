@@ -77,7 +77,7 @@ public sealed class MeritOperandRegistry
         r.Register(Control("BLNK", "Blank", MeritControl.Blank,
             "Does nothing. Used for separating portions of the operand list; the comment is shown in the editor."));
         r.Register(Control("DMFS", "Default merit function start", MeritControl.DefaultStart,
-            "Marks where a default merit function is appended. The wizard that appends it is OP-56; here the row does nothing."));
+            "Marks where a default merit function is appended: the row after it is the Optimization Wizard's default start row. Does nothing in the evaluation."));
         r.Register(Control("ENDX", "End", MeritControl.End,
             "Ends the computation of the merit function; all remaining operands are ignored."));
         r.Register(Control("GOTO", "Go to row", MeritControl.GoTo,
@@ -190,6 +190,12 @@ public sealed class MeritOperandRegistry
         r.Register(Trig("TANG", "Tangent", "Tangent of row Op#; radians, or degrees when Flag is not 0.", inverse: false, Math.Tan));
         r.Register(Unary("ABGT", "Absolute value greater than", "Absolute value of row Op#, bounded below by the target.", Math.Abs, bound: true, atLeast: true));
         r.Register(Unary("ABLT", "Absolute value less than", "Absolute value of row Op#, bounded above by the target.", Math.Abs, bound: true, atLeast: false));
+
+        // OP-56: the ray-aberration operands the Optimization Wizard writes (TRAR, TRAX, TRAY,
+        // ANAR, ANAX, ANAY, OPDC; the centroid groups TRAC, TRCX, TRCY, ANAC, ANCX, ANCY, OPDM,
+        // OPDX) and its thickness boundaries (MNCG, MXCG, MNEG, MNCA, MXCA, MNEA); see
+        // RayAberrationOperands.
+        foreach (var definition in RayAberrationOperands.Definitions()) r.Register(definition);
 
         // OP-59: glass operands (help: Constraints on Glass Data; GlassOperands).
         r.Register(GlassOperands.ReasonableGlass());

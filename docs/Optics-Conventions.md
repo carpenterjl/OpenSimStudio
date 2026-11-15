@@ -995,6 +995,36 @@ single place in the code, so a correction is one line and its test.
     monochromatic, against OpticStudio's text output; the contrast loss map's δ against its
     plot.
 
+36. **Default merit function wizard readings** (OP-56, section 40). Read from the help's
+    Optimization Wizard pages and the alphabetical operand list; nothing is compared with
+    OpticStudio's output, and these are this program's readings where the help is short:
+    - *The group columns.* OpticStudio groups TRAC, TRCX, TRCY, OPDM and OPDX (and, by their
+      pages, ANCX and ANCY) "by field position and wavelength" in the editor; here each such row
+      carries its pupil rule (Int1 rings or grid, Data5 arms, 0 for the rectangular array) and
+      Data6 (one reference per field, or per wavelength). OpticStudio's own rows have no such
+      columns; an imported TRAC row fails, asking for the rows to be regenerated.
+    - *Which chief ray.* TRAR's page says "See ANAR", whose reference is "the primary wavelength
+      chief ray"; TRAX and TRAY, whose pages say only "the chief ray", are read the same way.
+      OPDC's reference sphere is on its own wavelength's chief ray.
+    - *Polychromatic wavefront.* A group over every weighted wavelength (lateral colour counted)
+      is referred to the primary wavelength's reference sphere and its mean or plane is fitted
+      over all of them, as in OP-40's polychromatic RMS; each row's value is then in waves of its
+      own wavelength, as OPDC's page says ("in waves at the wavelength defined by Wave").
+    - *Arms and symmetry.* The arms start on +x, as in OP-40's rule; OpticStudio's arm angles are
+      not documented. With symmetry, arms on the y axis keep their own weight, so 8 or 12 arms
+      keep more than half; the help says "half the number of arms".
+    - *Weights.* Field weight × wavelength weight × pupil weight × overall weight; how OpticStudio
+      normalises its weights is not documented (the merit value divides by Σ W either way).
+    - *Boundary columns.* MNEG's and MNEA's Zone and Mode in Data1 and Data2; the edge thickness
+      at this surface's semi-diameter along +y; the boundary rows cover surfaces 1 to the one
+      before the image and are written once, not per configuration. The thickness defaults are
+      this program's.
+    - *Start At and DMFS.* The generated rows are inserted, not written over earlier ones (help,
+      "Button Functions": "adds the generated merit function to the existing merit function");
+      the wizard writes no DMFS row.
+    Check: OpticStudio's default merit function for a test lens, its rows and merit value
+    compared with this program's.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2638,7 +2668,7 @@ equation images are saved rendered as PNG beside their SVGs).
   surface range (the help's example: thicknesses 2.5 and 2.2 under 3.0 give 1.7); MXCT is the
   same with the sign turned.
 - **Control rows** (help: Merit Function Control Operands). BLNK and DMFS do nothing (DMFS only
-  marks where OP-56's default merit function would go); OOFF is evaluated as BLNK and is what a
+  marks where the Optimization Wizard's default merit function goes, §40); OOFF is evaluated as BLNK and is what a
   saved code this build does not know becomes, named in the load notes; ENDX ends the
   evaluation; GOTO continues at row Op#; SKIS continues at row Op# when the lens is rotationally
   symmetric, SKIN when it is not; USYM anywhere makes every configuration count as symmetric.
@@ -2672,7 +2702,7 @@ general math operands ABSO, ACOS, ASIN, ATAN, CONS, COSI, DIFF, DIVB, DIVI, LOGE
 MINN, OPGT, OPLT, OPVA, OSUM, PROB, PROD, QSUM, RECI, SQRT, SUMM, SINE, TANG, ABGT and ABLT.
 
 **Not built.** The rest of the operand catalogue (OP-55); EQUA (the help does not say how its
-value meets its target); the default merit function and its wizard (OP-56); the optimizer is
+value meets its target); the default merit function and its wizard are §40; the optimizer is
 §35; the merit function listing; reading or writing OpticStudio's .MF
 files (the help names the file but does not document its format).
 
@@ -3389,3 +3419,95 @@ with its Rotation and Scale; the through-focus spline and 101-point listing; the
 sparse methods (Grid = 0); object-space cycles per milliradian for focal systems; afocal angle
 units other than milliradians; afocal Huygens and through-focus MTF; the contrast loss map's
 circles and Show OPD indicator; O'Neill's annular closed form and Hopkins' series as gates.
+
+## 40. Default merit function wizard
+
+`OpenSim.Optics/Merit/DefaultMeritWizard.cs` (OP-56) writes OpticStudio's default merit
+function; `OpenSim.Optics/Merit/RayAberrationOperands.cs` holds the operands it writes. The help
+read is OpticStudio 2025 R2's Optimization Wizard and its pages (Optimization Function Types,
+Criteria, Reference Points, Distortion and Color, Pupil Integration Settings, Optimization Goal,
+Boundary Values, Other Settings, Button Functions; saved under
+`plans/sources/optics/op-56-help/`), "Gaussian Quadrature" and "Rectangular Array" (OP-40's
+folder) and the alphabetical operand list (OP-54's folder).
+
+- **Rows.** For each configuration chosen (the current one, or all; each after a CONF row when
+  the system has more than one), each field and each wavelength of non-zero weight, and each
+  pupil point of the rule: one row of the criterion's operand, target 0, weight
+  W = overall × w_field × w_wavelength × w_pupil (× the relative X or Y weight). The pupil
+  weights sum to 1, so
+  MF² = Σ_f w_f Σ_λ w_λ Σ_i w_i e²(f, λ, i) / (Σ_f w_f · Σ_λ w_λ):
+  - spot radius, spot x, spot y, wavefront: for one field and one wavelength MF is OP-40's RMS
+    (§34) over the same rule. With one centroid per field over every wavelength,
+    MF² = Σ_f w_f R_f² / Σ_f w_f, R_f OP-40's polychromatic RMS (exactly for the spot; for the
+    wavefront each wavelength's residual is in its own waves, while §34's polychromatic RMS is in
+    primary waves). With Ignore Lateral Color, MF² = Σ_f Σ_λ w_f w_λ R²(f, λ) / (Σ w_f · Σ w_λ),
+    R(f, λ) the monochromatic RMS;
+  - spot x + y and angular: x rows weighted by the relative X weight a, y rows by b, so
+    MF² = (a·R_x² + b·R_y²)/(a + b), which is R/√2 for a = b. A zero relative weight writes no
+    rows for that component; both zero write radial rows (TRAC or TRAR, ANAC or ANAR).
+- **Operands** (help: the alphabetical list). Centroid: TRAC (radial), TRCX, TRCY, ANAC, ANCX,
+  ANCY (direction cosines l, m), OPDX (mean and tilt removed: the weighted least-squares plane
+  a + b·Px + c·Py, OP-40's fit). Chief ray: TRAR, TRAX, TRAY, ANAR, ANAX, ANAY from the primary
+  wavelength's chief ray, and OPDM (mean removed). Unreferenced: OPDC (the OPD against the sphere
+  on the row's own wavelength's chief ray, nothing removed). Spot positions are on the image
+  surface in its local frame, in lens units; the OPD is §26's, against the exit-pupil reference
+  sphere on the chief ray, in waves of the row's wavelength.
+- **Groups.** A centroid row's reference comes from its whole group: the rule named by its own
+  columns (Int1 rings or grid, Data5 arms or 0 for the rectangular array, Data6 0 for every
+  weighted wavelength of the field or 1 for its own wavelength alone). The group is traced whole
+  once per lens, system and group and cached on the lens and system instances
+  (`RayAberrationOperands`). The row's own ray is read from the group, or traced alone when its
+  pupil point is not one of the rule's. Chief-ray rows trace their own ray through the
+  evaluator's ray hook and read the chief ray from the cache. The reason: the evaluator's hook
+  carries one ray per row and a row sees only its own columns (§31); `MeritEvaluator` is
+  unchanged.
+- **Tracing.** Spot and angular rays are traced as the evaluator traces a row's ray (automatic
+  semi-diameters sized once). The OPD is `OpdEngine`'s, on the lens with its floating
+  semi-diameters frozen; a field that is not a table row is appended with the launcher's
+  vignetting factors, as §34 does. A group over every wavelength is referred to the primary
+  wavelength's sphere.
+- **Failures.** One failed ray in a Gaussian group fails every row of the group, naming the
+  rays and asking for the rectangular array. A rectangular-array group leaves its failed rays out
+  of the reference. A row whose own ray fails fails alone. A rule column out of range fails the
+  row, naming the column.
+- **Pupil integration.** Gaussian quadrature is OP-40's `PupilQuadrature.Gaussian`: rings 1 to
+  20, arms 6, 8, 10 or 12 (the help's choices), exact for integrands of degree
+  ≤ min(4n − 1, N − 1) (§34). So with 6 arms an RMS is exact only for errors of degree ≤ 2,
+  whatever the rings. The obscuration is 0 (not offered). The rectangular array is OP-40's
+  cell-centred grid, 2 to 100 across (this program's limit), equally weighted; Delete Vignetted
+  leaves out the points whose ray fails when the rows are written.
+- **Vignetting.** Before writing Gaussian rows the wizard traces every ray of the rule at every
+  chosen configuration, field and wavelength. If any fails, it writes the rectangular array
+  instead and its notes say where (help, "Gaussian Quadrature": GQ "assumes the pupil is a
+  circle ... GQ should not be used"). Vignetting factors are applied by the launcher and do not
+  count as vignetting.
+- **Symmetry** (help, "Other Settings"). Automatic is on when
+  `MeritEvaluator.IsRotationallySymmetric` holds. On, a field with Hx = 0 keeps the points with
+  Px > 0 at twice their weight and those with Px = 0 (|Px| ≤ 10⁻¹²) at their own; the on-axis
+  field keeps one point per ring (the first arm, at the whole ring's weight) for the radial
+  criteria (wavefront, spot radius, radial x + y or angular). Fields with Hx ≠ 0 keep every
+  point. The references still come from the whole rule. No USYM row is written.
+- **Boundaries** (help, "Boundary Values"). MNCG, MXCG, MNEG (glass) and MNCA, MXCA, MNEA (air)
+  over surfaces 1 to the one before the image, weight = the overall weight, with MNCT's rule
+  (§31) over the surfaces whose following medium is glass or the system's air (§29's medium
+  rule: a mirror or coordinate break carries the medium before it). The edge thickness is the
+  axial distance to the next surface plus its sag minus this surface's at (0, a), a the
+  mechanical semi-diameter (Mode 0; the clear one plus the chip zone when none is set) or the
+  clear one (Mode 1), times Zone when Zone is not 0. A coordinate break or a tilted or decentered
+  next surface fails the row.
+- **Start At** (help, "Other Settings"; DMFS). The generated rows begin at row Start At: by
+  default the row after the first DMFS row, else the end; 0 is the end. Rows after them that name
+  rows by number (GOTO, SKIS, SKIN, and the Op# columns of math rows) are renumbered. When the
+  generated rows contain CONF and existing rows follow, a CONF back to the configuration in
+  effect at the start row is added after them. The first generated row is a BLNK whose comment
+  says what was written; each field's rows follow a BLNK naming the field.
+- **Settings** (help, "Button Functions"). Save Settings stores the options with the project
+  (`OpticsSettings.MeritWizard`, an `OpticsMeritWizardSettings` with the choices by name); Load
+  Settings and Reset Settings show the saved and the default options.
+
+**Not built.** The contrast (MTF) criterion with its spatial frequency and relative S and T
+weights (OP-39's MTF engine is not on main; the criterion is one more `MeritWizardCriterion`
+member and one arm in `DefaultMeritWizard`); the PTV function type (the rows are RMS); Max
+Distortion (DIMX); the optimization goal "Improve manufacturing yield" (HYLD); Add Favorite
+Operands; the Gaussian quadrature obscuration; OpticStudio's arm angles; the other boundary
+operands (MXEG, MXEA, XNEG and the rest); a copy of the boundary rows per configuration.

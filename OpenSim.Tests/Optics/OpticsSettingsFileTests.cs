@@ -40,6 +40,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.NotNull(optics.Thermal!.GlassMaterials![0].Material!.ThermalExpansionCoefficient);   // OP-91: the glass links
         Assert.Equal(2, optics.GlassSubstitution!.Catalogs!.Count);           // OP-59: the substitution template
         Assert.NotNull(optics.GlassSubstitution.MaxPhosphateResistance);
+
+        Assert.NotNull(optics.MeritWizard!.AirEdge);                         // OP-56: the wizard's saved settings
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 
