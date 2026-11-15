@@ -1114,6 +1114,26 @@ single place in the code, so a correction is one line and its test.
     Check: a lens with a seeded Monte Carlo run in OpticStudio, the spread of its criterion (mean,
     standard deviation) compared with this program's over the same tolerances and statistics.
 
+40. **Interactive adjustment readings** (OP-60, section 44). Read from the help pages' wording
+    ("Quick Focus", "Quick Adjust", "Slider", "Visual Optimizer"); nothing is compared with
+    OpticStudio's output, and these are this program's readings where the help is short:
+    - *Combining fields.* Both Quick tools compute "a polychromatic average over the field, using
+      the defined fields, wavelengths, and weights"; here the fields' RMS values are combined as
+      √(Σ w v² / Σ w), the merit function's form (as §42 does for tolerancing).
+    - *Sampling.* The help gives none; here Gaussian quadrature, 6 rings by default (the RMS
+      analyses' default), 1 to 20.
+    - *Quick Adjust's criteria.* The help names "best transverse or angular ray focus" and says
+      every criterion uses the centroid, but lists no choices; radial, x and y of each are this
+      program's, by analogy with Quick Focus. "Angular" is read as the spread of the direction
+      cosines after refraction into the evaluation surface.
+    - *Quick Focus in afocal image space.* The help lists four criteria at the image surface and
+      no angular one; the thickness before the image does not change ray angles, so afocal
+      systems are refused and pointed to Quick Adjust's angular criteria.
+    - *Slider and Visual Optimizer ranges.* The help gives no default range; here ±10 % of the
+      value (±1, or ±0.01 per lens unit for a curvature, when it is zero).
+    Check: Quick Focus and Quick Adjust on a lens in OpticStudio with each criterion, the
+    adjusted thickness or radius compared with this program's.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3842,3 +3862,74 @@ equally over the terms, as the sensitivity analysis does), correlated draws, Sav
 Monte Carlo files by name and the File Prefix, the ZTD data file, the Tolerance Data Viewer and
 Yield curve (OP-66), tolerance scripts (OP-67), overlay of analyses other than the MTF, and
 evaluation of element decenter and tilt trials (the launcher, OP-22).
+
+## 44. Interactive adjustment tools
+
+`OpenSim.Optics/Optimization/Interactive/` (OP-60) holds Quick Focus and Quick Adjust; the
+Slider and the Visual Optimizer are app view models (`OpenSim.App/ViewModels/OpticsSliderViewModel.cs`).
+The definitions were read from OpticStudio's 2025 R2 help pages "Quick Focus", "Quick Adjust",
+"Slider", "Visual Optimizer" and "Manual Adjustment Group", saved under
+`plans/sources/optics/op-60-help/`.
+
+- **Quick Focus** (`QuickFocus`). The help: "This feature adjusts the thickness of the surface
+  prior to the image surface. The thickness chosen is that which minimizes the RMS aberration."
+  Criteria (help, Settings): spot size radial, spot size x only, spot size y only, wavefront
+  error; Use Centroid references them to the centroid instead of the chief ray. One field's
+  value is OP-40's RMS (§34, `RmsCore.Evaluate`, the engine of RMS vs Focus) at the field row,
+  over every wavelength with its weight (polychromatic when there are several), the trial shift
+  added to the thickness before the image (as RMS vs Focus adds it). Fields with a positive
+  weight combine as √(Σ w_f v_f² / Σ w_f); a single field is its own value, so on a one-field
+  lens the criterion is exactly the RMS vs Focus curve. Afocal image space is refused.
+- **Quick Adjust** (`QuickAdjust`). The help: "adjusts any radius or thickness to minimize the
+  RMS aberration at any subsequent surface"; "All criterion use the image centroid for a
+  reference"; angular data are "computed after refraction into the specified evaluation
+  surface". The rays are OP-34's (`RaySampler`: field rows and wavelengths with a positive
+  weight, the quadrature's pupil points, read at the evaluation surface in its local frame).
+  Spot: RMS of the positions about their centroid, radial, x or y; angular: the same of the
+  direction cosines (L, M) after the surface, shown in milliradians (cosine × 1000).
+  Wavelengths pool with weight pupil weight × wavelength weight; fields combine as for Quick
+  Focus. A radius is searched as its curvature (it may pass through a plane); the evaluation
+  surface must come after the adjusted one. Floating semi-diameters are sized again at every
+  trial.
+- **Sampling.** Gaussian quadrature (§34), 1 to 20 rings with 4 arms each, default 6; a trial
+  where any ray fails has no value.
+- **Search** (`InteractiveSearch`). The variable is x₀ + t·h, h = 1 % of the lens's length
+  scale L (the sum of its finite thicknesses from surface 1 to the one before the image; 1 mm
+  when zero) for a thickness, 1 % of max(|c|, 1/L) for a curvature.
+  `BrentMinimizer.LineSearch` takes unit steps either way from t = 0, widens the bracket by the
+  golden ratio while the criterion falls, and runs Brent's localmin on the bracket to
+  tol = 1.49e-8·|t| + 1e-11; the minimum of a unimodal criterion lies within 2·tol·h of the
+  answer (`PositionTolerance`). A trial without a value counts as +∞ (a wall); the start must
+  have a value; a search that does not improve leaves the cell unchanged and says so.
+- **On the project record** (`QuickFocus.Run`, `QuickAdjust.Run`). The lens is the current
+  configuration's solved lens. The adjusted cell is refused when a solve or pickup sets it, when
+  the multi-configuration table sets it in the current configuration (the new value would be
+  overwritten), and in non-sequential mode. The new value is written into the saved cell in lens
+  units (thickness: the old value plus the shift; radius: 1/curvature, a plane at 0). A change
+  that moves other cells through their solves (a pickup of the adjusted cell, say) is not
+  searched with those solves re-evaluated: the search runs on the solved lens with only the
+  adjusted cell changed.
+- **Slider** (help, "Slider"). Drags one surface value (radius, curvature, thickness, conic,
+  Par 1–8) between a start and a stop. "A copy is made of the data to be modified": each move
+  publishes the editors' record with that value to the session (`ProjectSession.PublishOptics`)
+  without changing the editors, so every analysis window with auto-update on recomputes; Save
+  (and Keep and Exit) writes the value through the Lens Data Editor as one undoable edit; Exit,
+  closing the window or choosing another surface or parameter publishes the editors' record
+  again. Animate steps the value by 1/50 of the range every 400 ms, wrapping at the stop.
+- **Visual Optimizer** (help, "Visual Optimizer"). One to eight sliders ("between 1 and 8") on
+  the lens's variables (`LensVariables.Find`; "the variable status of each value must be set
+  prior"), radius variables as curvatures ("radius variables are always varied as
+  curvatures"), moved together, published and kept as the Slider's are (a multi-configuration
+  variable is written through the Multi-Configuration Editor).
+- **Update budget.** The analysis windows' debounce, `OpticsAnalysesViewModel.DefaultDebounce`
+  = 250 ms (OP-9's value, named by OP-60; this program's own, not OpticStudio's): a move issues
+  each window's request at once, the compute starts after 250 ms without a further move, and
+  moves inside it coalesce into one compute of the last value; a compute overtaken by a move is
+  cancelled. OpticStudio's Visual Optimizer instead waits for each update to finish ("will not
+  allow another update to be performed until the current update is completed").
+- **Not built.** NSC Quick Focus and every non-sequential part (no non-sequential mode yet); the
+  Slider's system, configuration and NSC data types (aperture, fields, wavelengths,
+  apodization, temperature, pressure, multi-configuration operands) and its Window choice
+  (every open window with auto-update on updates); the Visual Optimizer's Window choice and
+  Animate; Quick Focus's angular form for afocal systems; a wavefront criterion in Quick Adjust
+  (the help names none).

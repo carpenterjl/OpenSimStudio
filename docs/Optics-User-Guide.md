@@ -1452,6 +1452,41 @@ terms), correlated draws, Save Best and Worst files by name, tolerance scripts, 
 Data Viewer, the yield curve and the ZTD data file; rows whose operand cannot be applied in this
 version (coatings, TEXI, ISO 10110) are left out of every trial and named in the report.
 
+## Interactive adjustment
+
+Four buttons in the Optics panel open OpticStudio's manual adjustment tools. Each writes its
+result into the lens through the Lens Data Editor, so the editor's Undo takes it back.
+
+- **Quick Focus** adjusts the thickness of the surface before the image for the best RMS spot
+  radius, spot x, spot y or wavefront error, averaged over the fields and wavelengths with their
+  weights. *Use centroid* measures about the centroid instead of the chief ray (better when coma
+  dominates). The status line gives the thickness before and after and the RMS before and after;
+  the box below lists the assumptions.
+- **Quick Adjust** adjusts one radius or thickness (*Adjust surface*, *Radius / thickness*) for
+  the best RMS at a later surface (*Evaluate surface*; 0 is the image), about the centroid. The
+  *angular* criteria measure the spread of ray directions after the evaluation surface (in
+  milliradians): use them to collimate an afocal system, for example the spacing of a
+  telescope. The dialog can stay open while you edit; each Adjust reads the lens afresh.
+- **Slider** drags one value (radius, curvature, thickness, conic or a parameter of a surface)
+  between a start and a stop while every open analysis window with auto-update on recomputes.
+  The Lens Data Editor keeps the original until you press *Save* or *Keep and Exit*; *Exit*,
+  closing the window or choosing another surface or parameter puts the original back.
+  *Animate* steps through the range in a loop.
+- **Visual Optimizer** gives up to eight sliders on the lens's variables (flag cells Variable
+  first; radii appear as curvatures) and works like the Slider.
+
+Both Quick tools sample the pupil with Gaussian quadrature (rings, 1 to 20, default 6) and need
+every ray: a trial value where a ray fails is skipped, and a lens whose rays fail at the start is
+refused with the reason. They refuse a cell that a solve, a pickup or the multi-configuration
+table sets, and work in the current configuration. The analysis windows wait 250 ms after the
+last slider move before computing, so a fast drag computes once, on the value where it stops.
+Definitions are in docs/Optics-Conventions.md §44.
+
+Not built: NSC Quick Focus (there is no non-sequential mode yet); the Slider's system,
+configuration and NSC data (aperture, fields, wavelengths, temperature and the rest); updating
+only one chosen analysis window; Animate in the Visual Optimizer; Quick Focus in afocal image
+space (use Quick Adjust's angular criteria).
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

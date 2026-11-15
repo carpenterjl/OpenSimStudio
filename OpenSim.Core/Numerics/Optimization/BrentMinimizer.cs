@@ -98,6 +98,30 @@ public static class BrentMinimizer
         return Minimize(f, down, up, 0, f0, relative, absolute, 500);
     }
 
+    // OP-60: the line search for one-variable callers outside this assembly (Quick Focus, Quick Adjust).
+    /// <summary>
+    /// <see cref="Search"/> for callers outside this assembly: the minimum of <paramref name="f"/>
+    /// along t from t = 0 (value <paramref name="f0"/>), with unit first steps either way, the
+    /// bracket widened by the golden ratio while the function keeps falling, then Brent's
+    /// localmin on the bracket to |t|·1.49e-8 + 1e-11 (<see cref="LineSearchRelativeTolerance"/>,
+    /// <see cref="LineSearchAbsoluteTolerance"/>). The caller scales its variable so that one unit
+    /// of t is a sensible first step. A value of +∞ counts as higher than any finite value, so a
+    /// caller can mark a point it cannot evaluate. t stays in [<paramref name="lo"/>,
+    /// <paramref name="hi"/>], which must contain 0.
+    /// </summary>
+    public static (double T, double Value) LineSearch(Func<double, double> f, double lo, double hi, double f0)
+    {
+        ArgumentNullException.ThrowIfNull(f);
+        if (!(lo <= 0 && hi >= 0)) throw new ArgumentException($"The line search range [{lo}, {hi}] must contain 0.");
+        return Search(f, lo, hi, f0);
+    }
+
+    /// <summary>The relative stopping tolerance of <see cref="LineSearch"/> in t (√ε of a double).</summary>
+    public const double LineSearchRelativeTolerance = 1.4901161193847656e-8;
+
+    /// <summary>The absolute stopping tolerance of <see cref="LineSearch"/> in t.</summary>
+    public const double LineSearchAbsoluteTolerance = 1e-11;
+
     private static (double, double) Expand(Func<double, double> f, double previous, double current, double fCurrent,
         double lo, double hi, double relative, double absolute)
     {

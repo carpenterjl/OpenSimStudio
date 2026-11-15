@@ -1,0 +1,40 @@
+<Window x:Class="OpenSim.App.Views.SliderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        Title="Slider" Width="480" Height="360" MinWidth="360" MinHeight="260"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-60: the Slider. DataContext is the OpticsSliderViewModel. Dragging publishes trial
+         values, so the open analysis windows update; Keep writes the value into the lens, Exit
+         (or closing the window) puts the original back. -->
+    <DockPanel Margin="8">
+        <controls:FormGrid DockPanel.Dock="Top">
+            <Label Content="Surface"/>
+            <TextBox Text="{Binding Surface}" AutomationProperties.AutomationId="SliderSurfaceBox"/>
+            <Label Content="Parameter"/>
+            <ComboBox ItemsSource="{Binding Parameters}" SelectedItem="{Binding SelectedParameter}" DisplayMemberPath="Label"/>
+            <Label Content="Start value"/>
+            <TextBox Text="{Binding Start}"/>
+            <Label Content="Stop value"/>
+            <TextBox Text="{Binding Stop}"/>
+            <Label Content="Value"/>
+            <TextBox Text="{Binding Value}" AutomationProperties.AutomationId="SliderValueBox"/>
+        </controls:FormGrid>
+        <Slider DockPanel.Dock="Top" Margin="0,8,0,4" Minimum="{Binding Start}" Maximum="{Binding Stop}"
+                Value="{Binding Value}" IsEnabled="{Binding HasCell}"
+                AutomationProperties.AutomationId="SliderControl"/>
+        <WrapPanel DockPanel.Dock="Top" Margin="0,4,0,4">
+            <Button Content="Load" Command="{Binding LoadCommand}" MinWidth="70" Margin="0,0,4,4"
+                    ToolTip="Put back any trial value and read the cell again."/>
+            <Button Content="Animate / Stop" Command="{Binding AnimateCommand}" MinWidth="90" Margin="0,0,4,4"
+                    ToolTip="Step the value across the range in a loop."/>
+            <Button Content="Save" Command="{Binding KeepCommand}" MinWidth="70" Margin="8,0,4,4"
+                    ToolTip="Write the current value into the lens (one undoable edit) and stay open."/>
+            <Button Content="Keep and Exit" Click="KeepAndExit_Click" MinWidth="90" Margin="0,0,4,4"/>
+            <Button Content="Exit" Click="Exit_Click" MinWidth="70" Margin="0,0,4,4"
+                    ToolTip="Put the original value back and close."/>
+        </WrapPanel>
+        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+    </DockPanel>
+</Window>

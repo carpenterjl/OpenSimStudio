@@ -114,6 +114,9 @@ public partial class OpticsViewModel : ObservableObject
     public OpticsOptimizeViewModel Optimize => _optimize ??=
         new OpticsOptimizeViewModel(ToSettings, () => BuildLensEditContext().Catalogs, ApplyOptimization, PublishFromMultiConfig);   // OP-59: the template publishes
 
+    // OP-60: Quick Focus, Quick Adjust, the Slider and the Visual Optimizer are in
+    // OpticsViewModel.Interactive.cs; they write through ApplyOptimization below.
+
     /// <summary>Writes an optimization (or its undo) into the workspace: the surfaces as one
     /// undo step of the Lens Data Editor, then the multi-configuration table when one of its
     /// cells was a variable (reloading that editor clears its undo history). Null on success.</summary>

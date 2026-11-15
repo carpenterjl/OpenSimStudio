@@ -76,6 +76,52 @@ public partial class OpticsPanel : UserControl
         _optimize.Show();
     }
 
+    // OP-60
+    private QuickFocusWindow? _quickFocus;
+    private QuickAdjustWindow? _quickAdjust;
+    private SliderWindow? _slider;
+    private VisualOptimizerWindow? _visualOptimizer;
+
+    /// <summary>Opens Quick Focus (OP-60), or brings the open one forward.</summary>
+    private void QuickFocus_Click(object sender, RoutedEventArgs e)
+    {
+        if (_quickFocus is { IsLoaded: true }) { _quickFocus.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _quickFocus = new QuickFocusWindow(optics.QuickFocus) { Owner = Window.GetWindow(this) };
+        _quickFocus.Closed += (_, _) => _quickFocus = null;
+        _quickFocus.Show();
+    }
+
+    /// <summary>Opens Quick Adjust (OP-60), or brings the open one forward.</summary>
+    private void QuickAdjust_Click(object sender, RoutedEventArgs e)
+    {
+        if (_quickAdjust is { IsLoaded: true }) { _quickAdjust.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _quickAdjust = new QuickAdjustWindow(optics.QuickAdjust) { Owner = Window.GetWindow(this) };
+        _quickAdjust.Closed += (_, _) => _quickAdjust = null;
+        _quickAdjust.Show();
+    }
+
+    /// <summary>Opens the Slider (OP-60), or brings the open one forward.</summary>
+    private void Slider_Click(object sender, RoutedEventArgs e)
+    {
+        if (_slider is { IsLoaded: true }) { _slider.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _slider = new SliderWindow(optics.Slider) { Owner = Window.GetWindow(this) };
+        _slider.Closed += (_, _) => _slider = null;
+        _slider.Show();
+    }
+
+    /// <summary>Opens the Visual Optimizer (OP-60), or brings the open one forward.</summary>
+    private void VisualOptimizer_Click(object sender, RoutedEventArgs e)
+    {
+        if (_visualOptimizer is { IsLoaded: true }) { _visualOptimizer.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _visualOptimizer = new VisualOptimizerWindow(optics.VisualOptimizer) { Owner = Window.GetWindow(this) };
+        _visualOptimizer.Closed += (_, _) => _visualOptimizer = null;
+        _visualOptimizer.Show();
+    }
+
     /// <summary>Opens the Multi-Configuration Editor (OP-30), or brings the open one forward.</summary>
     private void MultiConfigEditor_Click(object sender, RoutedEventArgs e)
     {

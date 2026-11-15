@@ -38,7 +38,15 @@ public sealed partial class OpticsAnalysesViewModel : ObservableObject
     /// on save so a file passed through an older build does not lose them.</summary>
     private readonly List<OpticsAnalysisWindowSettings> _unknownWindows = new();
 
-    private TimeSpan _debounce = TimeSpan.FromMilliseconds(250);
+    // OP-60: the debounce as a named constant, the update budget the Slider and Visual Optimizer work to.
+    /// <summary>The windows' default debounce (OP-9's choice, this program's own): after a change a
+    /// window waits this long for the next one, then computes. It is the "update budget" of the
+    /// interactive tools (OP-60): a slider drag issues each window's request at once, and the
+    /// compute starts no later than this after the drag pauses; changes inside it coalesce into
+    /// one compute of the last value.</summary>
+    public static readonly TimeSpan DefaultDebounce = TimeSpan.FromMilliseconds(250);
+
+    private TimeSpan _debounce = DefaultDebounce;
 
     /// <param name="catalogs">The glass catalogs the material analyses (OP-14) read, filtered to
     /// the lens's active ones at each snapshot; null gives them none.</param>

@@ -34,6 +34,21 @@
                 <TextBlock Text="{Binding Optics.MeritEditor.OperandCount, StringFormat='{}{0} operands'}"
                            VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
             </DockPanel>
+            <!-- OP-60: the manual adjustment tools (OpticStudio's Manual Adjustment group). -->
+            <WrapPanel Margin="0,4,0,0">
+                <Button Content="Quick Focus…" Click="QuickFocus_Click" Margin="0,0,4,0"
+                        ToolTip="Adjust the thickness before the image for the best RMS spot or wavefront."
+                        AutomationProperties.AutomationId="OpticsQuickFocusButton"/>
+                <Button Content="Quick Adjust…" Click="QuickAdjust_Click" Margin="0,0,4,0"
+                        ToolTip="Adjust one radius or thickness for the best RMS at a later surface."
+                        AutomationProperties.AutomationId="OpticsQuickAdjustButton"/>
+                <Button Content="Slider…" Click="Slider_Click" Margin="0,0,4,0"
+                        ToolTip="Drag one surface value while the analysis windows update."
+                        AutomationProperties.AutomationId="OpticsSliderButton"/>
+                <Button Content="Visual Optimizer…" Click="VisualOptimizer_Click"
+                        ToolTip="Sliders on up to eight variables while the analysis windows update."
+                        AutomationProperties.AutomationId="OpticsVisualOptimizerButton"/>
+            </WrapPanel>
             <!-- OP-63: the tolerance data, edited in the Tolerance Data Editor window. -->
             <DockPanel Margin="0,4,0,0">
                 <Button DockPanel.Dock="Left" Content="Tolerance Data Editor…" Click="ToleranceDataEditor_Click"

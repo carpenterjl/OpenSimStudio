@@ -93,6 +93,11 @@ public sealed partial class AnalysisWindowViewModel : ObservableObject
     /// <summary>Finished computes, for tests and the status line.</summary>
     public int ComputeCount { get; private set; }
 
+    // OP-60
+    /// <summary>Computes asked for (by a system change with auto-update on, Update, or new
+    /// settings), whether or not a later one overtook them; for tests of the update-on-change link.</summary>
+    public int RequestCount { get; private set; }
+
     /// <summary>The latest compute's run, for tests: completes when its result is in.</summary>
     internal Task CurrentRun => _runner.Current;
 
@@ -116,6 +121,7 @@ public sealed partial class AnalysisWindowViewModel : ObservableObject
     /// <summary>Starts a compute on the host's current snapshot.</summary>
     internal void Request(bool immediate)
     {
+        RequestCount++;   // OP-60
         var context = _host.Snapshot();
         var settings = Settings;
         var analysis = Analysis;
