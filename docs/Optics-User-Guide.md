@@ -1169,13 +1169,41 @@ Rules and readings are in docs/Optics-Conventions.md §41. Not built: the Hammer
 optimizers, a substitute catalog per surface, saving the template to a *.GST file, and the
 operands MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and INDX.
 
+## Enclosed energy
+
+Four analyses in the **Enclosed energy** group give the fraction of a point image's energy inside
+a region about a reference point.
+
+- **Diffraction enclosed energy:** from the PSF of an n × n pupil grid (*Sampling*, 16 to 512),
+  computed exactly for that grid (no image sampling). *Type*: encircled (radius), x-only or
+  y-only (a slit infinite in the other direction), or ensquared (half-width). *Refer to*: chief
+  ray, centroid or vertex. *Maximum distance* (µm, 0 for the default) is limited to half the
+  PSF's period; raise the sampling for larger distances. *Show diffraction limit* adds the
+  aberration-free curve of the reference field. *Wavelength* 0 combines the wavelengths by their
+  weights; *Field* 0 draws every field.
+- **Geometric enclosed energy:** the same from rays on an n × n pupil grid at any surface, about
+  the chief ray, centroid, vertex or middle (the centre of the smallest circle holding every
+  ray). *Multiply by diffraction limit* (encircled only) multiplies by the Airy disk's curve at
+  the reference field's working F/#.
+- **Geometric line/edge spread:** the rays' line and edge spread about the chief ray, for a line
+  or edge parallel to x and to y.
+- **Extended source enclosed energy:** rays from every lit pixel of an IMA image (*File*, its full
+  path; text or binary), *Field size* wide in field units, centred on *Field*; about 1000 ×
+  *Rays x 1000* rays. Besides the four regions it draws the x or y distribution with its FWHM.
+  Fields with vignetting factors need *Remove vignetting factors*.
+
+The result lists the sizes holding 50 % and 80 % of the energy, the reference point, the rays
+that did not arrive and the sampling warnings. The rules are in `docs/Optics-Conventions.md`
+§39; readings not yet checked against OpticStudio are in §10 item 35. Not built: the Huygens PSF
+option, polarization, scattering, BIM files, dashed-line styling.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
 
 - the non-sequential object editor;
 - layouts with traced rays, and the analysis windows not described above (MTF, the Contrast
-  Loss Map, encircled energy and the rest; the Configuration Matrix Spot);
+  Loss Map and the rest; the Configuration Matrix Spot);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);

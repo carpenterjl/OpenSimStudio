@@ -135,6 +135,12 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new RmsVsWavelengthAnalysis());
         registry.Register(new RmsVsFocusAnalysis());
         registry.Register(new RmsFieldMapAnalysis());
+
+        // OP-41: enclosed energy (diffraction, geometric, geometric line/edge spread, extended source).
+        registry.Register(new DiffractionEnclosedEnergyAnalysis());
+        registry.Register(new GeometricEnclosedEnergyAnalysis());
+        registry.Register(new GeometricLineEdgeSpreadAnalysis());
+        registry.Register(new ExtendedSourceEnclosedEnergyAnalysis());
         return registry;
     }
 }

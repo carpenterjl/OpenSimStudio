@@ -904,6 +904,36 @@ single place in the code, so a correction is one line and its test.
     same catalog and template; RGLA and GCOS values read from OpticStudio's Merit Function
     Editor for the same lens.
 
+35. **Enclosed energy readings** (OP-41, section 39). Read from the help pages' wording; no
+    OpticStudio number was compared:
+    - *X-only and Y-only.* The diffraction page says the options "compute the fraction of energy
+      in the PSF in the [-y,y] or [-x,x] range of the y- or x-axes, respectively", then gives
+      the example "the X-only enclosed energy for an x-value of 10 microns represents the
+      fraction of energy in the region 20 microns across in the x-direction". The example (and
+      the geometric page) is followed: X-only is the slit |x − x_ref| ≤ size.
+    - *Diffraction centroid.* The help says "image centroid" without saying whether it is the
+      PSF's or the rays'; here it is the rays' light-weighted mean intercept (as OP-38's Huygens
+      Use Centroid), projected along the chief ray onto the PSF plane.
+    - *Polychromatic weighting.* Each wavelength's fraction is weighted by its weight times the
+      share of a clear pupil it passes; the help does not say how wavelengths combine.
+    - *Default scaling* (maximum distance 0): the help gives none. Diffraction: the smaller of half
+      the PSF's period and the larger of 5·λ·F and 1.5 × the rays' spread; geometric and extended
+      source: the distance that holds every ray.
+    - *Multiply by diffraction limit.* "Scaling the geometric data by the theoretical diffraction
+      limit curve" is read as the product of the geometric fraction and the Airy disk's
+      1 − J₀² − J₁², at the real working F/# of the reference field of "Diffraction Limited" and
+      the selected (or primary) wavelength; it is refused for types other than encircled.
+    - *Geometric line/edge spread.* Both orientations are drawn; the line spread is binned in
+      100 bins and scaled to its peak, the edge spread runs 0 to 1. The help gives neither the
+      bins nor the normalisation.
+    - *Extended source.* Rays are placed by a Sobol sequence instead of at random, each wavelength
+      traces its own rays instead of a random wavelength per ray, the binary IMA byte order is
+      read as little-endian, and row 1 of an IMA image is its top. The x and y distributions use
+      100 strips across ±the maximum distance; the help gives no strip width.
+    Check: Diffraction and Geometric Enclosed Energy (all four types, chief ray and centroid) and
+    an Extended Source run of a text IMA file for a singlet at two fields, against OpticStudio's
+    text output.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3072,3 +3102,78 @@ Using Glass Substitution, Global Optimization of Glass Selection) and
   substitution; a per-surface substitute catalog in the saved lens; the template's Save/Load
   of *.GST files and "Save As New Glass Catalog"; MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and
   INDX; the conversion's last-resort glass.
+
+## 39. Enclosed energy
+
+OP-41. Code: `OpenSim.Optics/Analysis/EnclosedEnergy/` (public: `EnclosedEnergyType`,
+`EnclosedEnergyReference`, `AiryEnclosedEnergy`, `EnclosedEnergyRegions`,
+`DiffractionEnclosedEnergyKernel`, `DiffractionEnclosedEnergySetup`, `DiffractionEnclosedEnergy`,
+`GeometricEnclosedEnergySpot`, `GeometricEnclosedEnergy`, `ImaImage`, `ImaFile`,
+`ExtendedSourceRequest`, `ExtendedSourceEnclosedEnergy`; the four analyses in
+`EnclosedEnergyAnalyses.cs`). Tests: `OpenSim.Tests/Optics/EnclosedEnergyTests.cs` and the gate
+`OpenSim.Tests/Optics/Gates/EnclosedEnergyGateTests.cs`. OpticStudio's behaviour is read from its
+2025 R2 help ("Enclosed Energy", "Diffraction (enclosed energy)", "Geometric", "Geometric
+Line/Edge Spread", "Extended Source", "Geometric Image Analysis"), saved under
+`plans/sources/optics/op-41-help/`.
+
+- **Regions.** Encircled: a circle of radius r about the reference. X-only: the slit
+  |x − x_ref| ≤ h, infinite in y; Y-only the same turned (help example: an x-value of 10 µm is
+  "the region 20 microns across in the x-direction ... infinite in the other direction").
+  Ensquared: the square of half-width h. Each curve runs from size 0 to the maximum distance in
+  100 steps; the result lists the sizes holding 50 % and 80 %.
+- **Reference.** Chief ray (the selected wavelength's, the primary's when several), centroid,
+  vertex (the surface's local (0, 0)); the geometric enclosed energy also offers the middle,
+  "the coordinate upon which the smallest circle enclosing all the ray intercepts is centered",
+  found by the incremental smallest-circle algorithm over a fixed-seed shuffle.
+- **Diffraction enclosed energy.** From OP-38's pupil function (section 33): the PSF of the
+  sampled pupil is I(x) = Σ_m C_m e^{−i k_m·x} with C the pupil's autocorrelation (by FFT of the
+  pupil zero-padded to 2n) and k_m = 2π·n·ΔP·(a_x m_x, a_y m_y)/λ. The energy in a region centred
+  on x₀ is Σ C_m e^{−i k_m·x₀}·D(k_m), D the region's Fourier transform (2πr·J₁(|k|r)/|k| for the
+  circle, (2 sin(k_x h)/k_x)(2 sin(k_y h)/k_y) for the square, the m_y = 0 terms with
+  2 sin(k_x h)/k_x for a slit over one period), over one period's energy C_0·T_x·T_y. This is
+  exact for the sampled pupil: no image grid enters. Sizes are limited to half the period
+  T = λ/(n·|a|·ΔP), where a region would overlap the PSF's periodic copies (refused with the
+  limit named). The reference point is projected along each wavelength's chief ray onto its PSF
+  plane; the centroid is the rays' mean image-surface intercept weighted by A² (and each
+  wavelength by its share). A reference more than a quarter period from the chief ray is warned
+  about (the help: with the vertex OpticStudio "is unable to detect if the sampling is
+  sufficient"). OP-38's sampling warnings are repeated. Polychromatic: every wavelength
+  referenced to the primary's chief ray, each fraction weighted by the wavelength's weight
+  times its pupil transmission. *Show diffraction limit*: the reference field's pupil (the (0, 0)
+  field, else field 1; help, "Diffraction Limited") with the OPD set to zero, about its chief ray.
+- **Geometric enclosed energy.** Rays on an n × n grid of pupil nodes inside the unit circle,
+  traced to the chosen surface; each ray that passes weighs its wavelength's weight (1 for one
+  wavelength) times the apodization's intensity A(ρ)². The fraction at a size is the weight of
+  the rays at a distance at most that size over the weight of every ray that passed; failed and
+  vignetted rays carry no light and are counted by status and surface. *Multiply by diffraction
+  limit* (encircled, image surface): the fraction times the Airy disk's E(v) = 1 − J₀(v)² − J₁(v)²,
+  v = π·r/(λF), F the real working F/# (OP-34's) at the reference field.
+- **Airy enclosed energy.** E(v) = ∫₀^v 2J₁(t)²/t dt = 1 − J₀(v)² − J₁(v)², derived in
+  `AiryEnclosedEnergy` from the Airy intensity (2J₁(v)/v)² and J₀′ = −J₁, J₁′ = J₀ − J₁/v.
+- **Geometric line/edge spread.** The same rays about the chief ray. X orientation (a line or
+  edge parallel to x) runs along y, Y along x. The line spread is the weight in each of 100 bins
+  across ±the maximum radius over the largest bin's; the edge spread at a bin centre is the
+  weight at or below it over the total. The diffraction line/edge spread is OP-38's FFT
+  Line/Edge Spread.
+- **Extended source.** A text IMA file (size, then rows of digits 0–9) or a binary one (int16
+  0, width 1–8000, number of maps; then bytes, column fastest), row 1 the top. One map serves
+  every wavelength; a binary file may give one per wavelength. Pixel (r, c) of an n × n image
+  spans the field (f_x + ((c + u)/n − ½)·S, f_y + (½ − (r + v)/n)·S), S the field size in field
+  units (degrees, or lens units for heights). About 1000 × "Rays x 1000" rays are shared by
+  pixel value × wavelength weight, at least one per lit pixel and wavelength; each weighs its
+  pixel's value × weight over the pixel's count, times A(ρ)². Positions in the pixel and pupil
+  come from a 4-D Sobol sequence (ρ = √s, θ = 2πt). Field points are normalised against the
+  defined fields plus the image's corners; vignetting factors are refused unless removed
+  (replaced by apertures, as OP-40). Types: the four regions, and x or y distributions (the
+  weight in 100 strips across ±the maximum distance) with the geometric FWHM between the
+  half-maximum crossings.
+- **Criterion form.** `DiffractionEnclosedEnergy.Fraction` and `GeometricEnclosedEnergy.Fraction`
+  return the fraction at one size for one field of one configuration's lens and system.
+- **Determinism.** The kernel's FFT and each size's sum are bitwise the same at any degree of
+  parallelism; the extended source runs one slot per wavelength and pixel row with a fixed
+  Sobol index each.
+
+Not built: the Huygens PSF option of the diffraction enclosed energy, polarization, scattering,
+intermediate surfaces for the diffraction enclosed energy, BIM files, the Geometric Image
+Analysis's own options (parity, rotation, Lambertian source, pixel interpolation), dashed-line
+styling.
