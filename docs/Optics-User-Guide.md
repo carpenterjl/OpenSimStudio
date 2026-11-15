@@ -1504,6 +1504,8 @@ a part not built), 2 the run failed or was cancelled.
   <project|lens.osslens>` writes a project's or lens file's system as a `.zmx` (`--out`). Content
   the subset does not hold fails the command (exit 2) with every item listed; `--lenient` lists
   it and goes on (Zemax lens files below).
+- `opensim optics export <project|lens.osslens> --format step|iges|stl|dxf` (or a CAD `--out`
+  name) writes the lens as a CAD file instead (CAD export below).
 - `opensim optics catalog <folder|catalog.osslcat>` indexes a folder of Zemax lens files as a
   stock lens catalog (or loads a private one), prints the Catalog Report of the lenses meeting
   `--efl MIN:MAX`, `--epd MIN:MAX`, `--shape`, `--type`, `--elements` and `--text`, and with
@@ -2372,6 +2374,49 @@ physics (OP-81), diffraction, gradient index and coating plots in objects (OP-82
 and filters (OP-83), Consider/Ignore Objects, mixed mode with ports, several wavelengths in one
 run, a layout of traced non-sequential rays. The readings not yet checked against OpticStudio are
 listed in docs/Optics-Conventions.md §10 item 65.
+
+## CAD export
+
+**Export CAD Files…** in the Optics panel writes the lens elements, mirrors and rays as a file a
+mechanical designer can open (OpticStudio's File > Export > CAD Files and Export 2D DXF):
+
+- **STEP** (AP214): one solid per element and per mirror with a substrate. Planes, spheres,
+  cylinders and cones are exact surfaces; any other rotationally symmetric surface (a conic, an
+  asphere) is a B-spline patch fitted to the tolerance. Rays are polylines.
+- **IGES** 5.3: each face as a rational B-spline surface (exact for planes, spheres, cylinders and
+  cones, fitted for aspheres), the rims as circles and the rays as polylines; lens data on level 1,
+  rays on level 2. IGES solids are not written.
+- **STL**: triangles with the tolerance as chordal error, binary or ASCII; no rays (STL has no
+  lines).
+- **DXF**: the 2-D cross-section as the Cross-Section layout shows it (global z across, y up):
+  spheres as arcs, flats and edges as lines, aspheres as polylines, rays as polylines; layers LENS
+  and RAYS. Every element's axis must lie in the global YZ plane.
+
+The settings: file type; first and last surface (0 for the last before the image); **Edges**,
+applied to every element: Squared to next surface (flats out to the larger face and a cylinder, as
+the shaded model draws), Tapered to next surface (a cone between the rims) or Flat to next surface
+(a cylinder at the front face's edge, the back face drawn out to it); **Mirror substrate**, the flat
+back behind a mirror that is not part of a lens (0 exports the bare mirror surface, which STEP
+refuses); **Tolerance** 1E-4 to 1E-7 lens units, the largest deviation of a fitted spline from the
+surface and the chordal error of STL and DXF; the ray pattern (none, Y, X or XY fan, ring, grid),
+number of rays, field and wavelength (0: all) and Delete vignetted. Files are written in the lens
+unit, in the global frame (surface 1's vertex at the origin). The dialog only reads the lens, and its
+settings are not saved with the project. The log of the export (what was written, the largest spline
+deviation, rays that failed) is shown under the buttons.
+
+Refused, by name: surfaces that are not rotationally symmetric, apertures other than circles
+centred on the axis, elements whose faces are tilted or decentered against each other or meet at
+the edge, coordinate breaks inside glass.
+
+From the command line: `opensim optics export <project|lens.osslens> --format step|iges|stl|dxf`
+(or `--out` with a `.step`, `.stp`, `.igs`, `.iges`, `.stl` or `.dxf` name), with `--first`,
+`--last`, `--edges squared|tapered|flat`, `--substrate`, `--tolerance`, `--rays`, `--nrays`,
+`--field`, `--wavelength`, `--delete-vignetted` and `--ascii`.
+
+The exported STEP files are read back by OpenSim's own STEP importer in the tests (same volume and
+areas); they have not been opened in a CAD program here. Not built: SAT (OP-76), point clouds, 3-D
+DXF and IGES Linework, dummy surfaces, solid beams, ray footprints, configurations by file or layer,
+chamfers, and the ZPL keyword EXPORTCAD. The equations are in `docs/Optics-Conventions.md` §70.
 
 ## Coming
 

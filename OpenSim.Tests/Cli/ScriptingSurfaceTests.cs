@@ -559,4 +559,24 @@ public class ScriptingSurfaceTests
         HasReadableProperty(Z + "ZplRunResult", "SolveReturn", "Double?");
         HasReadableProperty(Z + "ZplMacroFolder", "Current", "String", isStatic: true);
     }
+
+    // ------------------------------------------------------------------ OP-96: CAD export
+
+    /// <summary>OP-96: CAD export of a lens from a script, the entry points
+    /// docs/Optics-Conventions.md §70 names.</summary>
+    [Fact]
+    public void TheCadExportEntryPoints_ArePublic()
+    {
+        const string C = "OpenSim.Optics.CadExport.";
+        HasMethod(C + "CadExporter", "Export", "OpticsSettings", "IReadOnlyList<OpticalCatalog>", "CadExportSettings", "String");
+        HasMethod(C + "CadExporter", "FormatFromExtension", "String");
+        Assert.NotNull(Named(C + "CadExportSettings").GetConstructor(Type.EmptyTypes));
+        HasSettableProperty(C + "CadExportSettings", "Format", "CadExportFormat");
+        HasSettableProperty(C + "CadExportSettings", "EdgeStyle", "CadEdgeStyle");
+        HasSettableProperty(C + "CadExportSettings", "Tolerance", "Double");
+        HasSettableProperty(C + "CadExportSettings", "MirrorSubstrateThickness", "Double");
+        HasSettableProperty(C + "CadExportSettings", "RayPattern", "CadRayPattern");
+        HasSettableProperty(C + "CadExportSettings", "NumberOfRays", "Int32");
+        HasReadableProperty(C + "CadExportResult", "Notes", "IReadOnlyList<String>");
+    }
 }

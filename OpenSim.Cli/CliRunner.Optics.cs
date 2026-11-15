@@ -43,7 +43,8 @@ public static partial class CliRunner
             "optimise" or "optimize" => OpticsOptimise(project, o, stdout, cancellation),
             "tolerance" => OpticsTolerance(project, o, stdout, cancellation),
             "import" => OpticsZemaxImport(project, o, stdout),   // OP-94: a .zmx or .zar, not a project
-            "export" => OpticsZemaxExport(project, o, stdout),   // OP-94
+            "export" => IsCadExport(o) ? OpticsCadExport(project, o, stdout)   // OP-96: CAD files by --format or the --out extension (CliRunner.OpticsCad.cs)
+                : OpticsZemaxExport(project, o, stdout),   // OP-94
             "catalog" => OpticsCatalog(project, o, stdout),   // OP-16: a folder of lens files or a private catalog, not a project
             "macro" => OpticsMacro(project, o, stdout, cancellation),   // OP-99: a .zpl macro (CliRunner.OpticsMacro.cs)
             "convert" => OpticsConvert(project, o, stdout, cancellation),   // OP-61: design conversion tools (CliRunner.OpticsDesign.cs)

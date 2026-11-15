@@ -161,6 +161,19 @@ public partial class OpticsPanel : UserControl
         _lensCatalogs.Show();
     }
 
+    // OP-96
+    private CadExportWindow? _cadExport;
+
+    /// <summary>Opens Export CAD Files (OP-96), or brings the open window forward.</summary>
+    private void CadExport_Click(object sender, RoutedEventArgs e)
+    {
+        if (_cadExport is { IsLoaded: true }) { _cadExport.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _cadExport = new CadExportWindow(optics.CadExport) { Owner = Window.GetWindow(this) };
+        _cadExport.Closed += (_, _) => _cadExport = null;
+        _cadExport.Show();
+    }
+
     // OP-99
     private MacroEditorWindow? _macroEditor;
 

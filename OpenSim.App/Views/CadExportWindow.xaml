@@ -1,0 +1,53 @@
+<Window x:Class="OpenSim.App.Views.CadExportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        Title="Export CAD Files" Width="560" Height="600" MinWidth="420" MinHeight="380"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-96: Export CAD Files (OpticStudio's File > Export > CAD Files). DataContext is the
+         OpticsCadExportViewModel. Export asks for the file name and writes the lens elements,
+         mirrors and rays; the lens is not changed. -->
+    <DockPanel Margin="8">
+        <controls:FormGrid DockPanel.Dock="Top" IsEnabled="{Binding IsIdle}">
+            <Label Content="File type"/>
+            <ComboBox ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat}" DisplayMemberPath="Label"
+                      AutomationProperties.AutomationId="CadExportFormatCombo"/>
+            <Label Content="First surface"/>
+            <TextBox Text="{Binding FirstSurface}" ToolTip="The first surface to export (Lens Data Editor numbering)."/>
+            <Label Content="Last surface"/>
+            <TextBox Text="{Binding LastSurface}" ToolTip="The last surface to export; 0 for the last surface before the image."/>
+            <Label Content="Edges"/>
+            <ComboBox ItemsSource="{Binding EdgeStyles}" SelectedItem="{Binding SelectedEdgeStyle}" DisplayMemberPath="Label"
+                      ToolTip="How each element's edge joins its faces (OpticStudio's Draw Edges As), for every element."/>
+            <Label Content="Mirror substrate (lens units)"/>
+            <TextBox Text="{Binding MirrorSubstrateThickness}"
+                     ToolTip="The flat-backed substrate behind a mirror outside any lens; 0 exports the bare surface (not for STEP)."/>
+            <Label Content="Tolerance (lens units)"/>
+            <ComboBox ItemsSource="{Binding Tolerances}" SelectedItem="{Binding SelectedTolerance}" DisplayMemberPath="Label"
+                      ToolTip="The largest deviation of a fitted spline from an asphere, and the chordal error of STL triangles and DXF polylines."/>
+            <Label Content="Ray pattern"/>
+            <ComboBox ItemsSource="{Binding RayPatterns}" SelectedItem="{Binding SelectedRayPattern}" DisplayMemberPath="Label"
+                      ToolTip="The rays exported as polylines (STL has no lines: none are written)."/>
+            <Label Content="Number of rays"/>
+            <TextBox Text="{Binding NumberOfRays}" ToolTip="Rays per field and wavelength (the grid's side for Grid)."/>
+            <Label Content="Field"/>
+            <TextBox Text="{Binding Field}" ToolTip="The field number; 0 for all."/>
+            <Label Content="Wavelength"/>
+            <TextBox Text="{Binding Wavelength}" ToolTip="The wavelength number; 0 for all."/>
+            <Label Content="Delete vignetted"/>
+            <CheckBox IsChecked="{Binding DeleteVignetted}" VerticalAlignment="Center"
+                      ToolTip="Leave out rays that are vignetted or fail at any surface."/>
+            <Label Content="Binary STL"/>
+            <CheckBox IsChecked="{Binding StlBinary}" VerticalAlignment="Center" ToolTip="Binary STL; clear for ASCII."/>
+        </controls:FormGrid>
+        <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,4">
+            <Button Content="Export…" Click="Export_Click" MinWidth="70" Margin="0,0,4,4" IsEnabled="{Binding IsIdle}"
+                    AutomationProperties.AutomationId="CadExportButton"/>
+            <Button Content="Close" Click="Close_Click" MinWidth="70" Margin="0,0,4,4"/>
+        </WrapPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,4,0,4"/>
+        <TextBox Text="{Binding Details, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto" Foreground="{DynamicResource TextFaintBrush}"/>
+    </DockPanel>
+</Window>

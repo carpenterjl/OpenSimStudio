@@ -73,6 +73,12 @@
                         ToolTip="Edit and run OpticStudio ZPL macros on the lens."
                         AutomationProperties.AutomationId="OpticsMacrosButton"/>
             </WrapPanel>
+            <!-- OP-96 -->
+            <WrapPanel Margin="0,4,0,0">
+                <Button Content="Export CAD Files…" Click="CadExport_Click"
+                        ToolTip="Write the lens elements, mirrors and rays as STEP, IGES, STL or a 2-D DXF cross-section."
+                        AutomationProperties.AutomationId="OpticsCadExportButton"/>
+            </WrapPanel>
             <!-- OP-63: the tolerance data, edited in the Tolerance Data Editor window. -->
             <DockPanel Margin="0,4,0,0">
                 <Button DockPanel.Dock="Left" Content="Tolerance Data Editor…" Click="ToleranceDataEditor_Click"

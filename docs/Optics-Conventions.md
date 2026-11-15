@@ -1724,6 +1724,23 @@ single place in the code, so a correction is one line and its test.
     Check: Single Mode Coupling, POP fiber coupling and FICL/FICP in OpticStudio on one system,
     with a decenter, a tilt and a mismatched fiber.
 
+66. **CAD export readings** (OP-96, section 70). From the help pages under
+    `plans/sources/optics/op-96-help/` and `ansyshelp-op31/`; nothing has been compared with
+    OpticStudio's output and no exported file has been opened in a CAD program.
+    - *Edges.* The three "Draw Edges As" options of the surface properties are applied to every
+      element of an export (the per-surface property is not in the lens model); "Flat To Next
+      Surface" draws the back face out to the front face's outer semi-diameter, continuing it as a
+      flat beyond its own clear semi-diameter.
+    - *Mirror substrate.* The thickness is this program's export setting, measured from the
+      mirror's farthest point toward its back as the layouts measure theirs; the help says only
+      "Mirror surfaces are exported according to the settings for the mirror substrate".
+    - *Ray patterns.* Fans at −1 + 2k/(n − 1), the ring from +y, and the grid as n × n points of
+      the unit square inside the circle; the help does not define the grid.
+    - *Tolerance.* The help's "approximate accuracy of the exported objects in lens units" is read
+      as the largest deviation of a spline fit from the optical surface (measured, at most half the
+      value on the fit's check grid) and as the chordal error of STL triangles and DXF polylines.
+    Check: export the same lens from OpticStudio and here and compare the files in a CAD program.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6671,3 +6688,85 @@ diffraction and gradient index in objects (OP-82); the ray database and filters 
 Consider Objects, Ignore Objects and "Rays Ignore Object"; mixed mode (NSC groups in a
 sequential lens with ports); the Non-Sequential Component Editor (OP-71); polychromatic
 tracing (one wavelength per tracer); an absorbing background medium.
+
+## 70. CAD export
+
+OP-96 writes a sequential lens's elements, mirrors and rays as files a mechanical designer can
+open: STEP (ISO 10303-21, AP214), IGES 5.3, STL and a 2-D DXF cross-section
+(`OpenSim.Optics/CadExport/`, writers in `OpenSim.Geometry/Export/`). OpticStudio's tool is "CAD
+Files" (help page, 2025 R2); its 2-D DXF is "Export 2D DXF".
+
+**Bodies** (`CadGeometryBuilder`). Surface j and j + 1 bound a lens element when j is not a mirror
+and the medium after it is not air, the layouts' rule (a cemented doublet is two bodies sharing a
+face; a Mangin mirror is the body ending on the mirror). The faces must be coaxial: surface j + 1's
+frame (§4, §15) is j's moved along j's z, turned about it or reversed, to 10⁻¹². Each face reaches
+its outer semi-diameter (the larger of the clear and mechanical ones, sized from rays as §13 says
+when automatic); beyond the clear one it continues as a flat at its clear-edge sag. The edge is one
+of OpticStudio's "Draw Edges As" options, for every element: Squared (flats out to the larger face,
+a cylinder), Tapered (a cone between the two rims) or Flat To Next (a cylinder at the front's outer
+semi-diameter, the back face drawn out to it). A body whose faces meet or cross at the edge is
+refused. A mirror outside a body gets a flat back at the substrate thickness beyond its farthest
+point, on the side away from the incoming light (local +z after an even number of mirrors, −z after
+an odd number, §3), or is a bare surface when the thickness is zero. Every body is a surface of
+revolution described by its meridian (`RevolvedBody`): caps (plane, sphere, or a general sag z(r))
+and straight pieces (plane annuli, cylinders, cones). Coordinates are global (§4: object-space axes,
+origin at surface 1's untilted vertex), in the lens unit.
+
+**Shapes.** Planes and spheres are exact in every format. The Standard conic with k ≠ 0 and every
+`RadialSagShape` (the even, odd and extended aspheres, Q-type, superconic, radial NURBS) are fitted:
+cubic B-splines on a clamped uniform knot vector, interpolating at the Greville abscissae (so the
+spline's x and y are exact and only z deviates), the number of spans doubled until the deviation on
+a check grid of eight points per span is at most half the export tolerance (`BSplineFit`; derived,
+The NURBS Book not being available). STEP gets a bicubic patch over the square around the rim,
+trimmed by the rim's exact circle; beyond the rim the sag is continued by its second-order Taylor
+expansion. IGES gets a cubic profile with zero slope on the axis. Any other surface type is refused
+by name.
+
+**STEP** (`StepWriter`): the AP214 product records of the Wikipedia article "ISO 10303-21", the units
+and the export tolerance as the context's distance uncertainty in the form OpenSim's importer reads,
+one MANIFOLD_SOLID_BREP per body. Each rim is a circle cut into four quarter arcs at ±x, ±y of the
+body's frame; a sphere cap is four SPHERICAL_SURFACE faces meeting at a pole vertex along four
+meridian arcs, an edge four CYLINDRICAL_SURFACE or CONICAL_SURFACE faces, a plane cap or annulus one
+PLANE face, a fitted cap one B_SPLINE_SURFACE_WITH_KNOTS face. No loop winds round a periodic
+direction, so no seam edges are written. same_sense follows the surface's ISO 10303-42 normal; outer
+loops run counterclockwise about the outward normal (checked by their vector area as written). Rays
+are POLYLINEs in a GEOMETRICALLY_BOUNDED_WIREFRAME_SHAPE_REPRESENTATION. Open sheets (a bare
+mirror) are refused.
+
+**IGES** (`IgesWriter`, US PRO's IGES 5.3): each meridian piece revolved as a Rational B-Spline
+Surface (type 128, forms 1 to 4 and 6), exact for planes, spheres, cylinders and cones (rational
+quadratic circles with middle weight cos(θ/2)); rims as Circular Arcs (100) placed by Transformation
+Matrices (124); rays as Copious Data form 12 (106). Lens data on level 1, rays on level 2. Solids
+(entity 186) are not built.
+
+**STL** (`StlWriter`, `RevolvedTessellator`): binary or ASCII; every vertex on the exact surface, N
+segments around the axis with chord sagitta at most half the tolerance at the largest radius, caps
+bisected in r until each chord is within the other half. Rays are not written (no line entity).
+
+**DXF** (`DxfWriter`, Autodesk's DXF Reference): the global YZ cut seen as the cross-section (§3,
+global z horizontal): spheres as ARCs, flat and straight pieces as LINEs, fitted caps as POLYLINEs
+with the tolerance as chordal error, rays as POLYLINEs projected on the plane; layers LENS and RAYS,
+$INSUNITS from the lens unit. A body whose axis leaves the YZ plane is refused (a 3-D DXF is not
+built).
+
+**Rays** (`CadRays`): the real trace (§13) at the chosen field and wavelength (0: all), pattern None,
+Y, X or XY fan, Ring or Grid; points on the exported surfaces only, skip-rays surfaces left out;
+failed rays end where they stopped unless Delete Vignetted is set.
+
+**Validation** (docs/Optics-Gates.md). Exported STEP read back by `StepImporter`: the same volume and
+face areas as the closed form of a spherical singlet and the meridian quadrature of the other bodies,
+within the importer's tessellation (area × twice its chord) and the fit tolerance; the B-spline face
+re-read through the importer's schema lies within the tolerance of the asphere; the shell is
+manifold and its loops are oriented. STL volume by the divergence theorem within area × chordal
+error. IGES and DXF re-read by parsers in the tests. Opening the files in a CAD program has not been
+done (none was installed where this was built).
+
+**Command line and app.** `opensim optics export <project|lens> --format step|iges|stl|dxf` (or a
+CAD `--out` extension) with `--first`, `--last`, `--edges`, `--substrate`, `--tolerance`, `--rays`,
+`--nrays`, `--field`, `--wavelength`, `--delete-vignetted`, `--ascii`; the Optics panel's "Export CAD
+Files…" dialog. The settings are not saved with the project. ZPL's EXPORTCAD is not bound.
+
+**Not built:** SAT (OP-76), point clouds, 3-D DXF and IGES Linework, non-rotational surfaces
+(refused by name), apertures other than centred circles (refused), dummy surfaces, solid beams and
+ray footprints, configurations exported by file or layer, non-sequential objects, IGES solids, STEP
+sheets, chamfers, OpticStudio's STL angular tolerance. Readings in §10 item 66.

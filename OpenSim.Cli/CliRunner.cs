@@ -208,6 +208,16 @@ public static partial class CliRunner
             Writes the optical system as a Zemax lens file (UTF-16). Content the file subset
             cannot hold fails the export, every item listed; --lenient lists it and leaves it out.
 
+        opensim optics export <project.ossproj|lens.osslens> --format step|iges|stl|dxf [--out FILE] [options]
+            CAD export (OP-96): lens elements and mirrors as STEP AP214 solids, IGES 5.3 surfaces
+            and linework, STL triangles or the 2-D DXF cross-section, with ray polylines (not STL).
+            A --out ending .step/.stp/.igs/.iges/.stl/.dxf picks the format without --format.
+            --first N --last N  the surfaces (default 1 to the last before the image)
+            --edges squared|tapered|flat   --substrate T  a mirror's substrate (lens units)
+            --tolerance T       fit and chordal tolerance, lens units (default 1e-4)
+            --rays none|yfan|xfan|xyfan|ring|grid --nrays N --field N --wavelength N
+            --delete-vignetted  --ascii (ASCII STL)  --builtin-catalogs
+
         opensim optics catalog <folder|catalog.osslcat> [--efl MIN:MAX] [--epd MIN:MAX] [--shape EBPM?]
                 [--type SGAT] [--elements N] [--text T] [--save OUT.osslcat] [--name NAME] [--lenient]
             Indexes a folder of .zmx/.zar/.seq/.len lens files as a stock lens catalog (or loads a private
