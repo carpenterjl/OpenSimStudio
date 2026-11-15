@@ -114,6 +114,7 @@ public static partial class CliRunner
         {
             var saved = new ProjectSerializer().Load(projectPath);
             saved.Optics = result.ApplyTo(saved.Optics ?? optics, result.Best[0]);
+            if (o.ContainsKey("high-yield")) saved.Optics = saved.Optics with { MeritFunction = optics.MeritFunction };   // OP-62: the rows the search used
             string optimisedPath = Path.Combine(dir, Path.GetFileNameWithoutExtension(projectPath) + "-optimised" + ProjectSerializer.FileExtension);
             new ProjectSerializer().Save(saved, optimisedPath);
             Log($"The best design (merit {StudyReport.Number(result.Best[0].Merit, "g10")}, trial {result.Best[0].Trial}) written to {optimisedPath} (the input project is unchanged).");

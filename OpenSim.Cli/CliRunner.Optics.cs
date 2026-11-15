@@ -256,6 +256,8 @@ public static partial class CliRunner
             CancellationToken = cancellation,
             Progress = p => stdout.WriteLine($"  cycle {p.Cycle}: merit {StudyReport.Number(p.Merit, "g8")} (start {StudyReport.Number(p.StartMerit, "g8")}), {p.Evaluations} evaluations"),
         };
+        bool highYield = o.ContainsKey("high-yield");   // OP-62 (CliRunner.OpticsYield.cs)
+        if (highYield) optics = WithHighYield(optics, active, o, Log);
         if (o.ContainsKey("global") || o.ContainsKey("hammer"))   // OP-58: the Global and Hammer searches (CliRunner.OpticsSearch.cs)
             return OpticsSearch(projectPath, o, stdout, cancellation, project, optics, active, options, log, Log);
         if (cycles == LocalOptimizationCycles.Infinite) Log("Cycles: infinite; press Ctrl+C to stop and keep the best design so far.");
@@ -275,6 +277,7 @@ public static partial class CliRunner
         File.WriteAllText(Path.Combine(dir, "merit.csv"), MeritCsv(result.Evaluation));
         var saved = new ProjectSerializer().Load(projectPath);
         saved.Optics = result.ApplyTo(saved.Optics ?? optics);
+        if (highYield) saved.Optics = saved.Optics with { MeritFunction = optics.MeritFunction };   // OP-62: the High-Yield rows the run used
         string optimisedPath = Path.Combine(dir, Path.GetFileNameWithoutExtension(projectPath) + "-optimised" + ProjectSerializer.FileExtension);
         new ProjectSerializer().Save(saved, optimisedPath);
         Log($"Optimised project written to {optimisedPath} (the input project is unchanged).");
@@ -365,6 +368,7 @@ public static partial class CliRunner
         var active = GlassLookup.ActiveCatalogs(catalogs, optics.Materials?.ActiveCatalogs);
         var notes = new List<string>();
         var table = ToleranceDataSettings.FromSettings(optics.Tolerances, notes);
+        if (o.ContainsKey("wizard")) table = WizardTable(optics, table, active, Log);   // OP-66 (CliRunner.OpticsYield.cs)
         if (table.Rows.Count == 0)
             throw new InvalidOperationException($"The project '{project.Name}' has no tolerance rows: build them in the Tolerance Data Editor first.");
         var options = ToleranceRunSettings.FromSettings(optics.Tolerances?.Run, notes);
@@ -412,6 +416,12 @@ public static partial class CliRunner
             Progress = p => stdout.WriteLine($"  {p.RowsDone} of {p.RowCount} rows, {p.Trials} trials{(p.Last is null ? "" : $" (last {p.Last})")}"),
         };
 
+        if (o.ContainsKey("quick-yield"))   // OP-66: Quick Yield (CliRunner.OpticsYield.cs)
+        {
+            if (monteCarlo || mode is not null)
+                throw new UsageException("--quick-yield runs Quick Yield instead of --montecarlo or --mode; give one of them.");
+            return OpticsQuickYield(projectPath, o, stdout, project, optics, table, active, options, log, Log);
+        }
         if (monteCarlo)   // OP-65: Monte Carlo tolerancing (CliRunner.OpticsSearch.cs)
             return OpticsMonteCarlo(projectPath, o, stdout, project, optics, table, active, options, log, Log);
 

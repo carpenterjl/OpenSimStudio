@@ -1479,6 +1479,14 @@ a part not built), 2 the run failed or was cancelled.
   editor's report text; `trials.csv` lists every trial with its drawn values; `histogram.csv`
   holds the histogram. `--save-trial K` also writes trial K's lens as `MC_T000K.osslens`. A
   failed trial is named in the log and the report and gives exit 2.
+- `opensim optics tolerance <project> --quick-yield` runs Quick Yield with the saved Monte Carlo
+  and Quick Yield settings (`--samples`, `--seed`, `--yield-limit` override them) and writes
+  `quickyield.txt` (the editor's report text), `histogram.csv` and `yield.csv`; a failed
+  evaluation gives exit 2. `--wizard` (with any tolerance run) first writes the Tolerance Wizard's
+  rows from its saved settings and runs them; the project is not changed.
+- `opensim optics optimise <project> --high-yield W` adds the High-Yield rows at weight W to the
+  merit function (from the saved Optimization Wizard options) before optimizing; the written
+  project carries them.
 - Optics sweeps: an `opensim sweep` job whose targets are all `optics:...` sets cells of the saved
   lens at each point and tabulates the saved merit function and each row's value. Targets:
   `optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|par<k>|modelNd|modelVd|modelDeltaPgF`

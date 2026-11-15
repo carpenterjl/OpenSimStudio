@@ -4066,6 +4066,21 @@ write Zemax lens files (§52).
   focus shift cannot be saved is logged and gives exit 2. A failed trial gives exit 2, as a row
   that could not be evaluated does in sensitivity. Cancellation stops the run with "Cancelled."
   (exit 2); the engine returns no partial result.
+- **High-Yield, Tolerance Wizard and Quick Yield** (`CliRunner.OpticsYield.cs`, wave 9 wiring).
+  `optics optimise --high-yield W` first replaces the merit function's High-Yield block with
+  `HighYieldMerit.Generate` rows at weight W (§50), from the saved Optimization Wizard options and
+  the current configuration, as the Optimize window's Add High-Yield Rows does
+  (`HighYieldMerit.WithRows`); the local optimizer (or `--global`/`--hammer`) then runs against it,
+  and the written `<project>-optimised.ossproj` carries those rows. `--high-yield` without a
+  weight is a usage error; a weight the engine refuses exits 2. `optics tolerance --wizard` runs
+  `ToleranceWizard.Generate` (§51) on the saved rows with the saved wizard settings and runs the
+  result (sensitivity, Monte Carlo or Quick Yield); the project is not changed.
+  `optics tolerance --quick-yield` calls `QuickYield.Run` (§51) with the sensitivity run's options,
+  the saved Monte Carlo settings (`--seed`, `--yield-limit` override) and the saved Quick Yield
+  settings (`--samples` overrides); with `--montecarlo` or `--mode` it is a usage error. The folder
+  (`<project>-optics-quickyield`) holds `quickyield.txt` (`QuickYieldResult.ReportLines`, the
+  editor's text), `histogram.csv`, `yield.csv` (with a yield limit) and `log.txt`; a failed
+  evaluation exits 2. `optics testplates` (OP-17) is not built on the command line.
 - **Not built.** Multi-configuration cells as sweep targets, lens files (`.osslens`) as input,
   ranges for the global searches from the command line (the engines' default ranges are used,
   `--curvature-limit` aside), and CSV of the analyses' tables (their text is written) are not

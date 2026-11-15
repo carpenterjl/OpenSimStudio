@@ -157,6 +157,9 @@ public static partial class CliRunner
             (the input is not changed). Ctrl+C stops and keeps the best design so far (exit 2).
             --algorithm dls|od  damped least squares (default) or orthogonal descent
             --cycles auto|N|infinite                 --max-evaluations N   --threads N
+            --high-yield W      add the High-Yield rows (OP-62) at weight W to the merit
+                                function first (from the saved Optimization Wizard options);
+                                the written project carries them
             --global            the Global search instead (OP-58): differential evolution of
                                 locally optimized designs; --population N --generations N
             --hammer            the Hammer search instead (OP-58): perturb and re-optimize,
@@ -183,6 +186,13 @@ public static partial class CliRunner
                                 --save-trial K (writes MC_T000K.osslens). Writes report.md/.html,
                                 montecarlo.txt, trials.csv, histogram.csv, log.txt (default
                                 folder <project>-optics-montecarlo); exit 2 when a trial failed.
+            --wizard            first write the Tolerance Wizard's rows (OP-66) from its saved
+                                settings into the rows run (the project is not changed)
+            --quick-yield       Quick Yield instead (OP-66), with the saved Monte Carlo and
+                                Quick Yield settings as defaults: --samples N --seed N
+                                --yield-limit V. Writes quickyield.txt, histogram.csv, yield.csv
+                                (with a yield limit), log.txt (default folder
+                                <project>-optics-quickyield); exit 2 when an evaluation failed.
 
         opensim optics import <lens.zmx|archive.zar> [--out LENS.osslens] [--lenient] [--builtin-catalogs]
             Reads a Zemax lens file (or the lens inside a .zar archive) into a lens file (OP-94).
