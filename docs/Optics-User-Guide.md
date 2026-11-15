@@ -1046,6 +1046,71 @@ docs/Optics-Conventions.md §34.
 Not built: Plot Scale, Use Polarization,
 the field map at intermediate surfaces, and afocal systems (refused).
 
+## Modulation transfer function
+
+The MTF group holds fourteen analyses over three ways of computing the optical transfer function
+(OTF), tangential (T, frequency along y) and sagittal (S, along x):
+
+- **FFT** (FFT MTF, FFT through focus MTF, FFT surface MTF, FFT MTF vs field, FFT MTF map): the
+  autocorrelation of the same pupil function the FFT PSF uses, so it is the transform of that
+  PSF. The cutoff of each axis is 1/(λF) with the working F/# the traced rays give (for afocal
+  systems the exit pupil diameter over λ, in cycles per milliradian). Type: modulation, real
+  part, imaginary part, phase (degrees) or square-wave response.
+- **Huygens** (Huygens MTF, through focus, surface, vs field): the transform of the Huygens PSF,
+  with its pupil sampling, image sampling and image delta. Frequencies above the image grid's
+  Nyquist frequency, or a PSF that reaches the grid's edge, are warned about.
+- **Geometric** (Geometric MTF, through focus, vs field, map): the transform of the rays' spot,
+  optionally multiplied by the diffraction-limited MTF of the same pupil (on by default, as the
+  help advises). Good for strongly aberrated lenses; it does not know about diffraction
+  otherwise.
+- **Contrast loss map**: for each pupil point, how much a pair of rays one MTF-frequency shift
+  apart lose contrast, 0.5(1 − cos 2πΔW), as two false-colour maps (T and S), with the MTF and
+  its diffraction limit at that frequency (frequency 0: 5 % of the cutoff).
+
+Wavelength 0 is polychromatic: every wavelength referred to the primary wavelength's chief ray,
+weighted as the polychromatic PSF weights it. Field 0 plots every field. Show diffraction limit
+draws the FFT MTF of the on-axis field (or field 1 if none is on axis) with the OPD set to zero.
+Through focus adds the shift (lens units) to the thickness before the image surface. MTF vs field
+and the maps sample fields between the table's, as the RMS analyses do; Remove vignetting factors
+(on by default) replaces vignetting factors with apertures first. Map pixels are computed at their
+centres; a width of 0 is twice the largest radial field. The MTF unit is cycles per millimeter
+(cycles per milliradian in afocal mode); a focal system set to cycles per milliradian is refused.
+Definitions are in docs/Optics-Conventions.md §38. The same engine (`MtfEngine.Evaluate`) gives
+the MTF merit operands (MTFT, MTFS, MTFA; GMTT, GMTS, GMTA) and the MTF tolerance criteria.
+
+Not built: polarization, intermediate surfaces, scattered rays, the Huygens sum over
+configurations, the coherent transfer function, the 3-D surface plot, the through-focus spline,
+the contrast loss map's circles and OPD indicator, afocal through-focus and Huygens MTF, and
+the object-space cycles-per-milliradian unit of focal systems.
+
+## Enclosed energy
+
+Four analyses in the **Enclosed energy** group give the fraction of a point image's energy inside
+a region about a reference point.
+
+- **Diffraction enclosed energy:** from the PSF of an n × n pupil grid (*Sampling*, 16 to 512),
+  computed exactly for that grid (no image sampling). *Type*: encircled (radius), x-only or
+  y-only (a slit infinite in the other direction), or ensquared (half-width). *Refer to*: chief
+  ray, centroid or vertex. *Maximum distance* (µm, 0 for the default) is limited to half the
+  PSF's period; raise the sampling for larger distances. *Show diffraction limit* adds the
+  aberration-free curve of the reference field. *Wavelength* 0 combines the wavelengths by their
+  weights; *Field* 0 draws every field.
+- **Geometric enclosed energy:** the same from rays on an n × n pupil grid at any surface, about
+  the chief ray, centroid, vertex or middle (the centre of the smallest circle holding every
+  ray). *Multiply by diffraction limit* (encircled only) multiplies by the Airy disk's curve at
+  the reference field's working F/#.
+- **Geometric line/edge spread:** the rays' line and edge spread about the chief ray, for a line
+  or edge parallel to x and to y.
+- **Extended source enclosed energy:** rays from every lit pixel of an IMA image (*File*, its full
+  path; text or binary), *Field size* wide in field units, centred on *Field*; about 1000 ×
+  *Rays x 1000* rays. Besides the four regions it draws the x or y distribution with its FWHM.
+  Fields with vignetting factors need *Remove vignetting factors*.
+
+The result lists the sizes holding 50 % and 80 % of the energy, the reference point, the rays
+that did not arrive and the sampling warnings. The rules are in `docs/Optics-Conventions.md`
+§39; readings not yet checked against OpticStudio are in §10 item 35. Not built: the Huygens PSF
+option, polarization, scattering, BIM files, dashed-line styling.
+
 ## Optimization
 
 **Optimize…**, beside the Merit Function Editor in the Optics panel, opens the local optimizer.
@@ -1078,6 +1143,75 @@ variables and substitution are under Glass substitution below. Not built: global
 derivative-increment settings in the window (the library takes them), saving the Optimize
 window's settings, and the "Auto Update" of open analysis windows during a run (they update
 when the result is applied).
+
+## Optimization Wizard
+
+**Wizard** in the Merit Function Editor opens the Optimization Wizard, which writes the default
+merit function: an RMS image error at every field and wavelength, integrated over the pupil.
+
+- **Criterion**: wavefront (OPD in waves), spot radius, spot x, spot y, spot x + y, angular
+  (for afocal image space), or contrast (MTF): the Moore–Elliott method, which writes MECT and
+  MECS rows, the pupil phase differences across the shift of the **Spatial frequency**
+  (cycles/mm), weighted by **Relative T/S weight**. Contrast needs a frequency below the cutoff
+  and a focal image space; pupil points whose shifted partner falls outside the pupil are left
+  out and counted in the status line. **Reference**: centroid (the field's weighted centroid; for the
+  wavefront the mean and tilt are removed), chief ray (the primary wavelength's chief ray; for
+  the wavefront the mean is removed), or unreferenced (wavefront only). **Ignore lateral
+  colour** gives each wavelength its own centroid.
+- **Pupil integration**: Gaussian quadrature (rings 1 to 20, arms 6, 8, 10 or 12; n rings
+  integrate aberrations up to order 2n − 1 when there are at least 4n arms) or a rectangular
+  array (rays across, 2 to 100; Delete vignetted leaves out the rays that fail now). Gaussian
+  quadrature assumes the whole pupil is traced: when any of its rays is vignetted, the wizard
+  writes the rectangular array instead and says so in its status line.
+- **Symmetry**: automatic (when the lens is rotationally symmetric), on or off. On, fields on the
+  y axis get half the rows at twice the weight, and the on-axis field one row per ring for the
+  radial criteria; on a symmetric lens the merit value does not change.
+- **Boundary values**: minimum and maximum center thickness and minimum edge thickness for glass
+  (MNCG, MXCG, MNEG) and air (MNCA, MXCA, MNEA), in lens units, over every surface.
+- **Configurations**: the current one or all (each after a CONF row). **Start at row**: where the
+  rows go; by default the row after a DMFS row, else the end (0). Later rows that refer to rows
+  by number are renumbered. **Overall weight** scales every weight. **Relative X/Y weight** weigh
+  the x and y rows of spot x + y and angular (0 leaves those rows out; both 0 write radial rows).
+
+**Apply** inserts the rows (one undo step in the editor); **OK** applies and closes. **Save
+Settings** keeps the dialog's settings with the project; **Load Settings** and **Reset
+Settings** show the saved ones and the defaults. Each row's weight is overall × field weight ×
+wavelength weight × the pupil point's weight, so for one field and one wavelength the merit value
+is the RMS of the RMS analyses; for spot x + y with equal relative weights it is the RMS radius
+divided by √2. Docs/Optics-Conventions.md §40 has the rules and §10 item 36 the readings.
+
+The Merit Function Editor also takes the MTF operands MTFT, MTFS, MTFA (diffraction) and GMTT,
+GMTS, GMTA (geometric): Samp (pupil grid 32·2^(Samp−1)), Wave (0 polychromatic), Field, Freq.
+
+Not built: contrast in afocal image space, the Huygens and square-wave MTF operands, the PTV
+type, Max Distortion, the manufacturing-yield goal, Add Favorite Operands and the Gaussian
+obscuration.
+
+## Glass substitution
+
+The **Glasses** section of the Optimize window lets the optimizer change glasses.
+
+- **Glass list.** Refresh lists the surfaces with a glass. For a model glass ("nd, Vd" or "nd,
+  Vd, ΔPgF" in the Material cell) tick Vary nd, Vary Vd or Vary ΔPgF; Start then varies them
+  with the other variables. Tick Substitute on any glass the search may replace. Apply flags
+  writes the ticks into the lens (one undo step of the Lens Data Editor).
+- **Convert model glasses** replaces each model glass by the nearest catalog glass (by nd and
+  Vd, OpticStudio's least-squares distance) within the template; optimize again afterwards.
+- **Substitute glasses** tries every candidate glass on each Substitute surface, re-optimizing
+  each time with the algorithm and cycles above, keeps the best, and repeats until a round
+  changes nothing. The best design is written into the lens; the Lens Data Editor's undo takes
+  it back. Stop keeps the best so far. Trials that fail are listed in the log.
+- **Glass substitution template** (saved with the lens): the statuses allowed, maximum relative
+  cost and CR, FR, SR, AR and PR codes (empty or 0 ignores a limit), whether glasses with
+  incomplete data are excluded, and the catalogs to draw from. Glasses flagged Exclude
+  Substitution in their catalog, tabulated materials and glasses that do not cover every
+  wavelength are never chosen.
+- **Operands.** RGLA (reasonable glass: distance from each glass of a surface range to the
+  nearest catalog glass) and GCOS (glass cost) are in the Merit Function Editor.
+
+Rules and readings are in docs/Optics-Conventions.md §41. Not built: the Hammer and Global
+optimizers, a substitute catalog per surface, saving the template to a *.GST file, and the
+operands MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and INDX.
 
 ## Tolerance data
 
@@ -1113,89 +1247,6 @@ item 32. The tolerance run below uses them.
 Not built: the Monte Carlo analysis; the coating, non-sequential, TEXI and ISO 10110 operands (defined, refused
 when applied, as are TEZI on surfaces other than Toroidal); the default tolerance wizard, the
 tolerance listing, sorting and .TOL files.
-
-## Thermal analysis
-
-The **Thermal** section of the Multi-Configuration Editor sets a lens up at several temperatures,
-as OpticStudio's Make Thermal does.
-
-- **Make thermal.** Enter the number of new configurations and the minimum and maximum
-  temperature (°C); the new configurations span the range in equal steps. Off, "Use existing
-  configurations as nominal" replaces the table by one nominal configuration (the current one)
-  plus the new ones; on, each existing configuration gets its own set after the originals.
-  Pressure (atm) is the new configurations' air pressure; empty keeps the nominal's. The tool
-  adds TEMP and PRES rows and, for each radius, thickness and fixed semi-diameter, a row whose
-  new cells are thermal pickups of the nominal. The status line lists what got no row (a value
-  under a Lens Data Editor solve, for instance).
-- **Thermal pickups** (badge "T"): the reference configuration's value at this configuration's
-  temperature. Glass radii, thicknesses and semi-diameters grow with the glass's catalog TCE;
-  the air spaces grow with the TCE column of the surface before them (the mount), measured along
-  the lens edges at the mechanical semi-diameters, so a change of radius moves the spacing too.
-  A surface that is not a catalog glass (a constant index, a model glass) uses its TCE column.
-  Other operands copy the reference value. Docs/Optics-Conventions.md section 37 gives the rules.
-- **Indices.** Turn on "Adjust index to environment" in the system data for the glass indices to
-  follow each configuration's temperature and pressure; Make Thermal reminds you when it is off.
-- **Glass and mechanical material.** Link a glass to a material of the material library (Glass,
-  Mechanical material, Link): that glass then expands with the material's thermal expansion
-  coefficient instead of its catalog TCE. The link saves with the lens. The material library's
-  materials have no expansion coefficient yet; a linked material without one is refused by name.
-- **Not built.** Thermal pickups of parameters, several temperatures within one configuration,
-  thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
-  thermal table at a changed temperature.
-
-## Glass substitution
-
-The **Glasses** section of the Optimize window lets the optimizer change glasses.
-
-- **Glass list.** Refresh lists the surfaces with a glass. For a model glass ("nd, Vd" or "nd,
-  Vd, ΔPgF" in the Material cell) tick Vary nd, Vary Vd or Vary ΔPgF; Start then varies them
-  with the other variables. Tick Substitute on any glass the search may replace. Apply flags
-  writes the ticks into the lens (one undo step of the Lens Data Editor).
-- **Convert model glasses** replaces each model glass by the nearest catalog glass (by nd and
-  Vd, OpticStudio's least-squares distance) within the template; optimize again afterwards.
-- **Substitute glasses** tries every candidate glass on each Substitute surface, re-optimizing
-  each time with the algorithm and cycles above, keeps the best, and repeats until a round
-  changes nothing. The best design is written into the lens; the Lens Data Editor's undo takes
-  it back. Stop keeps the best so far. Trials that fail are listed in the log.
-- **Glass substitution template** (saved with the lens): the statuses allowed, maximum relative
-  cost and CR, FR, SR, AR and PR codes (empty or 0 ignores a limit), whether glasses with
-  incomplete data are excluded, and the catalogs to draw from. Glasses flagged Exclude
-  Substitution in their catalog, tabulated materials and glasses that do not cover every
-  wavelength are never chosen.
-- **Operands.** RGLA (reasonable glass: distance from each glass of a surface range to the
-  nearest catalog glass) and GCOS (glass cost) are in the Merit Function Editor.
-
-Rules and readings are in docs/Optics-Conventions.md §41. Not built: the Hammer and Global
-optimizers, a substitute catalog per surface, saving the template to a *.GST file, and the
-operands MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and INDX.
-
-## Enclosed energy
-
-Four analyses in the **Enclosed energy** group give the fraction of a point image's energy inside
-a region about a reference point.
-
-- **Diffraction enclosed energy:** from the PSF of an n × n pupil grid (*Sampling*, 16 to 512),
-  computed exactly for that grid (no image sampling). *Type*: encircled (radius), x-only or
-  y-only (a slit infinite in the other direction), or ensquared (half-width). *Refer to*: chief
-  ray, centroid or vertex. *Maximum distance* (µm, 0 for the default) is limited to half the
-  PSF's period; raise the sampling for larger distances. *Show diffraction limit* adds the
-  aberration-free curve of the reference field. *Wavelength* 0 combines the wavelengths by their
-  weights; *Field* 0 draws every field.
-- **Geometric enclosed energy:** the same from rays on an n × n pupil grid at any surface, about
-  the chief ray, centroid, vertex or middle (the centre of the smallest circle holding every
-  ray). *Multiply by diffraction limit* (encircled only) multiplies by the Airy disk's curve at
-  the reference field's working F/#.
-- **Geometric line/edge spread:** the rays' line and edge spread about the chief ray, for a line
-  or edge parallel to x and to y.
-- **Extended source enclosed energy:** rays from every lit pixel of an IMA image (*File*, its full
-  path; text or binary), *Field size* wide in field units, centred on *Field*; about 1000 ×
-  *Rays x 1000* rays. Besides the four regions it draws the x or y distribution with its FWHM.
-  Fields with vignetting factors need *Remove vignetting factors*.
-
-The result lists the sizes holding 50 % and 80 % of the energy, the reference point, the rays
-that did not arrive and the sampling warnings. The rules are in `docs/Optics-Conventions.md`
-§39; readings not yet checked against OpticStudio are in §10 item 35. Not built: the Huygens PSF
-option, polarization, scattering, BIM files, dashed-line styling.
 
 ## Sensitivity and inverse sensitivity
 
@@ -1240,85 +1291,34 @@ configurations choice; the tolerance data file and viewer. Element decenter and 
 (TEDX … TETZ and the rolls) cannot be evaluated yet: the ray launcher refuses the decentered lens
 they make, and the report names those rows.
 
-## Modulation transfer function
+## Thermal analysis
 
-The MTF group holds fourteen analyses over three ways of computing the optical transfer function
-(OTF), tangential (T, frequency along y) and sagittal (S, along x):
+The **Thermal** section of the Multi-Configuration Editor sets a lens up at several temperatures,
+as OpticStudio's Make Thermal does.
 
-- **FFT** (FFT MTF, FFT through focus MTF, FFT surface MTF, FFT MTF vs field, FFT MTF map): the
-  autocorrelation of the same pupil function the FFT PSF uses, so it is the transform of that
-  PSF. The cutoff of each axis is 1/(λF) with the working F/# the traced rays give (for afocal
-  systems the exit pupil diameter over λ, in cycles per milliradian). Type: modulation, real
-  part, imaginary part, phase (degrees) or square-wave response.
-- **Huygens** (Huygens MTF, through focus, surface, vs field): the transform of the Huygens PSF,
-  with its pupil sampling, image sampling and image delta. Frequencies above the image grid's
-  Nyquist frequency, or a PSF that reaches the grid's edge, are warned about.
-- **Geometric** (Geometric MTF, through focus, vs field, map): the transform of the rays' spot,
-  optionally multiplied by the diffraction-limited MTF of the same pupil (on by default, as the
-  help advises). Good for strongly aberrated lenses; it does not know about diffraction
-  otherwise.
-- **Contrast loss map**: for each pupil point, how much a pair of rays one MTF-frequency shift
-  apart lose contrast, 0.5(1 − cos 2πΔW), as two false-colour maps (T and S), with the MTF and
-  its diffraction limit at that frequency (frequency 0: 5 % of the cutoff).
-
-Wavelength 0 is polychromatic: every wavelength referred to the primary wavelength's chief ray,
-weighted as the polychromatic PSF weights it. Field 0 plots every field. Show diffraction limit
-draws the FFT MTF of the on-axis field (or field 1 if none is on axis) with the OPD set to zero.
-Through focus adds the shift (lens units) to the thickness before the image surface. MTF vs field
-and the maps sample fields between the table's, as the RMS analyses do; Remove vignetting factors
-(on by default) replaces vignetting factors with apertures first. Map pixels are computed at their
-centres; a width of 0 is twice the largest radial field. The MTF unit is cycles per millimeter
-(cycles per milliradian in afocal mode); a focal system set to cycles per milliradian is refused.
-Definitions are in docs/Optics-Conventions.md §38. The same engine (`MtfEngine.Evaluate`) gives
-the MTF merit operands (MTFT, MTFS, MTFA; GMTT, GMTS, GMTA) and the MTF tolerance criteria.
-
-Not built: polarization, intermediate surfaces, scattered rays, the Huygens sum over
-configurations, the coherent transfer function, the 3-D surface plot, the through-focus spline,
-the contrast loss map's circles and OPD indicator, afocal through-focus and Huygens MTF, and
-the object-space cycles-per-milliradian unit of focal systems.
-
-## Optimization Wizard
-
-**Wizard** in the Merit Function Editor opens the Optimization Wizard, which writes the default
-merit function: an RMS image error at every field and wavelength, integrated over the pupil.
-
-- **Criterion**: wavefront (OPD in waves), spot radius, spot x, spot y, spot x + y, angular
-  (for afocal image space), or contrast (MTF): the Moore–Elliott method, which writes MECT and
-  MECS rows, the pupil phase differences across the shift of the **Spatial frequency**
-  (cycles/mm), weighted by **Relative T/S weight**. Contrast needs a frequency below the cutoff
-  and a focal image space; pupil points whose shifted partner falls outside the pupil are left
-  out and counted in the status line. **Reference**: centroid (the field's weighted centroid; for the
-  wavefront the mean and tilt are removed), chief ray (the primary wavelength's chief ray; for
-  the wavefront the mean is removed), or unreferenced (wavefront only). **Ignore lateral
-  colour** gives each wavelength its own centroid.
-- **Pupil integration**: Gaussian quadrature (rings 1 to 20, arms 6, 8, 10 or 12; n rings
-  integrate aberrations up to order 2n − 1 when there are at least 4n arms) or a rectangular
-  array (rays across, 2 to 100; Delete vignetted leaves out the rays that fail now). Gaussian
-  quadrature assumes the whole pupil is traced: when any of its rays is vignetted, the wizard
-  writes the rectangular array instead and says so in its status line.
-- **Symmetry**: automatic (when the lens is rotationally symmetric), on or off. On, fields on the
-  y axis get half the rows at twice the weight, and the on-axis field one row per ring for the
-  radial criteria; on a symmetric lens the merit value does not change.
-- **Boundary values**: minimum and maximum center thickness and minimum edge thickness for glass
-  (MNCG, MXCG, MNEG) and air (MNCA, MXCA, MNEA), in lens units, over every surface.
-- **Configurations**: the current one or all (each after a CONF row). **Start at row**: where the
-  rows go; by default the row after a DMFS row, else the end (0). Later rows that refer to rows
-  by number are renumbered. **Overall weight** scales every weight. **Relative X/Y weight** weigh
-  the x and y rows of spot x + y and angular (0 leaves those rows out; both 0 write radial rows).
-
-**Apply** inserts the rows (one undo step in the editor); **OK** applies and closes. **Save
-Settings** keeps the dialog's settings with the project; **Load Settings** and **Reset
-Settings** show the saved ones and the defaults. Each row's weight is overall × field weight ×
-wavelength weight × the pupil point's weight, so for one field and one wavelength the merit value
-is the RMS of the RMS analyses; for spot x + y with equal relative weights it is the RMS radius
-divided by √2. Docs/Optics-Conventions.md §40 has the rules and §10 item 36 the readings.
-
-The Merit Function Editor also takes the MTF operands MTFT, MTFS, MTFA (diffraction) and GMTT,
-GMTS, GMTA (geometric): Samp (pupil grid 32·2^(Samp−1)), Wave (0 polychromatic), Field, Freq.
-
-Not built: contrast in afocal image space, the Huygens and square-wave MTF operands, the PTV
-type, Max Distortion, the manufacturing-yield goal, Add Favorite Operands and the Gaussian
-obscuration.
+- **Make thermal.** Enter the number of new configurations and the minimum and maximum
+  temperature (°C); the new configurations span the range in equal steps. Off, "Use existing
+  configurations as nominal" replaces the table by one nominal configuration (the current one)
+  plus the new ones; on, each existing configuration gets its own set after the originals.
+  Pressure (atm) is the new configurations' air pressure; empty keeps the nominal's. The tool
+  adds TEMP and PRES rows and, for each radius, thickness and fixed semi-diameter, a row whose
+  new cells are thermal pickups of the nominal. The status line lists what got no row (a value
+  under a Lens Data Editor solve, for instance).
+- **Thermal pickups** (badge "T"): the reference configuration's value at this configuration's
+  temperature. Glass radii, thicknesses and semi-diameters grow with the glass's catalog TCE;
+  the air spaces grow with the TCE column of the surface before them (the mount), measured along
+  the lens edges at the mechanical semi-diameters, so a change of radius moves the spacing too.
+  A surface that is not a catalog glass (a constant index, a model glass) uses its TCE column.
+  Other operands copy the reference value. Docs/Optics-Conventions.md section 37 gives the rules.
+- **Indices.** Turn on "Adjust index to environment" in the system data for the glass indices to
+  follow each configuration's temperature and pressure; Make Thermal reminds you when it is off.
+- **Glass and mechanical material.** Link a glass to a material of the material library (Glass,
+  Mechanical material, Link): that glass then expands with the material's thermal expansion
+  coefficient instead of its catalog TCE. The link saves with the lens. The material library's
+  materials have no expansion coefficient yet; a linked material without one is refused by name.
+- **Not built.** Thermal pickups of parameters, several temperatures within one configuration,
+  thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
+  thermal table at a changed temperature.
 
 ## Coming
 

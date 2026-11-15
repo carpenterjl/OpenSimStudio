@@ -887,22 +887,35 @@ single place in the code, so a correction is one line and its test.
       built: a thermal pickup of a length in such a table fails.
     Check: a lens made thermal by OpticStudio, its thermal pickups' values read from its
     Multi-Configuration Editor and compared with this program's for the same lens and catalog.
-37. **Glass substitution readings** (OP-59). Section 41 follows OpticStudio's help pages, but
-    nothing is compared with OpticStudio's output, and these are this program's readings:
-    - *RGLA's columns and range.* Surf1 and Surf2 in Int1 and Int2, Wn, Wa and Wp in Data1 to
-      Data3; over a range of surfaces the value is the target plus the summed excesses (the help
-      defines one glass only).
-    - *Where a glass sits.* The printed nd, Vd and ΔPgF of the catalog first, computed values
-      where it prints none.
-    - *Conversion weights.* The model-to-real conversion uses RGLA's default Wn and Wa (the help
-      says only "similar to the RGLA definition", partial dispersion omitted).
-    - *The template.* A glass without a status, and a Melt glass, pass the status test; a missing
-      status counts as incomplete data only when a status box is clear.
-    - *The search order.* OpticStudio substitutes glasses inside its Hammer and Global
-      optimizers, whose order is not published; this program's coordinate search is its own.
-    Check: a lens with model glasses converted by OpticStudio and by this program against the
-    same catalog and template; RGLA and GCOS values read from OpticStudio's Merit Function
-    Editor for the same lens.
+34. **MTF readings** (OP-39, section 38). Read from the help pages' wording; no OpticStudio
+    number was compared:
+    - *FFT MTF* is the pupil autocorrelation on OP-38's pupil grid, interpolated linearly between
+      whole-node shifts. The help's "faster version" for FFT Through Focus MTF (the MTFA
+      operand's Grid = 0 sparse method) is not described and not built; through focus uses the
+      same autocorrelation.
+    - *Polychromatic weights*: each wavelength's OTF weighted by its weight × (λ_min/λ)² × its
+      PSF's energy, so the polychromatic OTF is the transform of OP-38's polychromatic PSF; the
+      help does not say how OpticStudio weights them. The geometric MTF weights by the
+      wavelength weight.
+    - *Geometric MTF* is the exact transform of the ray set (no binning into a line spread
+      function); OpticStudio's grid algorithm and its sparse operand method are not described.
+      Multiply by diffraction limit uses the same field's unaberrated pupil; the help does not
+      say which diffraction limit.
+    - *Huygens MTF* transforms the Huygens PSF directly at each frequency; the help says "an FFT
+      of the Huygens PSF".
+    - *Diffraction limit* curves are the reference field's (help, "Diffraction Limited"), also on
+      the Huygens and geometric plots and as an option on the through-focus plots, where the help
+      lists no such setting.
+    - *Contrast Loss Map*: the help's δ is stated two ways that disagree ("ξ(Δ) = Δ/(D/2)·ξ_c"
+      with "Δ = D/2" at the cutoff, and an example where δ = 0.1 puts the pair at 1 ± 0.1);
+      here the pair is separated by the autocorrelation shift λν/(n|a|), 2ν/ν_c for a circular
+      pupil, as the MTF needs. The default frequency, "5% of the cutoff", uses the cutoff
+      2n√|a_x·a_y|/λ. Drawn as maps, not circles.
+    - *Defaults* the help does not give (frequencies, steps, pixels, 101 plotted frequencies,
+      129 × 129 surface points) are this program's.
+    Check: FFT, Huygens and geometric MTF of a singlet at two fields, polychromatic and
+    monochromatic, against OpticStudio's text output; the contrast loss map's δ against its
+    plot.
 
 35. **Enclosed energy readings** (OP-41, section 39). Read from the help pages' wording; no
     OpticStudio number was compared:
@@ -933,77 +946,6 @@ single place in the code, so a correction is one line and its test.
     Check: Diffraction and Geometric Enclosed Energy (all four types, chief ray and centroid) and
     an Extended Source run of a text IMA file for a singlet at two fields, against OpticStudio's
     text output.
-
-38. **Sensitivity and inverse sensitivity readings** (OP-64). Section 42 follows OpticStudio's
-    help pages; nothing is compared with OpticStudio's tolerance report, and these are this
-    program's readings where the help is short:
-    - *Combining fields.* The help says the criterion is "computed as an average over all field
-      positions" through a merit function OpticStudio builds; here the field values are combined
-      as √(Σ w v² / Σ w), the merit function's form (the Strehl ratio, the MTF and the encircled
-      energy, where larger is better, as the weighted mean).
-    - *The largest field coordinate* of the Y- and XY-Symmetric sets is the largest radial distance
-      of the system's field points; with every field on the axis the set is the one on-axis point.
-    - *Paraxial focus.* "How OpticStudio Computes the Tolerance Analysis" says that without
-      Optimize "the back focal position is set to paraxial focus"; "Evaluating Compensators" says
-      the focus is adjusted "to maintain the amount of defocus in the nominal lens design". This
-      program keeps the nominal lens as entered and holds its defocus (thickness before the image
-      minus the paraxial image distance), so a nominal lens not at its paraxial focus keeps its
-      own defocus.
-    - *Larger-is-better criteria* (the Strehl ratio, the MTF, the encircled energy): the degradation is −Δ, the
-      inverse Increment a decrease (as the help says for MTF), and the estimated performance
-      N − C with the linear difference; with the RSS difference it is not given, since the help's
-      √(N² + C²) is written for a criterion that grows worse upward.
-    - *Compensator bounds* are soft rows of weight 1 next to the criterion's rows (the help says
-      they "may be violated if doing so would provide better performance"; their weight is not
-      published); a COMP with Min = Max = 0 is held at its nominal by that row. CPAR and CMCO
-      bounds are not built.
-    - *Worst offenders* are the individual min and max trials sorted by degradation (the help:
-      "sorts the tolerances by contribution to the criterion"); Show Worst's default 10 is this
-      program's.
-    - *Inverse search.* Brent's method on t in (0, 1) with the limit t·L; an operand whose Min must
-      be −Max keeps the tighter of the two adjusted limits.
-    - *MTF criteria.* The help's Sampling for MTF is a grid ("a sampling of 1 yielding a 32 x 32
-      grid, sampling of 2 yielding a 64 x 64 grid, etc."); here the grid is given directly (the
-      pupil grid, 16 to 1024, shared with the Strehl ratio). The diffraction MTF is OP-39's FFT
-      engine and the geometric MTF its geometric engine times the diffraction-limited MTF of the
-      same pupil (the help's GMTA recommends that scaling; the tolerancing page does not say).
-      The MTF Frequency has no default in the help; the run refuses 0.
-    - *Encircled energy* is not one of OpticStudio's tolerancing criteria (the plan adds it, as
-      the Strehl ratio): OP-41's diffraction or geometric fraction within a radius (µm) of the
-      centroid (the reference OpticStudio "always uses ... for tolerancing" for spot and
-      wavefront), encircled only, on the pupil grid.
-    Check: a lens toleranced by OpticStudio in each mode with each compensator choice, its report's
-    nominal, per-tolerance changes, RSS estimate and inverse limits compared with this program's.
-
-34. **MTF readings** (OP-39, section 38). Read from the help pages' wording; no OpticStudio
-    number was compared:
-    - *FFT MTF* is the pupil autocorrelation on OP-38's pupil grid, interpolated linearly between
-      whole-node shifts. The help's "faster version" for FFT Through Focus MTF (the MTFA
-      operand's Grid = 0 sparse method) is not described and not built; through focus uses the
-      same autocorrelation.
-    - *Polychromatic weights*: each wavelength's OTF weighted by its weight × (λ_min/λ)² × its
-      PSF's energy, so the polychromatic OTF is the transform of OP-38's polychromatic PSF; the
-      help does not say how OpticStudio weights them. The geometric MTF weights by the
-      wavelength weight.
-    - *Geometric MTF* is the exact transform of the ray set (no binning into a line spread
-      function); OpticStudio's grid algorithm and its sparse operand method are not described.
-      Multiply by diffraction limit uses the same field's unaberrated pupil; the help does not
-      say which diffraction limit.
-    - *Huygens MTF* transforms the Huygens PSF directly at each frequency; the help says "an FFT
-      of the Huygens PSF".
-    - *Diffraction limit* curves are the reference field's (help, "Diffraction Limited"), also on
-      the Huygens and geometric plots and as an option on the through-focus plots, where the help
-      lists no such setting.
-    - *Contrast Loss Map*: the help's δ is stated two ways that disagree ("ξ(Δ) = Δ/(D/2)·ξ_c"
-      with "Δ = D/2" at the cutoff, and an example where δ = 0.1 puts the pair at 1 ± 0.1);
-      here the pair is separated by the autocorrelation shift λν/(n|a|), 2ν/ν_c for a circular
-      pupil, as the MTF needs. The default frequency, "5% of the cutoff", uses the cutoff
-      2n√|a_x·a_y|/λ. Drawn as maps, not circles.
-    - *Defaults* the help does not give (frequencies, steps, pixels, 101 plotted frequencies,
-      129 × 129 surface points) are this program's.
-    Check: FFT, Huygens and geometric MTF of a singlet at two fields, polychromatic and
-    monochromatic, against OpticStudio's text output; the contrast loss map's δ against its
-    plot.
 
 36. **Default merit function wizard readings** (OP-56, section 40). Read from the help's
     Optimization Wizard pages and the alphabetical operand list; nothing is compared with
@@ -1051,6 +993,64 @@ single place in the code, so a correction is one line and its test.
       described, so both Grid values use the grid method; Data Type 1–3 and Field 0 are refused.
     Check: OpticStudio's default merit function for a test lens, its rows and merit value
     compared with this program's.
+
+37. **Glass substitution readings** (OP-59). Section 41 follows OpticStudio's help pages, but
+    nothing is compared with OpticStudio's output, and these are this program's readings:
+    - *RGLA's columns and range.* Surf1 and Surf2 in Int1 and Int2, Wn, Wa and Wp in Data1 to
+      Data3; over a range of surfaces the value is the target plus the summed excesses (the help
+      defines one glass only).
+    - *Where a glass sits.* The printed nd, Vd and ΔPgF of the catalog first, computed values
+      where it prints none.
+    - *Conversion weights.* The model-to-real conversion uses RGLA's default Wn and Wa (the help
+      says only "similar to the RGLA definition", partial dispersion omitted).
+    - *The template.* A glass without a status, and a Melt glass, pass the status test; a missing
+      status counts as incomplete data only when a status box is clear.
+    - *The search order.* OpticStudio substitutes glasses inside its Hammer and Global
+      optimizers, whose order is not published; this program's coordinate search is its own.
+    Check: a lens with model glasses converted by OpticStudio and by this program against the
+    same catalog and template; RGLA and GCOS values read from OpticStudio's Merit Function
+    Editor for the same lens.
+
+38. **Sensitivity and inverse sensitivity readings** (OP-64). Section 42 follows OpticStudio's
+    help pages; nothing is compared with OpticStudio's tolerance report, and these are this
+    program's readings where the help is short:
+    - *Combining fields.* The help says the criterion is "computed as an average over all field
+      positions" through a merit function OpticStudio builds; here the field values are combined
+      as √(Σ w v² / Σ w), the merit function's form (the Strehl ratio, the MTF and the encircled
+      energy, where larger is better, as the weighted mean).
+    - *The largest field coordinate* of the Y- and XY-Symmetric sets is the largest radial distance
+      of the system's field points; with every field on the axis the set is the one on-axis point.
+    - *Paraxial focus.* "How OpticStudio Computes the Tolerance Analysis" says that without
+      Optimize "the back focal position is set to paraxial focus"; "Evaluating Compensators" says
+      the focus is adjusted "to maintain the amount of defocus in the nominal lens design". This
+      program keeps the nominal lens as entered and holds its defocus (thickness before the image
+      minus the paraxial image distance), so a nominal lens not at its paraxial focus keeps its
+      own defocus.
+    - *Larger-is-better criteria* (the Strehl ratio, the MTF, the encircled energy): the degradation is −Δ, the
+      inverse Increment a decrease (as the help says for MTF), and the estimated performance
+      N − C with the linear difference; with the RSS difference it is not given, since the help's
+      √(N² + C²) is written for a criterion that grows worse upward.
+    - *Compensator bounds* are soft rows of weight 1 next to the criterion's rows (the help says
+      they "may be violated if doing so would provide better performance"; their weight is not
+      published); a COMP with Min = Max = 0 is held at its nominal by that row. CPAR and CMCO
+      bounds are not built.
+    - *Worst offenders* are the individual min and max trials sorted by degradation (the help:
+      "sorts the tolerances by contribution to the criterion"); Show Worst's default 10 is this
+      program's.
+    - *Inverse search.* Brent's method on t in (0, 1) with the limit t·L; an operand whose Min must
+      be −Max keeps the tighter of the two adjusted limits.
+    - *MTF criteria.* The help's Sampling for MTF is a grid ("a sampling of 1 yielding a 32 x 32
+      grid, sampling of 2 yielding a 64 x 64 grid, etc."); here the grid is given directly (the
+      pupil grid, 16 to 1024, shared with the Strehl ratio). The diffraction MTF is OP-39's FFT
+      engine and the geometric MTF its geometric engine times the diffraction-limited MTF of the
+      same pupil (the help's GMTA recommends that scaling; the tolerancing page does not say).
+      The MTF Frequency has no default in the help; the run refuses 0.
+    - *Encircled energy* is not one of OpticStudio's tolerancing criteria (the plan adds it, as
+      the Strehl ratio): OP-41's diffraction or geometric fraction within a radius (µm) of the
+      centroid (the reference OpticStudio "always uses ... for tolerancing" for spot and
+      wavefront), encircled only, on the pupil grid.
+    Check: a lens toleranced by OpticStudio in each mode with each compensator choice, its report's
+    nominal, per-tolerance changes, RSS estimate and inverse limits compared with this program's.
 
 ## 11. Paraxial optics
 
@@ -3162,218 +3162,6 @@ Multi-Configuration pages "Make Thermal" and "Solve Types"; copies in
   then its thermal configurations at a changed temperature fail by name; the prescription
   report's thermal listing; coupling to OpenSim's own thermal and structural solvers (OP-92).
 
-## 41. Glass substitution
-
-`OpenSim.Optics/Optimization` and `Materials/Tools` (OP-59) let the optimizer change glasses. The
-help read is OpticStudio 2025 R2's, saved under `plans/sources/optics/op-59-help/` (Optimizing
-Using Model Glasses with its equation image, Glass Substitution Template (global optimizers
-group), Description of Catalog Data, Constraints on Glass Data, Restricting Selected Glasses,
-Using Glass Substitution, Global Optimization of Glass Selection) and
-`plans/sources/optics/solves/Material_Solves.html`.
-
-- **Saved flags** (`GlassVariables`). The Lens Data Editor's Material cell takes no Variable or
-  Solve flag, so glass flags name columns of their own, kept by the editor with the row:
-  `ModelNd`, `ModelVd`, `ModelDeltaPgF` (Variable, on a surface with a model glass) and
-  `Substitute` (Variable, on a surface with a glass). The Optimize window's Glasses section sets
-  them. No new surface field is saved.
-- **Model-glass variables** (`LensVariables`, kinds `ModelIndex`, `ModelAbbe`,
-  `ModelPartialDispersion`). The optimizer varies the model glass's nd, Vd or ΔPgF; the model is
-  this program's stand-in (`ModelGlassFit`), not OpticStudio's formula. A trial with nd ≤ 1 or
-  Vd ≤ 0 cannot be built and gets the failed-row penalty.
-- **Distance** (`GlassDistance`). d = [Wn(ΔNd)² + Wa(ΔVd)² + Wp(ΔPgF)²]^½ with zero weights
-  meaning 1, 1E-04 and 1E+02 (help: Optimizing Using Model Glasses). A glass's point is its
-  printed nd, Vd and ΔPgF, computed from its dispersion where the catalog prints none (§10 item 37).
-- **Template** (`OpticsSettings.GlassSubstitution`, `GlassSubstitutionTemplate`). Use template;
-  exclude glasses with incomplete data; the Standard, Preferred, Obsolete and Special boxes;
-  maximum relative cost, CR, FR, SR, AR and PR, each ignored when empty or zero. A datum the
-  catalog does not record (absent, or −1) fails a test only when incomplete data are excluded.
-  Substitution and conversion also always drop glasses flagged Exclude Substitution, tabulated
-  materials, and glasses whose valid range misses a wavelength of the lens. The AGF catalogs
-  record every datum the template reads (OD and NM lines); the refractiveindex.info seed records
-  none, so its materials pass unless incomplete data are excluded. The template's `Catalogs`
-  list (not OpticStudio's) restricts substitution to named catalogs; OpticStudio's per-surface
-  substitute catalog is not saved.
-- **Model to real glass** (`ModelGlassConversion`). The nearest candidate by the distance with
-  Wp = 0 and the RGLA defaults for Wn and Wa. If no glass meets the template, incomplete data are
-  allowed, then the template is ignored, as the help says; its last step (glass 1 of the catalog,
-  whatever it is) is not built: the conversion fails naming the surface. The conversion does not
-  re-optimize.
-- **Substitute solve** (`SubstituteGlassSolve`). With the active catalogs given, the solve fails
-  when no glass meets `SolveOptions.SubstitutionTemplate` (OpticStudio removes the solve
-  instead); the glass is unchanged. The saved lens does not produce this solve (its substitution
-  flag is the `Substitute` column above).
-- **Search** (`GlassSubstitution`). Re-optimize the start with its own glasses; then, round by
-  round, for each flagged surface try every candidate (written "catalog:glass"), each time from
-  the best design and re-optimized with `LocalOptimizer`, and keep the best when it lowers the
-  merit by more than 1e-9 relative. Rounds end when one changes nothing (at most three by
-  default). A trial that fails is listed with its reason. Sequential, so as deterministic as the
-  local optimizer; Stop keeps the best so far.
-- **Operands** (`GlassOperands`, registered under `// OP-59`). RGLA (Surf1, Surf2, Wn, Wa, Wp):
-  for each surface in the range with a glass, the distance to the nearest glass of the active
-  catalogs not excluded from substitution; the value is the target while every glass is within
-  it, else the target plus the excesses. GCOS (Surf): the catalog's relative cost of the glass
-  after the surface; fails for a non-catalog medium or a cost the catalog does not record. The
-  catalogs reach the operands through `IMeritConfigurations.Catalogs` (one added line in
-  `MeritEvaluator`).
-- **Not built.** The Hammer and Global optimizers (OP-58), which in OpticStudio run
-  substitution; a per-surface substitute catalog in the saved lens; the template's Save/Load
-  of *.GST files and "Save As New Glass Catalog"; MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and
-  INDX; the conversion's last-resort glass.
-
-## 39. Enclosed energy
-
-OP-41. Code: `OpenSim.Optics/Analysis/EnclosedEnergy/` (public: `EnclosedEnergyType`,
-`EnclosedEnergyReference`, `AiryEnclosedEnergy`, `EnclosedEnergyRegions`,
-`DiffractionEnclosedEnergyKernel`, `DiffractionEnclosedEnergySetup`, `DiffractionEnclosedEnergy`,
-`GeometricEnclosedEnergySpot`, `GeometricEnclosedEnergy`, `ImaImage`, `ImaFile`,
-`ExtendedSourceRequest`, `ExtendedSourceEnclosedEnergy`; the four analyses in
-`EnclosedEnergyAnalyses.cs`). Tests: `OpenSim.Tests/Optics/EnclosedEnergyTests.cs` and the gate
-`OpenSim.Tests/Optics/Gates/EnclosedEnergyGateTests.cs`. OpticStudio's behaviour is read from its
-2025 R2 help ("Enclosed Energy", "Diffraction (enclosed energy)", "Geometric", "Geometric
-Line/Edge Spread", "Extended Source", "Geometric Image Analysis"), saved under
-`plans/sources/optics/op-41-help/`.
-
-- **Regions.** Encircled: a circle of radius r about the reference. X-only: the slit
-  |x − x_ref| ≤ h, infinite in y; Y-only the same turned (help example: an x-value of 10 µm is
-  "the region 20 microns across in the x-direction ... infinite in the other direction").
-  Ensquared: the square of half-width h. Each curve runs from size 0 to the maximum distance in
-  100 steps; the result lists the sizes holding 50 % and 80 %.
-- **Reference.** Chief ray (the selected wavelength's, the primary's when several), centroid,
-  vertex (the surface's local (0, 0)); the geometric enclosed energy also offers the middle,
-  "the coordinate upon which the smallest circle enclosing all the ray intercepts is centered",
-  found by the incremental smallest-circle algorithm over a fixed-seed shuffle.
-- **Diffraction enclosed energy.** From OP-38's pupil function (section 33): the PSF of the
-  sampled pupil is I(x) = Σ_m C_m e^{−i k_m·x} with C the pupil's autocorrelation (by FFT of the
-  pupil zero-padded to 2n) and k_m = 2π·n·ΔP·(a_x m_x, a_y m_y)/λ. The energy in a region centred
-  on x₀ is Σ C_m e^{−i k_m·x₀}·D(k_m), D the region's Fourier transform (2πr·J₁(|k|r)/|k| for the
-  circle, (2 sin(k_x h)/k_x)(2 sin(k_y h)/k_y) for the square, the m_y = 0 terms with
-  2 sin(k_x h)/k_x for a slit over one period), over one period's energy C_0·T_x·T_y. This is
-  exact for the sampled pupil: no image grid enters. Sizes are limited to half the period
-  T = λ/(n·|a|·ΔP), where a region would overlap the PSF's periodic copies (refused with the
-  limit named). The reference point is projected along each wavelength's chief ray onto its PSF
-  plane; the centroid is the rays' mean image-surface intercept weighted by A² (and each
-  wavelength by its share). A reference more than a quarter period from the chief ray is warned
-  about (the help: with the vertex OpticStudio "is unable to detect if the sampling is
-  sufficient"). OP-38's sampling warnings are repeated. Polychromatic: every wavelength
-  referenced to the primary's chief ray, each fraction weighted by the wavelength's weight
-  times its pupil transmission. *Show diffraction limit*: the reference field's pupil (the (0, 0)
-  field, else field 1; help, "Diffraction Limited") with the OPD set to zero, about its chief ray.
-- **Geometric enclosed energy.** Rays on an n × n grid of pupil nodes inside the unit circle,
-  traced to the chosen surface; each ray that passes weighs its wavelength's weight (1 for one
-  wavelength) times the apodization's intensity A(ρ)². The fraction at a size is the weight of
-  the rays at a distance at most that size over the weight of every ray that passed; failed and
-  vignetted rays carry no light and are counted by status and surface. *Multiply by diffraction
-  limit* (encircled, image surface): the fraction times the Airy disk's E(v) = 1 − J₀(v)² − J₁(v)²,
-  v = π·r/(λF), F the real working F/# (OP-34's) at the reference field.
-- **Airy enclosed energy.** E(v) = ∫₀^v 2J₁(t)²/t dt = 1 − J₀(v)² − J₁(v)², derived in
-  `AiryEnclosedEnergy` from the Airy intensity (2J₁(v)/v)² and J₀′ = −J₁, J₁′ = J₀ − J₁/v.
-- **Geometric line/edge spread.** The same rays about the chief ray. X orientation (a line or
-  edge parallel to x) runs along y, Y along x. The line spread is the weight in each of 100 bins
-  across ±the maximum radius over the largest bin's; the edge spread at a bin centre is the
-  weight at or below it over the total. The diffraction line/edge spread is OP-38's FFT
-  Line/Edge Spread.
-- **Extended source.** A text IMA file (size, then rows of digits 0–9) or a binary one (int16
-  0, width 1–8000, number of maps; then bytes, column fastest), row 1 the top. One map serves
-  every wavelength; a binary file may give one per wavelength. Pixel (r, c) of an n × n image
-  spans the field (f_x + ((c + u)/n − ½)·S, f_y + (½ − (r + v)/n)·S), S the field size in field
-  units (degrees, or lens units for heights). About 1000 × "Rays x 1000" rays are shared by
-  pixel value × wavelength weight, at least one per lit pixel and wavelength; each weighs its
-  pixel's value × weight over the pixel's count, times A(ρ)². Positions in the pixel and pupil
-  come from a 4-D Sobol sequence (ρ = √s, θ = 2πt). Field points are normalised against the
-  defined fields plus the image's corners; vignetting factors are refused unless removed
-  (replaced by apertures, as OP-40). Types: the four regions, and x or y distributions (the
-  weight in 100 strips across ±the maximum distance) with the geometric FWHM between the
-  half-maximum crossings.
-- **Criterion form.** `DiffractionEnclosedEnergy.Fraction` and `GeometricEnclosedEnergy.Fraction`
-  return the fraction at one size for one field of one configuration's lens and system; OP-64's
-  encircled-energy tolerance criteria (§42) call them. The encircled-energy merit operands (DENC,
-  DENF, GENC, GENF, XENC, XENF) are not built.
-- **Determinism.** The kernel's FFT and each size's sum are bitwise the same at any degree of
-  parallelism; the extended source runs one slot per wavelength and pixel row with a fixed
-  Sobol index each.
-
-Not built: the Huygens PSF option of the diffraction enclosed energy, polarization, scattering,
-intermediate surfaces for the diffraction enclosed energy, BIM files, the Geometric Image
-Analysis's own options (parity, rotation, Lambertian source, pixel interpolation), dashed-line
-styling.
-
-## 42. Sensitivity and inverse sensitivity
-
-`OpenSim.Optics/Tolerancing/ToleranceAnalysis.cs`, `ToleranceCriterionEvaluator.cs`,
-`ToleranceCompensators.cs` and `ToleranceRunOptions.cs` (OP-64) run OpticStudio's Sensitivity,
-Inverse Limit and Inverse Increment modes and Quick Sensitivity on the tolerance table of §36. The
-definitions are OpticStudio's 2025 R2 help, saved under `plans/sources/optics/op-63-help/`
-("Tolerancing", the dialog) and `plans/sources/optics/op-64-help/` ("How OpticStudio Computes the
-Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS Estimated Change",
-"Inverse Sensitivity Analysis", "Quick Sensitivity"; the equation images rendered under `images/`).
-§10 item 38 lists the readings where the help is short.
-
-- **Nominal.** The current configuration is toleranced. The compensators are evaluated on the
-  nominal lens first (Optimize: the optimizer drives them; paraxial focus and none: the lens as
-  entered), and its criterion is N.
-- **Trial.** Each tolerance row (not ignored, not a control row) is applied alone to the
-  compensated nominal at its Min, then at its Max, by OP-63's `TolerancePerturber`; the
-  compensators are evaluated and the criterion P recorded. A row the perturber refuses, or a
-  criterion that cannot be evaluated (a failed ray in the quadrature, a lens that cannot be
-  built), records the reason for that trial; the others go on.
-- **Change.** Linear Difference Δ = P − N; RSS Difference Δ = S(P − N)·√|P² − N²|, S(x) = +1 for
-  x ≥ 0 and −1 otherwise (help, "Tolerancing", "Change").
-- **Estimate.** C² = Σᵢ (Δᵢ,min² + Δᵢ,max²)/2; F = N + C (linear) or √(N² + C²) (RSS) (help, "The RSS
-  Estimated Change"). Not given when any trial failed (the help: the statistics are then
-  "usually meaningless"). The worst offenders list the trials by degradation, largest first.
-- **Criteria** (help, "Tolerancing", Criterion tab). RMS spot radius, x and y (lens units) and RMS
-  wavefront (waves of the primary wavelength): OP-40's RMS core (§34) over the Gaussian quadrature
-  with Sampling rings and 2 × Sampling arms ("The number of arms is always twice the number of rays
-  along each arm"), about the centroid ("OpticStudio always uses a centroid reference for
-  tolerancing"), polychromatic over the system's wavelengths and weights, at the Y-Symmetric (±1,
-  ±0.7, 0 of the largest field in y; centre weight 2), XY-Symmetric (plus ±0.7, ±1 in x; centre
-  weight 4) or user-defined field points, combined as √(Σ w v² / Σ w). Merit function: the lens's
-  own merit function over every configuration. Boresight error: the radial image coordinate of
-  the on-axis chief ray at the primary wavelength over |EFL|, radians. Strehl ratio (the plan's
-  addition): OP-38's ratio through the RMS core, weighted mean over the fields. Geometric and
-  diffraction MTF, tangential, sagittal or average ("the average of the tangential and sagittal
-  responses is used"): OP-39's `MtfEngine.Evaluate` at the MTF Frequency (cycles/mm), the FFT
-  engine or the geometric engine times the diffraction-limited MTF, on the pupil grid (16 to
-  1024), polychromatic, weighted mean over the fields. Diffraction and geometric encircled energy
-  (the plan's addition): OP-41's fraction within the radius (µm) of the centroid on the pupil grid,
-  weighted mean over the fields. Each field point is appended to the system as its own field, as
-  the RMS core does. The MTF and the encircled energy are larger-is-better, like the Strehl ratio,
-  and take no part in Quick Sensitivity. A criterion is added with one enum value, one arm in
-  `ToleranceCriteria.Info` and one in the evaluator.
-- **Compensators** (help, "Evaluating Compensators"). None. Paraxial focus: each perturbed lens is
-  moved at the image so that its defocus (the thickness before the image minus the paraxial image
-  distance −y/u of the marginal ray) equals the nominal's, in every configuration the criterion
-  reads; COMP and CPAR rows are ignored. Optimize (DLS: one Orthogonal Descent cycle, then damped
-  least squares; OD: Orthogonal Descent only): every variable flag is removed, the COMP
-  (thickness, curvature, conic), CPAR and CMCO cells (all, or the rows chosen) are flagged
-  Variable, and OP-57's `LocalOptimizer` (§35) minimises the criterion's rows (weight the field
-  weight, target 0, or 1 for a larger-is-better criterion) plus a soft bound row per COMP (nominal + Min to
-  nominal + Max, weight 1); with the merit function criterion, the lens's merit function without
-  bounds (help). A compensator cell that carries a solve or pickup is refused. The trial reports
-  each compensator's change from the compensated nominal.
-- **Inverse** (help, "Inverse Sensitivity Analysis"). The target T is the Increment (positive), or
-  the change from N to the Limit (worse than N). For each side, when the degradation at the
-  starting limit L is at most T, or the row is marked Do Not Adjust, L is kept ("the tolerance
-  will never be loosened"); otherwise Brent's method (`RootFinding.Brent`) finds t in (0, 1) where
-  the degradation at t·L is T, to `InverseTolerance` (default 10⁻⁷) of L, and the trial is
-  evaluated again at the new limit. The estimate uses the adjusted limits; the result carries the
-  table with them, which the editor writes back on request.
-- **Quick Sensitivity** (help: "a sensitivity-only analysis with Paraxial Focus compensation"):
-  Sensitivity with the paraxial focus compensator, for the spot, wavefront and boresight criteria.
-- **Determinism.** Rows run in parallel, one slot each; everything inside a slot (perturbation,
-  optimizer, criterion) runs on one thread, so the result is bitwise the same at any thread count.
-- **Lenses the ray launcher refuses.** The launcher needs an axial paraxial model (§15): element
-  decenters and tilts (TEDX … TETZ, the rolls), which wrap the group in coordinate breaks, make
-  the lens non-axial, so their trials fail by name until the launcher handles such lenses (OP-22).
-- **Settings.** The MTF Frequency (`MtfFrequency`) and the encircled radius
-  (`EncircledRadiusMicrometers`) are saved on `OpticsToleranceRunSettings` with the rest; neither
-  has a default (0 is refused for its criteria).
-- **Not built.** Ensquared, x-only and y-only enclosed energy as criteria; MTF warnings (aliasing)
-  are not reported per trial; RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity and Monte Carlo (OP-65);
-  Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
-  .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
-  CEDV (deprecated) compensators.
-
 ## 38. Modulation transfer function
 
 `OpenSim.Optics/Analysis/Mtf` (OP-39): `MtfEngine.cs` (public: `MtfPupil`, `MtfEngine`,
@@ -3460,6 +3248,83 @@ sparse methods (Grid = 0; the grid method is used), their Data Type 1–3 and Fi
 and square-wave operands (MTHx, MSWx) and the N and X (minimum, maximum) forms; object-space cycles per milliradian for focal systems; afocal angle
 units other than milliradians; afocal Huygens and through-focus MTF; the contrast loss map's
 circles and Show OPD indicator; O'Neill's annular closed form and Hopkins' series as gates.
+
+## 39. Enclosed energy
+
+OP-41. Code: `OpenSim.Optics/Analysis/EnclosedEnergy/` (public: `EnclosedEnergyType`,
+`EnclosedEnergyReference`, `AiryEnclosedEnergy`, `EnclosedEnergyRegions`,
+`DiffractionEnclosedEnergyKernel`, `DiffractionEnclosedEnergySetup`, `DiffractionEnclosedEnergy`,
+`GeometricEnclosedEnergySpot`, `GeometricEnclosedEnergy`, `ImaImage`, `ImaFile`,
+`ExtendedSourceRequest`, `ExtendedSourceEnclosedEnergy`; the four analyses in
+`EnclosedEnergyAnalyses.cs`). Tests: `OpenSim.Tests/Optics/EnclosedEnergyTests.cs` and the gate
+`OpenSim.Tests/Optics/Gates/EnclosedEnergyGateTests.cs`. OpticStudio's behaviour is read from its
+2025 R2 help ("Enclosed Energy", "Diffraction (enclosed energy)", "Geometric", "Geometric
+Line/Edge Spread", "Extended Source", "Geometric Image Analysis"), saved under
+`plans/sources/optics/op-41-help/`.
+
+- **Regions.** Encircled: a circle of radius r about the reference. X-only: the slit
+  |x − x_ref| ≤ h, infinite in y; Y-only the same turned (help example: an x-value of 10 µm is
+  "the region 20 microns across in the x-direction ... infinite in the other direction").
+  Ensquared: the square of half-width h. Each curve runs from size 0 to the maximum distance in
+  100 steps; the result lists the sizes holding 50 % and 80 %.
+- **Reference.** Chief ray (the selected wavelength's, the primary's when several), centroid,
+  vertex (the surface's local (0, 0)); the geometric enclosed energy also offers the middle,
+  "the coordinate upon which the smallest circle enclosing all the ray intercepts is centered",
+  found by the incremental smallest-circle algorithm over a fixed-seed shuffle.
+- **Diffraction enclosed energy.** From OP-38's pupil function (section 33): the PSF of the
+  sampled pupil is I(x) = Σ_m C_m e^{−i k_m·x} with C the pupil's autocorrelation (by FFT of the
+  pupil zero-padded to 2n) and k_m = 2π·n·ΔP·(a_x m_x, a_y m_y)/λ. The energy in a region centred
+  on x₀ is Σ C_m e^{−i k_m·x₀}·D(k_m), D the region's Fourier transform (2πr·J₁(|k|r)/|k| for the
+  circle, (2 sin(k_x h)/k_x)(2 sin(k_y h)/k_y) for the square, the m_y = 0 terms with
+  2 sin(k_x h)/k_x for a slit over one period), over one period's energy C_0·T_x·T_y. This is
+  exact for the sampled pupil: no image grid enters. Sizes are limited to half the period
+  T = λ/(n·|a|·ΔP), where a region would overlap the PSF's periodic copies (refused with the
+  limit named). The reference point is projected along each wavelength's chief ray onto its PSF
+  plane; the centroid is the rays' mean image-surface intercept weighted by A² (and each
+  wavelength by its share). A reference more than a quarter period from the chief ray is warned
+  about (the help: with the vertex OpticStudio "is unable to detect if the sampling is
+  sufficient"). OP-38's sampling warnings are repeated. Polychromatic: every wavelength
+  referenced to the primary's chief ray, each fraction weighted by the wavelength's weight
+  times its pupil transmission. *Show diffraction limit*: the reference field's pupil (the (0, 0)
+  field, else field 1; help, "Diffraction Limited") with the OPD set to zero, about its chief ray.
+- **Geometric enclosed energy.** Rays on an n × n grid of pupil nodes inside the unit circle,
+  traced to the chosen surface; each ray that passes weighs its wavelength's weight (1 for one
+  wavelength) times the apodization's intensity A(ρ)². The fraction at a size is the weight of
+  the rays at a distance at most that size over the weight of every ray that passed; failed and
+  vignetted rays carry no light and are counted by status and surface. *Multiply by diffraction
+  limit* (encircled, image surface): the fraction times the Airy disk's E(v) = 1 − J₀(v)² − J₁(v)²,
+  v = π·r/(λF), F the real working F/# (OP-34's) at the reference field.
+- **Airy enclosed energy.** E(v) = ∫₀^v 2J₁(t)²/t dt = 1 − J₀(v)² − J₁(v)², derived in
+  `AiryEnclosedEnergy` from the Airy intensity (2J₁(v)/v)² and J₀′ = −J₁, J₁′ = J₀ − J₁/v.
+- **Geometric line/edge spread.** The same rays about the chief ray. X orientation (a line or
+  edge parallel to x) runs along y, Y along x. The line spread is the weight in each of 100 bins
+  across ±the maximum radius over the largest bin's; the edge spread at a bin centre is the
+  weight at or below it over the total. The diffraction line/edge spread is OP-38's FFT
+  Line/Edge Spread.
+- **Extended source.** A text IMA file (size, then rows of digits 0–9) or a binary one (int16
+  0, width 1–8000, number of maps; then bytes, column fastest), row 1 the top. One map serves
+  every wavelength; a binary file may give one per wavelength. Pixel (r, c) of an n × n image
+  spans the field (f_x + ((c + u)/n − ½)·S, f_y + (½ − (r + v)/n)·S), S the field size in field
+  units (degrees, or lens units for heights). About 1000 × "Rays x 1000" rays are shared by
+  pixel value × wavelength weight, at least one per lit pixel and wavelength; each weighs its
+  pixel's value × weight over the pixel's count, times A(ρ)². Positions in the pixel and pupil
+  come from a 4-D Sobol sequence (ρ = √s, θ = 2πt). Field points are normalised against the
+  defined fields plus the image's corners; vignetting factors are refused unless removed
+  (replaced by apertures, as OP-40). Types: the four regions, and x or y distributions (the
+  weight in 100 strips across ±the maximum distance) with the geometric FWHM between the
+  half-maximum crossings.
+- **Criterion form.** `DiffractionEnclosedEnergy.Fraction` and `GeometricEnclosedEnergy.Fraction`
+  return the fraction at one size for one field of one configuration's lens and system; OP-64's
+  encircled-energy tolerance criteria (§42) call them. The encircled-energy merit operands (DENC,
+  DENF, GENC, GENF, XENC, XENF) are not built.
+- **Determinism.** The kernel's FFT and each size's sum are bitwise the same at any degree of
+  parallelism; the extended source runs one slot per wavelength and pixel row with a fixed
+  Sobol index each.
+
+Not built: the Huygens PSF option of the diffraction enclosed energy, polarization, scattering,
+intermediate surfaces for the diffraction enclosed energy, BIM files, the Geometric Image
+Analysis's own options (parity, rotation, Lambertian source, pixel interpolation), dashed-line
+styling.
 
 ## 40. Default merit function wizard
 
@@ -3568,3 +3433,138 @@ operands; the PTV function type (the rows are RMS); Max
 Distortion (DIMX); the optimization goal "Improve manufacturing yield" (HYLD); Add Favorite
 Operands; the Gaussian quadrature obscuration; OpticStudio's arm angles; the other boundary
 operands (MXEG, MXEA, XNEG and the rest); a copy of the boundary rows per configuration.
+
+## 41. Glass substitution
+
+`OpenSim.Optics/Optimization` and `Materials/Tools` (OP-59) let the optimizer change glasses. The
+help read is OpticStudio 2025 R2's, saved under `plans/sources/optics/op-59-help/` (Optimizing
+Using Model Glasses with its equation image, Glass Substitution Template (global optimizers
+group), Description of Catalog Data, Constraints on Glass Data, Restricting Selected Glasses,
+Using Glass Substitution, Global Optimization of Glass Selection) and
+`plans/sources/optics/solves/Material_Solves.html`.
+
+- **Saved flags** (`GlassVariables`). The Lens Data Editor's Material cell takes no Variable or
+  Solve flag, so glass flags name columns of their own, kept by the editor with the row:
+  `ModelNd`, `ModelVd`, `ModelDeltaPgF` (Variable, on a surface with a model glass) and
+  `Substitute` (Variable, on a surface with a glass). The Optimize window's Glasses section sets
+  them. No new surface field is saved.
+- **Model-glass variables** (`LensVariables`, kinds `ModelIndex`, `ModelAbbe`,
+  `ModelPartialDispersion`). The optimizer varies the model glass's nd, Vd or ΔPgF; the model is
+  this program's stand-in (`ModelGlassFit`), not OpticStudio's formula. A trial with nd ≤ 1 or
+  Vd ≤ 0 cannot be built and gets the failed-row penalty.
+- **Distance** (`GlassDistance`). d = [Wn(ΔNd)² + Wa(ΔVd)² + Wp(ΔPgF)²]^½ with zero weights
+  meaning 1, 1E-04 and 1E+02 (help: Optimizing Using Model Glasses). A glass's point is its
+  printed nd, Vd and ΔPgF, computed from its dispersion where the catalog prints none (§10 item 37).
+- **Template** (`OpticsSettings.GlassSubstitution`, `GlassSubstitutionTemplate`). Use template;
+  exclude glasses with incomplete data; the Standard, Preferred, Obsolete and Special boxes;
+  maximum relative cost, CR, FR, SR, AR and PR, each ignored when empty or zero. A datum the
+  catalog does not record (absent, or −1) fails a test only when incomplete data are excluded.
+  Substitution and conversion also always drop glasses flagged Exclude Substitution, tabulated
+  materials, and glasses whose valid range misses a wavelength of the lens. The AGF catalogs
+  record every datum the template reads (OD and NM lines); the refractiveindex.info seed records
+  none, so its materials pass unless incomplete data are excluded. The template's `Catalogs`
+  list (not OpticStudio's) restricts substitution to named catalogs; OpticStudio's per-surface
+  substitute catalog is not saved.
+- **Model to real glass** (`ModelGlassConversion`). The nearest candidate by the distance with
+  Wp = 0 and the RGLA defaults for Wn and Wa. If no glass meets the template, incomplete data are
+  allowed, then the template is ignored, as the help says; its last step (glass 1 of the catalog,
+  whatever it is) is not built: the conversion fails naming the surface. The conversion does not
+  re-optimize.
+- **Substitute solve** (`SubstituteGlassSolve`). With the active catalogs given, the solve fails
+  when no glass meets `SolveOptions.SubstitutionTemplate` (OpticStudio removes the solve
+  instead); the glass is unchanged. The saved lens does not produce this solve (its substitution
+  flag is the `Substitute` column above).
+- **Search** (`GlassSubstitution`). Re-optimize the start with its own glasses; then, round by
+  round, for each flagged surface try every candidate (written "catalog:glass"), each time from
+  the best design and re-optimized with `LocalOptimizer`, and keep the best when it lowers the
+  merit by more than 1e-9 relative. Rounds end when one changes nothing (at most three by
+  default). A trial that fails is listed with its reason. Sequential, so as deterministic as the
+  local optimizer; Stop keeps the best so far.
+- **Operands** (`GlassOperands`, registered under `// OP-59`). RGLA (Surf1, Surf2, Wn, Wa, Wp):
+  for each surface in the range with a glass, the distance to the nearest glass of the active
+  catalogs not excluded from substitution; the value is the target while every glass is within
+  it, else the target plus the excesses. GCOS (Surf): the catalog's relative cost of the glass
+  after the surface; fails for a non-catalog medium or a cost the catalog does not record. The
+  catalogs reach the operands through `IMeritConfigurations.Catalogs` (one added line in
+  `MeritEvaluator`).
+- **Not built.** The Hammer and Global optimizers (OP-58), which in OpticStudio run
+  substitution; a per-surface substitute catalog in the saved lens; the template's Save/Load
+  of *.GST files and "Save As New Glass Catalog"; MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and
+  INDX; the conversion's last-resort glass.
+
+## 42. Sensitivity and inverse sensitivity
+
+`OpenSim.Optics/Tolerancing/ToleranceAnalysis.cs`, `ToleranceCriterionEvaluator.cs`,
+`ToleranceCompensators.cs` and `ToleranceRunOptions.cs` (OP-64) run OpticStudio's Sensitivity,
+Inverse Limit and Inverse Increment modes and Quick Sensitivity on the tolerance table of §36. The
+definitions are OpticStudio's 2025 R2 help, saved under `plans/sources/optics/op-63-help/`
+("Tolerancing", the dialog) and `plans/sources/optics/op-64-help/` ("How OpticStudio Computes the
+Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS Estimated Change",
+"Inverse Sensitivity Analysis", "Quick Sensitivity"; the equation images rendered under `images/`).
+§10 item 38 lists the readings where the help is short.
+
+- **Nominal.** The current configuration is toleranced. The compensators are evaluated on the
+  nominal lens first (Optimize: the optimizer drives them; paraxial focus and none: the lens as
+  entered), and its criterion is N.
+- **Trial.** Each tolerance row (not ignored, not a control row) is applied alone to the
+  compensated nominal at its Min, then at its Max, by OP-63's `TolerancePerturber`; the
+  compensators are evaluated and the criterion P recorded. A row the perturber refuses, or a
+  criterion that cannot be evaluated (a failed ray in the quadrature, a lens that cannot be
+  built), records the reason for that trial; the others go on.
+- **Change.** Linear Difference Δ = P − N; RSS Difference Δ = S(P − N)·√|P² − N²|, S(x) = +1 for
+  x ≥ 0 and −1 otherwise (help, "Tolerancing", "Change").
+- **Estimate.** C² = Σᵢ (Δᵢ,min² + Δᵢ,max²)/2; F = N + C (linear) or √(N² + C²) (RSS) (help, "The RSS
+  Estimated Change"). Not given when any trial failed (the help: the statistics are then
+  "usually meaningless"). The worst offenders list the trials by degradation, largest first.
+- **Criteria** (help, "Tolerancing", Criterion tab). RMS spot radius, x and y (lens units) and RMS
+  wavefront (waves of the primary wavelength): OP-40's RMS core (§34) over the Gaussian quadrature
+  with Sampling rings and 2 × Sampling arms ("The number of arms is always twice the number of rays
+  along each arm"), about the centroid ("OpticStudio always uses a centroid reference for
+  tolerancing"), polychromatic over the system's wavelengths and weights, at the Y-Symmetric (±1,
+  ±0.7, 0 of the largest field in y; centre weight 2), XY-Symmetric (plus ±0.7, ±1 in x; centre
+  weight 4) or user-defined field points, combined as √(Σ w v² / Σ w). Merit function: the lens's
+  own merit function over every configuration. Boresight error: the radial image coordinate of
+  the on-axis chief ray at the primary wavelength over |EFL|, radians. Strehl ratio (the plan's
+  addition): OP-38's ratio through the RMS core, weighted mean over the fields. Geometric and
+  diffraction MTF, tangential, sagittal or average ("the average of the tangential and sagittal
+  responses is used"): OP-39's `MtfEngine.Evaluate` at the MTF Frequency (cycles/mm), the FFT
+  engine or the geometric engine times the diffraction-limited MTF, on the pupil grid (16 to
+  1024), polychromatic, weighted mean over the fields. Diffraction and geometric encircled energy
+  (the plan's addition): OP-41's fraction within the radius (µm) of the centroid on the pupil grid,
+  weighted mean over the fields. Each field point is appended to the system as its own field, as
+  the RMS core does. The MTF and the encircled energy are larger-is-better, like the Strehl ratio,
+  and take no part in Quick Sensitivity. A criterion is added with one enum value, one arm in
+  `ToleranceCriteria.Info` and one in the evaluator.
+- **Compensators** (help, "Evaluating Compensators"). None. Paraxial focus: each perturbed lens is
+  moved at the image so that its defocus (the thickness before the image minus the paraxial image
+  distance −y/u of the marginal ray) equals the nominal's, in every configuration the criterion
+  reads; COMP and CPAR rows are ignored. Optimize (DLS: one Orthogonal Descent cycle, then damped
+  least squares; OD: Orthogonal Descent only): every variable flag is removed, the COMP
+  (thickness, curvature, conic), CPAR and CMCO cells (all, or the rows chosen) are flagged
+  Variable, and OP-57's `LocalOptimizer` (§35) minimises the criterion's rows (weight the field
+  weight, target 0, or 1 for a larger-is-better criterion) plus a soft bound row per COMP (nominal + Min to
+  nominal + Max, weight 1); with the merit function criterion, the lens's merit function without
+  bounds (help). A compensator cell that carries a solve or pickup is refused. The trial reports
+  each compensator's change from the compensated nominal.
+- **Inverse** (help, "Inverse Sensitivity Analysis"). The target T is the Increment (positive), or
+  the change from N to the Limit (worse than N). For each side, when the degradation at the
+  starting limit L is at most T, or the row is marked Do Not Adjust, L is kept ("the tolerance
+  will never be loosened"); otherwise Brent's method (`RootFinding.Brent`) finds t in (0, 1) where
+  the degradation at t·L is T, to `InverseTolerance` (default 10⁻⁷) of L, and the trial is
+  evaluated again at the new limit. The estimate uses the adjusted limits; the result carries the
+  table with them, which the editor writes back on request.
+- **Quick Sensitivity** (help: "a sensitivity-only analysis with Paraxial Focus compensation"):
+  Sensitivity with the paraxial focus compensator, for the spot, wavefront and boresight criteria.
+- **Determinism.** Rows run in parallel, one slot each; everything inside a slot (perturbation,
+  optimizer, criterion) runs on one thread, so the result is bitwise the same at any thread count.
+- **Lenses the ray launcher refuses.** The launcher needs an axial paraxial model (§15): element
+  decenters and tilts (TEDX … TETZ, the rolls), which wrap the group in coordinate breaks, make
+  the lens non-axial, so their trials fail by name until the launcher handles such lenses (OP-22).
+- **Settings.** The MTF Frequency (`MtfFrequency`) and the encircled radius
+  (`EncircledRadiusMicrometers`) are saved on `OpticsToleranceRunSettings` with the rest; neither
+  has a default (0 is refused for its criteria).
+- **Not built.** Ensquared, x-only and y-only enclosed energy as criteria; MTF warnings (aliasing)
+  are not reported per trial; RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity and Monte Carlo (OP-65);
+  Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
+  .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
+  CEDV (deprecated) compensators.
