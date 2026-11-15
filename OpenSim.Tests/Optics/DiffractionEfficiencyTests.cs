@@ -123,7 +123,9 @@ public sealed class DiffractionEfficiencyTests
         var widths = Enumerable.Repeat(1.0 / levels, levels).ToArray();
         var phases = Enumerable.Range(0, levels).Select(k => peakPhase * Math.Sin(2 * Math.PI * (k + 0.5) / levels)).ToArray();
         double sum = 0;
-        for (int m = -12; m <= 12; m++)
+        // Orders to ±25: the tail beyond is below 1e-20 at a = 5 (J_m(a) falls as (a/2)^m/m!), so
+        // Σ J_m² = 1 (Parseval on the Jacobi–Anger expansion of exp(i a sin x), derived) holds to the rounding; at ±12 the tail is 5e-10.
+        for (int m = -25; m <= 25; m++)
         {
             double j = Bessel.Jn(m, peakPhase);
             Close(j * j, ScalarGratingEfficiency.Sinusoidal(m, peakPhase), 1e-15, $"η_{m} = J_m²");

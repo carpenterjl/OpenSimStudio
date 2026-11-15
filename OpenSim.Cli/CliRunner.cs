@@ -267,7 +267,7 @@ public static partial class CliRunner
             int positional = command switch
             {
                 "foils" => 1,
-                "optics" => args.Length > 1 && args[1].Equals("list", StringComparison.OrdinalIgnoreCase) ? 2 : 3,
+                "optics" => args.Length > 1 && (args[1].Equals("list", StringComparison.OrdinalIgnoreCase) || args[1].Equals("efficiency", StringComparison.OrdinalIgnoreCase)) ? 2 : 3,   // list and efficiency (OP-47) take no project
                 _ => 2
             };
             var options = ParseOptions(args.Skip(Math.Min(positional, args.Length)));
