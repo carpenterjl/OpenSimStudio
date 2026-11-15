@@ -160,9 +160,9 @@ public sealed class SavedSurfaceTypesTests
 
         // A type that is not registered is still refused by name.
         var unknown = saved.ToList();
-        unknown[2] = unknown[2] with { Type = "Zernike Standard Sag" };
+        unknown[2] = unknown[2] with { Type = "Toroidal NURBS" };
         ex = Assert.Throws<ArgumentException>(() => SavedSurfaces.ToLens(unknown, LensUnit.Millimeter, _ => null));
-        Assert.Contains("Surface 2: the surface type 'Zernike Standard Sag' is saved with the lens but this build does not trace it", ex.Message);
+        Assert.Contains("Surface 2: the surface type 'Toroidal NURBS' is saved with the lens but this build does not trace it", ex.Message);
         // A shape without a layout cannot be saved.
         var lenslet = Lens(new SequentialSurface { Shape = new LensletArrayShape(3, 3, 0.002, 0.002) });
         Assert.Contains("'Lenslet Array' cannot be saved", Assert.Throws<ArgumentException>(() => SavedSurfaces.FromLens(lenslet, LensUnit.Meter)).Message);
@@ -469,8 +469,8 @@ public sealed class SavedSurfaceTypesTests
         Assert.True(Math.Abs(after / before - 2) <= 1e-12);
 
         var unknown = Doublet();
-        unknown[2] = unknown[2] with { Type = "Zernike Standard Sag" };
-        Assert.Contains("'Zernike Standard Sag'", Assert.Throws<ArgumentException>(() => ScaleLens.Apply(unknown, 2)).Message);
+        unknown[2] = unknown[2] with { Type = "Toroidal NURBS" };
+        Assert.Contains("'Toroidal NURBS'", Assert.Throws<ArgumentException>(() => ScaleLens.Apply(unknown, 2)).Message);
         var reverse = Doublet();
         reverse[2] = reverse[2] with { Type = "Even Asphere" };
         Assert.Contains("'Even Asphere'", Assert.Throws<ArgumentException>(() => ReverseElements.Apply(reverse, 1, 2)).Message);
