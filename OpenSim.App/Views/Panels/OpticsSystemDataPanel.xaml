@@ -272,7 +272,12 @@
                     AutomationProperties.AutomationId="OpticsExportZemaxButton"
                     ToolTip="Writes the optical system as a Zemax lens file, for the content that format holds."/>
         </UniformGrid>
-        <CheckBox Content="List unsupported Zemax content in the log instead of stopping" IsChecked="{Binding Optics.ZemaxUnsupportedAsWarnings}"
+        <!-- OP-95: CODE V (.seq) and OSLO (.len) lens files. -->
+        <Button x:Name="OpticsImportCodeVOsloButton" Content="Import CODE V .seq / OSLO .len…" Command="{Binding Optics.ImportCodeVOsloCommand}" Margin="0,4,0,0"
+                AutomationProperties.AutomationId="OpticsImportCodeVOsloButton"
+                ToolTip="Replaces this workspace's optical system with a CODE V sequence file (.seq) or an OSLO lens file (.len)."/>
+        <!-- OP-95: the check box below applies to every lens-file import and to the Zemax export. -->
+        <CheckBox Content="List unsupported lens-file content in the log instead of stopping" IsChecked="{Binding Optics.ZemaxUnsupportedAsWarnings}"
                   Margin="0,2,0,0" AutomationProperties.AutomationId="OpticsZemaxLenientCheck"/>
         <TextBlock Text="{Binding Optics.LensFileStatus}" TextWrapping="Wrap" Margin="0,2,0,0"
                    Foreground="{DynamicResource TextFaintBrush}"/>

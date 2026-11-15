@@ -194,8 +194,9 @@ public static partial class CliRunner
                                 (with a yield limit), log.txt (default folder
                                 <project>-optics-quickyield); exit 2 when an evaluation failed.
 
-        opensim optics import <lens.zmx|archive.zar> [--out LENS.osslens] [--lenient] [--builtin-catalogs]
-            Reads a Zemax lens file (or the lens inside a .zar archive) into a lens file (OP-94).
+        opensim optics import <lens.zmx|archive.zar|lens.seq|lens.len> [--out LENS.osslens] [--lenient] [--builtin-catalogs]
+            Reads a Zemax lens file (or the lens inside a .zar archive) into a lens file (OP-94);
+            a CODE V .seq or OSLO .len file by its extension (OP-95).
             Content this build does not read fails the import, every item listed; --lenient lists
             it and leaves it out. Glass names are checked against the loaded catalogs.
 

@@ -1278,6 +1278,32 @@ single place in the code, so a correction is one line and its test.
     Check: OpticStudio's Lens Catalogs search results and Catalog Report on a vendor .ZMF, and
     Insert Lens with and without Ignore Object, compared with this program's on the same files.
 
+50. **CODE V and OSLO lens file readings** (OP-95, section 54). Neither format is published by
+    its vendor, and neither program was run here. The command meanings are those of RayOptics'
+    and Optiland's readers; these are readings beyond what a reader's code states:
+    - *Tilt signs.* CODE V's ADE and BDE and OSLO's TLA and TLB are read as left-handed (saved as
+      −ADE, −BDE, −TLA, −TLB), as RayOptics' `euler2opt` and Optiland's `surface_coordinates`
+      build them. No CODE V or OSLO output with a tilted surface was available to compare.
+    - *GO and DER.* GO is the last command of every RayOptics CODE V test file and DER appears in
+      eleven of them; both are read and not used. The CODE V listing `ag_dblgauss.lis` prints the
+      prescription its `.seq` file's surface commands give, so DER there changes no lens data.
+    - *CCY, CCX, THC, GLC, PIM.* Read as variable codes and the paraxial image solve from the
+      listing `ag_dblgauss.lis` (columns CCY, THC, GLC of the prescription; PIM under SOLVES); the
+      written value is used.
+    - *Fictitious glasses.* nd:Vd and NNN.VVV glasses are this program's model glass with
+      ΔPgF = 0; away from the d line its dispersion is not CODE V's.
+    - *CODE V vignetting.* VUX, VLX, VUY, VLY are converted with RayOptics' relation to
+      OpticStudio's factors (zemax/zmxread.py); the edges of the pupil agree, the interior is
+      mapped linearly (section 16), where RayOptics scales each half separately.
+    - *FNO.* CODE V's FNO is read as the paraxial working F/# (RayOptics' slope −1/(2·FNO));
+      Optiland maps it to its image-space F/#. The two agree for an object at infinity.
+    - *OSLO fields.* An angle fraction f of the field table is atan(f·tan θ); OBH with the object
+      at infinity is the angle atan(OBH/distance), taken positive; GIH is the paraxial image
+      height. All from Optiland's converter, which cites the OSLO manuals (not opened here).
+    Check: a tilted, decentered lens with each decenter kind (basic, DAR, BEN, REV; OSLO DT ±1,
+    RCO, BEN) and vignetted fields entered in CODE V and in OSLO, its global vertices and a traced
+    ray compared with this import.
+
 51. **Freeform surface readings** (OP-25, section 55). Where a help page leaves the surface open:
     - *Off-Axis Conic Freeform sign.* The printed sag is the parent conic of radius −R for R > 0
       and does not pass through the vertex for R < 0 or q < 0; this program takes the branch
@@ -4022,7 +4048,8 @@ Yield curve are §51), tolerance scripts (OP-67), and overlay of analyses other 
 `OpenSim.Optics/Analysis/OpticsBatch.cs` (OP-97) run the optics of a saved project from the
 command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics targets in
 `opensim sweep`). `opensim optics import` and `export` (OP-94, `CliRunner.OpticsZemax.cs`) read and
-write Zemax lens files (§52); `opensim optics catalog` (OP-16, `CliRunner.OpticsCatalog.cs`)
+write Zemax lens files (§52); `import` also reads CODE V .seq and OSLO .len files by their
+extension (OP-95, §54); `opensim optics catalog` (OP-16, `CliRunner.OpticsCatalog.cs`)
 indexes and searches a stock lens catalog (§53).
 
 - **One report function.** An analysis report is `OpticsAnalysisReport.Compose` over the
@@ -4513,8 +4540,8 @@ solves on any column, offsets, cross-column pickups), surface types other than t
 (Biconic, Superconic, Fresnel, ABCD, the Zernike types and the rest have no TYPE code from a
 source), surface tilts and decenters, rectangular, elliptical, spider and user apertures and
 obscurations (SQAP, OBSC and similar keywords have no meaning from a reader), ray aiming,
-polarization and the mechanical semi-diameter; the .zos format; writing a .zar; CODE V and OSLO
-files (OP-95). No written file has been opened in OpticStudio (§10 item 48).
+polarization and the mechanical semi-diameter; the .zos format; writing a .zar. CODE V and OSLO
+files are read by OP-95 (section 54). No written file has been opened in OpticStudio (§10 item 48).
 
 ## 53. Stock lens catalogs
 
@@ -4692,3 +4719,143 @@ not published) and a local-support stand-in for it; Make TrueFreeForm; Grid Poin
 Export Point Cloud; a Grid Sag import button in the app (a grid enters a lens from code or a
 saved lens); the .zmx, CODE V and OSLO mappings of the new types; optimization variables on grid
 points ("No optimization or tolerancing of grid data is possible", help).
+
+## 54. CODE V and OSLO lens files
+
+Plan item OP-95: CODE V sequence files (.seq) and OSLO lens files (.len) read into the saved
+optical model. Code: `OpenSim.Optics/Interop/CodeV/CodeVLensReader.cs`,
+`OpenSim.Optics/Interop/Oslo/OsloLensReader.cs`, the shared model-building layer
+`OpenSim.Optics/Interop/LensFileModel.cs` (the surface as read, problems and notes, glass
+lookup), and `OpenSim.Optics/Interop/LensFileImport.cs` (files on disk, by extension). The
+readers return OP-94's result type and throw its exception type (section 52). Nothing is written
+in either format.
+
+**Sources.** Neither format is published by its vendor. Command meanings come from RayOptics
+0.9.10 (BSD 3-clause): `rayoptics/codev/reader.py`, `cmdproc.py`, `tla_mapping.csv` and, for the
+conventions, `util/misc_math.py` (`euler2opt`, `euler2rot3d`), `elem/surface.py`
+(`DecenterData`), `elem/transform.py` (`forward_transform`), `elem/profiles.py`,
+`parax/etendue.py`, `zemax/zmxread.py`; and Optiland 0.6.3 (MIT): `optiland/fileio/codev/reader/`
+and `optiland/fileio/oslo/` (`reader/parser.py`, `converter.py`, `coordinates.py`,
+`geometry.py`, `pickups.py`, `constants.py`, `syntax.py`, `validation.py`). Optiland's OSLO code
+cites pages of the OSLO Program Reference and Optics Reference; the manuals were not opened
+here. Readings beyond the readers' code are §10 item 50.
+
+**Every command is accounted for.** Read, read and not used (named once in the notes:
+`CodeVLensReader.Ignored`, `CodeVLensReader.CodesNotKept`, `OsloLensReader.Ignored`), or a problem
+naming the line, the surface and the command. Problems fail the import, every one listed; the
+option "unsupported as warnings" lists them and reads the rest. Where the two readers disagree
+the command is refused.
+
+**CODE V text.** "!" starts a comment, a line ending in "&" continues, ";" separates commands,
+a quoted string is one token, case is ignored, and a command is known by its first three
+letters (RayOptics `process_command`). A command may name its surface (Sk, SO, SI) right after
+the command name; otherwise it acts on the last surface.
+
+**CODE V system data.** RDM (radius mode; RDM N curvatures; a non-zero surface value without
+RDM is a problem, as RayOptics defaults to curvatures and Optiland to radii), TIT (title), DIM
+M/C/I (mm, cm, in; mm without), EPD (entrance pupil diameter), FNO (paraxial working F/#), NAO
+(object NA), WL (nm, read as µm by moving the decimal point, so 587.5618 gives exactly the
+double 0.5875618), WTW, REF (the first without), XAN/YAN (angle), XOB/YOB (object height),
+XIM/YIM (paraxial image height), XRI/YRI (real image height), WTF, and the vignetting factors:
+VDX = (VLX − VUX)/2, VCX = (VLX + VUX)/2 and the same in y (RayOptics `zmxread.py`: vly = vcy +
+vdy, vuy = vcy − vdy). TEM 20 is noted (no reader gives its unit; 20 is this program's default
+in °C); another temperature and PRE are problems. NA (image NA), zoom positions (Z qualifiers)
+and private catalogs (PRV … END) are problems.
+
+**CODE V surfaces.** SO (object; a distance of 10¹⁰ or more is infinite, Optiland), S, SI
+(image; its thickness is a focus shift added to the thickness before it, RayOptics), with the
+radius or curvature, thickness and glass on the surface line; STO, SLB (comment), K (conic),
+A … G (the coefficients on r⁴ … r¹⁶, the Even Asphere's parameters 2 … 8; H and J are problems),
+RDY/CUY, THI, GLA, RMD REFL; CIR, REX/REY, ELX/ELY with CLR or OBS (circular, rectangular,
+elliptical apertures, which limit rays here), ADX/ADY (aperture decenter); EDG (edge aperture)
+is noted, HOL, ARO and a second aperture are problems. A surface with coefficients is an Even
+Asphere. Solve qualifiers on CUY, CUX, THI and the codes CCY, CCX, THC, GLC, PIM keep the
+written value. No surface named as the stop: surface 1 (Optiland).
+
+**Glasses.** REFL/RFL a mirror; AIR air. CODE V: nd:Vd and NNN.VVV (three digits before the
+point, where the readers agree) a model glass with ΔPgF = 0; other numeric codes are problems
+(the readers disagree on six-digit codes); name_catalog a glass of that catalog (split at the
+last underscore); a bare name is searched in every loaded catalog. A name is tried as written
+and then with a hyphen after its first letter ("NBK7" → "N-BK7", Optiland
+`_glass_name_candidates`). Found glasses are saved as "CATALOG:Glass" and their catalogs become
+the active list; a glass not found is a problem (or replaced by the import option's
+substitution, noted). OSLO: GLA name; GLA with indices all equal is a constant index; indices
+that differ (tabulated at the wavelengths) and GLA MOD are problems.
+
+**Tilts and decenters, converted.** Section 4's tilts are right-handed about x, the new y and
+the new z. CODE V's ADE and BDE are left-handed and CDE right-handed, taken in that order after
+the decenter (RayOptics `euler2opt`: "alpha and beta are left-handed", rotating axes x, y, z;
+`DecenterData.tform_before_surf` applies the decenter first). OSLO's TLA and TLB likewise
+(Optiland `surface_coordinates`: "intrinsic, about −x, −y and +z"); its DT 1 decenters then
+tilts in x, y, z order and DT −1 tilts in z, y, x order then decenters along the tilted axes.
+So:
+
+| File | Saved |
+|---|---|
+| CODE V XDE, YDE, ADE, BDE, CDE | "before": DecenterX, DecenterY, TiltX = −ADE, TiltY = −BDE, TiltZ = CDE, decenter then tilt |
+| … with DAR | the same, and "after" in the mode reverse this surface |
+| … with BEN | the same, and "after" explicit: the same three tilts, no decenter |
+| … with REV | no "before"; "after" explicit: the reverse (tilt then decenter, every value negated) |
+| OSLO DCX, DCY, TLA, TLB, TLC, DT | "before": DecenterX, DecenterY, TiltX = −TLA, TiltY = −TLB, TiltZ = TLC; DT 1 decenter then tilt, DT −1 tilt then decenter |
+| … with RCO (on the surface itself) | and "after" in the mode reverse this surface |
+| … with BEN (a mirror, one of TLA and TLB) | and "after" explicit: the same tilts, no decenter |
+
+A basic decenter moves every later surface, which a "before" tilt alone does (section 15).
+Refused: ZDE and DCZ (a tilt and decenter has no z shift), OSLO TOX/TOY/TOZ (a pivot), GC, RCO to
+another surface, BEN on two axes or on a refracting surface, DAR/BEN/REV/RCO on the image, any
+decenter of the object surface.
+
+**OSLO text.** Optiland `_statements` and `tokenize`: ";" separates commands and "//" starts a
+comment, both outside double quotes (in which a backslash escapes); blanks or commas separate
+tokens. LEN NEW "name" scaling count starts the lens (the title; a scaling other than 1 is
+noted); NXT moves to the next surface (GTO is a problem); END count ends the prescription. After
+END only the field table RST NEW, F rows, END is read; anything else there is a problem.
+
+**OSLO system data.** UNI (millimeters per lens unit: 1, 10, 25.4, 1000; mm without; others are
+problems), EBR (beam radius at surface 1: the entrance pupil diameter is 2·EBR with the object at
+infinity, a problem for a finite object), FNO (paraxial working F/#), NAP (the reduced slope
+n′u′ = NAP, read as the paraxial working F/# 1/(2·NAP)), NAO (object NA, finite object only), PUK
+(a problem), TELE (telecentric object space), WV, WVn (µm), WW, WWn (OSLO's defaults 0.58756,
+0.48613, 0.65627 µm without WV, Optiland citing Program Reference p. 123; wavelength 1 is the
+primary), SNOn (notes), ANG/OBH/GIH (the reference field: angle, object height, paraxial image
+height; OBH with the object at infinity is the angle atan(OBH/distance), and angles are taken
+positive), and the field table's F rows: the fractions of the reference (heights f times the
+reference, angles atan(f·tan θ)), the weight, and symmetric pupil bounds ±b as compression 1 − b
+(asymmetric bounds, field depth and aiming entries are problems). Without a field table the
+fields are the axis and the reference (noted).
+
+**OSLO surfaces.** Surface 0's TH is the object distance (10⁸ or more is infinite, Optiland
+citing Optics Reference p. 151); the image's TH is a focus shift added to the thickness before
+it; another thickness of 9.9·10⁹ or more is a problem. RD/RDF, CV/CVF, TH/THF, CC, AD … AG (the
+coefficients on r⁴ … r¹⁰, the Even Asphere's parameters 2 … 5, Optiland `surface_geometry`
+citing Program Reference pp. 70–74), ASP 0/ADO, AIR/AIF, RFL/RFH, GLA/GLF, AST, NOT (comment), AP
+(the semi-diameter; with CHK also a circular aperture that limits rays, unless APCK OFF), and the
+deletions ATD, TDD, APD, CSD, TSD, RCD, BED, GCD. Solves PY, PYC, PU, PUC, EC keep the written
+value (a problem when the file does not write it). Pickups PK CV, CVM, TH, THM, GLA, AP are
+resolved to values in surface order (Optiland `resolve_pickups`: CV copies the curvature plus an
+additive offset, the conic and the coefficients; CVM negates the curvature and coefficients;
+TH/THM copy the thickness, THM negated, plus an offset; a negative source is relative); the link
+is not kept. Drawing commands (DRW, LDP, CBK, ELMDF1, ELMDF2, BDI, BDD, VX, PF, LMN, LME, LMO
+EGR/ELE), TCE and DES are noted. ASP ASR/ARA/ASX and ASn, CVX/RDX, PFL/PFM, GSP/GOR, PK LN and TD
+are problems. No surface named as the stop: surface 1 (Optiland).
+
+**Gate.** `OpenSim.Tests/Optics/Gates/CodeVOsloImportGateTests`: an aspheric doublet and a folded
+lens with decentered and tilted surfaces, entered by hand and written in each format, import to
+the hand-entered record exactly and trace bit for bit the same; CODE V's `ag_dblgauss.seq`
+reproduces the focal length and paraxial marginal-ray heights of CODE V's own listing of it.
+
+**Not built.** Writing either format. CODE V: zoom (multi-configuration) data, private glass
+catalogs, six-digit glass codes, image-space NA, toroids, cylinders and anamorphic aspheres
+(XTO, YTO, CYL, AAS), the r¹⁸ and r²⁰ terms, diffractive surfaces (DIF, HOE), z decenters and
+rotation points, general apertures (CIG, REG, ELG), holes, pickups (PIK) and solves as solves.
+OSLO: configurations (CFG), general aspheres, toric surfaces, the perfect lens, gratings, pickups
+of lengths and tilts, global references, returns to other surfaces, tilt pivots, tabulated and
+model glasses, the image-space slope PUK, a finite-object EBR, and solves as solves. In both, the
+temperature and pressure are this program's defaults, coatings and ray aiming are not read, and
+no file was compared with the vendor program's own output except CODE V's listing of
+`ag_dblgauss` (paraxial focal length and marginal ray).
+
+**App and command line.** The optics panel's system-data section has **Import CODE V .seq / OSLO
+.len…** under Import .zmx; the check box below it lists unsupported content instead of stopping,
+for every lens-file import. `opensim optics import <file.seq|file.len>` reads either by its
+extension (`--out`, `--lenient`, `--builtin-catalogs` as for a .zmx).

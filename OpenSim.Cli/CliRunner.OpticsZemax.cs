@@ -1,12 +1,13 @@
 using OpenSim.Core.Model;
 using OpenSim.Core.Persistence;
+using OpenSim.Optics.Interop;
 using OpenSim.Optics.Interop.Zemax;
 
 namespace OpenSim.Cli;
 
 // OP-94: Zemax lens files on the command line (docs/Optics-Conventions.md section 52):
-// "optics import" reads a .zmx (or the lens in a .zar) into a lens file, "optics export" writes a
-// project's or lens file's optical system as a .zmx.
+// "optics import" reads a .zmx (or the lens in a .zar), or (OP-95) a CODE V .seq or OSLO .len,
+// into a lens file; "optics export" writes a project's or lens file's optical system as a .zmx.
 
 public static partial class CliRunner
 {
@@ -16,7 +17,8 @@ public static partial class CliRunner
             ? outPath
             : Path.ChangeExtension(source, OpticsFileSerializer.FileExtension);
         var catalogs = LoadedCatalogs(o, line => stdout.WriteLine(line));
-        var result = ZemaxLensFiles.Import(source, catalogs, new ZemaxImportOptions { UnsupportedAsWarnings = o.ContainsKey("lenient") });
+        // OP-95: a CODE V .seq or OSLO .len by its extension; anything else is read as Zemax.
+        var result = LensFileImport.Import(source, catalogs, new ZemaxImportOptions { UnsupportedAsWarnings = o.ContainsKey("lenient") });
         foreach (var w in result.Warnings) stdout.WriteLine("Not read: " + w);
         foreach (var n in result.Notes) stdout.WriteLine(n);
         string name = result.Optics.SystemData?.Title is { Length: > 0 } title ? title : Path.GetFileNameWithoutExtension(source);

@@ -1493,8 +1493,9 @@ a part not built), 2 the run failed or was cancelled.
   (surface 0 is the object), `optics:system.apertureValue|temperature|pressure`,
   `optics:wavelength<n>[.weight]` and `optics:field<n>.x|y|weight`. A cell driven by a solve or
   pickup, a surface that does not exist and a property not listed are refused, naming the target.
-- `opensim optics import <file.zmx|file.zar>` reads a Zemax lens file into a lens file
-  (`--out`, default the input's name with `.osslens`), and `opensim optics export
+- `opensim optics import <file.zmx|file.zar|file.seq|file.len>` reads a Zemax, CODE V or OSLO
+  lens file (by its extension) into a lens file (`--out`, default the input's name with
+  `.osslens`), and `opensim optics export
   <project|lens.osslens>` writes a project's or lens file's system as a `.zmx` (`--out`). Content
   the subset does not hold fails the command (exit 2) with every item listed; `--lenient` lists
   it and goes on (Zemax lens files below).
@@ -1674,8 +1675,8 @@ catalogs are used for the check; copy them into your catalog folder (Materials) 
 
 Anything else in the file stops the import, and the log lists every item with its line, surface
 and keyword: another surface type or solve, merit-function rows, tolerance rows, more than one
-configuration, an unknown keyword, a glass not in your catalogs. Tick **List unsupported Zemax
-content in the log instead of stopping** to read the rest and have those items listed. Display
+configuration, an unknown keyword, a glass not in your catalogs. Tick **List unsupported
+lens-file content in the log instead of stopping** to read the rest and have those items listed. Display
 and program settings (drawing, physical optics, ray aiming, polarization and the like) are never
 read; the log names them. Export works the same way the other round: what a .zmx written here
 cannot hold (other surface types, surface tilts and decenters, other apertures, the merit
@@ -1687,7 +1688,8 @@ From the command line: `opensim optics import <file.zmx|file.zar> [--out lens.os
 
 Not built: merit-function, tolerance and multi-configuration data; surface types and solves not
 listed above; surface tilts and decenters; rectangular, elliptical and user apertures; ray aiming
-and polarization; writing archives; the .zos format; CODE V and OSLO files. Files written here
+and polarization; writing archives; the .zos format. CODE V and OSLO files are imported as
+described in the next section. Files written here
 have not been opened in OpticStudio. The details are in docs/Optics-Conventions.md §52.
 
 ## Stock lens catalogs and design templates
@@ -1772,6 +1774,41 @@ Cloud, a Grid Sag import button, optimizing grid points, and reading or writing 
 .zmx files. The Off-Axis Conic Freeform sign and the NURBS degree are readings not checked against
 OpticStudio (docs/Optics-Conventions.md §10 item 51).
 
+## CODE V and OSLO lens files
+
+**Import CODE V .seq / OSLO .len…** sits under the Zemax buttons in the system data. It replaces
+the workspace's optical system with a CODE V sequence file (.seq) or an OSLO lens file (.len),
+chosen by the extension. Nothing is written in either format.
+
+What is read: the title (and OSLO's notes), the lens unit, the aperture, the fields with CODE V's
+vignetting factors or OSLO's field table, the wavelengths, and per surface the radius or
+curvature, thickness, glass or mirror, conic, even aspheric terms (an Even Asphere surface), the
+stop, a comment, apertures, and surface tilts and decenters. CODE V's and OSLO's tilts about x
+and y turn the other way from this program's, so they are saved with the opposite sign; their
+decenter kinds become this program's tilt "before" and "after" a surface (decenter and return,
+bend, reverse; OSLO's return and bend). A focus shift written on the image surface is added to
+the last thickness. Glass names are looked up in your loaded catalogs, with or without the
+hyphen CODE V files drop ("NBK7" finds N-BK7); CODE V's fictitious glasses (1.62:36.4 or
+620.364) become model glasses, and an OSLO glass given by one index a constant index. OSLO's
+pickups are read as the values they give. Solves and variable codes keep the value the file
+writes.
+
+Anything else stops the import and the log lists every item with its line, surface and command:
+zoom positions or configurations, private glass catalogs, toroids and other surface types,
+diffractive surfaces, z decenters, tilt pivots, a glass not in your catalogs, an unknown
+command. Tick **List unsupported lens-file content in the log instead of stopping** to read the
+rest. Settings that do not change the lens (designer initials, drawing data, CODE V's GO and
+DER) are never read; the log names them.
+
+From the command line: `opensim optics import <file.seq|file.len> [--out lens.osslens]
+[--lenient]`.
+
+Not built: writing CODE V or OSLO files; multi-configuration data; private and tabulated glasses;
+surface types other than Standard and Even Asphere; OSLO's general aspheres, perfect lens and
+gratings; solves kept as solves; temperature and pressure from the file. Tilted files have not
+been compared with CODE V or OSLO themselves; a CODE V double Gauss reproduces the focal length
+CODE V lists for it. The details are in docs/Optics-Conventions.md §54.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1794,5 +1831,5 @@ Not built yet, and not to be relied on until they appear in this guide:
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration
   data, real F/# per field, POP settings, the report graphic's page arrangement);
-- CODE V and OSLO lens-file import; Zemax merit-function, tolerance and configuration data;
+- Zemax merit-function, tolerance and configuration data;
 - reference results from OpticStudio itself (the cross-checks use open programs only).
