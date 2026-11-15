@@ -210,6 +210,9 @@ public sealed class MeritOperandRegistry
 
         // OP-46: ghost focus operands and YNIP (help: Ghost Focus Control; GhostOperands).
         foreach (var definition in GhostOperands.Definitions()) r.Register(definition);
+
+        // OP-99: the ZPL macro operand (help: Optimizing with ZPL Macros; Scripting/Zpl/ZplMacroOperand).
+        r.Register(Scripting.Zpl.ZplMacroOperand.Definition());
         return r;
     }
 

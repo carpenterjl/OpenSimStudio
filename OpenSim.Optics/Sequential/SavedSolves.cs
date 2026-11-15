@@ -208,6 +208,12 @@ public static class SavedSolves
             // OP-63: the glass offset a TIND or TABB row writes on a catalog glass (ΔNd, ΔVd).
             (SolveColumn.Material, "Offset") => new GlassOffsetSolve { Surface = j, DeltaNd = P(0), DeltaVd = P(1) },
             (SolveColumn.Parameter, "Chief ray") => new ParameterChiefRaySolve { Surface = j, Parameter = parameter, Field = Surface(0), Wavelength = Surface(1) },
+            // OP-99: the ZPL macro solve; the macro's file name is saved in the flag's Macro.
+            (_, ZplMacroSolve.SavedName) when ZplMacroSolve.Takes(column) => new ZplMacroSolve
+            {
+                Surface = j, Target = column,
+                Macro = f.Macro is { Length: > 0 } macro ? macro : throw new ArgumentException("the ZPL macro solve names no macro."),
+            },
             _ => null,
         };
         return solve ?? throw new ArgumentException($"the solve '{f.Solve}' is not one this column takes in this version.");

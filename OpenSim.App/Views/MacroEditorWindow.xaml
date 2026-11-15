@@ -1,0 +1,57 @@
+<Window x:Class="OpenSim.App.Views.MacroEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        Title="ZPL Macros" Width="820" Height="640" MinWidth="480" MinHeight="360"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-99: the ZPL macro editor. DataContext is the OpticsMacroEditorViewModel. Run runs the
+         macro on a copy of the lens off the UI thread; its changes are written to the lens when it
+         completes. Stop cancels it (nothing is applied). Check lists what the macro names that is
+         not bound. -->
+    <DockPanel Margin="8">
+        <controls:FormGrid DockPanel.Dock="Top" IsEnabled="{Binding IsIdle}">
+            <Label Content="Macro folder"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseFolder_Click" Margin="4,0,0,0"/>
+                <TextBox Text="{Binding MacroFolder, UpdateSourceTrigger=LostFocus}"
+                         ToolTip="CALLMACRO's macros, OUTPUT and OPEN file names without a folder, and the folder ZPLM operands and macro solves read."
+                         AutomationProperties.AutomationId="MacroFolderBox"/>
+            </DockPanel>
+            <Label Content="Macro list"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Edit" Command="{Binding LoadSelectedCommand}" Margin="4,0,0,0"
+                        AutomationProperties.AutomationId="MacroLoadButton"/>
+                <ComboBox ItemsSource="{Binding Macros}" SelectedItem="{Binding SelectedMacro}"
+                          AutomationProperties.AutomationId="MacroListCombo"/>
+            </DockPanel>
+        </controls:FormGrid>
+        <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,4">
+            <Button Content="Run" Command="{Binding RunCommand}" MinWidth="70" Margin="0,0,4,4"
+                    AutomationProperties.AutomationId="MacroRunButton"/>
+            <Button Content="Stop" Command="{Binding StopCommand}" MinWidth="70" Margin="0,0,4,4"
+                    AutomationProperties.AutomationId="MacroStopButton"/>
+            <Button Content="Check" Command="{Binding CheckCommand}" MinWidth="70" Margin="0,0,4,4"
+                    ToolTip="Parse the macro and list the keywords and functions it names that this version does not bind."/>
+            <Button Content="Open…" Click="Open_Click" MinWidth="70" Margin="0,0,4,4" IsEnabled="{Binding IsIdle}"/>
+            <Button Content="Save As…" Click="Save_Click" MinWidth="70" Margin="0,0,4,4"/>
+            <Button Content="Close" Click="Close_Click" MinWidth="70" Margin="0,0,4,4"/>
+        </WrapPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,4,0,4"
+                   AutomationProperties.AutomationId="MacroStatusText"/>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="3*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="2*"/>
+            </Grid.RowDefinitions>
+            <TextBox Grid.Row="0" Text="{Binding Text, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" AcceptsTab="True"
+                     FontFamily="Consolas" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                     IsReadOnly="{Binding IsRunning}" AutomationProperties.AutomationId="MacroTextBox"/>
+            <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"/>
+            <TextBox Grid.Row="2" Text="{Binding Output, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas"
+                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                     Foreground="{DynamicResource TextFaintBrush}" AutomationProperties.AutomationId="MacroOutputBox"/>
+        </Grid>
+    </DockPanel>
+</Window>

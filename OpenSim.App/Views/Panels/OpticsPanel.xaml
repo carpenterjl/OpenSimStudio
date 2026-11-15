@@ -61,6 +61,12 @@
                         ToolTip="Search stock lens catalogs built from vendor .zmx files, insert a lens, or start from a design template."
                         AutomationProperties.AutomationId="OpticsLensCatalogsButton"/>
             </WrapPanel>
+            <!-- OP-99 -->
+            <WrapPanel Margin="0,4,0,0">
+                <Button Content="ZPL Macros…" Click="Macros_Click"
+                        ToolTip="Edit and run OpticStudio ZPL macros on the lens."
+                        AutomationProperties.AutomationId="OpticsMacrosButton"/>
+            </WrapPanel>
             <!-- OP-63: the tolerance data, edited in the Tolerance Data Editor window. -->
             <DockPanel Margin="0,4,0,0">
                 <Button DockPanel.Dock="Left" Content="Tolerance Data Editor…" Click="ToleranceDataEditor_Click"

@@ -256,6 +256,8 @@ public static class SolveEngine
             SolveColumn.Conic or SolveColumn.Parameter => (1, image),
             _ => (0, image),
         },
+        // OP-99: a macro solve on a thickness stops before the image; the others reach it.
+        ZplMacroSolve z => z.Target == SolveColumn.Thickness ? (0, last) : (z.Target == SolveColumn.Curvature ? 1 : 0, image),
         _ => throw new NotSupportedException($"The solve type {solve.GetType().Name} is not known to the solve engine."),
     };
 
@@ -545,6 +547,10 @@ public static class SolveEngine
 
                 case ParameterChiefRaySolve:
                     throw new NotSupportedException("the chief ray parameter solve is not built in this program (it needs a real chief ray solved through the coordinate break's decenter or tilt).");
+
+                // OP-99: the ZPL macro solve (Scripting/Zpl/ZplMacroSolves.cs).
+                case ZplMacroSolve z:
+                    return Number(Scripting.Zpl.ZplMacroSolves.Evaluate(lens, _system, z));
 
                 default:
                     throw new NotSupportedException($"the solve type {solve.GetType().Name} is not known to the solve engine.");

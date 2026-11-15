@@ -28,6 +28,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.Equal(2, optics.Materials!.ActiveCatalogs!.Count);
         Assert.Equal(2, optics.Surfaces!.Count);                              // OP-31
         Assert.Equal(2, optics.Surfaces[0].Flags![0].SolveParameters!.Count);
+        Assert.NotNull(optics.Surfaces[0].Flags![0].Macro);                  // OP-99: a macro solve's file name
         Assert.NotNull(optics.Surfaces[0].TiltBefore);                       // TC-6: tilts and returns
         Assert.NotNull(optics.Surfaces[0].TiltAfter!.Mode);
         Assert.NotNull(optics.Surfaces[0].CoordinateReturn!.Mode);

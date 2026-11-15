@@ -1317,6 +1317,36 @@ single place in the code, so a correction is one line and its test.
     Check: each type's sag at a few points against OpticStudio's Sag analysis, and a Grid Sag
     file with all derivatives zero against OpticStudio's interpolated sag.
 
+52. **ZPL macro readings** (OP-99, section 56). The language and each bound keyword follow the
+    OpticStudio 2025 R2 help (saved under `plans/sources/optics/op-99-help/`); no macro has been
+    run in OpticStudio to compare. Where the help leaves a point open this program reads it so:
+    - *Operator precedence* (the help gives none): unary − + !, then * /, + −, the comparisons,
+      then & | ^ at one level, left to right; both operands of & and | are evaluated.
+    - *The default number format* is `FORMAT .4`, from the help's example output "3.5000" and
+      "7.1100" for values printed without a FORMAT (Calling a Macro from within a Macro).
+      `FORMAT m` without INT is read as `FORMAT m INT`. A C format's exponent has two digits (the
+      C standard); the EXP format's three, as the help's example shows.
+    - *NSUR()* is the image surface's number, from the help's Example Macro 1, which reads the
+      image intercept as RAYX(NSUR()).
+    - *RANX, RANY, RANZ*: the normal's sense is this program's, +z at the vertex; OpticStudio's
+      sense is not stated.
+    - *Integers*: an INTEGER array, FORMAT INT and the %d conversions truncate toward zero; an array
+      index is rounded down (as VEC1..4 subscripts are, the help says); a value an integer argument
+      needs must be within 1e-9 of one.
+    - *Strings*: $NEWLINE returns the newline (the help says "the tab character (
+)"); $RIGHTSTRING
+      pads on the left; $GETSTRING past the last word is empty; FINDFILE returns names without
+      their folder; SVAL of text that is not a number fails (the help does not say).
+    - *SETAIM 1* sets paraxial ray aiming, and SYSP 70's "on" (1) and "aberrated" (2) are
+      paraxial and real, from GETSYSTEMDATA's "0 for off, 1 for paraxial, and 2 for real".
+    - *ONUM and OCOD* return this program's operand numbers (the registry order), not OpticStudio's.
+    - *ZPLM* runs its macro for every row; the help reuses a non-zero data field from the last run
+      (section 56 says why).
+    - *GETTEXTFILE* runs this program's analysis of the same name for each String Code it maps;
+      the text is this program's, not OpticStudio's layout.
+    Check: each conformance macro of `ZplConformanceTests` run in OpticStudio on the same singlet,
+    the outputs compared.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -1989,7 +2019,9 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
   a pickup from a later cell, a marginal ray height solve before the stop, or two solves on one
   cell.
 - **Not built.**
-  - The ZPL macro solve, which needs the macro interpreter (OP-99).
+  - The ZPL macro solve on parameters, the chip zone and the mechanical semi-diameter (the
+    curvature, thickness, semi-diameter and conic macro solves are §56, set by SOLVETYPE; the
+    editor does not offer them).
   - The parameter chief ray solve. Its record exists, the editor offers it on a coordinate
     break's first four parameters, and the engine reports it as not built.
   - Extra data columns.
@@ -4050,7 +4082,8 @@ command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics
 `opensim sweep`). `opensim optics import` and `export` (OP-94, `CliRunner.OpticsZemax.cs`) read and
 write Zemax lens files (§52); `import` also reads CODE V .seq and OSLO .len files by their
 extension (OP-95, §54); `opensim optics catalog` (OP-16, `CliRunner.OpticsCatalog.cs`)
-indexes and searches a stock lens catalog (§53).
+indexes and searches a stock lens catalog (§53); `opensim optics macro` (OP-99,
+`CliRunner.OpticsMacro.cs`) runs a ZPL macro (§56).
 
 - **One report function.** An analysis report is `OpticsAnalysisReport.Compose` over the
   analyses' results, the function the app's Save report calls
@@ -4189,8 +4222,9 @@ build the lens from them through `ProjectLens` as the application does.
   record with `r = Type(); r.Property = value` (checked under JGraph on 2026-11-14; pythonnet not
   run). A record is then changed in place, which C# code never does; a script should build a
   record before handing it to an engine and not change it while one holds it.
-- **Not built.** The non-sequential model, macro language (OP-99) and plug-ins (OP-100). The
-  global searches and Monte Carlo were pinned by reflection but not run under JGraph.
+- **Not built.** The non-sequential model and plug-ins (OP-100). The global searches and Monte
+  Carlo were pinned by reflection but not run under JGraph. The ZPL macro language (OP-99) is
+  §56; `ZplMacro.Run` is on the scripting surface.
 
 ## 48. Test plates
 
@@ -4859,3 +4893,95 @@ not published) and a local-support stand-in for it; Make TrueFreeForm; Grid Poin
 Export Point Cloud; a Grid Sag import button in the app (a grid enters a lens from code or a
 saved lens); the .zmx, CODE V and OSLO mappings of the new types; optimization variables on grid
 points ("No optimization or tolerancing of grid data is possible", help).
+
+## 56. ZPL macros
+
+`OpenSim.Optics/Scripting/Zpl/` (OP-99) interprets OpticStudio's ZPL macro language, as its 2025
+R2 help defines it (the "About the ZPL" chapter and each keyword's page, saved under
+`plans/sources/optics/op-99-help/`). `ZplMacro.Parse` checks a macro; `ZplMacro.Run` runs one on a
+copy of an optics record and returns the screen text, the changed record, the OPTRETURN fields and
+the SOLVERETURN value. The published table of what is bound is docs/Optics-ZPL-Library.md
+(`ZplLibrary.Table()`); readings the help leaves open are §10 item 52.
+
+**Statements.** A line is an assignment (`x = …`, `A$ = …`, `Z(i, j) = …`), a keyword with its
+arguments, or a remark (REM or ! at the start of the line; # anywhere outside a string). Names are
+not case sensitive, at most 28 characters, and must not be a keyword or function name; a trailing
+$ makes a string variable (at most 360 characters). Numbers are 64-bit. Arrays are DECLAREd with
+DOUBLE or INTEGER, 1 to 4 dimensions, indices from 1, and RELEASEd. A variable used before it is
+assigned is an error, as is a string where a number is needed and the reverse.
+
+**Expressions.** + − * / on numbers, + joining strings, the numeric comparisons == != < > <= >=
+and their string forms $== $!= $< $> $<= $>= (ordinal comparison), & | ^ (exclusive or) and !,
+each giving 1 or 0. Precedence is §10 item 52's reading. Division by zero, a function outside its
+domain (SQRT of a negative, LOGE of zero, ACOS beyond ±1) and a non-finite result are errors.
+
+**Control.** `IF cond THEN statement`; `IF cond` … [`ELSE`] … `ENDIF` blocks, nested; `FOR v, start,
+stop, step` … `NEXT [v]` (the help's examples also write `FOR v = start, …`, which is accepted),
+start, stop and step evaluated once; equal start and stop run once; a step that does not move
+toward the stop is an error, not an endless loop. `GOTO`/`LABEL` by number or word (at most 300
+labels); `GOSUB`/`SUB`/`RETURN` (at most 100 subroutines and 100 nesting levels); `END`. Execution
+that falls into a SUB, a RETURN without a GOSUB and a subroutine without RETURN are errors. Block
+structure, labels and subroutines are checked before the first statement runs, every error naming
+its line.
+
+**Output.** PRINT writes its items in order (strings as they are, numbers in the current FORMAT), a
+trailing comma keeping the line open; items written side by side without a comma are accepted (the
+help's own `PRINT "Surface " $STR(n)`). FORMAT m.n, m.n EXP, m INT and "C format" LIT, with the
+default `FORMAT .4`. OUTPUT sends PRINT to a file (UTF-16, as the help says; a name without a
+folder is in the macro folder) or the screen; REWIND erases the last screen line.
+
+**Lens model.** A macro works on the optics settings in lens units, as the editors hold them. The
+lens-data functions read the current configuration with every solve and pickup evaluated (the
+values the editor shows); SETSURFACEPROPERTY, SETSYSTEMPROPERTY and the other setters change the
+lens as entered. The lens is rebuilt for every trace and analysis, so a change takes effect at
+once; UPDATE checks that the lens builds. On a lens with a multi-configuration table the setters
+are refused (the help also changes the current configuration's table entry, which is not built).
+RAYTRACE is `OpticsScripting.TraceRay` (§47), its intercepts converted to lens units; RAYE and
+RAYV are §47's codes. RAYX … RAYO read the local frame of each surface; a surface the ray did not
+reach is an error rather than invalid data.
+
+**Merit function and optimization.** SETOPERAND, INSERTMFO and DELETEMFO edit the merit rows; MFCN
+evaluates the merit function over every configuration (a failed row is an error) and keeps the
+evaluation for OPER's value and contribution columns, which are refused once the lens has changed;
+OPEV and OPEW evaluate one operand alone in the current configuration (an operand that reads other
+rows is refused). OPTIMIZE is `LocalOptimizer.Run` (§35) with the cycles and algorithm given;
+QUICKFOCUS is Quick Focus (§44).
+
+**ZPLM.** Int1 is Mac# (the macro ZPLnn.ZPL in the macro folder, `ZplMacroFolder.Current`), Int2
+the data field 0 to 50 whose OPTRETURN value is the row's value, Data1 to Data6 the pass values
+(PVHX … PVEY). The macro runs on a copy of the configuration's solved lens
+(`SavedSurfaces.FromLens`, with catalogs made of the lens's own glasses after the given ones), and
+its changes are discarded. Every ZPLM row runs its macro: merit rows are evaluated in parallel, and
+a row must not depend on another having run first (the help reuses the last run for a non-zero
+data field). A missing macro, an empty data field or a macro error fails the row, naming it.
+
+**Macro solves.** `ZplMacroSolve` (curvature, thickness, semi-diameter and conic; SOLVETYPE CZ, TZ,
+SZ, KZ; saved as solve "ZPL Macro" with the macro's file name in the flag's `Macro`) runs the
+macro on a copy of the lens solved so far, with SOSO(0) the solve's surface, and takes its last
+SOLVERETURN in lens units (a curvature in inverse lens units). A macro that calls no SOLVERETURN
+fails the solve. SOLVEBEFORESTOP is accepted and does nothing (no solve before the stop is
+refused).
+
+**Calling macros.** CALLMACRO runs a macro of the macro folder as a child with its own variables;
+the call buffers (51 numbers and 51 strings), the lens, the vectors, OPTRETURN and SOLVERETURN are
+shared; the child's screen output is copied into the parent's when it returns; a child's error
+names the child and its line. Nesting is limited to 64 (a macro calling itself).
+
+**Not bound** (each fails by name and line when reached; the table gives the reason): graphics
+(GRAPHICS, PLOT, LINE …), analysis windows (OPENANALYSISWINDOW, GETT, WINL …), the non-sequential
+keywords and functions, physical optics (POP, ZBF…), image analysis files, RAYTRACEX, POLTRACE,
+DEFAULTMERIT, HAMMER, TOLERANCE, QUICKSENSITIVITY, the multi-configuration and tolerance editor
+keywords, LOADMERIT/SAVEMERIT, GETSYSTEMDATA and the other GET… vector keywords, PARAXIAL ON, the
+global coordinate functions (GLC…, RAG…), OPDC, OPTH, the glass catalog functions (GIND, GABB,
+GNUM …), the solve and tolerance readers (SOLV, SOLM, TOLV, MCOP, MCON), COMMAND (deliberately), the
+obsolete setter keywords, and the parameter, chip zone and mechanical semi-diameter macro solves.
+The Lens Data Editor does not offer the macro solve; SOLVETYPE sets it. Of the JGraph bridge, a
+macro can be run from JGraph (`ZplMacro.Run` is on the scripting surface); a JGraph script as a
+macro solve or operand is not built. Tolerance scripts are not built.
+
+**App and command line.** **ZPL Macros…** in the optics panel opens `MacroEditorWindow`: the macro
+folder and its macro list, the editor, Run (off the UI thread), Stop, Check, and the output; INPUT
+and PAUSE ask in dialogs. A run that changed only surfaces is one undoable Lens Data Editor edit;
+any other change loads the whole record. `opensim optics macro <macro.zpl> [--lens FILE]
+[--arg NAME=VALUE,...] [--macro-folder DIR] [--lens-folder DIR] [--out FILE] [--save-lens FILE]`
+runs a macro from the command line ($GETARG("IsAutomated") is "True"); a macro error gives exit 2.

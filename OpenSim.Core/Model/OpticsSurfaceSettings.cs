@@ -218,4 +218,8 @@ public sealed record OpticsCellFlagSettings
     public string? PickupColumn { get; init; }
     public double PickupScale { get; init; } = 1;
     public double PickupOffset { get; init; }
+
+    // OP-99
+    /// <summary>The macro file of a "ZPL Macro" solve (its name in the macro folder), or null.</summary>
+    public string? Macro { get; init; }
 }

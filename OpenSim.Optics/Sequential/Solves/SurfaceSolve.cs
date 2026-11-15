@@ -15,8 +15,7 @@ namespace OpenSim.Optics.Sequential.Solves;
 /// </para>
 /// <para>
 /// "Fixed" is no solve (the cell keeps its value), and "Variable" is an optimizer flag, not a
-/// solve; neither has a record. The ZPL macro solve needs the macro interpreter (OP-99) and is
-/// not built.
+/// solve; neither has a record. The ZPL macro solve is <see cref="ZplMacroSolve"/> (OP-99).
 /// </para>
 /// </summary>
 public abstract record SurfaceSolve

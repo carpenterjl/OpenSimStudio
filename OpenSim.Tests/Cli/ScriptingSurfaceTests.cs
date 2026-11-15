@@ -524,4 +524,26 @@ public class ScriptingSurfaceTests
             Assert.All(c.Y, y => Assert.True(y >= 0 && y <= 1 + 1e-12, $"{c.Name}: an MTF value {y:R} outside [0, 1]."));
         }
     }
+
+    // ------------------------------------------------------------------ OP-99: ZPL macros
+
+    /// <summary>OP-99: the ZPL macro entry points docs/Scripting-from-JGraph.md ("Optics") lists.</summary>
+    [Fact]
+    public void TheZplMacroEntryPoints_ArePublic_WithTheSignaturesTheDocumentShows()
+    {
+        const string Z = "OpenSim.Optics.Scripting.Zpl.";
+        HasMethod(Z + "ZplMacro", "Run", "String", "ZplRunOptions");
+        HasMethod(Z + "ZplMacro", "RunFile", "String", "ZplRunOptions");
+        HasMethod(Z + "ZplMacro", "Parse", "String", "String");
+        HasMethod(Z + "ZplLibrary", "Table");
+        HasSettableProperty(Z + "ZplRunOptions", "System", "OpticsSettings");
+        HasSettableProperty(Z + "ZplRunOptions", "Catalogs", "IReadOnlyList<OpticalCatalog>");
+        HasSettableProperty(Z + "ZplRunOptions", "MacroFolder", "String");
+        HasSettableProperty(Z + "ZplRunOptions", "PassValues", "IReadOnlyList<Double>");
+        HasReadableProperty(Z + "ZplRunResult", "Output", "String");
+        HasReadableProperty(Z + "ZplRunResult", "System", "OpticsSettings");
+        HasReadableProperty(Z + "ZplRunResult", "OptReturn", "IReadOnlyList<Double?>");
+        HasReadableProperty(Z + "ZplRunResult", "SolveReturn", "Double?");
+        HasReadableProperty(Z + "ZplMacroFolder", "Current", "String", isStatic: true);
+    }
 }

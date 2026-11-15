@@ -148,6 +148,19 @@ public partial class OpticsPanel : UserControl
         _lensCatalogs.Show();
     }
 
+    // OP-99
+    private MacroEditorWindow? _macroEditor;
+
+    /// <summary>Opens the ZPL macro window (OP-99), or brings the open one forward.</summary>
+    private void Macros_Click(object sender, RoutedEventArgs e)
+    {
+        if (_macroEditor is { IsLoaded: true }) { _macroEditor.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _macroEditor = new MacroEditorWindow(optics.Macros) { Owner = Window.GetWindow(this) };
+        _macroEditor.Closed += (_, _) => _macroEditor = null;
+        _macroEditor.Show();
+    }
+
     /// <summary>Opens the Multi-Configuration Editor (OP-30), or brings the open one forward.</summary>
     private void MultiConfigEditor_Click(object sender, RoutedEventArgs e)
     {

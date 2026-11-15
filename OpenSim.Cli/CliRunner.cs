@@ -210,6 +210,14 @@ public static partial class CliRunner
             catalog), prints the files left out and the Catalog Report of the lenses meeting the
             criteria (mm); --save writes the private catalog with every file inside it (OP-16).
 
+        opensim optics macro <macro.zpl> [--lens FILE] [--arg NAME=VALUE[,...]] [options]
+            Runs a ZPL macro (OP-99) on the lens of a project, lens file or .zmx and prints its
+            output; $GETARG reads --arg and "IsAutomated" is True.
+            --macro-folder DIR  CALLMACRO's and ZPLM's macros (default the macro's folder)
+            --lens-folder DIR   LOADLENS/SAVELENS names without a folder (default the lens's)
+            --out FILE          also write the output text; --save-lens FILE the changed lens
+                                (.osslens or .zmx)
+
         Optics sweeps: a sweep job whose targets are all optics:... sets the lens instead of
         solving a body, and tabulates the saved merit function and each row's value.
             Targets: optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|

@@ -465,7 +465,8 @@ Notes on specific solves:
 
 Not built:
 
-- the ZPL macro solve (needs the macro interpreter);
+- the ZPL macro solve in the editor (a macro sets it with SOLVETYPE; ZPL macros below), and
+  on parameters;
 - the chief ray solve on coordinate-break parameters (offered in the editor, refused when
   evaluated);
 - solves on extra data;
@@ -1503,6 +1504,9 @@ a part not built), 2 the run failed or was cancelled.
   stock lens catalog (or loads a private one), prints the Catalog Report of the lenses meeting
   `--efl MIN:MAX`, `--epd MIN:MAX`, `--shape`, `--type`, `--elements` and `--text`, and with
   `--save OUT.osslcat` writes the private catalog (Stock lens catalogs below).
+- `opensim optics macro <macro.zpl> [--lens FILE]` runs a ZPL macro on the lens of a project,
+  lens file or .zmx and prints its output (ZPL macros below); `--arg NAME=VALUE,...` sets what
+  `$GETARG` reads, `--out` writes the output to a file, `--save-lens` the changed lens.
 - Glass catalogs: the app's (the built-in set and your catalog folder); `--builtin-catalogs` uses
   the built-in set alone, for a run that does not depend on the machine.
 - Ctrl+C stops a run between steps. A stopped optimization still writes the best design so far.
@@ -1523,8 +1527,9 @@ the interop wants them; `examples/jgraph/optics_from_jgraph.m` builds a singlet,
 plots its MTF. A script works on its own copy of the lens: to see the result in the program, save
 it into a project (`project.Optics = …`, then the project serializer's Save) and open that.
 
-Not built: the macro language (ZPL); plug-ins. The global searches and Monte Carlo were not
-tried under JGraph itself; their calls are checked by the test suite.
+Not built: plug-ins. The global searches and Monte Carlo were not tried under JGraph itself;
+their calls are checked by the test suite. A ZPL macro can be run from a script with
+`ZplMacro.Run` (ZPL macros below).
 
 ## Test plate fitting
 
@@ -1808,6 +1813,52 @@ surface types other than Standard and Even Asphere; OSLO's general aspheres, per
 gratings; solves kept as solves; temperature and pressure from the file. Tilted files have not
 been compared with CODE V or OSLO themselves; a CODE V double Gauss reproduces the focal length
 CODE V lists for it. The details are in docs/Optics-Conventions.md §54.
+
+## ZPL macros
+
+**ZPL Macros…** in the optics panel opens the macro window, which runs macros written in
+OpticStudio's ZPL language on the lens. Choose the **Macro folder** (it holds the macros that
+CALLMACRO calls and the ZPLM operand runs, and is where OUTPUT and OPEN look for a file name given
+without a folder); its macros are listed under **Macro list** (**Edit** opens one). **Open…** and
+**Save As…** read and write .zpl files.
+
+- **Run** runs the macro on a copy of the lens; its PRINT output appears below the editor as it
+  runs. When it finishes, its changes are written to the lens: if it changed only surfaces, as one
+  edit the Lens Data Editor's Undo takes back; if it changed anything else (system data, the merit
+  function, …), the whole system is reloaded, which cannot be undone. **Stop** cancels a run and
+  nothing is applied; a macro that fails applies nothing either, and the status line names the
+  macro, the line and the problem.
+- **Check** lists the keywords and functions the macro uses that this version does not bind, with
+  their lines. A macro runs until it reaches one; then it stops, naming it.
+- INPUT asks for a value in a small dialog; PAUSE shows its message and waits for OK.
+
+What runs: the whole language (variables, strings, arrays, expressions, IF, FOR, GOTO, GOSUB,
+PRINT and FORMAT, files, CALLMACRO), and the keywords and functions bound to the program's
+engines — ray tracing (RAYTRACE and RAYX … RAYO), the lens data (SETSURFACEPROPERTY and SPRO, the
+surface functions, INSERT, DELETE, STOPSURF, SOLVETYPE, SETVAR), the system data
+(SETSYSTEMPROPERTY and SYPR, the field and wavelength functions), the merit function (SETOPERAND,
+MFCN, OPER, OPEV), OPTIMIZE and QUICKFOCUS, analyses to text files (GETTEXTFILE), and lens files
+(LOADLENS, SAVELENS). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
+with what each does here or why it is not bound. Lengths are in lens units; the lens-data
+functions show solved values, as the editor does; a change made by a keyword takes effect at once
+(UPDATE is accepted and checks the lens builds).
+
+**In the merit function**, the ZPLM operand runs macro ZPLnn.ZPL (nn = Mac#, from the macro
+folder) on a copy of the lens and takes the value it returns with OPTRETURN in data field Int2;
+Data1 to Data6 reach the macro as PVHX … PVEY. **As a solve**, `SOLVETYPE surf, TZ, name.zpl` (CZ,
+SZ, KZ for the curvature, semi-diameter and conic) makes the cell take the macro's SOLVERETURN
+value; the macro reads the solve's surface with SOSO(0).
+
+From the command line: `opensim optics macro <macro.zpl> [--lens FILE] [--arg NAME=VALUE,...]
+[--macro-folder DIR] [--lens-folder DIR] [--out FILE] [--save-lens FILE]`.
+
+Not built: macro graphics and plots, analysis windows driven from a macro (GETT, OPENANALYSISWINDOW),
+the non-sequential and physical optics keywords, RAYTRACEX and polarization traces, DEFAULTMERIT,
+HAMMER and the tolerancing keywords, the multi-configuration and tolerance editor keywords, the
+GET… vector keywords, paraxial ray tracing (PARAXIAL ON), the setters on a lens with a
+multi-configuration table, parameter macro solves, the macro solve in the Lens Data Editor, a
+JGraph script as a macro solve or operand, and tolerance scripts. No macro has been compared with
+OpticStudio's own output. The rules are in docs/Optics-Conventions.md §56.
 
 ## Coming
 
