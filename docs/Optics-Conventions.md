@@ -1566,6 +1566,26 @@ single place in the code, so a correction is one line and its test.
     - *ZTHI* returns the spread when it exceeds the target, else the target (the help's example).
     Check: each operand evaluated in OpticStudio on one lens with the same columns.
 
+61. **Universal plot readings** (OP-45, section 65). The settings follow OpticStudio 2025 R2's
+    help pages "Universal Plot 1-D" and "Universal Plot 2-D" (saved under
+    `plans/sources/optics/op-45-help/`); no plot has been compared with OpticStudio's output.
+    - *Parameters by name.* The help lists the kinds of independent variable but not the order of
+      OpticStudio's options (UN1_PARAMETER is "0 for first option, 1 for second option"), so this
+      program names them (`UniversalPlotParameter`) and a numbered option cannot be translated.
+      Field data is read as X, Y, weight and the vignetting factors VDX, VDY, VCX, VCY, VAN of one
+      field; wavelength data as one wavelength and its weight.
+    - *Radius 0* is a plane, as a curvature of 0 is.
+    - *Failed points.* The help says that when the operand "cannot be computed, an error message
+      will be displayed and the plot will not be generated". This program shows such a point as a
+      gap instead (no value in the plot, "failed" in the table, the reason listed) and stops only
+      when no point can be computed.
+    - *Multi-configuration overrides.* The help says OpticStudio "automatically alters the
+      corresponding data on the Multi-Configuration operand" when the swept value is one a
+      configuration row sets. This program refuses such a variable instead, naming the row to sweep.
+    - *Steps* must be at least 2 in the 1D plot too (the help states the minimum for 2D only).
+    Check: a 1D and a 2D plot of EFFL against radii, and of a real-ray operand through a point
+    that misses, made in OpticStudio on the same lens.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -5977,3 +5997,57 @@ and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
 **Not built:** off-axis coordinates and the Base/Composite sag removal of SSAG, SSLP and SCRV; the
 fitted-term removals of SPHS and PSLP; OpticStudio's global reference surface. Readings in §10
 item 60.
+
+## 65. Universal plots
+
+OP-45 builds OpticStudio's Universal Plot 1-D and Universal Plot 2-D
+(`OpenSim.Optics/Analysis/UniversalPlot/`, registered as `UniversalPlot1D` and `UniversalPlot2D`):
+the value of any registered merit operand, of the system merit function, or of one row of it,
+while one or two independent variables step from a start to a stop value. The settings follow the
+help pages (UN1_* and UN2_* in MODIFYSETTINGS).
+
+**Independent variables** (`UniversalPlotEngine.Resolve`). Surface data: radius (0 is a plane),
+curvature, thickness (a swept object distance becomes finite), conic, and a surface type's
+parameter or extra-data column (`Number`), in lens units or the column's own unit; whole-number
+parameters are refused. System data: the aperture value, the apodization factor, temperature (°C),
+pressure (atm), a field's x, y, weight, VDX, VDY, VCX, VCY and VAN, and a wavelength (µm) or its
+weight; `Number` picks the field or wavelength. Configuration data: a real-number cell of the
+multi-configuration table, row `Number` in configuration `Surface`. Non-sequential data is not
+built. A cell driven by a solve or pickup, a configuration cell that is a pickup, and a surface or
+system value that a multi-configuration row overwrites in the current configuration (found by
+writing the start and stop values and reading them back from that configuration's record) are
+refused by name, since the sweep would be overwritten. The values are `SweepParameter.Linear`
+(OpenSim.Core/Studies/ParameterSweep.cs) with the last value set to the stop value exactly; the
+2D points are `SweepPlan`'s full-factorial order over (x, y).
+
+**Evaluation** (`UniversalPlotEngine.Evaluate`). Each point is a copy of the optics record with
+the value written in; the caller's record is not changed. The point is evaluated by
+`MeritEvaluator` over `ProjectMeritConfigurations`, so multi-configuration pickups and then the
+lens's solves and pickups are evaluated again at each point, exactly as the local optimizer
+evaluates a trial design. An operand is evaluated alone, as a one-row merit function (as OPEV),
+starting in the current configuration; with Operand `Merit`, Line 0 is the merit function's value
+and Line k the value of row k. Control operands and math operands that read other rows are
+refused (help: DIFF and SUMM "have no meaning" alone). The universal plots, unlike other analyses,
+receive the whole record with its table (`UniversalPlotAnalysisBase`), so configuration cells can
+be swept. Points run in parallel, each into its own slot, the evaluator single-threaded inside a
+point: the result is the same bits at any thread count.
+
+**Failed points.** A point fails, with the evaluator's reason, when its row fails (a ray that
+misses, TIR, a solve that fails, a configuration that cannot be built), when Merit's Line 0 has a
+counted row that failed (the penalised value would be a made-up number), when the row was skipped,
+or when the swept value makes system data invalid that was valid before (the configurations read
+system data unchecked). A failed point is never given a number: it is NaN in the plot (a gap in
+the line; no data in the map, which both plot kinds draw as blank), "failed" in the table, and
+listed under "Failed points" with its parameter values. When no point can be computed the analysis
+fails, naming each point (up to 20). OpticStudio stops at the first failure instead (§10 item 61).
+
+**Results.** 1D: a `LinePlot` of the operand against the variable and a table of every point. 2D:
+an `AnalysisMapPlot`, false colour or contours, its columns in increasing x and rows in increasing y
+whichever way the sweep ran, and a table with a row per y value. The 2D min and max plot scale set
+the colour scale of the false-colour map (0 is automatic) and have no effect on contours, as the
+help says.
+
+**Not built:** non-sequential data; the surface plot and grey-scale displays; the contour format
+string (contours are evenly spaced); the 1D min and max plot value (the line plot sets its own
+scale); the UPL and UP2 settings files; altering a multi-configuration row that overrides the swept
+value (refused instead). Readings in §10 item 61.

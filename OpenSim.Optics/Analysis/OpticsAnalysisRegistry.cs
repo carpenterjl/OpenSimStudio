@@ -169,6 +169,10 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new EfficiencyVsAngleAnalysis());
         registry.Register(new EfficiencyVsWavelengthAnalysis());
         registry.Register(new GratingEfficiencyAnalysis());
+
+        // OP-45: Universal Plot 1D and 2D (any registered operand against one or two swept parameters).
+        registry.Register(new UniversalPlot.UniversalPlot1DAnalysis());
+        registry.Register(new UniversalPlot.UniversalPlot2DAnalysis());
         return registry;
     }
 }

@@ -2176,6 +2176,47 @@ loaded row with such a code becomes OOFF. The same message answers SETOPERAND in
 OPEV evaluates any operand listed here by its OCOD number. (The Zemax lens file import reads no
 merit rows: it refuses them all, so it never meets an operand code.)
 
+## Universal plots
+
+**Universal plot 1D** and **Universal plot 2D** (category Universal plot) plot any operand of the
+Merit Function Editor's catalogue while one or two values of the system step from a start to a
+stop value: for example the focal length (EFFL) against a radius, or a real ray coordinate (REAY)
+over two thicknesses.
+
+- **Independent variable** (X and Y in 2D): the Category (Surface, System or Configuration), the
+  Parameter, the Surface number and a Number, then Start value, Stop value and # of steps (both
+  ends included, at least 2). Surface data is Radius (0 is a plane), Curvature, Thickness, Conic
+  or Parameter (Number = the parameter column). System data is ApertureValue, ApodizationFactor,
+  Temperature, Pressure, FieldX, FieldY, FieldWeight, the vignetting factors FieldDecenterX,
+  FieldDecenterY, FieldCompressionX, FieldCompressionY and FieldTilt (Number = the field), and
+  Wavelength or WavelengthWeight (Number = the wavelength). Configuration data is the parameter
+  Operand: row Number of the Multi-Configuration Editor in configuration Surface.
+- **Operand**: a four-letter code with its Int1, Int2 and Data1 to Data6 as the Merit Function
+  Editor would hold them (Hx, Hy, Px, Py are in Data1 to Data4 for the ray operands), or `Merit`
+  with Line 0 for the merit function's value or Line k for row k's value. Math operands such as
+  DIFF have no value alone: use Merit and the row's Line.
+- **2D display**: Show as FalseColor or Contour; Min and Max plot scale fix the colour scale of
+  the false-colour map (0 = automatic).
+
+Each point is computed on a copy of the system: your lens is not changed. Solves and pickups are
+worked out again at every point, as the optimizer does, so a solved back focus follows the swept
+radius. The operand is evaluated in the current configuration.
+
+A point whose value cannot be computed (a ray that misses or is totally internally reflected, a
+solve that fails, a wavelength made invalid) is a gap in the plot, "failed" in the table, and listed
+under Failed points with its parameter value and the reason. The analysis stops with an error only
+when no point can be computed; OpticStudio stops at the first failure.
+
+Refused by name: non-sequential data; a cell driven by a solve or pickup; a value that a
+multi-configuration row overwrites (sweep that row instead: the message names it; OpticStudio
+edits the row for you); two axes that write the same cell. `opensim optics analyse --analysis
+UniversalPlot1D --set "Parameter=Radius;Surface=1;Start=20;Stop=200;Steps=10;Operand=EFFL;Int2=1"`
+runs it from the command line.
+
+**Not built:** non-sequential data, the surface plot and grey-scale displays, the contour format
+string, the 1D plot's min and max value, and the UPL and UP2 settings files. Nothing has been
+compared with OpticStudio's output. Details: Optics-Conventions.md section 65.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
