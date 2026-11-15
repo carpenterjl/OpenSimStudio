@@ -1011,8 +1011,8 @@ over configurations, True Color and the coherent line/edge spread.
 
 ## RMS against field, wavelength and focus
 
-Four analyses in the RMS group plot the RMS wavefront error (waves) or the RMS spot radius,
-x or y (µm):
+Four analyses in the RMS group plot the RMS wavefront error (waves), the RMS spot radius,
+x or y (µm), or the Strehl ratio:
 
 - **RMS vs field**: at evenly spaced fields from the axis to the largest defined field in one
   direction (+y, +x, −y, −x), one curve per wavelength and a polychromatic curve (or only one
@@ -1031,10 +1031,18 @@ whole pupil is traced: where an aperture clips a ray, the point is left blank an
 listed. Use the **rectangular array** (ray density = rays across a square grid) for a vignetted
 pupil; it leaves clipped rays out and counts them. Refer to chief ray removes the wavefront's
 piston (spot: about the chief ray); centroid also removes its tilt (spot: about the centroid).
-Show diffraction limit draws 0.072 waves, or 1.22 λ times the on-axis working F/# for a spot.
-Definitions are in docs/Optics-Conventions.md §34.
+Show diffraction limit draws 0.072 waves, 0.8 for the Strehl ratio, or 1.22 λ times the
+on-axis working F/# for a spot.
 
-Not built: Strehl ratio (it will come with the PSF analyses), Plot Scale, Use Polarization,
+The **Strehl ratio** is the one the Strehl ratio analysis computes (the FFT PSF's peak over the
+unaberrated peak), at each sampled field, wavelength or focus; *PSF sampling* sets its pupil
+grid (16 to 1024, default 64). Method, ray density and Refer to do not change it. The
+polychromatic curve uses the polychromatic FFT PSF (OpticStudio's RMS plots offer the Strehl
+ratio for one wavelength only). Sampling warnings such as aliasing are listed under the table
+with the point they belong to; raise the PSF sampling when one appears. Definitions are in
+docs/Optics-Conventions.md §34.
+
+Not built: Plot Scale, Use Polarization,
 the field map at intermediate surfaces, and afocal systems (refused).
 
 ## Optimization
@@ -1141,8 +1149,7 @@ Not built yet, and not to be relied on until they appear in this guide:
 
 - the non-sequential object editor;
 - layouts with traced rays, and the analysis windows not described above (MTF, the Contrast
-  Loss Map, encircled energy and the rest; the Configuration Matrix Spot; Strehl ratio in the
-  RMS analyses);
+  Loss Map, encircled energy and the rest; the Configuration Matrix Spot);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);

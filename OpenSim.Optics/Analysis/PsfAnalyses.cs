@@ -264,6 +264,19 @@ internal static class PsfRuns
         IgnoreApertures = !checkApertures, AllowOpdLimitations = allow,
     };
 
+    /// <summary>The polychromatic Strehl ratio of the Strehl ratio analysis (also used by OP-40's
+    /// RMS analyses): the peak of <see cref="PsfEngine.FftPolychromatic"/> on the shortest
+    /// wavelength's FFT grid, refined off the grid by <see cref="PsfEngine.RefinePeak"/> on the
+    /// same combination (<see cref="PsfEngine.Combine"/>) sampled anywhere.</summary>
+    public static double PolychromaticStrehl(IReadOnlyList<PupilFunction> pupils, IReadOnlyList<double> weights, int? maxDegreeOfParallelism,
+        CancellationToken cancellation)
+    {
+        var image = PsfEngine.FftPolychromatic(pupils, weights, PsfEngine.DefaultPadding, 0, maxDegreeOfParallelism, cancellation);
+        var lambdas = pupils.Select(p => p.Wavelength).ToArray();
+        return PsfEngine.RefinePeak(image, (x, y) =>
+            PsfEngine.Combine(lambdas, weights, i => PsfEngine.Sample(pupils[i], x, y, maxDegreeOfParallelism, cancellation), x, y).Intensity).Value;
+    }
+
     /// <summary>The FFT PSF of one field at the given wavelength rows (more than one:
     /// polychromatic), on the FFT's own grid or at a chosen spacing.</summary>
     public static PsfRun Fft(SequentialLens lens, OpticalSystemData system, int field, IReadOnlyList<int> waves, int sampling,
@@ -789,9 +802,7 @@ public sealed class StrehlRatioAnalysis : WavefrontAnalysisBase<StrehlRatioSetti
             if (poly)
             {
                 var weights = waves.Select(w => system.Wavelengths.Wavelengths[w].Weight).ToArray();
-                var image = PsfEngine.FftPolychromatic(pupils, weights, PsfEngine.DefaultPadding, 0, null, cancellation);
-                var lambdas = pupils.Select(p => p.Wavelength).ToArray();
-                double strehl = PsfEngine.RefinePeak(image, (x, y) => PsfEngine.Combine(lambdas, weights, i => PsfEngine.Sample(pupils[i], x, y, null, cancellation), x, y).Intensity).Value;
+                double strehl = PsfRuns.PolychromaticStrehl(pupils, weights, null, cancellation);
                 rows.Add(new[] { $"{f + 1}", "polychromatic", W(strehl), "", "" });
                 polyCurve.X.Add(f + 1); polyCurve.Y.Add(strehl);
             }

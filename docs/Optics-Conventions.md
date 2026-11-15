@@ -814,6 +814,11 @@ single place in the code, so a correction is one line and its test.
     - *Remove Vignetting Factors* replaces the factors with surface apertures, as in OP-37.
     - *Field Map automatic size*: a field size of 0 means the largest radial defined field; the
       help gives no default.
+    - *Strehl ratio*: the help computes it "using the method described in "Strehl ratio
+      approximation"", a section not in the online help; the PSF-peak ratio of its "Strehl
+      Ratio" page (OP-38's engine) is used instead, at a PSF sampling of the program's choosing.
+      The help says it "is only available for monochromatic calculations"; here a
+      polychromatic curve uses OP-38's polychromatic FFT PSF.
     Check: RMS vs Field (wavefront and spot, chief and centroid, GQ and RA), RMS vs Focus and
     RMS vs Wavelength of a singlet at two fields and three wavelengths against OpticStudio's
     text output.
@@ -2757,13 +2762,22 @@ Limited", saved under `plans/sources/optics/op-40-help/`.
   against wavelength for RMS vs Wavelength); wavefront, 0.072 waves.
 - **Peak to valley** (Field Map, rectangular array, one wavelength): max − min of the residual
   OPD after the reference's piston (and tilt) removal.
+- **Strehl ratio** (all four analyses; `RmsCore.EvaluateStrehl`). OP-38's PSF-peak ratio (§33),
+  computed as the Strehl ratio analysis computes it, at the point's appended field, wavelength
+  and focus: `PsfEngine.BuildPupil` on an n × n pupil (setting "PSF sampling", 16 to 1024,
+  default 64, OP-38's default; apertures checked; OPD against the exit-pupil sphere on the chief
+  ray), then `PsfEngine.Strehl` for one wavelength or `PsfRuns.PolychromaticStrehl` (OP-38's
+  polychromatic FFT PSF: every wavelength referred to the primary wavelength's chief ray, weight
+  × (λ_min/λ)², the peak refined off the grid) for several. The quadrature rule and Refer to do
+  not apply (the peak is searched for wherever it lies). A failed ray carries no light, so the
+  point keeps a value; the PSF sampling check, the pupil's warnings and a ratio below 0.1 are
+  listed in the result, each naming the point. Diffraction limit 0.8 (help, "Show Diffraction
+  Limit": "For Strehl ratio, 0.8 is used").
 - **Determinism.** The sample points are evaluated one per `ParallelSlots` slot, each tracing
   with one thread, so the result is bitwise the same at any degree of parallelism.
 - **Afocal image space** is refused (the help's afocal forms in diopters are not built).
 
-**Not built.** Strehl ratio: the help computes it "using the method described in "Strehl ratio
-approximation"", a section not found in the online help (its "Strehl Ratio" page describes the
-PSF peak ratio), so it waits for OP-38's PSF Strehl. Plot Scale; Use Polarization; the Field
+**Not built.** Plot Scale; Use Polarization; the Field
 Map's Surface setting (image surface only); OpticStudio's halving of arms for symmetric systems;
 afocal units.
 

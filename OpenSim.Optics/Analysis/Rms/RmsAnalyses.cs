@@ -27,8 +27,12 @@ public sealed record RmsVsFieldSettings
     public int FieldDensity { get; init; } = 20;
 
     [DisplayName("Data")]
-    [Description("RMS wavefront error or RMS spot radius, x or y.")]
+    [Description("RMS wavefront error, RMS spot radius, x or y, or the Strehl ratio.")]
     public RmsData Data { get; init; } = RmsData.WavefrontError;
+
+    [DisplayName("PSF sampling")]
+    [Description("Strehl ratio only: an n × n grid of pupil nodes, zero-padded to 2n × 2n (as the Strehl ratio analysis); 16 to 1024.")]
+    public int PsfSampling { get; init; } = RmsCore.DefaultPsfSampling;
 
     [DisplayName("Refer to")]
     [Description("Chief ray (piston removed) or centroid (piston and tilt removed).")]
@@ -51,7 +55,7 @@ public sealed record RmsVsFieldSettings
     public bool UseDashes { get; init; }
 
     [DisplayName("Show diffraction limit")]
-    [Description("Spot: 1.22 λ times the on-axis working F/#. Wavefront: 0.072 waves.")]
+    [Description("Spot: 1.22 λ times the on-axis working F/#. Wavefront: 0.072 waves. Strehl ratio: 0.8.")]
     public bool ShowDiffractionLimit { get; init; }
 
     [DisplayName("Remove vignetting factors")]
@@ -75,8 +79,12 @@ public sealed record RmsVsWavelengthSettings
     public int WaveDensity { get; init; } = 20;
 
     [DisplayName("Data")]
-    [Description("RMS wavefront error or RMS spot radius, x or y.")]
+    [Description("RMS wavefront error, RMS spot radius, x or y, or the Strehl ratio.")]
     public RmsData Data { get; init; } = RmsData.WavefrontError;
+
+    [DisplayName("PSF sampling")]
+    [Description("Strehl ratio only: an n × n grid of pupil nodes, zero-padded to 2n × 2n (as the Strehl ratio analysis); 16 to 1024.")]
+    public int PsfSampling { get; init; } = RmsCore.DefaultPsfSampling;
 
     [DisplayName("Refer to")]
     [Description("Chief ray (piston removed) or centroid (piston and tilt removed).")]
@@ -91,7 +99,7 @@ public sealed record RmsVsWavelengthSettings
     public bool UseDashes { get; init; }
 
     [DisplayName("Show diffraction limit")]
-    [Description("Spot: 1.22 λ times the on-axis working F/# at each wavelength. Wavefront: 0.072 waves.")]
+    [Description("Spot: 1.22 λ times the on-axis working F/# at each wavelength. Wavefront: 0.072 waves. Strehl ratio: 0.8.")]
     public bool ShowDiffractionLimit { get; init; }
 }
 
@@ -111,8 +119,12 @@ public sealed record RmsVsFocusSettings
     public int FocusDensity { get; init; } = 21;
 
     [DisplayName("Data")]
-    [Description("RMS wavefront error or RMS spot radius, x or y.")]
+    [Description("RMS wavefront error, RMS spot radius, x or y, or the Strehl ratio.")]
     public RmsData Data { get; init; } = RmsData.WavefrontError;
+
+    [DisplayName("PSF sampling")]
+    [Description("Strehl ratio only: an n × n grid of pupil nodes, zero-padded to 2n × 2n (as the Strehl ratio analysis); 16 to 1024.")]
+    public int PsfSampling { get; init; } = RmsCore.DefaultPsfSampling;
 
     [DisplayName("Refer to")]
     [Description("Chief ray (piston removed) or centroid (piston and tilt removed).")]
@@ -139,7 +151,7 @@ public sealed record RmsVsFocusSettings
     public bool UseDashes { get; init; }
 
     [DisplayName("Show diffraction limit")]
-    [Description("Spot: 1.22 λ times the on-axis working F/# (primary wavelength when polychromatic). Wavefront: 0.072 waves.")]
+    [Description("Spot: 1.22 λ times the on-axis working F/# (primary wavelength when polychromatic). Wavefront: 0.072 waves. Strehl ratio: 0.8.")]
     public bool ShowDiffractionLimit { get; init; }
 }
 
@@ -155,8 +167,12 @@ public sealed record RmsFieldMapSettings
     public int RayDensity { get; init; } = 6;
 
     [DisplayName("Data")]
-    [Description("RMS wavefront error, RMS spot radius, x or y, or (rectangular array, one wavelength) the wavefront's peak to valley.")]
+    [Description("RMS wavefront error, RMS spot radius, x or y, the Strehl ratio, or (rectangular array, one wavelength) the wavefront's peak to valley.")]
     public RmsMapData Data { get; init; } = RmsMapData.WavefrontError;
+
+    [DisplayName("PSF sampling")]
+    [Description("Strehl ratio only: an n × n grid of pupil nodes, zero-padded to 2n × 2n (as the Strehl ratio analysis); 16 to 1024.")]
+    public int PsfSampling { get; init; } = RmsCore.DefaultPsfSampling;
 
     [DisplayName("Wavelength")]
     [Description("Row of the wavelength table, 1 for the first; 0 for the polychromatic RMS over every wavelength.")]
@@ -243,6 +259,7 @@ internal static class RmsPresentation
         int nc = curveNames.Count, nx = x.Count;
         var rows = new List<IReadOnlyList<string>>();
         var failures = new List<string>();
+        var warnings = new List<string>();
         var plotted = new List<AnalysisCurve>();
         for (int i = 0; i < nx; i++)
         {
@@ -260,14 +277,15 @@ internal static class RmsPresentation
                 y[i] = v.Succeeded ? RmsCore.Shown(q, v.Value) : double.NaN;
                 if (!v.Succeeded) failures.Add($"{curveNames[c]}: {v.Failure}");
                 else if (v.RayFailures.Count > 0) failures.Add($"{curveNames[c]}, {StudyReport.Number(x[i], "g6")}: {v.Launched - v.Used} of {v.Launched} rays left out ({string.Join("; ", v.RayFailures)}).");
+                warnings.AddRange(v.Warnings.Select(w => "Warning: " + w));
             }
             plotted.Add(new AnalysisCurve(curveNames[c], x, y, dashes && c % 2 == 1));
         }
         var headers = new List<string> { xLabel };
-        headers.AddRange(curveNames.Select(n => $"{n} ({RmsCore.Unit(q)})"));
+        headers.AddRange(curveNames.Select(n => n + RmsCore.UnitSuffix(q)));
         if (diffractionCurve is not null)
         {
-            headers.Add($"Diffraction limit ({RmsCore.Unit(q)})");
+            headers.Add("Diffraction limit" + RmsCore.UnitSuffix(q));
             plotted.Add(new AnalysisCurve("Diffraction limit", x, diffractionCurve, true));
         }
         else if (double.IsFinite(diffractionLimit))
@@ -275,8 +293,10 @@ internal static class RmsPresentation
             plotted.Add(new AnalysisCurve("Diffraction limit", new[] { x[0], x[^1] }, new[] { diffractionLimit, diffractionLimit }, true));
         }
         var allPairs = pairs.ToList();
-        if (double.IsFinite(diffractionLimit)) allPairs.Add(("Diffraction limit", $"{StudyReport.Number(diffractionLimit, "g6")} {RmsCore.Unit(q)}"));
-        if (failures.Count == 0) failures.Add("Every point has a value and every ray launched gave one.");
+        if (double.IsFinite(diffractionLimit)) allPairs.Add(("Diffraction limit", RmsCore.WithUnit(q, diffractionLimit, "g6")));
+        if (failures.Count == 0) failures.Add(NoFailures(q));
+        failures.AddRange(warnings);
+        assumptions.AddRange(warnings);
         var sections = new[]
         {
             new ReportSection(title) { Pairs = allPairs, TableHeaders = headers, TableRows = rows, Lines = failures },
@@ -287,18 +307,25 @@ internal static class RmsPresentation
         });
     }
 
+    /// <summary>The line under the table when nothing failed.</summary>
+    public static string NoFailures(RmsQuantity q) => q == RmsQuantity.Strehl
+        ? "Every point has a value."
+        : "Every point has a value and every ray launched gave one.";
+
     /// <summary>The diffraction limit line of a quantity at one wavelength (shown units), or NaN when not asked.</summary>
     public static double DiffractionLimit(bool show, RmsSetup setup, RmsQuantity q, int row, List<string> notes)
     {
         if (!show) return double.NaN;
-        if (!RmsCore.IsSpot(q)) return RmsCore.WavefrontDiffractionLimitWaves;
+        if (!RmsCore.IsSpot(q)) return RmsCore.FlatDiffractionLimit(q);
         return RmsCore.Shown(q, RmsCore.SpotDiffractionLimit(setup, row, null, notes));
     }
 
     public static string DiffractionAssumption(bool show, RmsQuantity q) => !show ? "No diffraction limit drawn."
         : RmsCore.IsSpot(q)
             ? "Diffraction limit (help, \"Show Diffraction Limit\"): 1.22 times the working F/# on axis times the wavelength (primary when polychromatic), the change of F/# with field ignored; an approximate indicator only."
-            : "Diffraction limit (help, \"Show Diffraction Limit\"): 0.072 waves; an approximate indicator only.";
+            : q == RmsQuantity.Strehl
+                ? "Diffraction limit (help, \"Show Diffraction Limit\"): a Strehl ratio of 0.8; an approximate indicator only."
+                : "Diffraction limit (help, \"Show Diffraction Limit\"): 0.072 waves; an approximate indicator only.";
 }
 
 /// <summary>OpticStudio's RMS vs. Field (OP-40): the RMS wavefront error or spot radius at
@@ -329,6 +356,7 @@ public sealed class RmsVsFieldAnalysis : OpticsAnalysis<RmsVsFieldSettings>
         FieldScanCommon.CheckCount(settings.FieldDensity, 2, 100, who, "field density");
         var rule = RmsCore.Rule(settings.Method, settings.RayDensity, who);
         var q = RmsCore.Quantity(settings.Data);
+        RmsCore.CheckPsfSampling(q, settings.PsfSampling, who);
         var curves = RmsPresentation.WavelengthCurves(system, settings.Wavelength, settings.Curves, who);
         var setup = RmsCore.Prepare(lens, system, settings.RemoveVignettingFactors, who, notes, cancellation);
 
@@ -349,7 +377,7 @@ public sealed class RmsVsFieldAnalysis : OpticsAnalysis<RmsVsFieldSettings>
                     Label = $"{name}, {RmsPresentation.FieldText(setup, fx, fy)}",
                 });
             }
-        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation, MaxDegreeOfParallelism);
+        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation, MaxDegreeOfParallelism, settings.PsfSampling);
         var grid = new RmsValue[curves.Count, h.Length];
         for (int c = 0; c < curves.Count; c++) for (int i = 0; i < h.Length; i++) grid[c, i] = values[c * h.Length + i];
 
@@ -358,7 +386,7 @@ public sealed class RmsVsFieldAnalysis : OpticsAnalysis<RmsVsFieldSettings>
         string axis = FieldScans.AlongX(settings.Scan) ? "X" : "Y";
         string xLabel = $"{FieldScans.Label(settings.Scan)} field ({setup.FieldUnit})";
         var x = h.Select(v => setup.FieldShown(v * extent)).ToArray();
-        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule);
+        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule, settings.PsfSampling);
         assumptions.Add($"Fields from the axis to {StudyReport.Number(setup.FieldShown(extent), "g6")} {setup.FieldUnit} along {FieldScans.Label(settings.Scan)} ({axis}), the largest defined field in that direction; {h.Length} points, joined by straight lines.");
         assumptions.Add(RmsPresentation.DiffractionAssumption(settings.ShowDiffractionLimit, q));
         assumptions.AddRange(setup.Launcher.Notes);
@@ -378,6 +406,9 @@ public sealed class RmsVsWavelengthAnalysis : OpticsAnalysis<RmsVsWavelengthSett
     public RmsVsWavelengthAnalysis(Func<OpticsAnalysisContext, SequentialLens?>? lensSource = null) =>
         _lensSource = lensSource ?? ProjectLens.Sequential;
 
+    /// <summary>The thread limit of the evaluation (null: none); the result is the same bits at any value.</summary>
+    internal int? MaxDegreeOfParallelism { get; init; }
+
     public override string Id => SavedId;
     public override string Name => "RMS vs wavelength";
     public override string Category => "RMS";
@@ -392,6 +423,7 @@ public sealed class RmsVsWavelengthAnalysis : OpticsAnalysis<RmsVsWavelengthSett
         FieldScanCommon.CheckCount(settings.WaveDensity, 2, 100, who, "wave density");
         var rule = RmsCore.Rule(settings.Method, settings.RayDensity, who);
         var q = RmsCore.Quantity(settings.Data);
+        RmsCore.CheckPsfSampling(q, settings.PsfSampling, who);
         var fields = RmsPresentation.FieldRows(system, settings.Field, who);
         var setup = RmsCore.Prepare(lens, system, removeVignettingFactors: false, who, notes, cancellation);
 
@@ -413,7 +445,7 @@ public sealed class RmsVsWavelengthAnalysis : OpticsAnalysis<RmsVsWavelengthSett
                     Label = $"{RmsPresentation.FieldRowLabel(setup, f)}, {RmsPresentation.Wave(setup.System, um)}",
                 });
             }
-        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation);
+        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation, MaxDegreeOfParallelism, settings.PsfSampling);
         var grid = new RmsValue[fields.Count, lambdas.Length];
         for (int c = 0; c < fields.Count; c++) for (int i = 0; i < lambdas.Length; i++) grid[c, i] = values[c * lambdas.Length + i];
 
@@ -423,9 +455,9 @@ public sealed class RmsVsWavelengthAnalysis : OpticsAnalysis<RmsVsWavelengthSett
         {
             if (RmsCore.IsSpot(q))
                 limitCurve = lambdas.Select(um => RmsCore.Shown(q, RmsCore.SpotDiffractionLimit(setup, null, um, notes))).ToArray();
-            else limit = RmsCore.WavefrontDiffractionLimitWaves;
+            else limit = RmsCore.FlatDiffractionLimit(q);
         }
-        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule);
+        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule, settings.PsfSampling);
         assumptions.Add($"Wavelengths from {StudyReport.Number(low, "g6")} to {StudyReport.Number(high, "g6")} µm (the table's shortest and longest, in the system's air), {lambdas.Length} points; each is monochromatic, referred to its own chief ray.");
         assumptions.Add(RmsPresentation.DiffractionAssumption(settings.ShowDiffractionLimit, q)
             + (settings.ShowDiffractionLimit && RmsCore.IsSpot(q) ? " Here at each wavelength, a curve." : ""));
@@ -447,6 +479,9 @@ public sealed class RmsVsFocusAnalysis : OpticsAnalysis<RmsVsFocusSettings>
     public RmsVsFocusAnalysis(Func<OpticsAnalysisContext, SequentialLens?>? lensSource = null) =>
         _lensSource = lensSource ?? ProjectLens.Sequential;
 
+    /// <summary>The thread limit of the evaluation (null: none); the result is the same bits at any value.</summary>
+    internal int? MaxDegreeOfParallelism { get; init; }
+
     public override string Id => SavedId;
     public override string Name => "RMS vs focus";
     public override string Category => "RMS";
@@ -463,6 +498,7 @@ public sealed class RmsVsFocusAnalysis : OpticsAnalysis<RmsVsFocusSettings>
             throw new ArgumentException($"{who}: the max focus must be a number above the min focus (they are {settings.MinFocus} and {settings.MaxFocus}).");
         var rule = RmsCore.Rule(settings.Method, settings.RayDensity, who);
         var q = RmsCore.Quantity(settings.Data);
+        RmsCore.CheckPsfSampling(q, settings.PsfSampling, who);
         var fields = RmsPresentation.FieldRows(system, settings.Field, who);
         var rows = FieldScanCommon.Rows(settings.Wavelength, system, who, zeroIsAll: true);
         bool poly = settings.Wavelength == 0 && rows.Length > 1;
@@ -483,13 +519,13 @@ public sealed class RmsVsFocusAnalysis : OpticsAnalysis<RmsVsFocusSettings>
                     Label = $"{RmsPresentation.FieldRowLabel(setup, f)}, {waveText}, focus {StudyReport.Number(z, "g6")} {ParaxialReport.UnitName(unit)}",
                 });
             }
-        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation);
+        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation, MaxDegreeOfParallelism, settings.PsfSampling);
         var grid = new RmsValue[fields.Count, focus.Length];
         for (int c = 0; c < fields.Count; c++) for (int i = 0; i < focus.Length; i++) grid[c, i] = values[c * focus.Length + i];
 
         int limitRow = poly ? setup.System.Wavelengths.PrimaryIndex : rows[0];
         double limit = RmsPresentation.DiffractionLimit(settings.ShowDiffractionLimit, setup, q, limitRow, notes);
-        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule);
+        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule, settings.PsfSampling);
         assumptions.Add($"Focus shifts from {StudyReport.Number(settings.MinFocus, "g6")} to {StudyReport.Number(settings.MaxFocus, "g6")} {ParaxialReport.UnitName(unit)}, {focus.Length} points, each added to the thickness of surface {setup.Lens.LastSurfaceIndex} (the surface before the image), as the help says; with an odd number of mirrors that thickness is negative, so a negative shift moves the image away from the last surface.");
         assumptions.Add($"Wavelength: {waveText}.");
         assumptions.Add(RmsPresentation.DiffractionAssumption(settings.ShowDiffractionLimit, q));
@@ -510,6 +546,9 @@ public sealed class RmsFieldMapAnalysis : OpticsAnalysis<RmsFieldMapSettings>
 
     public RmsFieldMapAnalysis(Func<OpticsAnalysisContext, SequentialLens?>? lensSource = null) =>
         _lensSource = lensSource ?? ProjectLens.Sequential;
+
+    /// <summary>The thread limit of the evaluation (null: none); the result is the same bits at any value.</summary>
+    internal int? MaxDegreeOfParallelism { get; init; }
 
     public override string Id => SavedId;
     public override string Name => "RMS field map";
@@ -533,8 +572,10 @@ public sealed class RmsFieldMapAnalysis : OpticsAnalysis<RmsFieldMapSettings>
             RmsMapData.SpotX => RmsQuantity.SpotX,
             RmsMapData.SpotY => RmsQuantity.SpotY,
             RmsMapData.WavefrontPeakToValley => RmsQuantity.WavefrontPeakToValley,
+            RmsMapData.StrehlRatio => RmsQuantity.Strehl,
             _ => throw new ArgumentOutOfRangeException(nameof(settings), settings.Data, "Unknown RMS map data."),
         };
+        RmsCore.CheckPsfSampling(q, settings.PsfSampling, who);
         if (q == RmsQuantity.WavefrontPeakToValley)
         {
             // The help: "If the method selected is rectangular array, then a rough estimate of the
@@ -569,10 +610,11 @@ public sealed class RmsFieldMapAnalysis : OpticsAnalysis<RmsFieldMapSettings>
                     FieldX = X(c), FieldY = Y(r), Rows = rows, Polychromatic = poly,
                     Label = $"{RmsPresentation.FieldText(setup, X(c), Y(r))}, {waveText}",
                 });
-        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation);
+        var values = RmsCore.EvaluateAll(setup, points, q, settings.Reference, rule, cancellation, MaxDegreeOfParallelism, settings.PsfSampling);
 
         var map = new double[ny, nx];
         var failures = new List<string>();
+        var warnings = new List<string>();
         var tableRows = new List<IReadOnlyList<string>>();
         for (int r = ny - 1; r >= 0; r--)
         {
@@ -584,11 +626,13 @@ public sealed class RmsFieldMapAnalysis : OpticsAnalysis<RmsFieldMapSettings>
                 line.Add(RmsCore.Text(q, v));
                 if (!v.Succeeded) failures.Add(v.Failure!);
                 else if (v.RayFailures.Count > 0) failures.Add($"{points[r * nx + c].Label}: {v.Launched - v.Used} of {v.Launched} rays left out ({string.Join("; ", v.RayFailures)}).");
+                warnings.AddRange(v.Warnings.Select(w => "Warning: " + w));
             }
             tableRows.Add(line);
         }
         var finite = values.Where(v => v.Succeeded).Select(v => RmsCore.Shown(q, v.Value)).ToArray();
-        if (failures.Count == 0) failures.Add("Every point has a value and every ray launched gave one.");
+        if (failures.Count == 0) failures.Add(RmsPresentation.NoFailures(q));
+        failures.AddRange(warnings);
         string u = setup.FieldUnit == "°" ? "°" : setup.FieldUnit;
         var headers = new List<string> { $"Y \\ X field ({u})" };
         headers.AddRange(Enumerable.Range(0, nx).Select(c => StudyReport.Number(setup.FieldShown(X(c)), "g6")));
@@ -600,14 +644,14 @@ public sealed class RmsFieldMapAnalysis : OpticsAnalysis<RmsFieldMapSettings>
         };
         if (finite.Length > 0)
         {
-            pairs.Add(("Minimum", $"{StudyReport.Number(finite.Min(), "g8")} {RmsCore.Unit(q)}"));
-            pairs.Add(("Maximum", $"{StudyReport.Number(finite.Max(), "g8")} {RmsCore.Unit(q)}"));
+            pairs.Add(("Minimum", RmsCore.WithUnit(q, finite.Min())));
+            pairs.Add(("Maximum", RmsCore.WithUnit(q, finite.Max())));
         }
         var sections = new[]
         {
             new ReportSection($"{RmsCore.AxisLabel(q)} over the field") { Pairs = pairs, TableHeaders = headers, TableRows = tableRows, Lines = failures },
         };
-        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule);
+        var assumptions = RmsCore.Assumptions(setup, q, settings.Reference, rule, settings.PsfSampling);
         assumptions.Add($"Field grid {nx} × {ny} centred on field {settings.Field}, half-widths {StudyReport.Number(setup.FieldShown(hwx), "g6")} and {StudyReport.Number(setup.FieldShown(hwy), "g6")} {setup.FieldUnit}"
             + (settings.XFieldSize > 0 && settings.YFieldSize > 0 ? "." : " (an automatic half-width is the largest radial defined field)."));
         if (q == RmsQuantity.WavefrontPeakToValley)
@@ -615,11 +659,12 @@ public sealed class RmsFieldMapAnalysis : OpticsAnalysis<RmsFieldMapSettings>
         assumptions.Add("Evaluated at the image surface only (the help's Surface setting, for intermediate images, is not built).");
         assumptions.AddRange(setup.Launcher.Notes);
         assumptions.AddRange(notes);
+        assumptions.AddRange(warnings);
         var plots = new List<AnalysisPlot>();
         if (finite.Length > 0)
             plots.Add(new AnalysisMapPlot($"{RmsCore.AxisLabel(q)}, {waveText}", $"X field ({u})", $"Y field ({u})",
                 new GridField(map, setup.FieldShown(X(0)), setup.FieldShown(X(nx - 1)), setup.FieldShown(Y(0)), setup.FieldShown(Y(ny - 1))),
-                RmsCore.Unit(q)) { Style = settings.ShowAs });
+                q == RmsQuantity.Strehl ? "Strehl ratio" : RmsCore.Unit(q)) { Style = settings.ShowAs });
         return OpticsAnalysisResult.FromSections(Name, sections, assumptions, plots);
     }
 }

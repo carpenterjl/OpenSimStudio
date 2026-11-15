@@ -244,6 +244,102 @@ public sealed class RmsAnalysisTests
         Assert.Throws<InvalidOperationException>(() => new RmsVsFieldAnalysis(_ => lens).Compute(afocal, new RmsVsFieldSettings(), default));
     }
 
+    // ---- The Strehl ratio (OP-38's PSF engine) ----
+
+    // A paraboloid (k = −1, R < 0) on axis sends every axial ray through its focus at R/2 with
+    // equal path (PsfAnalysisTests, RealRayTraceTests); the image surface is placed there.
+    private static SequentialLens Paraboloid() => Lens(new SequentialSurface
+    {
+        Curvature = OpticsConventions.CurvatureFromRadius(-0.2), Conic = -1, Thickness = -0.1,
+        Medium = ParaxialMedium.Constant(1), IsStop = true, IsMirror = true,
+    });
+
+    [Fact]
+    public void TheStrehlRatioAgainstField_AtADefinedField_IsOp38sStrehl()
+    {
+        // The scan's last point is the 1.5° field itself, traced as an appended field row; OP-38's
+        // engine at the table's own row (the default OPD options are the ones its Strehl analysis
+        // uses for one wavelength) and its Strehl ratio analysis give the same pupil and the same
+        // peak search. Expected bitwise; 1e-12 relative allows only the appended row's field
+        // normalisation to round differently.
+        var lens = Singlet();
+        var system = Sys(0.008, new[] { 0.0, 1.5 });
+        var context = Context(system);
+        var result = new RmsVsFieldAnalysis(_ => lens).Compute(context,
+            new RmsVsFieldSettings { Data = RmsData.StrehlRatio, PsfSampling = 32, FieldDensity = 2, Wavelength = 1 }, default);
+        var curve = Plot(result).Curves[0];
+        Assert.Equal("Strehl ratio", Plot(result).YLabel);
+
+        var pupil = PsfEngine.BuildPupil(lens, system, 1, 0, 32, new OpdOptions());
+        double engine = PsfEngine.Strehl(pupil);
+        Assert.True(Math.Abs(curve.Y[1] / engine - 1) <= 1e-12, $"RMS vs field {curve.Y[1]:R}, engine {engine:R}.");
+        var op38 = Plot(new StrehlRatioAnalysis(_ => lens).Compute(context, new StrehlRatioSettings { Sampling = 32, Wavelength = 1 }, default)).Curves[0];
+        Assert.True(Math.Abs(curve.Y[1] / op38.Y[1] - 1) <= 1e-12, $"RMS vs field {curve.Y[1]:R}, Strehl analysis {op38.Y[1]:R}.");
+
+        // The Maréchal expression 1 − (2πσ)² is a lower bound of the PSF-peak Strehl ratio, σ the
+        // amplitude-weighted RMS of the same pupil (derived in PsfGateTests,
+        // TheStrehlOfASmallZernikeTerm_LiesOnTheMarechalExpression_WithinItsDerivedBounds).
+        foreach (int f in new[] { 0, 1 })
+        {
+            double sigma = StrehlRatioAnalysis.WeightedRms(PsfEngine.BuildPupil(lens, system, f, 0, 32, new OpdOptions()));
+            double marechal = 1 - Math.Pow(2 * Math.PI * sigma, 2);
+            Assert.True(curve.Y[f] >= marechal - 1e-12 && curve.Y[f] <= 1 + 1e-12, $"field {f}: Strehl {curve.Y[f]:R}, Maréchal bound {marechal:R}.");
+        }
+    }
+
+    [Fact]
+    public void TheStrehlRatio_OfAParaboloidOnAxis_IsOne()
+    {
+        // Zero OPD: the PSF is the unaberrated one, so its peak over the unaberrated peak is 1 to
+        // the engine's rounding (the OP-38 gate allows 1e-12 for the same lens through PsfEngine).
+        var lens = Paraboloid();
+        var context = Context(Sys(0.01, new[] { 0.0, 0.1 }));
+        var result = new RmsVsFieldAnalysis(_ => lens).Compute(context,
+            new RmsVsFieldSettings { Data = RmsData.StrehlRatio, PsfSampling = 32, FieldDensity = 2 }, default);
+        Assert.True(Math.Abs(Plot(result).Curves[0].Y[0] - 1) <= 1e-12, $"Strehl {Plot(result).Curves[0].Y[0]:R}.");
+        Assert.Contains("Every point has a value.", result.Text);
+    }
+
+    [Fact]
+    public void TheStrehlRatio_IsBitwiseTheSame_AtAnyDegreeOfParallelism()
+    {
+        var lens = Singlet();
+        var context = Context(Sys(0.008, new[] { 0.0, 1.5 }, new[] { 0.5, 0.6 }));
+        var settings = new RmsVsFieldSettings { Data = RmsData.StrehlRatio, PsfSampling = 16, FieldDensity = 3 };
+        var serial = new RmsVsFieldAnalysis(_ => lens) { MaxDegreeOfParallelism = 1 }.Compute(context, settings, default);
+        var parallel = new RmsVsFieldAnalysis(_ => lens).Compute(context, settings, default);
+        var a = Plot(serial).Curves;
+        var b = Plot(parallel).Curves;
+        Assert.Equal(3, a.Count);   // two wavelengths and the polychromatic curve
+        for (int c = 0; c < a.Count; c++) Assert.Equal(a[c].Y, b[c].Y);
+        Assert.Equal(serial.Text, parallel.Text);
+
+        var mapSettings = new RmsFieldMapSettings { Data = RmsMapData.StrehlRatio, PsfSampling = 16, XFieldSampling = 2, YFieldSampling = 2, Field = 2, XFieldSize = 0.5, YFieldSize = 0.5 };
+        var mapSerial = new RmsFieldMapAnalysis(_ => lens) { MaxDegreeOfParallelism = 1 }.Compute(context, mapSettings, default);
+        var mapParallel = new RmsFieldMapAnalysis(_ => lens).Compute(context, mapSettings, default);
+        Assert.Equal(Assert.IsType<AnalysisMapPlot>(mapSerial.Plots[0]).Field.Values.Cast<double>(),
+            Assert.IsType<AnalysisMapPlot>(mapParallel.Plots[0]).Field.Values.Cast<double>());
+        Assert.All(Assert.IsType<AnalysisMapPlot>(mapSerial.Plots[0]).Field.Values.Cast<double>(), v => Assert.InRange(v, 0, 1 + 1e-12));
+    }
+
+    [Fact]
+    public void TheStrehlRatiosSamplingWarnings_ReachTheResult_NamingThePoint()
+    {
+        // A paraboloid 0.5 mm out of focus on a 16 × 16 pupil is aliased (PsfAnalysisTests,
+        // AnAliasedPsf_IsWarnedAbove_AndAnOversizedImageDeltaIsRefused, the same lens and
+        // sampling); the warning carries the point's label with its focus shift.
+        var lens = Paraboloid();
+        var context = Context(Sys(0.04, new[] { 0.0, 0.1 }));
+        var result = new RmsVsFocusAnalysis(_ => lens).Compute(context, new RmsVsFocusSettings
+        {
+            Data = RmsData.StrehlRatio, PsfSampling = 16, Field = 1, FocusDensity = 2, MinFocus = -0.5, MaxFocus = 0.5,
+        }, default);
+        var lines = result.Sections[0].Lines;
+        Assert.Contains(lines, l => l.StartsWith("Warning: Field 1", StringComparison.Ordinal) && l.Contains("focus -0.5", StringComparison.Ordinal) && l.Contains("ALIASED", StringComparison.Ordinal));
+        Assert.Contains(result.Assumptions, a => a.StartsWith("Warning: ", StringComparison.Ordinal) && a.Contains("ALIASED", StringComparison.Ordinal));
+        Assert.Throws<ArgumentException>(() => new RmsVsFocusAnalysis(_ => lens).Compute(context, new RmsVsFocusSettings { Data = RmsData.StrehlRatio, PsfSampling = 8 }, default));
+    }
+
     [Fact]
     public void ThePeakToValley_OnTheRectangularArray_IsAtLeastTheRms()
     {

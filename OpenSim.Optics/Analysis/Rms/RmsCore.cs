@@ -10,9 +10,7 @@ namespace OpenSim.Optics.Analysis;
 
 // OP-40: what the four RMS analyses share.
 
-/// <summary>What an RMS analysis plots (OpticStudio's "Data"). Strehl ratio is not built: the
-/// help computes it by a "Strehl ratio approximation" whose definition was not found in the help
-/// (docs/Optics-Conventions.md §34).</summary>
+/// <summary>What an RMS analysis plots (OpticStudio's "Data").</summary>
 public enum RmsData
 {
     /// <summary>RMS wavefront error, waves.</summary>
@@ -23,6 +21,9 @@ public enum RmsData
     SpotX = 2,
     /// <summary>RMS spot size in y, µm.</summary>
     SpotY = 3,
+    /// <summary>The Strehl ratio: the FFT PSF's peak over the unaberrated peak, by OP-38's engine
+    /// (<see cref="PsfEngine.Strehl"/>; docs/Optics-Conventions.md §33, §34).</summary>
+    StrehlRatio = 4,
 }
 
 /// <summary>What the RMS Field Map plots: the <see cref="RmsData"/> choices and, with the
@@ -36,6 +37,8 @@ public enum RmsMapData
     /// <summary>Peak to valley of the wavefront over the rectangular array's rays, waves (the
     /// help's "rough estimate of the PTV"); one wavelength only.</summary>
     WavefrontPeakToValley = 4,
+    /// <summary>The Strehl ratio, as <see cref="RmsData.StrehlRatio"/>.</summary>
+    StrehlRatio = 5,
 }
 
 /// <summary>The point an RMS is measured about (OpticStudio's "Refer To").</summary>
@@ -64,12 +67,19 @@ internal enum RmsQuantity
     SpotRadius,
     SpotX,
     SpotY,
+    /// <summary>The Strehl ratio by OP-38's PSF engine (not an RMS over the quadrature).</summary>
+    Strehl,
 }
 
-/// <summary>One RMS value (waves, or meters for a spot), or why there is none.</summary>
+/// <summary>One RMS value (waves, meters for a spot, a pure number for the Strehl ratio), or why
+/// there is none.</summary>
 internal sealed record RmsValue(double Value, string? Failure, int Launched, int Used, IReadOnlyList<string> RayFailures)
 {
     public bool Succeeded => Failure is null;
+
+    /// <summary>Warnings about the value, each naming the point (the Strehl ratio's PSF sampling
+    /// and validity warnings); empty for the RMS quantities.</summary>
+    public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>One point to evaluate: a field position in the field type's unit (degrees or
@@ -152,12 +162,24 @@ internal sealed class RmsSetup
 /// out ("Rays outside the circular entrance pupil are ignored"; vignetted rays likewise) and counts
 /// them.
 /// </para>
+/// <para>
+/// <b>Strehl ratio</b>: OP-38's PSF-peak ratio at the same appended field, wavelength and focus
+/// (<see cref="EvaluateStrehl"/>); the quadrature rule is not used for it.
+/// </para>
 /// </summary>
 internal static class RmsCore
 {
     /// <summary>The help's diffraction limit of RMS wavefront ("for RMS wavefront, 0.072 waves is
     /// used"; "RMS vs. Field", "Show Diffraction Limit").</summary>
     public const double WavefrontDiffractionLimitWaves = 0.072;
+
+    /// <summary>The help's diffraction limit of the Strehl ratio ("For Strehl ratio, 0.8 is used";
+    /// "RMS vs. Field", "Show Diffraction Limit").</summary>
+    public const double StrehlDiffractionLimit = 0.8;
+
+    /// <summary>The default pupil sampling of the Strehl ratio: the default of OP-38's Strehl ratio
+    /// analysis (<see cref="StrehlRatioSettings.Sampling"/>).</summary>
+    public const int DefaultPsfSampling = 64;
 
     /// <summary>The lens and system ready for evaluation: afocal refused, the vignetting factors
     /// replaced by apertures when asked, and floating semi-diameters frozen.</summary>
@@ -236,17 +258,20 @@ internal static class RmsCore
         };
     }
 
-    /// <summary>Evaluates many points, one slot each, the same bits at any degree of parallelism.</summary>
+    /// <summary>Evaluates many points, one slot each, the same bits at any degree of parallelism
+    /// (a Strehl ratio's PSF transforms run on one thread inside its slot).</summary>
     public static RmsValue[] EvaluateAll(RmsSetup setup, IReadOnlyList<RmsPoint> points, RmsQuantity quantity, RmsReference reference,
-        PupilQuadratureRule rule, CancellationToken cancellation, int? maxDegreeOfParallelism = null) =>
+        PupilQuadratureRule rule, CancellationToken cancellation, int? maxDegreeOfParallelism = null, int psfSampling = DefaultPsfSampling) =>
         ParallelSlots.Compute(points.Count, maxDegreeOfParallelism,
-            i => Evaluate(setup, points[i], quantity, reference, rule, cancellation), cancellation);
+            i => Evaluate(setup, points[i], quantity, reference, rule, cancellation, psfSampling), cancellation);
 
-    /// <summary>The RMS (or P-V) of one point; see the class remarks.</summary>
+    /// <summary>The RMS (or P-V, or the Strehl ratio, <see cref="EvaluateStrehl"/>) of one point;
+    /// see the class remarks.</summary>
     public static RmsValue Evaluate(RmsSetup setup, RmsPoint point, RmsQuantity quantity, RmsReference reference,
-        PupilQuadratureRule rule, CancellationToken cancellation)
+        PupilQuadratureRule rule, CancellationToken cancellation, int psfSampling = DefaultPsfSampling)
     {
         cancellation.ThrowIfCancellationRequested();
+        if (quantity == RmsQuantity.Strehl) return EvaluateStrehl(setup, point, psfSampling, cancellation);
         var (system, field, rows) = Extended(setup, point);
         var lens = Focused(setup.Lens, point.Focus);
         bool wavefront = quantity is RmsQuantity.WavefrontRms or RmsQuantity.WavefrontPeakToValley;
@@ -356,6 +381,62 @@ internal static class RmsCore
         return new RmsValue(value, null, launched, used, rayFailures);
     }
 
+    /// <summary>
+    /// The Strehl ratio of one point, computed as OP-38's Strehl ratio analysis computes it
+    /// (<see cref="StrehlRatioAnalysis"/>): each wavelength's pupil function
+    /// (<see cref="PsfEngine.BuildPupil"/> with <see cref="PsfRuns.Options"/>: apertures checked,
+    /// the OPD against the exit-pupil sphere on the chief ray, referred to the primary wavelength's
+    /// chief ray when polychromatic), then <see cref="PsfEngine.Strehl"/> for one wavelength or
+    /// <see cref="PsfRuns.PolychromaticStrehl"/> (OP-38's polychromatic FFT PSF and its peak) for
+    /// several. The help defines the ratio as "the peak intensity of the diffraction point spread
+    /// function (PSF) divided by the peak intensity of the diffraction point spread function (PSF)
+    /// in the absence of aberrations" (help, "Strehl Ratio"). A ray that fails carries no light
+    /// (OP-38's rule), so the point keeps a value and the failure is a warning. The sampling check
+    /// (<see cref="PsfEngine.CheckSampling"/>) and the pupil's own warnings are returned, each
+    /// naming the point. The transforms run on one thread: the caller's slots are the parallelism,
+    /// and the engine's transforms are bitwise the same at any thread count.
+    /// </summary>
+    internal static RmsValue EvaluateStrehl(RmsSetup setup, RmsPoint point, int sampling, CancellationToken cancellation)
+    {
+        var (system, field, rows) = Extended(setup, point);
+        var lens = Focused(setup.Lens, point.Focus);
+        var options = PsfRuns.Options(point.Polychromatic, checkApertures: true, allow: false);
+        var pupils = new List<PupilFunction>();
+        var warnings = new List<string>();
+        int launched = 0, used = 0;
+        double value;
+        try
+        {
+            foreach (int row in rows)
+            {
+                cancellation.ThrowIfCancellationRequested();
+                var p = PsfEngine.BuildPupil(lens, system, field, row, sampling, options, cancellation);
+                pupils.Add(p);
+                string label = point.Polychromatic ? $"{point.Label}, {StudyReport.Number(p.Wavelength * 1e6, "g6")} µm: " : $"{point.Label}: ";
+                warnings.AddRange(PsfEngine.CheckSampling(p).Warnings.Select(w => label + w));
+                warnings.AddRange(p.Warnings.Select(w => label + w));
+                if (p.Opd is { } opd)
+                {
+                    launched += opd.Samples.Count;
+                    used += opd.Samples.Count(s => s.IsValid);
+                }
+            }
+            if (point.Polychromatic)
+            {
+                var weights = rows.Select(r => system.Wavelengths.Wavelengths[r].Weight).ToArray();
+                value = PsfRuns.PolychromaticStrehl(pupils, weights, 1, cancellation);
+            }
+            else value = PsfEngine.Strehl(pupils[0], PsfEngine.DefaultPadding, 1, cancellation);
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException)
+        {
+            return new RmsValue(double.NaN, $"{point.Label}: {e.Message}", launched, used, Array.Empty<string>()) { Warnings = warnings };
+        }
+        if (value < 0.1)
+            warnings.Add($"{point.Label}: Strehl ratio {StudyReport.Number(value, "g3")} is below about 0.1, where the help says the ratio \"is not useful\" (help, \"Strehl Ratio\").");
+        return new RmsValue(value, null, launched, used, Array.Empty<string>()) { Warnings = warnings };
+    }
+
     /// <summary>The OPD with the weighted mean removed (chief ray) or the weighted least-squares
     /// plane a + b·Px + c·Py removed (centroid).</summary>
     internal static double[] Residual(IReadOnlyList<double> px, IReadOnlyList<double> py, IReadOnlyList<double> w,
@@ -448,7 +529,26 @@ internal static class RmsCore
         RmsData.SpotRadius => RmsQuantity.SpotRadius,
         RmsData.SpotX => RmsQuantity.SpotX,
         RmsData.SpotY => RmsQuantity.SpotY,
+        RmsData.StrehlRatio => RmsQuantity.Strehl,
         _ => throw new ArgumentOutOfRangeException(nameof(data), data, "Unknown RMS data."),
+    };
+
+    /// <summary>The Strehl ratio's pupil sampling: OP-38's Strehl analysis range, 16 to 1024
+    /// (checked only when the Strehl ratio is plotted).</summary>
+    public static void CheckPsfSampling(RmsQuantity q, int sampling, string who)
+    {
+        if (q == RmsQuantity.Strehl && (sampling < 16 || sampling > 1024))
+            throw new ArgumentException($"{who}: the PSF sampling of the Strehl ratio must be 16 to 1024 (it is {sampling}).");
+    }
+
+    /// <summary>The flat diffraction-limit line of a quantity that has one (help, "Show Diffraction
+    /// Limit"): 0.072 waves for the wavefront, 0.8 for the Strehl ratio; NaN for a spot, whose
+    /// limit depends on the wavelength and F/#.</summary>
+    public static double FlatDiffractionLimit(RmsQuantity q) => q switch
+    {
+        RmsQuantity.Strehl => StrehlDiffractionLimit,
+        RmsQuantity.WavefrontRms => WavefrontDiffractionLimitWaves,
+        _ => double.NaN,
     };
 
     public static bool IsSpot(RmsQuantity q) => q is RmsQuantity.SpotRadius or RmsQuantity.SpotX or RmsQuantity.SpotY;
@@ -464,10 +564,19 @@ internal static class RmsCore
         RmsQuantity.SpotRadius => "RMS spot radius (µm)",
         RmsQuantity.SpotX => "RMS spot x (µm)",
         RmsQuantity.SpotY => "RMS spot y (µm)",
+        RmsQuantity.Strehl => "Strehl ratio",
         _ => q.ToString(),
     };
 
-    public static string Unit(RmsQuantity q) => IsSpot(q) ? "µm" : "waves";
+    /// <summary>"µm", "waves", or "" for the Strehl ratio (a pure number).</summary>
+    public static string Unit(RmsQuantity q) => IsSpot(q) ? "µm" : q == RmsQuantity.Strehl ? "" : "waves";
+
+    /// <summary>" (µm)", " (waves)", or nothing for the Strehl ratio.</summary>
+    public static string UnitSuffix(RmsQuantity q) => Unit(q).Length == 0 ? "" : $" ({Unit(q)})";
+
+    /// <summary>A shown value with its unit: "0.5 waves", or "0.93" for the Strehl ratio.</summary>
+    public static string WithUnit(RmsQuantity q, double shown, string format = "g8") =>
+        Unit(q).Length == 0 ? StudyReport.Number(shown, format) : $"{StudyReport.Number(shown, format)} {Unit(q)}";
 
     /// <summary>The density rules: Gaussian quadrature 1 to 20 rings, the rectangular array at least 2 across.</summary>
     public static PupilQuadratureRule Rule(PupilIntegration method, int density, string who)
@@ -480,8 +589,10 @@ internal static class RmsCore
     }
 
     /// <summary>The assumptions every RMS analysis states.</summary>
-    public static List<string> Assumptions(RmsSetup setup, RmsQuantity q, RmsReference reference, PupilQuadratureRule rule)
+    public static List<string> Assumptions(RmsSetup setup, RmsQuantity q, RmsReference reference, PupilQuadratureRule rule,
+        int psfSampling = DefaultPsfSampling)
     {
+        if (q == RmsQuantity.Strehl) return StrehlAssumptions(setup, psfSampling);
         var lines = new List<string> { rule.Describe() };
         if (IsSpot(q))
             lines.Add(reference == RmsReference.ChiefRay
@@ -495,16 +606,43 @@ internal static class RmsCore
         lines.Add(rule.Method == PupilIntegration.GaussianQuadrature
             ? "Gaussian quadrature assumes the whole pupil is traced: a point where any ray fails or is vignetted has no value and is listed."
             : "Rectangular array: rays that fail or are vignetted are left out and counted.");
-        lines.Add(setup.ReplacedVignetting ? "The fields' vignetting factors were replaced by surface apertures before tracing (docs/Optics-Conventions.md §16)."
-            : setup.System.Fields.Points.Any(p => p.IsVignetted) ? "The vignetting factors were kept; a sampled field between table fields takes the launcher's interpolated factors."
-            : "No field has vignetting factors.");
-        lines.Add(setup.System.RayAiming.IsOn
-            ? $"Ray aiming {RayAimingModes.Names.Label(setup.System.RayAiming.Mode).ToLowerInvariant()}: pupil coordinates are on the stop (§16)."
-            : "Ray aiming is off: pupil coordinates are on the paraxial entrance pupil of the primary wavelength.");
+        lines.Add(VignettingNote(setup));
+        lines.Add(RayAimingNote(setup));
         if (setup.System.Aperture.Apodization != ApodizationType.Uniform)
             lines.Add($"Pupil apodization ({ApodizationTypes.Names.Label(setup.System.Aperture.Apodization)}) is NOT applied: the pupil is weighted uniformly.");
         lines.Add("Polarization is not considered (Use Polarization is not built).");
-        lines.Add("A sampled field or wavelength not in the tables is traced as one appended table row; the primary wavelength is unchanged, and so is the field normalisation unless the sampled field lies beyond the largest defined field (the ray goes to the same field position either way).");
+        lines.Add(AppendedRowNote);
+        return lines;
+    }
+
+    private const string AppendedRowNote = "A sampled field or wavelength not in the tables is traced as one appended table row; the primary wavelength is unchanged, and so is the field normalisation unless the sampled field lies beyond the largest defined field (the ray goes to the same field position either way).";
+
+    private static string VignettingNote(RmsSetup setup) =>
+        setup.ReplacedVignetting ? "The fields' vignetting factors were replaced by surface apertures before tracing (docs/Optics-Conventions.md §16)."
+        : setup.System.Fields.Points.Any(p => p.IsVignetted) ? "The vignetting factors were kept; a sampled field between table fields takes the launcher's interpolated factors."
+        : "No field has vignetting factors.";
+
+    private static string RayAimingNote(RmsSetup setup) => setup.System.RayAiming.IsOn
+        ? $"Ray aiming {RayAimingModes.Names.Label(setup.System.RayAiming.Mode).ToLowerInvariant()}: pupil coordinates are on the stop (§16)."
+        : "Ray aiming is off: pupil coordinates are on the paraxial entrance pupil of the primary wavelength.";
+
+    /// <summary>The assumptions of the Strehl ratio (<see cref="EvaluateStrehl"/>).</summary>
+    private static List<string> StrehlAssumptions(RmsSetup setup, int sampling)
+    {
+        var lines = new List<string>
+        {
+            $"Strehl ratio: the FFT PSF's peak (refined off the grid) over the unaberrated PSF's peak, the same pupil amplitude with no OPD (help, \"Strehl Ratio\"), computed by OP-38's PSF engine as the Strehl ratio analysis computes it, on a {sampling} × {sampling} pupil zero-padded to {2 * sampling} × {2 * sampling}; OPD against the exit-pupil reference sphere centred on the chief ray, surface apertures checked (docs/Optics-Conventions.md §33, §34).",
+            "OpticStudio's RMS pages compute the Strehl ratio \"using the method described in \"Strehl ratio approximation\"\", a section its online help does not contain; the PSF-peak definition of its \"Strehl Ratio\" page is used here, so values may differ from OpticStudio's RMS plots.",
+            "The method, ray density and Refer to settings do not apply to the Strehl ratio: the peak is searched for wherever it lies in the PSF window, so the wavefront's piston and tilt do not change it.",
+            "Polychromatic (OP-38's polychromatic FFT PSF): each wavelength referred to the primary wavelength's chief ray, sampled on the shortest wavelength's grid and weighted by its weight × (λ_min/λ)² over its own unaberrated peak. OpticStudio's RMS help offers the Strehl ratio for one wavelength only and points to the Huygens PSF for a polychromatic one.",
+            "Rays that fail or are clipped by an aperture carry no light (zero pupil amplitude) and are listed as warnings; the point keeps its value. The PSF sampling and validity warnings (aliasing, a fast cone, an oblique chief ray) are listed with the point they belong to, and so is a ratio below about 0.1.",
+            VignettingNote(setup),
+            RayAimingNote(setup),
+        };
+        if (setup.System.Aperture.Apodization != ApodizationType.Uniform)
+            lines.Add($"Pupil apodization ({ApodizationTypes.Names.Label(setup.System.Aperture.Apodization)}) is applied as the pupil amplitude (OP-38).");
+        lines.Add("Polarization is not considered (Use Polarization is not built).");
+        lines.Add(AppendedRowNote);
         return lines;
     }
 

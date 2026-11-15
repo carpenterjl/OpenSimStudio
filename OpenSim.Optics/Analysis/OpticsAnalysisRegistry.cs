@@ -130,7 +130,7 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new SeidelDiagramAnalysis());
         registry.Register(new FullFieldAberrationAnalysis());
 
-        // OP-40: RMS against field, wavelength and focus, and the RMS field map (Strehl not built).
+        // OP-40: RMS against field, wavelength and focus, and the RMS field map, with the Strehl ratio by OP-38's PSF engine.
         registry.Register(new RmsVsFieldAnalysis());
         registry.Register(new RmsVsWavelengthAnalysis());
         registry.Register(new RmsVsFocusAnalysis());
