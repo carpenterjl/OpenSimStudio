@@ -43,8 +43,18 @@ public sealed record SurfaceHit
     /// to this one; negative for a virtual step back.</summary>
     public double SegmentLength { get; init; }
 
-    /// <summary>Index before times <see cref="SegmentLength"/>.</summary>
+    /// <summary>Index before times <see cref="SegmentLength"/> (in a birefringent crystal, the
+    /// wave vector before dotted with the segment, N·Δr; OP-53).</summary>
     public double SegmentOpticalPath { get; init; }
+
+    // OP-53
+    /// <summary>The wave vector N = n·k̂ (k̂ the wave normal, n its phase index) in the space
+    /// after the surface, local frame, when that space is a birefringent crystal; null in an
+    /// isotropic space, where the wave normal is <see cref="Direction"/> and n
+    /// <see cref="IndexAfter"/> (docs/Optics-Conventions.md §62). In a crystal
+    /// <see cref="Direction"/> is the ray (energy) direction and <see cref="IndexAfter"/> the
+    /// ordinary index.</summary>
+    public Vector3D? WaveNormal { get; init; }
 
     /// <summary>The optical path from the launch point to here.</summary>
     public double OpticalPath { get; init; }

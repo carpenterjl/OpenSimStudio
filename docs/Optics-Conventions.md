@@ -1478,6 +1478,33 @@ single place in the code, so a correction is one line and its test.
       1e+10).
     Check: each operand in OpticStudio and here on one lens with the same columns.
 
+58. **Birefringent media readings** (OP-53, section 62). The surfaces follow OpticStudio 2025 R2's
+    "Birefringent In and Birefringent Out" and "Birefringent Types" (saved under
+    `plans/sources/optics/op-53-help/`); no birefringent lens has been traced in OpticStudio to
+    compare. Where the help leaves a point open this program reads it so:
+    - *Sequence.* A crystal begins at a Birefringent In and ends at the next Birefringent In
+      (crystal to crystal, as the help's Wollaston prism needs) or Birefringent Out; only
+      coordinate breaks and ignored surfaces may stand between. The help describes the pair but
+      states no rule.
+    - *Optical path in a crystal* is the phase, N·Δr along the wave normal (n(θ_w)·cos α per unit
+      ray length). The help says rays follow ŝ and the index is n(θ_w); it does not say which path
+      length OpticStudio reports.
+    - *Phase of the other mode in modes 2 and 3* is the plane-wave retardance
+      k₀(N_other − N_traced)·Δr, both wave vectors sharing the tangential wave vector of the last
+      interface; the help says only that the effective index "properly referenced to the ordinary
+      ray direction" is used.
+    - *Amplitude coefficients* at a birefringent interface come from the boundary conditions (the
+      help gives none), so transmission through a birefringent surface has not been compared.
+    - *Along the optic axis* the ordinary field is the interface's s and the extraordinary its p
+      ("ZOS chooses the ordinary ray to be s-polarized and the extraordinary ray to be
+      p-polarized"); the help's further dependence of that choice on the input polarization is not
+      reproduced.
+    - *Parax Ignore 0* with an extraordinary mode is refused for paraxial data (the help does not
+      say which extraordinary index paraxial rays would use). A zero crystal axis is refused (the
+      non-sequential page takes (0, 0, 1); the sequential page says nothing).
+    Check: the help's Wollaston prism sample and a calcite plate traced in OpticStudio in modes 0–3,
+    ray positions, optical path and Polarization Ray Trace transmission compared.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -5609,3 +5636,87 @@ TFNO, ABCD, DISA, DISC, DISG, DIMX, SMIA, BIOC, BIOD, OSCD, SPCH, TRAE, CEHX, CE
 CNAX, CNAY, CNPX, CNPY, DXDX, DXDY, DYDX, DYDY, IMAE, XENC, XENF, ERFP, FOUC, TOLR, PARZ, PARA,
 PARB, PARC, PANA, PANB, PANC. They are not registered, so a saved row with one of these codes loads
 as OOFF and is named.
+
+## 62. Birefringent media
+
+OP-53 adds OpticStudio's **Birefringent In** and **Birefringent Out** sequential surfaces
+(`OpenSim.Optics/Sequential/Birefringent/`), registered by `SurfaceTypes`
+(`BirefringentLayouts.cs`) with the parameter columns of the help page "Birefringent In and
+Birefringent Out" (OpticStudio 2025 R2, saved under `plans/sources/optics/op-53-help/`): In
+0 draw length, 1 mode, 2–4 the crystal axis direction cosines in the In surface's local frame,
+5 Parax Ignore, 6 shape, 7 radius of rotation, 8–12 aspheric coefficients, 13 gradient mode; Out
+6–12. Both are traced on the Standard substrate (shape 0, radius and conic).
+
+**Crystal.** Homogeneous uniaxial: the In surface's medium gives the ordinary index n_o, and its
+extraordinary index n_e is the glass named as the ordinary glass with "-E" appended, looked up in
+the active catalogs when a saved lens is converted (`SavedSurfaces.ToLens`; a constant index or a
+model glass is refused there, and a missing "-E" glass is a problem naming the surface). Both are
+relative to the system's air like every index of the trace. Paraxial data use n_o ("Most
+OpticStudio calculations, such as EFL, EPD, F/#, etc. use the ordinary index").
+
+**Physics** (`UniaxialCrystal`, `UniaxialOptics`). The extraordinary index along a wave normal k̂
+at angle θ_w to the axis â is the help's (1/n)² = (cos θ_w/n_o)² + (sin θ_w/n_e)²; written for the
+wave vector N = n k̂ (units of the vacuum wavenumber) it is the normal surface
+(N·â)²/n_o² + (N·N − (N·â)²)/n_e² = 1. The ray (energy) direction is the normal to that surface,
+ŝ ∝ N/n_e² + Δ(N·â)â, Δ = 1/n_o² − 1/n_e², which reproduces the help's walk-off
+tan α = (n_e² − n_o²) tan θ_w/(n_e² + (n_o tan θ_w)²) and keeps k̂, ŝ and â coplanar. At an
+interface the tangential part κ of N is kept (Snell's law in vector form); the transmitted wave
+vector is N = κ + qη̂ with q from n² − κ·κ (ordinary, isotropic) or the quadratic
+αq² + βq + γ = 0 of the normal surface (extraordinary), taking the root whose ray goes on through
+the surface. A mode with no real root is totally internally reflected
+(`RayStatus.TotalInternalReflection`).
+
+**Trace** (`SequentialTrace`, under `// OP-53`). The trace holds `BirefringentSpaces` only for a
+lens with a birefringent surface; for any other lens it is null, every new branch is skipped and
+the loop computes exactly what it computed before (the segment is still `nBefore * length`, the
+refraction the same calls), which the existing trace tests pin. Inside a crystal the trace
+carries the wave vector N beside the ray: the ray moves along ŝ, the optical path gains N·Δr (the
+phase along the wave normal, n(θ_w)·cos α per unit ray length), and `SurfaceHit.WaveNormal`
+records N after each surface (null in isotropic spaces). Sequential tracing follows one mode per
+trace, as OpticStudio does ("In sequential mode, OpticStudio cannot trace both rays at once";
+the help suggests two configurations with modes 0 and 1): modes 0 and 2 trace the ordinary ray,
+1 and 3 the extraordinary one. Along the optic axis both modes give the same wave and ray.
+
+**Rules.** A crystal ends at the next Birefringent In (crystal to crystal) or at a Birefringent
+Out; only coordinate breaks and ignored surfaces may stand between; it must end before the image;
+an Out needs a crystal before it; neither type may be a mirror, ignored, carry composite add-ons,
+or be the object or image surface; the axis must not be zero. Each broken rule is refused when the
+trace is built, naming the surface.
+
+**Polarization ray trace** (`Polarization/BirefringentPolarization.cs`). In a crystal the field
+is carried transverse to the traced ray on the help's basis: P̂ in the plane of the ray and the
+axis, at right angles to the ray; Ŝ at right angles to both. At a birefringent interface the
+incident field is split into the incident modes and carried through `AnisotropicInterface`, which
+solves the continuity of tangential E and H (H = N × E) for the two reflected and two transmitted
+waves and returns power-normalised amplitudes (|ã|² the power fraction; derived, the help gives
+no coefficients; it reduces to Fresnel's for n_o = n_e and conserves power). Modes 0 and 1 keep
+only the traced mode ("the fraction of ray energy in the part of the ray that is not traced is
+discarded"); modes 2 and 3 also keep the other mode's part on its basis vector and multiply it,
+on each segment, by e^(i k₀ (N_other − N_traced)·Δr), the plane-wave retardance between modes that
+share the last interface's tangential wave vector (exact for a plane-parallel plate). Through an
+Out both parts leave as one field. Bulk absorption uses the ordinary glass's data (as the help
+says; no dichroism). A coating on a birefringent surface is refused. In the Polarization Ray Trace
+table the s and p amplitudes of a birefringent surface are the diagonal of its 2 × 2 transmission
+(ordinary or s first, extraordinary or p second).
+
+**Approximations** (modes 2 and 3). The other mode's part travels with the traced ray (no walk-off
+between them; the help: "Modes 2 and 3 assume that the angular deviation between the ordinary and
+extraordinary beam is so small that the region of interest can be approximated by a single
+beam"), and at the next interface it is taken at the traced wave's tangential wave vector there.
+
+**Sources.** The help pages above. McClain, Hillman and Chipman, JOSA A 10 (1993) 2371 and 2383,
+Born and Wolf ch. XV, Yariv and Yeh, Lam's dissertation and Chipman, Lam and Young were not opened
+for this item; the normal surface, the ray direction and the boundary solution are derived in the
+code comments from the help's equation 3 and Maxwell's boundary conditions, and checked against
+the help's equations 4 and 5 and Fresnel's coefficients.
+
+**Not built:** shape 1 (the toroidal substrate, parameters 7–12; a non-zero shape is refused), the
+gradient modes 1–9 (crystal axis varying with position, and the user-defined birefringence DLL;
+refused), paraxial rays with the extraordinary index (Parax Ignore 0 with mode 1 or 3 is refused
+for paraxial data), drawing the crystal axis (parameter 0 is saved), optical activity, coatings on
+birefringent surfaces, biaxial crystals, stress birefringence (OpticStudio models it in STAR from
+FEA stress data and the stress-optical coefficients K11 and K12 of the material catalog, help
+"About Stress Birefringence" and "Defining Stress Optical Coefficients"; neither the FEA data path
+nor those coefficients exist here), NSC birefringent media (no non-sequential mode), and these
+types in .zmx, CODE V and OSLO files and in ZPL. Readings not checked against OpticStudio: §10
+item 58.

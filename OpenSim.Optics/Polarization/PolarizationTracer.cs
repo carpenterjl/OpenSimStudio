@@ -106,6 +106,14 @@ public sealed record PolarizedSurface
     /// <summary>True on a Mueller Matrix surface that acted on the ray.</summary>
     public bool IsMueller { get; init; }
 
+    // OP-53
+    /// <summary>True at a Birefringent In or Out surface (docs §62). There <see cref="Response"/>
+    /// is null, <see cref="S"/>, <see cref="PIn"/> and <see cref="POut"/> are zero, and the s and
+    /// p amplitudes are the diagonal of the 2 × 2 transmission between the incident and leaving
+    /// bases (ordinary or s first, extraordinary or p second); <see cref="Matrix"/> is the whole
+    /// action.</summary>
+    public bool IsBirefringent { get; init; }
+
     /// <summary>The coherency matrix after the surface (surface 1's frame) from the first Mueller
     /// matrix surface on; null while the ray is described by its field. Where it is set, the
     /// field (<see cref="FieldOut"/>, and <see cref="FieldIn"/> after that surface) and
@@ -231,6 +239,10 @@ public sealed class PolarizationTracer
         for (int j = 1; j < surfaces.Count - 1; j++)
         {
             if (surfaces[j].Coating is not { } name || name.Trim().Length == 0) continue;
+            // OP-53: a coating on a birefringent interface is not built (the bare interface is).
+            if (surfaces[j].Shape is Sequential.Birefringent.BirefringentShape crystalSurface)
+                throw new InvalidOperationException(
+                    $"Polarization ray trace: surface {j} ({crystalSurface.TypeName}) names coating '{name.Trim()}'; coatings on a birefringent interface are not built. Remove the coating to trace the bare interface.");
             _coatings[j] = catalog.FindCoating(name.Trim()) ?? throw new InvalidOperationException(
                 $"Polarization ray trace: surface {j} names coating '{name.Trim()}', which is not in the coating catalog. " +
                 (catalog.Coatings.Count == 0 ? "The catalog is empty: add the coating in the Coatings panel or import a catalog."
@@ -279,6 +291,9 @@ public sealed class PolarizationTracer
         var records = new List<PolarizedSurface>(path.Hits.Count);
         CoherencyMatrix? coherency = null;    // OP-52: set from the first Mueller matrix surface on
         int? muellerSurface = null;
+        var crystals = Trace.Birefringence;   // OP-53: null for a lens without birefringent surfaces
+        Vector3D? waveGlobal = null;          // OP-53: the traced wave vector in a crystal (global)
+        BirefringentPolarization.Carry? carry = null;   // OP-53: modes 2 and 3
 
         for (int h = 1; h < path.Hits.Count; h++)
         {
@@ -301,10 +316,51 @@ public sealed class PolarizationTracer
                 cumulative = cumulative.Scaled(amplitude);
                 coherency = coherency?.Scaled(bulk);
             }
+            // OP-53: in modes 2 and 3 the other mode's part gains its phase over the segment.
+            if (crystals is not null && carry is not null && crystals.Space(j - 1) is not null && hit.SegmentLength != 0)
+            {
+                var ray = Unit(placement.ApplyDirection(hit.IncomingDirection));
+                var phase = BirefringentPolarization.Propagation(carry, ray, ray * hit.SegmentLength, Trace.AirMicrometers * 1e-6);
+                field = phase.Apply(field);
+                cumulative = phase * cumulative;
+                coherency = coherency?.Transformed(phase);
+            }
             var fieldIn = field;
 
             var s = surfaces[j];
             bool interfaceHere = hit.Status == RayStatus.Ok && j < image && !s.IsIgnored;
+            // OP-53: a coordinate break inside a crystal is no interface.
+            if (crystals is not null && crystals.Space(j - 1) is not null && !crystals.IsInterface(j)) interfaceHere = false;
+            if (crystals is not null && interfaceHere && crystals.IsInterface(j))
+            {
+                var kInB = Unit(placement.ApplyDirection(hit.IncomingDirection));
+                var kOutB = Unit(placement.ApplyDirection(hit.Direction));
+                var etaB = Unit(placement.ApplyDirection(hit.Normal));
+                var spaceBefore = crystals.Space(j - 1);
+                var spaceAfter = crystals.Space(j);
+                var before = spaceBefore is { } sb ? Sequential.Birefringent.OpticalSide.Of(sb.Global) : Sequential.Birefringent.OpticalSide.Isotropic(hit.IndexBefore);
+                var afterSide = spaceAfter is { } sa ? Sequential.Birefringent.OpticalSide.Of(sa.Global) : Sequential.Birefringent.OpticalSide.Isotropic(hit.IndexAfter);
+                var waveIn = spaceBefore is not null
+                    ? waveGlobal ?? throw new InvalidOperationException($"Polarization ray trace, surface {j}: the trace recorded no wave vector in the crystal before it.")
+                    : kInB * hit.IndexBefore;
+                var b = BirefringentPolarization.Interface(j, kInB, waveIn, kOutB, etaB, before, afterSide, spaceAfter);
+                field = b.Matrix.Apply(field);
+                cumulative = b.Matrix * cumulative;
+                coherency = coherency?.Transformed(b.Matrix);
+                carry = b.Carry;
+                waveGlobal = hit.WaveNormal is { } wb ? placement.ApplyDirection(wb) : null;
+                double powerB = coherency?.Power ?? field.NormSquared;
+                records.Add(new PolarizedSurface
+                {
+                    Coherency = coherency, Surface = j, Hit = hit, BulkTransmittance = bulk, FieldIn = fieldIn, FieldOut = field,
+                    IsInterface = true, AmplitudeS = b.DiagonalS, AmplitudeP = b.DiagonalP, FieldAmplitudeS = b.DiagonalS, FieldAmplitudeP = b.DiagonalP,
+                    Matrix = b.Matrix, Cumulative = cumulative, IsBirefringent = true,
+                    RelativeTransmission = previousPower > 0 ? powerB / previousPower : 0, TotalTransmission = powerB,
+                });
+                previousPower = powerB;
+                continue;
+            }
+            if (crystals is not null && hit.WaveNormal is { } wc) waveGlobal = placement.ApplyDirection(wc);   // OP-53: through a break inside a crystal
             if (!interfaceHere)
             {
                 double powerHere = coherency?.Power ?? field.NormSquared;

@@ -176,6 +176,9 @@ public static class SavedSurfaces
             if (!s.ThicknessIsInfinite && !double.IsFinite(s.Thickness)) problems.Add($"{where}: the thickness must be a number.");
             bool mirror = IsMirror(s);
             var medium = Medium(s, mirror, where, findGlass, modelGlass, problems);
+            // OP-53: a Birefringent In's extraordinary index is the glass named as its own with "-E" appended.
+            if (shape is Birefringent.BirefringentInShape crystal)
+                shape = crystal.WithExtraordinary(Extraordinary(s, where, findGlass, problems));
             SurfaceAperture? aperture = null;
             if (s.Aperture is { } a)
                 aperture = Aperture(a, perUnit, where, problems);
@@ -325,6 +328,28 @@ public static class SavedSurfaces
         return ParaxialMedium.Of(glass);
     }
 
+    // OP-53
+    /// <summary>The extraordinary index of a Birefringent In: "To compute the extraordinary
+    /// index, OpticStudio appends "-E" to the glass name, and then looks for this material in the
+    /// glass catalog ... If not found, an error message is issued" (help, "Birefringent In and
+    /// Birefringent Out"). A constant index or a model glass has no such name and is refused.</summary>
+    private static ParaxialMedium? Extraordinary(OpticsSurfaceSettings s, string where, Func<string, OpticalMaterial?> findGlass, List<string> problems)
+    {
+        if (string.IsNullOrWhiteSpace(s.Material) || IsMirror(s))
+        {
+            problems.Add($"{where}: a {Birefringent.BirefringentInShape.Name} needs a glass name for its ordinary index; its extraordinary index is the glass of that name with \"-E\" appended (OpticStudio help, \"Birefringent In and Birefringent Out\").");
+            return null;
+        }
+        string name = s.Material.Trim() + "-E";
+        var glass = findGlass(name);
+        if (glass is null)
+        {
+            problems.Add($"{where}: the extraordinary glass '{name}' is not in the active catalogs (a {Birefringent.BirefringentInShape.Name} takes its extraordinary index from the glass named as its own with \"-E\" appended).");
+            return null;
+        }
+        return ParaxialMedium.Of(glass);
+    }
+
     private static SurfaceAperture? Aperture(OpticsSurfaceApertureSettings a, double perUnit, string where, List<string> problems)
     {
         SurfaceAperture? shape = a.Type switch
@@ -395,6 +420,12 @@ public static class SavedSurfaces
                 }
             }
             var m = s.Medium;
+            // OP-53: the saved form names only the ordinary glass; the extraordinary one must be its "-E" twin.
+            if (s.Shape is Birefringent.BirefringentInShape crystal
+                && !(m.Material is { } ordinaryGlass && crystal.Extraordinary?.Material is { } eGlass
+                     && string.Equals(eGlass.Name, ordinaryGlass.Name + "-E", StringComparison.OrdinalIgnoreCase)
+                     && string.Equals(eGlass.Catalog, ordinaryGlass.Catalog, StringComparison.OrdinalIgnoreCase)))
+                throw new ArgumentException($"{Where(j, lens.Surfaces.Count)}: a {Birefringent.BirefringentInShape.Name} is saved by its glass name only, so its extraordinary index must be the glass of the same name with \"-E\" appended in the same catalog; this one is {crystal.Extraordinary?.Describe() ?? "missing"} with {m.Describe()}.");
             list.Add(new OpticsSurfaceSettings
             {
                 Type = type,

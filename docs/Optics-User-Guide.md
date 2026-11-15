@@ -2083,6 +2083,30 @@ XENF, ERFP, FOUC, TOLR, PARZ, PARA, PARB, PARC, PANA, PANB, PANC; polarization a
 options; the Huygens enclosed energy; the afocal forms. No operand has been compared with
 OpticStudio's own output. Details: Optics-Conventions.md section 63.
 
+## Birefringent crystals
+
+The type column of the Lens Data Editor offers **Birefringent In** and **Birefringent Out**
+(docs/Optics-Conventions.md §62). Put a crystal glass on the Birefringent In surface, for example
+CALCITE: its index is the ordinary index, and the extraordinary index is read from the glass of
+the same name with "-E" appended (CALCITE-E), which must be in an active catalog. Give the crystal
+axis as direction cosines in parameters 2–4 (in the In surface's own coordinates) and choose the
+mode in parameter 1: 0 traces the ordinary ray, 1 the extraordinary ray, and 2 and 3 trace the
+ordinary or extraordinary ray while the polarization ray trace also keeps the other part of the
+field with its phase, which is what a wave plate needs. End the crystal with a Birefringent Out,
+or start another crystal with a second Birefringent In (a Wollaston prism); coordinate breaks may
+stand between. One trace follows one ray; use two configurations with modes 0 and 1 to see both.
+
+Inside the crystal the ray follows the energy direction, which walks off the wave normal for the
+extraordinary ray, and the optical path is the phase along the wave normal, so OPD, PSF and MTF
+are those of the traced mode. Paraxial data use the ordinary index; with mode 1 or 3 set Parax
+Ignore (parameter 5) to 1, or paraxial data are refused for the lens. Surface coatings are not
+allowed on these two types.
+
+Not built: the toroidal substrate (shape 1), crystals whose axis varies with position (gradient
+modes), drawing the crystal axis, optical activity, stress birefringence, non-sequential
+birefringent objects, and these types in .zmx, CODE V and OSLO files and macros. The readings not
+yet checked against OpticStudio are listed in docs/Optics-Conventions.md §10 item 58.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

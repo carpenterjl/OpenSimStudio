@@ -254,6 +254,9 @@ public static class SurfaceTypes
         // OP-25: a Grid Sag keeps its grid, which is not a parameter.
         if (shape is Freeform.GridSagSurface grid)
             return surface with { Shape = Freeform.FreeformLayouts.BuildGridSag(layout, n => values.TryGetValue(n, out double x) ? x : 0, grid.Data) };
+        // OP-53: a Birefringent In keeps its extraordinary index, which is not a parameter.
+        if (shape is Birefringent.BirefringentInShape crystal)
+            return surface with { Shape = ((Birefringent.BirefringentInShape)layout.Build(n => values.TryGetValue(n, out double x) ? x : 0)!).WithExtraordinary(crystal.Extraordinary) };
         return surface with { Shape = layout.Build(n => values.TryGetValue(n, out double x) ? x : 0) };
     }
 
@@ -694,6 +697,10 @@ public static class SurfaceTypes
         // OP-26: diffractive, grating and holographic surfaces (docs/Optics-Conventions.md §57),
         // from their OpticStudio 2025 R2 help pages (saved under plans/sources/optics/op-26-help/).
         list.AddRange(Diffractive.DiffractiveLayouts.Build());
+
+        // OP-53: Birefringent In and Birefringent Out (docs/Optics-Conventions.md §62), from the
+        // help page "Birefringent In and Birefringent Out" (saved under plans/sources/optics/op-53-help/).
+        list.AddRange(Birefringent.BirefringentLayouts.Build());
 
         return list.ToArray();
     }

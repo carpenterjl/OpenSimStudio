@@ -43,6 +43,7 @@ public sealed class SequentialTrace
     private readonly RigidTransform[] _global;
     private readonly double[] _semiDiameter;
     private readonly SurfaceShape?[] _shape;   // OP-32: each surface's effective (composite) shape
+    private readonly Birefringent.BirefringentSpaces? _birefringence;   // OP-53: null for a lens without birefringent surfaces
 
     /// <summary>A ray whose local z direction cosine is below this in magnitude is taken as
     /// parallel to a coordinate break's plane.</summary>
@@ -117,7 +118,16 @@ public sealed class SequentialTrace
         for (int j = 0; j < count; j++)
             _semiDiameter[j] = lens.Surfaces[j].SemiDiameter
                 ?? (semiDiameters is not null && j < semiDiameters.Count ? semiDiameters[j] : double.NaN);
+
+        // OP-53: the crystals between Birefringent In and Out surfaces (docs §62); null, and the
+        // trace below exactly as before, for a lens that has none.
+        _birefringence = Birefringent.BirefringentSpaces.Create(lens, _index, AirMicrometers, system.Environment, _global);
     }
+
+    // OP-53
+    /// <summary>The birefringent crystals of the lens at this wavelength, or null when it has no
+    /// Birefringent In or Out surface (docs/Optics-Conventions.md §62).</summary>
+    public Birefringent.BirefringentSpaces? Birefringence => _birefringence;
 
     /// <summary>
     /// The trace of <paramref name="lens"/> at one row of the wavelength table (the primary
@@ -197,9 +207,11 @@ public sealed class SequentialTrace
         }
         if (segments is not null) segments[0] = 0;
         double path = ray.OpticalPath;
+        Vector3D? wave = null;   // OP-53: the wave vector n·k̂ inside a crystal (local frame); null in isotropic spaces
         for (int j = 1; j <= image; j++)
         {
             ray = ray.ToLocal(_step[j]);
+            if (wave is { } w0 && !_step[j].IsIdentity) wave = _step[j].InverseApplyDirection(w0);   // OP-53
             var s = surfaces[j];
             var p = ray.Position;
             var d = ray.Direction;
@@ -233,7 +245,9 @@ public sealed class SequentialTrace
             if (!met || !double.IsFinite(s0) || !double.IsFinite(delta))
                 return ray.Failed(RayStatus.MissedSurface, j);
             double length = s0 + delta;
-            double segment = nBefore * length;
+            // OP-53: in a crystal the optical path is the phase, N·Δr along the wave normal
+            // (n·cos α per unit length of the ray); elsewhere n·length as always.
+            double segment = wave is { } wn ? Vector3D.Dot(wn, d) * length : nBefore * length;
             path += segment;
             if (segments is not null) segments[j] = segment;
             ray = ray with { Position = point, OpticalPath = path };
@@ -249,7 +263,15 @@ public sealed class SequentialTrace
 
             // Refraction or reflection.
             Vector3D after = d;
-            if (j < image && shape is not null && shape.TryRedirect(new SurfaceRedirectInput
+            if (_birefringence is not null && j < image && _birefringence.IsInterface(j))   // OP-53
+            {
+                if (!_birefringence.TryRefract(j, d, wave, nBefore, nAfter, normal, out after, out wave))
+                {
+                    Record(hits, j, ray, d, d, normal, nBefore, nAfter, length, segment, RayStatus.TotalInternalReflection);
+                    return ray.Failed(RayStatus.TotalInternalReflection, j);
+                }
+            }
+            else if (j < image && shape is not null && shape.TryRedirect(new SurfaceRedirectInput
                 {
                     Surface = s, SurfaceIndex = j, Point = point, Incoming = d, Normal = normal,
                     IndexBefore = nBefore, IndexAfter = s.IsMirror ? nBefore : nAfter,
@@ -282,13 +304,13 @@ public sealed class SequentialTrace
                 }
             }
             ray = ray with { Direction = after };
-            Record(hits, j, ray, d, after, normal, nBefore, j < image ? nAfter : nBefore, length, segment, RayStatus.Ok);
+            Record(hits, j, ray, d, after, normal, nBefore, j < image ? nAfter : nBefore, length, segment, RayStatus.Ok, wave);
         }
         return ray;
     }
 
     private void Record(List<SurfaceHit>? hits, int j, Ray ray, Vector3D incoming, Vector3D after, Vector3D normal,
-        double nBefore, double nAfter, double length, double segment, RayStatus status)
+        double nBefore, double nAfter, double length, double segment, RayStatus status, Vector3D? wave = null)
     {
         if (hits is null) return;
         hits.Add(new SurfaceHit
@@ -299,6 +321,7 @@ public sealed class SequentialTrace
             AngleOfIncidenceDegrees = SurfaceHit.AngleDegrees(incoming, normal),
             AngleOfExitDegrees = SurfaceHit.AngleDegrees(after, normal),
             SegmentLength = length, SegmentOpticalPath = segment, OpticalPath = ray.OpticalPath, Status = status,
+            WaveNormal = wave,   // OP-53
         });
     }
 }
