@@ -21,7 +21,7 @@ namespace OpenSim.Cli;
 public static partial class CliRunner
 {
     /// <summary>The optics subcommands, in the order Usage lists them.</summary>
-    public static readonly IReadOnlyList<string> OpticsSubcommands = new[] { "list", "analyse", "trace", "optimise", "tolerance", "import", "export", "catalog", "macro" };   // OP-94: import, export; OP-16: catalog; OP-99: macro
+    public static readonly IReadOnlyList<string> OpticsSubcommands = new[] { "list", "analyse", "trace", "optimise", "tolerance", "import", "export", "catalog", "macro", "convert" };   // OP-94: import, export; OP-16: catalog; OP-99: macro; OP-61: convert
 
     /// <summary>Subcommands planned but not built; each fails with a message naming its item.
     /// Empty since wave 8 wired the Global and Hammer searches (OP-58) and Monte Carlo (OP-65).</summary>
@@ -45,6 +45,7 @@ public static partial class CliRunner
             "export" => OpticsZemaxExport(project, o, stdout),   // OP-94
             "catalog" => OpticsCatalog(project, o, stdout),   // OP-16: a folder of lens files or a private catalog, not a project
             "macro" => OpticsMacro(project, o, stdout, cancellation),   // OP-99: a .zpl macro (CliRunner.OpticsMacro.cs)
+            "convert" => OpticsConvert(project, o, stdout, cancellation),   // OP-61: design conversion tools (CliRunner.OpticsDesign.cs)
             _ => throw new UsageException($"Unknown optics subcommand '{args[1]}'; use {string.Join(", ", OpticsSubcommands)}.")
         };
     }

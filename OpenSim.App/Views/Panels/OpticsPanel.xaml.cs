@@ -135,6 +135,19 @@ public partial class OpticsPanel : UserControl
         _testPlateFitting.Show();
     }
 
+    // OP-61
+    private DesignToolsWindow? _designTools;
+
+    /// <summary>Opens the design conversion tools (OP-61), or brings the open window forward.</summary>
+    private void DesignTools_Click(object sender, RoutedEventArgs e)
+    {
+        if (_designTools is { IsLoaded: true }) { _designTools.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _designTools = new DesignToolsWindow(optics.DesignTools) { Owner = Window.GetWindow(this) };
+        _designTools.Closed += (_, _) => _designTools = null;
+        _designTools.Show();
+    }
+
     // OP-16
     private LensCatalogWindow? _lensCatalogs;
 

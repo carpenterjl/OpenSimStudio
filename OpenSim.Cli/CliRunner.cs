@@ -218,6 +218,15 @@ public static partial class CliRunner
             --out FILE          also write the output text; --save-lens FILE the changed lens
                                 (.osslens or .zmx)
 
+        opensim optics convert <project.ossproj> --tool asphere|best-asphere|stock [options]
+            The design conversion tools (OP-61); writes report.txt, log.txt and the project with
+            the result (the input is unchanged).
+            asphere: --surface N [--to even|extended|qbfs|qcon] [--terms N] [--keep-radius]
+            best-asphere: [--first N] [--last N] [--kind conic|even] [--order 4..16]
+            stock: [--catalogs DIR] [--vendor NAME] [--variables] [--matches N] [--efl-tol P]
+                   [--epd-tol P] [--air] [--any-shape] [--both-ways]
+            --cycles auto|N     the optimization of every trial
+
         Optics sweeps: a sweep job whose targets are all optics:... sets the lens instead of
         solving a body, and tabulates the saved merit function and each row's value.
             Targets: optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|

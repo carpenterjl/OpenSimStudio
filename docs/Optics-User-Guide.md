@@ -1507,6 +1507,9 @@ a part not built), 2 the run failed or was cancelled.
 - `opensim optics macro <macro.zpl> [--lens FILE]` runs a ZPL macro on the lens of a project,
   lens file or .zmx and prints its output (ZPL macros below); `--arg NAME=VALUE,...` sets what
   `$GETARG` reads, `--out` writes the output to a file, `--save-lens` the changed lens.
+- `opensim optics convert <project> --tool asphere|best-asphere|stock` runs Convert Asphere
+  Types, Find Best Asphere or Stock Lens Matching and writes the report and the project with the
+  result (Design conversion tools below).
 - Glass catalogs: the app's (the built-in set and your catalog folder); `--builtin-catalogs` uses
   the built-in set alone, for a run that does not depend on the machine.
 - Ctrl+C stops a run between steps. A stopped optimization still writes the best design so far.
@@ -1916,6 +1919,34 @@ and "Update Tilt", drawing add-ons in the layouts (the base is drawn), the sag a
 "Composite Sag", Seidel sums of composite surfaces, Reverse Elements and Make Double Pass of
 surfaces with add-ons, the COMPOSITEON/COMPOSITEOFF macro keywords, add-ons in .zmx, CODE V and
 OSLO files, and diffractive phase add-ons.
+
+## Design conversion tools
+
+**Design Conversion Tools…** in the optics panel opens one window with three of OpticStudio's
+Optimization Tools. Each shows a report; **Keep** writes the last result into the lens (the Lens
+Data Editor's Undo takes it back); **Stop** ends a search between trials and keeps what it found.
+
+- **Convert Asphere Types**: choose the surface, the new form (Even, Extended, Q-type Qbfs or
+  Qcon) and the number of terms or Automatic. The new coefficients are a least-squares fit of the
+  old sag over the clear semi-diameter, which is also the normalization radius; with **Fit radius
+  and conic** a non-zero or variable radius or conic is fitted too (not one held by a solve). The
+  report gives the RMS and largest sag residual in lens units: if they are not small next to the
+  semi-diameter, use more terms.
+- **Find Best Asphere**: tries a conic, or an even asphere up to the chosen order (terms from r⁴),
+  on each candidate surface between First and Last in turn (Standard, no conic, between air and
+  glass, radius variable or held by a marginal ray angle or F/# solve, no CRVT row), re-optimizes
+  every variable against the current merit function, and ranks the surfaces. The merit function
+  should suit an aspheric design. Keep writes the best.
+- **Stock Lens Matching**: loads the stock lens catalog folder of Lens Catalogs, then for each lens
+  element (or each with a variable radius) tries the catalog lenses within the EFL and EPD
+  tolerances (never smaller than the element), in the orientation and shape the options allow,
+  keeping the element's air space after it, optionally re-optimizing the variable air spaces,
+  and lists the best matches per element and the best combinations. Keep writes the best
+  combination.
+
+The trials use the optimization settings at the bottom of the window. From the command line:
+`opensim optics convert <project> --tool asphere|best-asphere|stock` (options in `opensim help`).
+Not built: writing `<lens>_SLM.zmx`, the coating check, conversion to the Odd forms.
 
 ## Coming
 

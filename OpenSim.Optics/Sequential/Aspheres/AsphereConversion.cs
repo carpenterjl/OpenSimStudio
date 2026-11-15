@@ -127,6 +127,36 @@ public static class AsphereConversion
         return Residuals(source, surface, samples, rho);
     }
 
+    // OP-61: the Extended Asphere target of Convert Asphere Types (docs/Optics-Conventions.md §59).
+    /// <summary>Fits an Extended Asphere of <paramref name="terms"/> coefficients (1…240) to the
+    /// surface over 0 ≤ r ≤ <paramref name="apertureRadius"/>, which is also its normalization
+    /// radius, keeping its curvature and conic. The design matrix is the Even Asphere's on r/ρ, so
+    /// the fitted values are the Extended Asphere's coefficients on ρ²ⁱ directly (meters).</summary>
+    public static AsphereFitResult ToExtendedAsphere(SequentialSurface source, double apertureRadius, int terms)
+    {
+        CheckArguments(source, terms, 240, apertureRadius, "Extended Asphere");
+        double rho = apertureRadius, c = source.Curvature, k = source.Conic;
+        var samples = Samples(terms);
+        var design = new double[samples.Length, terms];
+        var rhs = new double[samples.Length];
+        for (int j = 0; j < samples.Length; j++)
+        {
+            double u = samples[j], x = u * u, r = u * rho;
+            if (!ConicSag.TryEvaluate(r, c, k, out double conic, out _))
+                throw new InvalidOperationException($"Asphere conversion: the base conic (c = {c} 1/m, k = {k}) is not defined at r = {r} m.");
+            rhs[j] = RadialSag(source, r) - conic;
+            double power = 1;
+            for (int i = 0; i < terms; i++)
+            {
+                power *= x;
+                design[j, i] = power;      // ρ^(2i + 2)
+            }
+        }
+        var alpha = HouseholderLeastSquares.Solve(design, rhs);
+        var surface = source with { Shape = new ExtendedAsphere(rho, alpha) };
+        return Residuals(source, surface, samples, rho);
+    }
+
     private static void CheckArguments(SequentialSurface source, int terms, int maximum, double apertureRadius, string target)
     {
         ArgumentNullException.ThrowIfNull(source);

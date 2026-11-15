@@ -1384,6 +1384,30 @@ single place in the code, so a correction is one line and its test.
     Check: a base with a decentered and a tilted add-on traced in OpticStudio, and its Surface
     Sag map, against this program's.
 
+55. **Design conversion readings** (OP-61, section 59). The help pages "Find Best Asphere",
+    "Convert Asphere Types" and "Stock Lens Matching" (2025 R2) describe the tools in outline;
+    these are this program's readings where they stop:
+    - *Find Best Asphere's even asphere* varies α2 … α(order/2), not α1 (r², a second curvature),
+      and not the conic; the conic choice varies the conic alone. Each trial starts from the
+      design as given, not from the best so far. The start re-optimized without an asphere is
+      reported beside the trials (the help reports only the best surface).
+    - *Convert Asphere Types' automatic terms*: the source's polynomial order (Even 2n, Extended
+      2N, Q-type 2T + 2) gives n terms for the Even and Extended targets and n − 1 for the Q-types,
+      raised one at a time while the RMS residual exceeds 1e-9 of the fitting radius (at most 8
+      for the Even, 20 otherwise); a Standard or other source starts at 4. A "non-zero or
+      variable" radius and conic are fitted by variable projection; one held by a solve or pickup
+      is kept.
+    - *Stock Lens Matching*: "close" shape factors differ by at most 1 (the help gives no number);
+      Match Shape and Match Orientation default on as the text says, though the help's dialog
+      picture shows them cleared; only Standard surfaces are matched in the design, stock lenses
+      of every type are tried; the combination stage evaluates every combination of the shown
+      matches (up to 1000, then greedy); the design keeps its air thickness after a component and
+      its stop. The wavelength-range criterion is applied only through the merit function (a
+      glass not valid at a wavelength fails its trial by name).
+    Check: the three tools on the same lens in OpticStudio (a doublet with a variable radius per
+    surface; a two-singlet design against a vendor catalog), the ranked surfaces, the converted
+    coefficients and the matched parts compared.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -4120,7 +4144,8 @@ command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics
 write Zemax lens files (§52); `import` also reads CODE V .seq and OSLO .len files by their
 extension (OP-95, §54); `opensim optics catalog` (OP-16, `CliRunner.OpticsCatalog.cs`)
 indexes and searches a stock lens catalog (§53); `opensim optics macro` (OP-99,
-`CliRunner.OpticsMacro.cs`) runs a ZPL macro (§56).
+`CliRunner.OpticsMacro.cs`) runs a ZPL macro (§56); `opensim optics convert` (OP-61,
+`CliRunner.OpticsDesign.cs`) runs a design conversion tool (§59).
 
 - **One report function.** An analysis report is `OpticsAnalysisReport.Compose` over the
   analyses' results, the function the app's Save report calls
@@ -5197,3 +5222,77 @@ COMPOSITEON, COMPOSITEOFF and COMPOSITEOFFAXISAPERTUREON, tolerancing irregulari
 inserted add-ons (TIRR, TEXI, TEZI on other types), .zmx/CODE V/OSLO reading and writing of
 add-ons, and diffractive phase add-ons (OP-26's phase types would need the composite to sum
 their phases in `TryRedirect`).
+
+## 59. Design conversion tools
+
+`OpenSim.Optics/DesignTools/` (OP-61): OpticStudio's Optimization Tools Find Best Asphere, Convert
+Asphere Types and Stock Lens Matching (2025 R2 help pages of those names, saved in
+`plans/sources/optics/aspheres/` and `plans/sources/optics/op-61-help/`). All three work on the
+saved optics record, change surfaces in place (no surface is renumbered, so merit rows, pickups and
+multi-configuration rows keep their numbers) and rank by the current merit function. Readings
+beyond the help pages are §10 item 55.
+
+**Convert Asphere Types** (`AsphereTypeConversion`). Surface, Asphere Type (Even, Extended, Q-type
+Qbfs, Q-type Qcon) and Number of Terms (a number, or automatic). The fit is OP-23's
+`AsphereConversion` (linear least squares of the sag on equal-area samples, §17), extended by
+`AsphereConversion.ToExtendedAsphere` for this tool: the Even Asphere's design matrix on r/ρ, whose
+coefficients are the Extended Asphere's on ρ²ⁱ. The fitting region and normalization radius are the
+surface's clear semi-diameter ("the optical surface edge"). When the radius or the conic is
+"non-zero or variable" (help) it is fitted too: damped least squares (`DampedLeastSquares`) over c·ρ
+and k on the sag residuals, the coefficients solved linearly at every step. The refined fit
+replaces the fixed one only when it lowers the RMS residual by more than 0.1 %, and not at all
+when the fixed fit is exact (RMS at most 1e-12 of ρ), so a radius never moves by rounding. The
+Qbfs's curvature is the best-fit conic's through the vertex and the edge (§17), so only its conic
+is fitted. A curvature or conic held by a solve or pickup is not fitted. The report gives the RMS
+and largest sag residual in lens units, the terms used and the radius and conic before and after.
+Flags on the old type's parameter cells are removed.
+
+**Find Best Asphere** (`FindBestAsphere`). First and Last Surface, Asphere Type (conic, or even
+polynomial to a maximum order 4 … 16). A candidate is, as the help lists, a Standard surface with
+no conic, between air and glass, whose radius is variable or held by a marginal-ray-angle or F/#
+solve, with no CRVT row on it; ignored surfaces and mirrors are not candidates. Each candidate in
+turn is made aspheric on the design as given, its aspheric terms flagged Variable, and the design
+re-optimized with every variable by `LocalOptimizer`; the lowest merit wins (a design meeting the
+exact constraints first; ties keep the earlier surface). The even polynomial is optimized as an
+Extended Asphere normalized at the surface's clear semi-diameter R, so that every coefficient is a
+length and the optimizer's derivative steps suit all orders, and written back as the Even Asphere
+α_i = A_i/R²ⁱ (the same sag) with α2 … αn Variable; the merit is evaluated again on it. The start
+re-optimized without an asphere is reported for comparison.
+
+**Stock Lens Matching** (`StockLensMatching`). Surfaces (All or Variables), Vendor(s) (OP-16's
+`LensCatalogLibrary` catalogs), Show Matches, EFL and EPD tolerances (%), Air Thickness
+Compensation with # Opt. Cycles, Match Shape, Match Orientation; defaults 5, 25 %, 25 % and
+automatic cycles as the help's dialog shows. Components are runs of lens surfaces with air before
+and after (`StockLensProperties.OfGroup` gives their EFL in air and diameter, twice the largest
+clear semi-diameter); a component with a mirror, a non-Standard surface or a tilt is reported and
+not matched. A stock lens is a candidate when it has the component's number of elements, its EFL
+within the EFL tolerance of the component's, and its EPD not below the component's diameter and
+within the EPD tolerance above it. The shape factor is the help's S = (C_front + C_back)/(C_front −
+C_back), C = 1/R. With Match Orientation the lens is reversed when its S and the design's have
+opposite signs; without, both orientations are tried. With Match Shape the oriented S must be
+within 1 of the design's. A trial puts the lens file into the component with Insert Lens
+(`StockLensInsertion`, IgnoreObject and Reverse), surface for surface: the lens's radii, conics,
+glasses, center thicknesses, semi-diameters, apertures and coatings replace the component's; the
+component keeps its stop flag and the air thickness after its last surface (with that cell's
+flag), and its first surface's comment becomes the part and vendor; a lens file with a different
+number of surfaces fails the trial by name. The merit is evaluated, or with Air Thickness
+Compensation the variable air thicknesses alone (every other variable held) are re-optimized
+first. A component's matches are its successful trials ranked by merit; the best combinations
+evaluate every combination of the shown matches of the components that have any (up to 1000;
+beyond, a greedy search in order of the components' best matches). The report follows the help's
+example (component, MF Value, MF Change, Orientation; Best Combinations) and lists failed trials.
+
+All three report progress after each trial and stop between trials on cancellation, keeping what
+was found. Trials run one after another; `LocalOptimizer` is bitwise identical at every thread
+count, so the tools are too.
+
+**App and command line.** **Design Conversion Tools…** in the optics panel opens
+`DesignToolsWindow` (`OpticsDesignToolsViewModel`): a section per tool, Stop, and Keep, which writes
+the last result into the lens as one undoable Lens Data Editor edit (the help's Keep and Exit).
+`opensim optics convert <project> --tool asphere|best-asphere|stock` runs a tool and writes
+report.txt, log.txt and the project with the result.
+
+**Not built.** OpticStudio's own automatic term rule (this program's is above); the
+wavelength-range limiting criterion as a test of its own; the coating check (COATING.DAT's stock
+coatings); Save Best Combination's `<lens>_SLM.zmx`; conversion to the Odd forms (Odd and Extended
+Odd sources are read, not offered as targets); multi-configuration caveats beyond the CRVT check.

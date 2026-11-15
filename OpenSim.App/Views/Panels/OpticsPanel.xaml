@@ -55,6 +55,12 @@
                         ToolTip="Fit the variable radii to a fabricator's test plate list, re-optimizing after each."
                         AutomationProperties.AutomationId="OpticsTestPlateFittingButton"/>
             </WrapPanel>
+            <!-- OP-61 -->
+            <WrapPanel Margin="0,4,0,0">
+                <Button Content="Design Conversion Tools…" Click="DesignTools_Click"
+                        ToolTip="Find Best Asphere, Convert Asphere Types and Stock Lens Matching."
+                        AutomationProperties.AutomationId="OpticsDesignToolsButton"/>
+            </WrapPanel>
             <!-- OP-16: stock lens catalogs, Insert Lens and design templates (OpticStudio's Libraries tab). -->
             <WrapPanel Margin="0,4,0,0">
                 <Button Content="Lens Catalogs…" Click="LensCatalogs_Click"
