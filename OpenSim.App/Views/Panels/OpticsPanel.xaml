@@ -49,6 +49,12 @@
                         ToolTip="Sliders on up to eight variables while the analysis windows update."
                         AutomationProperties.AutomationId="OpticsVisualOptimizerButton"/>
             </WrapPanel>
+            <!-- OP-17: test plate fitting (OpticStudio's Optimization Tools group). -->
+            <WrapPanel Margin="0,4,0,0">
+                <Button Content="Test Plate Fitting…" Click="TestPlateFitting_Click"
+                        ToolTip="Fit the variable radii to a fabricator's test plate list, re-optimizing after each."
+                        AutomationProperties.AutomationId="OpticsTestPlateFittingButton"/>
+            </WrapPanel>
             <!-- OP-63: the tolerance data, edited in the Tolerance Data Editor window. -->
             <DockPanel Margin="0,4,0,0">
                 <Button DockPanel.Dock="Left" Content="Tolerance Data Editor…" Click="ToleranceDataEditor_Click"

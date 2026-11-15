@@ -122,6 +122,19 @@ public partial class OpticsPanel : UserControl
         _visualOptimizer.Show();
     }
 
+    // OP-17
+    private TestPlateFittingWindow? _testPlateFitting;
+
+    /// <summary>Opens Test Plate Fitting (OP-17), or brings the open one forward.</summary>
+    private void TestPlateFitting_Click(object sender, RoutedEventArgs e)
+    {
+        if (_testPlateFitting is { IsLoaded: true }) { _testPlateFitting.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _testPlateFitting = new TestPlateFittingWindow(optics.TestPlates) { Owner = Window.GetWindow(this) };
+        _testPlateFitting.Closed += (_, _) => _testPlateFitting = null;
+        _testPlateFitting.Show();
+    }
+
     /// <summary>Opens the Multi-Configuration Editor (OP-30), or brings the open one forward.</summary>
     private void MultiConfigEditor_Click(object sender, RoutedEventArgs e)
     {

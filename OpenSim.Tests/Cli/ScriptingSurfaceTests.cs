@@ -362,6 +362,23 @@ public class ScriptingSurfaceTests
         HasReadableProperty(T + "MonteCarloStatistics", "StandardDeviation", "Double");
         HasReadableProperty(T + "MonteCarloStatistics", "Percentiles", "IReadOnlyList<MonteCarloPercentile>");
         HasReadableProperty(T + "MonteCarloYield", "Fraction", "Double");
+        // OP-17: test plate lists and fitting.
+        const string TP = "OpenSim.Optics.Optimization.TestPlates.";
+        HasMethod(TP + "TestPlateList", "Read", "String");
+        HasMethod(TP + "TestPlateList", "Parse", "String", "String");
+        HasMethod(TP + "TestPlateList", "Write", "String");
+        HasReadableProperty(TP + "TestPlateList", "Plates", "IReadOnlyList<TestPlate>");
+        HasMethod(TP + "TestPlateFitting", "Run", "OpticsSettings", "TestPlateList", "IReadOnlyList<OpticalCatalog>", "TestPlateFitOptions", "MeritFunction", "MeritOperandRegistry");
+        Assert.NotNull(Named(TP + "TestPlateFitOptions").GetConstructor(Type.EmptyTypes));
+        HasSettableProperty(TP + "TestPlateFitOptions", "Method", "TestPlateFitMethod");
+        HasSettableProperty(TP + "TestPlateFitOptions", "Optimization", "LocalOptimizationOptions");
+        HasReadableProperty(TP + "TestPlateFitResult", "Fitted", "OpticsSettings");
+        HasReadableProperty(TP + "TestPlateFitResult", "Merit", "Double");
+        HasReadableProperty(TP + "TestPlateFitResult", "Steps", "IReadOnlyList<TestPlateFitStep>");
+        HasMethod(TP + "TestPlateFitResult", "ReportLines");
+        HasReadableProperty(TP + "TestPlateFitStep", "Surface", "Int32");
+        HasReadableProperty(TP + "TestPlateFitStep", "Plate", "TestPlate");
+        HasReadableProperty(TP + "TestPlateFitStep", "Merit", "Double");
     }
 
     /// <summary>The lens of <c>examples/jgraph/optics_from_jgraph.m</c>, built with the same

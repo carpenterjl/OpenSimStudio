@@ -1135,6 +1135,31 @@ single place in the code, so a correction is one line and its test.
     Check: OpticStudio's RAYTRACE on a lens built to miss, totally reflect and vignette one ray
     each, and one whose aim fails, RAYE and RAYV compared.
 
+44. **Test plate readings** (OP-17, section 48). The help page "Test Plate Fitting" (2025 R2,
+    saved under `plans/sources/optics/op-17-help/`) gives the file layout, the four orders, the
+    diameter (3/4) and edge-sag (0.2 mm) tests and "NO MATCH FOUND!". These are this program's
+    readings where the page is silent:
+    - *The code names the plate.* Code −1 "concave only" and 1 "convex only" are read as the
+      plate's own shape (the Test Plate Lists page: "availability of concave and convex test
+      plates"), so a convex lens surface needs a concave plate (code −1 or 0) and a concave one a
+      convex plate (1 or 0). A cemented surface needs both (code 0).
+    - *Convex or concave* is decided from the materials: the surface is convex when its centre of
+      curvature lies in its element's material (§48 gives the side rule for mirrors and reversed
+      light). A radius flagged Variable on a surface with air on both sides is refused.
+    - *Fringes* are N = r²·|c_plate − c|/λ over the clear semi-diameter r, from the TFRN page's
+      ΔZ = (λ/2)·N and ΔC = 2ΔZ/r²; the page does not name a wavelength for fitting, so the
+      report uses 0.6328 µm (the TWAV default) unless set. The fitting order does not depend on it.
+    - *Edge sag* compares the surface's conic sag (its conic constant included, higher-order
+      aspheric terms not) with the plate's spherical sag at the clear semi-diameter; a plate whose
+      radius is shorter than the clear semi-diameter fails the test.
+    - *No match.* A radius with no admissible plate is reported when it is found (before the
+      remaining radii are fitted) and stays variable, re-optimized as a compensator ("that radii
+      will subsequently be ignored").
+    - *Ties.* The lower surface is fitted first; the earlier line of the list wins between plates;
+      Try All keeps the first order (help order) on equal merit.
+    Check: Test Plate Fitting in OpticStudio on a lens and a vendor list, the chosen plates, their
+    order and the merit after each step compared with this program's report.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3970,3 +3995,59 @@ build the lens from them through `ProjectLens` as the application does.
   record before handing it to an engine and not change it while one holds it.
 - **Not built.** The non-sequential model, macro language (OP-99) and plug-ins (OP-100). The
   global searches and Monte Carlo were pinned by reflection but not run under JGraph.
+
+## 48. Test plates
+
+`OpenSim.Optics/Optimization/TestPlates/` (OP-17) reads and writes fabricators' test plate lists
+and fits variable radii to them, after OpticStudio 2025 R2 help, "Test Plate Fitting" and "Test
+Plate Lists" (saved under `plans/sources/optics/op-17-help/`). No list ships with the program.
+
+- **List layout** (`TestPlateList`). Up to 15 header lines starting with "!", then one plate per
+  line, `partname radius diameter code`, separated by spaces or tabs; radius and diameter in
+  millimeters whatever the lens unit; code −1 concave only, 0 both, 1 convex only; at most 30,000
+  plates. Blank lines are skipped. A line with the wrong number of values, a radius that is not
+  positive, a negative diameter, a code other than −1, 0, 1, a "!" line after the first plate, a
+  16th header line or a 30,001st plate fails the read, naming the file and every bad line. The
+  writer gives the same layout with round-trip numbers and refuses what the layout cannot hold.
+  The list report shows "!" as a space and columns CC and CX, as the Test Plate Lists tool does.
+- **What is fitted** (`TestPlateFitting.Run`). Only Radius cells flagged Variable in the Lens Data
+  Editor. Variable multi-configuration CRVT cells are not fitted (a note says so); they and every
+  other variable are re-optimized as compensators. The current merit function is the figure of
+  merit. Clear semi-diameters are the fixed ones as entered, automatic ones sized as the editor
+  sizes them (`ApertureTools.ClearSemiDiameters`, the base configuration), re-read at every step.
+- **Element side.** Light runs along +z and reverses at each mirror. A refracting surface's
+  element material is the solid medium after it (+direction) or before it (−direction); solid on
+  both sides is cemented. A mirror's substrate lies behind the reflecting face (+direction),
+  unless the light arrives through glass (a Mangin mirror: −direction). The medium after a mirror
+  is the one before it; a constant index of exactly 1 counts as air. With s that side in the
+  surface's local z, a surface of curvature sign σ is convex when σ = s.
+- **Admissible plate.** The right shape (convex surface: a concave plate, code −1 or 0; concave
+  surface: a convex plate, 1 or 0; cemented: code 0; a plane surface may take either sign); a
+  diameter of at least 3/4 of the clear aperture diameter (0 skips the test); and an edge sag
+  within 0.2 mm of the surface's at the clear semi-diameter, the surface's sag with its conic and
+  the plate's spherical with the surface's sign (§3 sag). The closest admissible plate is the one
+  of fewest fringes N = r²·|σ/R_plate − c|/λ (r the clear semi-diameter, λ the test wavelength,
+  default 0.6328 µm), ties to the earlier line.
+- **Procedure.** The design is optimized locally first (`LocalOptimizer`, §35). Then, while
+  variable radii remain: each one's closest plate is found; a radius with none is reported
+  "NO MATCH FOUND!" with the count of plates failing each test and stays variable; of the rest the
+  method picks one (Best To Worst: fewest fringes; Worst To Best: most; Long To Short: smallest
+  |c|; Short To Long: largest; ties to the lower surface); its radius becomes σ·R_plate (in lens
+  units), its Variable flag is removed and every remaining variable is re-optimized (or the merit
+  only evaluated when none is left). Try All runs the four orders from the same pre-optimized
+  design and keeps the lowest final merit, the first in the help's order on a tie; an order that
+  fails is reported with its reason and the others still count. "# Opt Cycles" is the local
+  optimizer's Automatic or Fixed cycles; infinite cycles run as automatic.
+- **Result.** Each step gives the surface, the radius before and after (lens units), the plate,
+  its fringes, the clear semi-diameter used and the merit after the re-optimization; the report
+  (`ReportLines`) adds the vendor header, the order kept, each order's merit under Try All and the
+  merit before and after. A re-optimization that fails stops the order with a message naming the
+  order, surface and plate (and the list line). Cancellation returns the design so far, flagged;
+  the app does not apply a stopped fit.
+- **App.** The optics panel's Test Plate Fitting… opens a FormGrid dialog (list file, method,
+  cycles, test wavelength; Show List, Fit, Stop). Fit writes the fitted design through the Lens
+  Data Editor as one undoable edit, and the multi-configuration table too when one of its cells is
+  variable, as the Optimize tool does.
+- **Not built.** Fitting multi-configuration CRVT cells; a Testplate folder of installed lists
+  (any file is chosen instead); the ZPL keyword TESTPLATEFIT and a command-line arm; higher-order
+  aspheric terms in the edge-sag test. Nothing is compared with OpticStudio's output (§10 item 44).

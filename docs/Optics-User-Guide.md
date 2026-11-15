@@ -1503,6 +1503,36 @@ it into a project (`project.Optics = …`, then the project serializer's Save) a
 Not built: the macro language (ZPL); plug-ins. The global searches and Monte Carlo were not
 tried under JGraph itself; their calls are checked by the test suite.
 
+## Test plate fitting
+
+Fabricators publish lists of the test plates they own; fitting a design's radii to one list
+avoids paying for new plates. **Test Plate Fitting…** in the optics panel opens a dialog:
+
+- **Test plate list**: a list file in OpticStudio's .TPD layout (header lines starting with "!",
+  then `partname radius diameter code` per line, millimeters, code −1 concave only, 0 both,
+  1 convex only). Lists come from fabricators; none ships with the program. **Show List** shows
+  the list with its CC and CX columns; a file that does not follow the layout is refused with
+  every bad line named.
+- **Method of fit**: Try All Methods (the default; keeps the order with the lowest merit), Best
+  To Worst, Worst To Best, Long To Short, Short To Long.
+- **Automatic cycles** / **Optimization cycles**: how long each optimization runs.
+- **Test wavelength**: the wavelength the report's fringes are given at (0.6328 µm by default).
+
+Only radii flagged Variable are fitted; flag thicknesses or other compensators Variable too,
+since the merit function is re-optimized after each radius. **Fit** optimizes the lens first,
+then fits one radius at a time: the plate must have the right shape (a convex surface needs a
+concave plate), be at least 3/4 of the clear aperture in diameter, and have an edge sag within
+0.2 mm of the surface's; the closest such plate in fringes is used, the radius loses its Variable
+flag and the rest are re-optimized. The report lists the vendor, the order of fitting, each
+surface's plate, the radius change and the merit after each step. A radius with no suitable plate
+is reported "NO MATCH FOUND!" with the reason and stays variable: it is a candidate for a custom
+plate. The fitted design goes into the Lens Data Editor as one edit, which its Undo takes back;
+**Stop** ends a fit without changing the lens.
+
+Not built: fitting multi-configuration CRVT cells; an installed folder of lists; the ZPL keyword
+TESTPLATEFIT and a command-line arm. The choices where the help is silent (which shape the list's
+code names, the fringe wavelength) are listed in docs/Optics-Conventions.md §10 item 44.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
