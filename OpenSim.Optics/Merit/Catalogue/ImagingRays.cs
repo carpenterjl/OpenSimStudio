@@ -154,9 +154,12 @@ public static partial class ImagingOperands
         double hx = c.Row.DataAt(1), hy = c.Row.DataAt(2);
         var own = c.Ray(RayOf(c.Row));
         var o1 = HitOn(own, 1, "the ray");
-        var d = o1.GlobalPosition - own.Hits[0].GlobalPosition;
+        // The field's direction is the ray's incoming direction at surface 1 in the global frame
+        // (every ray of one field arrives parallel); reading it from the launch point fails when
+        // the launch point lies on surface 1 (the chief ray through surface 1's vertex).
+        var d = For(c).Placement().Global(1).ApplyDirection(o1.IncomingDirection);
         double length = d.Length;
-        if (!(length > 0)) throw new MeritOperandException("the ray's launch point lies on surface 1, so the field direction cannot be read.");
+        if (!(length > 0)) throw new MeritOperandException("the ray has no incoming direction at surface 1, so the field direction cannot be read.");
         d = d * (1 / length);
         var chief = For(c).Path(wave, hx, hy, 0, 0);
         var g = HitOn(chief, 1, $"the chief ray (Hx {F(hx)}, Hy {F(hy)}, wavelength {wave})").GlobalPosition;

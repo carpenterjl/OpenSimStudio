@@ -387,7 +387,7 @@ public sealed class MeritFunctionTests
     public void TheRegistry_FindsByCodeAndName()
     {
         var registry = MeritOperandRegistry.CreateDefault();
-        Assert.Equal("EFFL", registry.Search("focal").Single().Code);
+        Assert.Contains("EFFL", registry.Search("focal").Select(d => d.Code)); // OP-55A added EFLX, EFLY
         Assert.Equal("CTGT", registry.Search("ctgt")[0].Code);
         Assert.Equal("REAY", registry.Get("reay").Code);
         Assert.Null(registry.Find("EQUA"));                     // not built (see the registry)
