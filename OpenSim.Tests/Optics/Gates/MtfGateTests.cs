@@ -179,7 +179,8 @@ public sealed class MtfGateTests
     /// The gate's last line: the geometric MTF tends to the diffraction MTF as the aberration grows.
     /// For W₂₀ = 4 and 16 waves of defocus on 257 × 257 nodes, the largest difference between the
     /// FFT MTF and the geometric MTF of the rays the same defocus sends (x = 2W₂₀λP/(n·a), the
-    /// stationary-phase landing point derived in the class remarks), over z = 8πW₂₀s ≤ 12, falls
+    /// stationary-phase landing point derived in the class remarks), over z = 8πW₂₀s ≤ 12 at the
+    /// FFT's whole lags, falls
     /// as 1/W₂₀ (a direct evaluation of both lattice sums gives 0.041 and 0.0107). The test asks it
     /// to fall by more than half and to be below 0.015 at 16 waves. The FFT pupil is sampled finely
     /// enough: the integrand's phase advances 8πW₂₀·s·ΔP ≤ 12·2/256 ≈ 0.1 rad per node here.
@@ -200,11 +201,15 @@ public sealed class MtfGateTests
                     if (px * px + py * py <= 1) rays.Add(new GeometricRay(radius * px, radius * py, 1));
                 }
             double worst = 0;
-            for (int i = 0; i <= 60; i++)
+            // Whole lags only: there the FFT autocorrelation is exact. Between lags the engine
+            // interpolates linearly, and at 16 waves the OTF turns by 8πW₂₀/(n − 1) ≈ 1.6 rad of z
+            // per lag, so the interpolation error (about 0.06) would hide the 1/W₂₀ trend tested.
+            for (int lag = 0; ; lag++)
             {
-                double z = i * 0.2;
-                double s = z / (8 * Math.PI * w20);
-                double nu = s * diffraction.CutoffX;
+                double nu = lag * Math.Abs(diffraction.StepX);
+                double s = nu / diffraction.CutoffX;
+                double z = 8 * Math.PI * w20 * s;
+                if (z > 12) break;
                 Close(z / (2 * Math.PI * radius), nu, 1e-9 * nu + 1e-9, "the frequency of z (2πνR = z)");
                 double d = diffraction.Otf(nu, MtfOrientation.Sagittal).Magnitude;
                 double g = MtfEngine.GeometricOtf(rays, nu, MtfOrientation.Sagittal).Magnitude;
