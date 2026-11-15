@@ -389,8 +389,9 @@ public static class MultiConfigOperands
                 Finite(v, code);
                 return WithSurface(sys, n, code, s =>
                 {
+                    var addOn = AddOnOf(s, n, k, code);
                     var list = s.AddOns!.ToList();
-                    list[k - 1] = set(AddOnOf(s, n, k, code), v.Number);
+                    list[k - 1] = set(addOn, v.Number);
                     return s with { AddOns = list };
                 });
             },

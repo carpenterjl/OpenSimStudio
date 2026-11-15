@@ -138,9 +138,12 @@ public sealed class CompositeSurfaceTests
         var withZero = asphere with { AddOns = new[] { zero } };
         Assert.IsType<CompositeSurfaceShape>(CompositeSurfaces.EffectiveShape(withZero));
         TraceBoth(Lens(asphere), Lens(withZero), Bitwise);
+        // A decentered add-on has no paraxial model (refused by name, §58), so the paraxial
+        // comparison uses the same zero add-on undecentered.
+        var centred = asphere with { AddOns = new[] { zero with { Placement = default } } };
         Assert.Equal(
             ParaxialSystem.Create(Lens(asphere).ToParaxialLens(), Sys()).EffectiveFocalLength,
-            ParaxialSystem.Create(Lens(withZero).ToParaxialLens(), Sys()).EffectiveFocalLength);
+            ParaxialSystem.Create(Lens(centred).ToParaxialLens(), Sys()).EffectiveFocalLength);
     }
 
     /// <summary>An ignored add-on is no add-on ("The sag of ignored Composite Add-On surfaces
