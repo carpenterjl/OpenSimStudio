@@ -94,6 +94,7 @@ public sealed class LensCatalogTests : IDisposable
         // Bi-concave R1 = −40, R2 = 60, t = 2 (negative EFL).
         Write("BCC-48.zmx", Lens("BCC-48", 8, new[] { S(-40, 2, 1.5), S(60, 10) }));
         // Cemented doublet, n 1.5 and 1.7.
+        // Its EFL is about 103.6 mm (a paraxial trace, derived), so the name is only a label; the gate searches 98–102 mm.
         Write("ACH-80.zmx", Lens("ACH-80", 20, new[] { S(50, 6, 1.5), S(-40, 2, 1.7), S(-150, 75) }));
         // Conic front, plano back: aspheric; stated EFL R1/(n−1) = 120 mm (the conic has no paraxial power).
         Write("ASP-120.zmx", Lens("ASP-120", 15, new[] { S(60, 5, 1.5, conic: -0.5), S(null, 115) }));
@@ -139,7 +140,7 @@ public sealed class LensCatalogTests : IDisposable
         Close(ThickLensEfl(1.5, 50, -50, 5), catalog.Lenses.Single(l => l.PartName == "BCX-50").EffectiveFocalLengthMm, 1e-12, "BCX-50 EFL");
         Close(120, catalog.Lenses.Single(l => l.PartName == "ASP-120").EffectiveFocalLengthMm, 1e-12, "ASP-120 EFL");
 
-        var found = LensCatalogSearch.Find(new[] { catalog }, new LensSearchCriteria { UseEffectiveFocalLength = true, FocalLengthMinMm = 95, FocalLengthMaxMm = 105 });
+        var found = LensCatalogSearch.Find(new[] { catalog }, new LensSearchCriteria { UseEffectiveFocalLength = true, FocalLengthMinMm = 98, FocalLengthMaxMm = 102 });
         Assert.Equal(new[] { "PCX-100" }, found.Select(l => l.PartName));
 
         // The current lens: a 3 mm plane window of index 1.5 at the stop, 10 mm before the image.
