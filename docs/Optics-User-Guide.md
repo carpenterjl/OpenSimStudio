@@ -1533,6 +1533,36 @@ Not built: fitting multi-configuration CRVT cells; an installed folder of lists;
 TESTPLATEFIT and a command-line arm. The choices where the help is silent (which shape the list's
 code names, the fringe wavelength) are listed in docs/Optics-Conventions.md §10 item 44.
 
+## High-yield optimization
+
+The **High Yield** section of the Optimize window steers a design toward one that is less
+sensitive to manufacturing errors, as OpticStudio's "Improve Manufacturing Yield" does. It adds
+HYLD rows to the merit function: at every refracting surface, for every ray of the default merit
+function, the penalty |n − n′|(1 − cos θ), θ the larger of the ray's angles of incidence and
+exit. Large ray angles make a design's aberrations depend delicately on each surface, so lowering
+them lowers the tolerance sensitivity; the optimizer weighs this against the image quality.
+
+- **Weight** (default 1): the weight of the HYLD rows relative to the default merit function's
+  rows. A larger weight gives lower ray angles and worse nominal performance; too large a weight
+  drives the design toward rays normal to every surface, which no longer focuses. Saved with the
+  lens.
+- **Add High-Yield rows** writes the rows at the end of the merit function, after a BLNK row
+  whose comment starts "High-Yield:", using the Optimization Wizard's saved settings (criterion,
+  rings and arms or grid, symmetry, configurations). Adding again replaces them; **Remove** takes
+  them out; the Merit Function Editor's undo takes either back. Mirrors get no rows; rays that
+  fail are left out, and the log says so. Add the default merit function first, then the
+  High-Yield rows, then optimize with **Start** (or Global and Hammer) as usual.
+- **Evaluate** lists, surface by surface, the mean and largest penalty and the rows' share of the
+  merit function.
+- The HYLD operand can also be typed into the Merit Function Editor: Surf, Wave, Hx, Hy, Px, Py.
+
+The definition and the sources are in docs/Optics-Conventions.md §50, and the readings where
+OpticStudio's documentation is short in §10 item 46.
+
+Not built: the "Improve Manufacturing Yield" choice inside the Optimization Wizard dialog itself,
+the TOLR operand (a tolerance estimate inside the merit function), HYLD at mirrors, and a
+command-line option.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

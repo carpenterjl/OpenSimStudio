@@ -203,6 +203,10 @@ public sealed class MeritOperandRegistry
         // OP-59: glass operands (help: Constraints on Glass Data; GlassOperands).
         r.Register(GlassOperands.ReasonableGlass());
         r.Register(GlassOperands.GlassCost());
+
+        // OP-62: the High-Yield operand (help: Constraints on Real Ray Data, HYLD; Zemax
+        // Knowledgebase KA-01837; HighYieldOperands).
+        r.Register(HighYieldOperands.HighYield());
         return r;
     }
 

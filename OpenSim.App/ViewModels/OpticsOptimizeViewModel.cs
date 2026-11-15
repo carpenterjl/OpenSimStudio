@@ -80,6 +80,8 @@ public sealed partial class OpticsOptimizeViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(SubstituteGlassesCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyGlassFlagsCommand))]
     [NotifyCanExecuteChangedFor(nameof(ConvertModelGlassesCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AddHighYieldRowsCommand))]      // OP-62
+    [NotifyCanExecuteChangedFor(nameof(RemoveHighYieldRowsCommand))]   // OP-62
     [NotifyPropertyChangedFor(nameof(IsIdle))]
     private bool _isRunning;
 
@@ -229,6 +231,7 @@ public sealed partial class OpticsOptimizeViewModel : ObservableObject
     {
         base.OnPropertyChanged(e);
         if (!_loadingTemplate && e.PropertyName is { } name && TemplateProperties.Contains(name)) _templateChanged?.Invoke();
+        if (!_loadingHighYield && e.PropertyName == nameof(HighYieldWeight)) _templateChanged?.Invoke();   // OP-62: saved with the lens
     }
 
     /// <summary>The template as saved; null when it is the default (no template, nothing set),

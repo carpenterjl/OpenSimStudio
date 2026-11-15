@@ -11,7 +11,9 @@
          OP-59: the Glasses section: model-glass variables, the substitution flags, model to real
          glass conversion, the glass substitution search and the Glass Substitution Template.
          OP-58: the Global and Hammer section: settings, start, stop, progress, the best ten
-         designs and Apply design. -->
+         designs and Apply design.
+         OP-62: the High Yield section: the HYLD weight, adding and removing the HYLD rows of the
+         merit function, and the penalty surface by surface. -->
     <DockPanel Margin="8">
         <controls:FormGrid DockPanel.Dock="Top">
             <Label Content="Algorithm"/>
@@ -145,6 +147,39 @@
                         <DataGridTextColumn Header="Constraints" Binding="{Binding Constraints}"/>
                         <DataGridTextColumn Header="Trial" Binding="{Binding Trial}"/>
                         <DataGridTextColumn Header="Glasses" Binding="{Binding Glasses}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </StackPanel>
+        </Expander>
+        <!-- OP-62 -->
+        <Expander DockPanel.Dock="Top" Header="High Yield" Margin="0,4,0,4" AutomationProperties.AutomationId="OptimizeHighYieldExpander">
+            <StackPanel Margin="0,4,0,0">
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,4"
+                           Text="Adds HYLD rows to the end of the merit function: at every refracting surface, for the default merit function's rays, the penalty |n − n′|(1 − cos θ) of the larger of the incidence and exit angles. A larger weight trades nominal performance for lower ray angles, a proxy for tolerance sensitivity. Then Start optimizes as usual."/>
+                <controls:FormGrid IsEnabled="{Binding IsIdle}">
+                    <Label Content="Weight"/>
+                    <TextBox Text="{Binding HighYieldWeight}" ToolTip="The weight of the HYLD rows relative to the default merit function's rows; 1 is the default."
+                             AutomationProperties.AutomationId="OptimizeHighYieldWeight"/>
+                    <Label Content="Result"/>
+                    <TextBlock Text="{Binding HighYieldText}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                </controls:FormGrid>
+                <WrapPanel Margin="0,4,0,4">
+                    <Button Content="Add High-Yield rows" Command="{Binding AddHighYieldRowsCommand}" Margin="0,0,4,4"
+                            ToolTip="Write the HYLD rows (replacing earlier ones) from the Optimization Wizard's saved settings; one undo step of the Merit Function Editor."
+                            AutomationProperties.AutomationId="OptimizeAddHighYieldButton"/>
+                    <Button Content="Remove" Command="{Binding RemoveHighYieldRowsCommand}" Margin="0,0,4,4" MinWidth="70"/>
+                    <Button Content="Evaluate" Command="{Binding EvaluateHighYieldCommand}" Margin="0,0,4,4" MinWidth="70"
+                            ToolTip="List the HYLD rows' mean and largest penalty surface by surface."/>
+                </WrapPanel>
+                <DataGrid ItemsSource="{Binding HighYieldSurfaces}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          IsReadOnly="True" MaxHeight="160" HeadersVisibility="Column" AutomationProperties.AutomationId="OptimizeHighYieldGrid">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Config" Binding="{Binding Configuration}"/>
+                        <DataGridTextColumn Header="Surface" Binding="{Binding Surface}"/>
+                        <DataGridTextColumn Header="Rows" Binding="{Binding Rows}"/>
+                        <DataGridTextColumn Header="Mean τ" Binding="{Binding MeanTau}"/>
+                        <DataGridTextColumn Header="Largest τ" Binding="{Binding MaxTau}"/>
+                        <DataGridTextColumn Header="Share of merit" Binding="{Binding Share}" Width="*"/>
                     </DataGrid.Columns>
                 </DataGrid>
             </StackPanel>

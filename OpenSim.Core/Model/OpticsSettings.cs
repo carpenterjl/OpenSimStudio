@@ -78,4 +78,9 @@ public sealed record OpticsSettings
     /// <summary>The Optimization Wizard's saved settings (OP-56). Null — every file written
     /// before OP-56, or settings never saved — is the wizard's defaults.</summary>
     public OpticsMeritWizardSettings? MeritWizard { get; init; }
+
+    // OP-62
+    /// <summary>The High-Yield optimization settings of the Optimize window (OP-62). Null —
+    /// every file written before OP-62 — is the defaults.</summary>
+    public OpticsHighYieldSettings? HighYield { get; init; }
 }

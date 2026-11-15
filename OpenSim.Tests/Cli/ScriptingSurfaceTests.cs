@@ -281,6 +281,16 @@ public class ScriptingSurfaceTests
         HasReadableProperty(GO + "GlobalDesign", "Glasses", "IReadOnlyList<String>");
         HasReadableProperty(GO + "GlobalDesign", "Trial", "Int32");
 
+        // OP-62: High-Yield optimization (the HYLD rows of the merit function).
+        const string HY = "OpenSim.Optics.Optimization.HighYield.";
+        HasMethod(HY + "HighYieldMerit", "Generate", "IMeritConfigurations", "Int32", "DefaultMeritOptions", "Double", "CancellationToken");
+        HasMethod(HY + "HighYieldMerit", "WithRows", "MeritFunction", "IReadOnlyList<MeritOperandRow>", "MeritOperandRegistry");
+        HasMethod(HY + "HighYieldMerit", "Without", "MeritFunction", "MeritOperandRegistry");
+        HasMethod(HY + "HighYieldMerit", "Report", "MeritEvaluation");
+        HasReadableProperty(HY + "HighYieldRows", "Rows", "IReadOnlyList<MeritOperandRow>");
+        HasReadableProperty(HY + "HighYieldReport", "Surfaces", "IReadOnlyList<HighYieldSurfaceTerm>");
+        HasMethod(HY + "HighYieldPenalty", "Tau", "Double", "Double", "Vector3D", "Vector3D", "Vector3D");
+
         // Every analysis by id (the registry), and its result.
         HasMethod("OpenSim.Optics.Scripting.OpticsScripting", "AnalysisIds");
         HasMethod("OpenSim.Optics.Scripting.OpticsScripting", "AnalysisSettings", "String");

@@ -112,7 +112,10 @@ public partial class OpticsViewModel : ObservableObject
     /// <summary>The Optimize tool (OP-57): local optimization of the project's lens against the
     /// merit function, its result written back through the editors.</summary>
     public OpticsOptimizeViewModel Optimize => _optimize ??=
-        new OpticsOptimizeViewModel(ToSettings, () => BuildLensEditContext().Catalogs, ApplyOptimization, PublishFromMultiConfig);   // OP-59: the template publishes
+        new OpticsOptimizeViewModel(ToSettings, () => BuildLensEditContext().Catalogs, ApplyOptimization, PublishFromMultiConfig)   // OP-59: the template publishes
+        {
+            ApplyMerit = (function, description) => MeritEditor.ApplyFunction(function, description),   // OP-62: the High-Yield rows
+        };
 
     // OP-60: Quick Focus, Quick Adjust, the Slider and the Visual Optimizer are in
     // OpticsViewModel.Interactive.cs; they write through ApplyOptimization below.
@@ -183,6 +186,7 @@ public partial class OpticsViewModel : ObservableObject
         Thermal = MultiConfig?.ToThermalSettings(),   // OP-91
         GlassSubstitution = Optimize.TemplateToSettings(),   // OP-59
         MeritWizard = MeritEditor?.WizardSettings,   // OP-56
+        HighYield = Optimize.HighYieldToSettings(),   // OP-62
     };
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -208,6 +212,7 @@ public partial class OpticsViewModel : ObservableObject
         MeritEditor.LoadWizardSettings(saved.MeritWizard);   // OP-56
         ToleranceEditor.LoadSettings(saved.Tolerances, notes);   // OP-63
         Optimize.LoadTemplate(saved.GlassSubstitution);   // OP-59
+        Optimize.LoadHighYield(saved.HighYield);   // OP-62
 
         MultiConfig.LoadThermalSettings(saved.Thermal);   // OP-91: before the table, whose thermal pickups read it
         MultiConfig.LoadSettings(saved.MultiConfiguration, notes);   // OP-30: null is one configuration

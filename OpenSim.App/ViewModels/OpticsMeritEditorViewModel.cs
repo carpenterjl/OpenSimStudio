@@ -286,6 +286,19 @@ public sealed partial class OpticsMeritEditorViewModel : ObservableObject
         return result;
     }
 
+    // OP-62
+    /// <summary>Replaces the rows with <paramref name="function"/>'s as one undo step named
+    /// <paramref name="description"/> (the Optimize window's High-Yield rows); returns why it
+    /// was refused, or null.</summary>
+    public string? ApplyFunction(MeritFunction function, string description)
+    {
+        ArgumentNullException.ThrowIfNull(function);
+        try { Replace(function, description); }
+        catch (InvalidOperationException e) { return e.Message; }
+        Status = $"{description}: {function.Rows.Count} rows.";
+        return null;
+    }
+
     /// <summary>Replaces the rows with <paramref name="function"/>'s as one undo step named
     /// <paramref name="description"/>; publishes once.</summary>
     private void Replace(MeritFunction function, string description)

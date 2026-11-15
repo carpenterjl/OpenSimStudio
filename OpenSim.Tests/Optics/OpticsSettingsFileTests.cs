@@ -44,6 +44,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.NotNull(optics.GlassSubstitution.MaxPhosphateResistance);
 
         Assert.NotNull(optics.MeritWizard!.AirEdge);                         // OP-56: the wizard's saved settings
+        Assert.NotNull(optics.HighYield!.Weight);                            // OP-62: the High-Yield weight
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 
