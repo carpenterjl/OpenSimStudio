@@ -43,6 +43,7 @@ public static partial class CliRunner
             "tolerance" => OpticsTolerance(project, o, stdout, cancellation),
             "import" => OpticsZemaxImport(project, o, stdout),   // OP-94: a .zmx or .zar, not a project
             "export" => OpticsZemaxExport(project, o, stdout),   // OP-94
+            "catalog" => OpticsCatalog(project, o, stdout),   // OP-16: a folder of lens files or a private catalog, not a project
             _ => throw new UsageException($"Unknown optics subcommand '{args[1]}'; use {string.Join(", ", OpticsSubcommands)}.")
         };
     }

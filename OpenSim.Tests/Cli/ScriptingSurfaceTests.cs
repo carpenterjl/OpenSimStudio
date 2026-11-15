@@ -406,6 +406,21 @@ public class ScriptingSurfaceTests
         HasMethod(T + "ToleranceDataSet", "FromMonteCarlo", "MonteCarloResult");
         HasMethod(T + "ToleranceDataSet", "YieldCurve", "String", "QuickYieldResult");
         HasMethod(T + "ToleranceDataSet", "ToCsv");
+
+        // OP-16: stock lens catalogs, Insert Lens and design templates.
+        const string LC = "OpenSim.Optics.Catalogs.";
+        HasMethod(LC + "LensCatalog", "FromFolder", "String", "IReadOnlyList<OpticalCatalog>", "String", "ZemaxImportOptions");
+        HasMethod(LC + "LensCatalog", "Load", "String");
+        HasMethod(LC + "LensCatalog", "Save", "String", "String");
+        HasMethod(LC + "LensCatalog", "Import", "StockLens", "IReadOnlyList<OpticalCatalog>", "ZemaxImportOptions");
+        HasReadableProperty(LC + "LensCatalog", "Lenses", "IReadOnlyList<StockLens>");
+        HasReadableProperty(LC + "StockLens", "EffectiveFocalLengthMm", "Double?");
+        HasMethod(LC + "LensCatalogSearch", "Find", "IEnumerable<LensCatalog>", "LensSearchCriteria");
+        HasSettableProperty(LC + "LensSearchCriteria", "FocalLengthMinMm", "Double");
+        HasMethod(LC + "StockLensInsertion", "Insert", "OpticsSettings", "OpticsSettings", "Int32", "InsertLensOptions");
+        HasReadableProperty(LC + "InsertLensResult", "Settings", "OpticsSettings");
+        HasReadableProperty(LC + "DesignTemplates", "All", "IReadOnlyList<DesignTemplate>", isStatic: true);
+        HasMethod(LC + "DesignTemplate", "Build", "IReadOnlyDictionary<String,String>", "IReadOnlyList<OpticalCatalog>");
     }
 
     /// <summary>The lens of <c>examples/jgraph/optics_from_jgraph.m</c>, built with the same

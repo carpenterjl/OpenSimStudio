@@ -135,6 +135,19 @@ public partial class OpticsPanel : UserControl
         _testPlateFitting.Show();
     }
 
+    // OP-16
+    private LensCatalogWindow? _lensCatalogs;
+
+    /// <summary>Opens Lens Catalogs (OP-16), or brings the open one forward.</summary>
+    private void LensCatalogs_Click(object sender, RoutedEventArgs e)
+    {
+        if (_lensCatalogs is { IsLoaded: true }) { _lensCatalogs.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _lensCatalogs = new LensCatalogWindow(optics.LensCatalog) { Owner = Window.GetWindow(this) };
+        _lensCatalogs.Closed += (_, _) => _lensCatalogs = null;
+        _lensCatalogs.Show();
+    }
+
     /// <summary>Opens the Multi-Configuration Editor (OP-30), or brings the open one forward.</summary>
     private void MultiConfigEditor_Click(object sender, RoutedEventArgs e)
     {

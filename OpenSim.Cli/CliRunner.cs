@@ -203,6 +203,12 @@ public static partial class CliRunner
             Writes the optical system as a Zemax lens file (UTF-16). Content the file subset
             cannot hold fails the export, every item listed; --lenient lists it and leaves it out.
 
+        opensim optics catalog <folder|catalog.osslcat> [--efl MIN:MAX] [--epd MIN:MAX] [--shape EBPM?]
+                [--type SGAT] [--elements N] [--text T] [--save OUT.osslcat] [--name NAME] [--lenient]
+            Indexes a folder of .zmx/.zar lens files as a stock lens catalog (or loads a private
+            catalog), prints the files left out and the Catalog Report of the lenses meeting the
+            criteria (mm); --save writes the private catalog with every file inside it (OP-16).
+
         Optics sweeps: a sweep job whose targets are all optics:... sets the lens instead of
         solving a body, and tabulates the saved merit function and each row's value.
             Targets: optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|

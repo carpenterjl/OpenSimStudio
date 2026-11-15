@@ -1262,6 +1262,22 @@ single place in the code, so a correction is one line and its test.
     Check: a lens with each solve, pickup, variable and surface type saved by OpticStudio, read
     here, and a file written here opened in OpticStudio.
 
+49. **Stock lens catalog readings** (OP-16, section 53). The help pages name the Lens Catalogs
+    tool's codes, criteria and report but not the rules behind them; these are this program's:
+    - *Shape.* A singlet is Plano when either radius is a plane, Meniscus when both centres of
+      curvature lie on one side, Equi when they lie on opposite sides with magnitudes equal to
+      1e-9 relative, Bi otherwise; any lens of other than one element, or a mirror, is "?".
+    - *Type.* When a lens has several kinds of surface, GRIN wins over Toroidal over Aspheric; a
+      non-zero conic counts as aspheric.
+    - *Elements.* Lens surfaces followed by a glass, plus mirrors.
+    - *EFL and EPD.* The paraxial values of the file's own system at its primary wavelength.
+    - *Insert Lens.* A finite, non-zero object thickness is kept as a plane dummy surface unless
+      Ignore Object is set; the inserted lens's stop flag is cleared; pickups from the file's
+      object or image surface are removed. In mirror space only radii and thicknesses change
+      sign, as the help says (aspheric coefficients do not).
+    Check: OpticStudio's Lens Catalogs search results and Catalog Report on a vendor .ZMF, and
+    Insert Lens with and without Ignore Object, compared with this program's on the same files.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3993,7 +4009,8 @@ Yield curve are §51), tolerance scripts (OP-67), and overlay of analyses other 
 `OpenSim.Optics/Analysis/OpticsBatch.cs` (OP-97) run the optics of a saved project from the
 command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics targets in
 `opensim sweep`). `opensim optics import` and `export` (OP-94, `CliRunner.OpticsZemax.cs`) read and
-write Zemax lens files (§52).
+write Zemax lens files (§52); `opensim optics catalog` (OP-16, `CliRunner.OpticsCatalog.cs`)
+indexes and searches a stock lens catalog (§53).
 
 - **One report function.** An analysis report is `OpticsAnalysisReport.Compose` over the
   analyses' results, the function the app's Save report calls
@@ -4485,3 +4502,105 @@ source), surface tilts and decenters, rectangular, elliptical, spider and user a
 obscurations (SQAP, OBSC and similar keywords have no meaning from a reader), ray aiming,
 polarization and the mechanical semi-diameter; the .zos format; writing a .zar; CODE V and OSLO
 files (OP-95). No written file has been opened in OpticStudio (§10 item 48).
+
+## 53. Stock lens catalogs
+
+Plan item OP-16: OpticStudio's Lens Catalogs, Make Private Lens Catalog, Insert Lens and Design
+Templates tools (OpticStudio 2025 R2 help, Libraries tab › Stock Parts Group › Lens Catalogs and
+Make Private Lens Catalog; File tab › Lens File Group › Insert Lens; Libraries tab › Design
+Templates; saved under `plans/sources/optics/op-16-help/` and `op-94-help/`). Code in
+`OpenSim.Optics/Catalogs/`: `StockLens` (the record and its codes), `StockLensProperties`,
+`LensCatalog`, `LensCatalogLibrary`, `LensCatalogSearch` (criteria, search, report),
+`StockLensInsertion`, `DesignTemplates`.
+
+**No vendor catalog ships.** Vendors publish a Zemax file per part with no redistribution terms
+found, so vendor files are user-supplied (decided 2026-11-12). OpticStudio's .ZMF catalog format
+has no public description and is not read or written.
+
+**A catalog.** `LensCatalog.FromFolder` reads every .zmx and .zar directly in a folder with OP-94's
+reader as it is (§52; strict by default, or with unsupported content listed), and lists for each
+lens: the part name (the first space-delimited word of the file name, as the help's Make Private
+Lens Catalog assigns it), the title, the file, and the search data. A file that cannot be read or
+traced is left out and named in `Problems` with the reason; two files giving the same part name
+are both kept and named. Lengths are millimeters whatever the file's lens unit.
+
+**Search data** (`StockLensProperties`; §10 item 49 for the readings):
+
+| Field | Rule |
+|---|---|
+| EFL | paraxial effective focal length (§11) of the file's lens with its solves evaluated, at its primary wavelength; none when afocal |
+| EPD | paraxial entrance pupil diameter of the file's system |
+| Shape | E, B, P, M or ? (help: "Equi-, Bi-, Plano-, Meniscus, or other … Other is used if the lens is multi-element"); a singlet: P when either radius is a plane, M when both centres of curvature are on one side, E when on opposite sides with magnitudes equal to 1e-9 relative, B otherwise; a mirror is ? |
+| Type | S, G, A or T; G when a surface type's name says gradient index (no such type is read from a .zmx, so G does not occur), else T for a Toroidal surface, else A for an asphere type or a non-zero conic, else S |
+| Elements | lens surfaces followed by a glass, plus mirrors |
+
+**Search** (`LensSearchCriteria`, `LensCatalogSearch.Find`): the focal-length and diameter ranges,
+each used only when switched on; the shape and type sets (empty accepts all, otherwise "at least
+one of the selected criteria"); the number of elements (null is "Any #"); and a part-name or title
+text (this program's addition). The EFL range is on the signed EFL. A range with its minimum above
+its maximum is refused. `LensSearchCriteria.Around` gives the help's default ranges, ±5 % of a
+surface group's EFL and diameter; `StockLensProperties.OfGroup` takes the group in air (object at
+infinity, stop on its first surface, flags removed) and its diameter as twice the largest clear
+semi-diameter of the group in the whole lens (OP-51's `ApertureTools.ClearSemiDiameters`).
+`LensCatalogSearch.Report` is the Catalog Report: the criteria, then the lenses three times, by
+part name, by EFL and by EPD, each with part, EFL, EPD, shape, type and elements.
+
+**Private catalog.** `LensCatalog.Save` writes a JSON file (`.osslcat`, format name "OpenSim
+Studio stock lens catalog", version 1): the name, each lens's search data and its file's bytes in
+base 64, and the problems, so the file stands on its own (the help: "All lens files in this folder
+will be placed in the ZMF or ZLC file"). `LensCatalog.MakePrivate` is Make Private Lens Catalog;
+it refuses a folder with no readable lens. `Load` refuses a file that is not one, a newer version,
+an incomplete entry or a code that is not a shape or type letter, naming the entry.
+
+**Library.** `LensCatalogLibrary.Open(folder)` is the counterpart of OpticStudio's Stockcat
+folder: each `.osslcat` file in it and each sub-folder holding .zmx or .zar files is one catalog.
+A catalog file that does not load is named and left out. The folder is the user's choice, saved in
+`%AppData%\OpenSimStudio\stock-lens-catalogs.json` (default `%AppData%\OpenSimStudio\StockLensCatalogs`).
+
+**Insert Lens** (`StockLensInsertion.Insert(current, lens, at, options)`): the file's lens surfaces
+(1 to N − 2) go in before surface `at` (1 to the image); its image surface does not, so the last
+inserted surface keeps the file's distance to its own image. Lengths are converted from the file's
+lens unit with OP-51's lens-unit change (`ScaleLens.ConvertUnits`). The current lens is not
+disturbed: its stop stays (the inserted stop flag is cleared), and every surface number it holds
+follows its surface (`SavedLensSurgery`: pickups, surface solves, tilt pickups, coordinate returns,
+multi-configuration and merit rows). The file's own pickups are renumbered into the new numbering;
+those reading its object or image surface are removed, with a note. Options: Ignore Object
+(otherwise a finite, non-zero object thickness becomes a plane dummy surface in front); Change Sign
+of Surface Geometry in Mirror Space (after an odd number of mirrors before `at`, the inserted radii
+and thicknesses change sign, §3); Reverse (this program's addition: OP-51's `ReverseElements` on
+the inserted surfaces). A note names the file's glass catalogs that are not among the system's
+active ones.
+
+**Design templates** (`DesignTemplates.All`). Each is this program's own prescription, derived in
+closed form (the derivations are in the class remarks); none is copied from a book, patent or
+program. Every template is in millimeters with the F, d and C lines (`SpectralLines`, d primary),
+an entrance-pupil aperture and angle fields 0 and the half field; where the design is focal, the
+gap before the image is a marginal-ray-height solve at the paraxial focus.
+
+| Id | Design |
+|---|---|
+| plano-singlet | R₁ = (n − 1)f, plane back: exact for any thickness |
+| equi-singlet | c = n(1 − √(1 − tφ/n)) / ((n − 1)t), R₂ = −R₁: the exact thick-lens power |
+| cemented-achromat | thin-lens split φ₁ = φV₁/(V₁ − V₂), φ₂ = −φV₂/(V₁ − V₂), equi-convex crown, V from the catalog at d, F, C; then OP-51's Make Focal scales the lens to the focal length (thicknesses scale with it) |
+| parabolic-mirror | radius −2f, conic −1 |
+| keplerian-telescope, galilean-telescope | two Paraxial surfaces f₁, f₂ separated by f₁ + f₂, afocal image space, angular magnification −f₁/f₂ |
+
+A glass input is a glass name in the loaded catalogs or, for the singlets, a number (a constant
+index). Defaults are the built-in catalogs' SiO2-Malitson for the singlets, and PMMA and
+polystyrene (Sultanova) for the achromat. A value that is not a number or out of range, a glass
+not loaded, or a design that does not exist (an equi lens with t/n beyond its focal length) is
+refused, naming the template and the input.
+
+**App and command line.** The optics panel's **Lens Catalogs…** opens `LensCatalogWindow`: the
+library folder and vendor, the criteria, ranges ±5 % from a surface group, Search, Catalog Report,
+Load (replaces the lens), Insert (one undoable edit of the Lens Data Editor; renumbered merit rows
+are loaded into the Merit Function Editor), Make Private Catalog, and the design templates with
+their inputs and Load. `opensim optics catalog <folder|catalog.osslcat> [--efl MIN:MAX] [--epd
+MIN:MAX] [--shape EBPM?] [--type SGAT] [--elements N] [--text T] [--save OUT.osslcat] [--name
+NAME] [--lenient] [--builtin-catalogs]` prints the files left out and the Catalog Report.
+
+**Not built.** OpticStudio's .ZMF and .ZLC files; non-sequential insertion; the Lens Catalogs
+tool's Prescription and Layout buttons (Load the lens and use the analyses instead); GRIN lenses
+(no gradient-index surface type is read); OpticStudio's hundreds of design templates (six of this
+program's own are built) and template filtering beyond text, element count and kind. Nothing is
+compared with OpticStudio's output (§10 item 49).

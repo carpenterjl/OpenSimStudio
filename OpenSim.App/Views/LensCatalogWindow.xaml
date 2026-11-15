@@ -1,0 +1,152 @@
+<Window x:Class="OpenSim.App.Views.LensCatalogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        Title="Lens Catalogs" Width="760" Height="720" MinWidth="520" MinHeight="420"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-16: Lens Catalogs, Make Private Lens Catalog and Design Templates. DataContext is the
+         OpticsLensCatalogViewModel. Search lists the library's lenses meeting the criteria; Load
+         replaces the lens; Insert adds the selected lens before a surface as one undoable edit of
+         the Lens Data Editor. -->
+    <DockPanel Margin="8">
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+        <TabControl>
+            <TabItem Header="Stock lenses">
+                <DockPanel Margin="4">
+                    <controls:FormGrid DockPanel.Dock="Top">
+                        <Label Content="Library folder"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Reload" Command="{Binding ReloadCommand}" Margin="4,0,0,0"
+                                    AutomationProperties.AutomationId="LensCatalogReloadButton"/>
+                            <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseLibrary_Click" Margin="4,0,0,0"/>
+                            <TextBox Text="{Binding LibraryFolder, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Private catalogs (.osslcat) in this folder and each sub-folder of .zmx/.zar files are the catalogs."/>
+                        </DockPanel>
+                        <Label Content="Vendor"/>
+                        <ComboBox ItemsSource="{Binding Vendors}" SelectedItem="{Binding SelectedVendor}"
+                                  AutomationProperties.AutomationId="LensCatalogVendorCombo"/>
+                        <Label Content="Use effective focal length"/>
+                        <CheckBox IsChecked="{Binding UseFocalLength}" VerticalAlignment="Center"/>
+                        <Label Content="Focal length min (mm)"/>
+                        <TextBox Text="{Binding FocalLengthMin}"/>
+                        <Label Content="Focal length max (mm)"/>
+                        <TextBox Text="{Binding FocalLengthMax}"/>
+                        <Label Content="Use entrance pupil diameter"/>
+                        <CheckBox IsChecked="{Binding UseDiameter}" VerticalAlignment="Center"/>
+                        <Label Content="Diameter min (mm)"/>
+                        <TextBox Text="{Binding DiameterMin}"/>
+                        <Label Content="Diameter max (mm)"/>
+                        <TextBox Text="{Binding DiameterMax}"/>
+                        <Label Content="Shape"/>
+                        <WrapPanel ToolTip="None checked accepts every shape; multi-element lenses are shape '?'.">
+                            <CheckBox Content="Equi-" IsChecked="{Binding ShapeEqui}" Margin="0,0,8,0"/>
+                            <CheckBox Content="Bi-" IsChecked="{Binding ShapeBi}" Margin="0,0,8,0"/>
+                            <CheckBox Content="Plano-" IsChecked="{Binding ShapePlano}" Margin="0,0,8,0"/>
+                            <CheckBox Content="Meniscus" IsChecked="{Binding ShapeMeniscus}"/>
+                        </WrapPanel>
+                        <Label Content="Type"/>
+                        <WrapPanel ToolTip="None checked accepts every type.">
+                            <CheckBox Content="Spherical" IsChecked="{Binding TypeSpherical}" Margin="0,0,8,0"/>
+                            <CheckBox Content="GRIN" IsChecked="{Binding TypeGrin}" Margin="0,0,8,0"/>
+                            <CheckBox Content="Aspheric" IsChecked="{Binding TypeAspheric}" Margin="0,0,8,0"/>
+                            <CheckBox Content="Toroidal" IsChecked="{Binding TypeToroidal}"/>
+                        </WrapPanel>
+                        <Label Content="# Elements"/>
+                        <ComboBox ItemsSource="{Binding ElementChoices}" SelectedItem="{Binding SelectedElements}" DisplayMemberPath="Label"/>
+                        <Label Content="Part name contains"/>
+                        <TextBox Text="{Binding PartText, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Label Content="Ranges from surfaces"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Set ±5%" Command="{Binding RangesFromSurfacesCommand}" Margin="4,0,0,0"
+                                    ToolTip="The focal length and diameter of these surfaces of the current lens, plus and minus 5%."/>
+                            <TextBox Text="{Binding GroupFirst}" Width="48" DockPanel.Dock="Left"/>
+                            <TextBlock Text=" to " VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                            <TextBox Text="{Binding GroupLast}" Width="48" HorizontalAlignment="Left"/>
+                        </DockPanel>
+                        <Label Content="List unsupported content"/>
+                        <CheckBox IsChecked="{Binding ReadUnsupportedAsWarnings}" VerticalAlignment="Center"
+                                  ToolTip="Index lens files with content this build does not read, listing it, instead of leaving them out (Reload to apply)."/>
+                    </controls:FormGrid>
+                    <WrapPanel DockPanel.Dock="Top" Margin="0,8,0,4">
+                        <Button Content="Search" Command="{Binding SearchCommand}" MinWidth="70" Margin="0,0,4,4"
+                                AutomationProperties.AutomationId="LensCatalogSearchButton"/>
+                        <Button Content="Catalog Report" Command="{Binding ReportCommand}" MinWidth="70" Margin="0,0,4,4"/>
+                        <Button Content="Load" Command="{Binding LoadLensCommand}" MinWidth="70" Margin="0,0,4,4"
+                                ToolTip="Replace the current lens with the selected one."/>
+                        <Button Content="Insert" Command="{Binding InsertLensCommand}" MinWidth="70" Margin="0,0,4,4"
+                                AutomationProperties.AutomationId="LensCatalogInsertButton"/>
+                        <Button Content="Close" Click="Close_Click" MinWidth="70" Margin="0,0,4,4"/>
+                    </WrapPanel>
+                    <controls:FormGrid DockPanel.Dock="Top">
+                        <Label Content="Insert before surface"/>
+                        <TextBox Text="{Binding InsertAt}"/>
+                        <Label Content="Ignore object"/>
+                        <CheckBox IsChecked="{Binding IgnoreObject}" VerticalAlignment="Center"
+                                  ToolTip="Ignore the inserted lens's object thickness; otherwise it is kept as a dummy surface."/>
+                        <Label Content="Change sign in mirror space"/>
+                        <CheckBox IsChecked="{Binding ChangeSignInMirrorSpace}" VerticalAlignment="Center"/>
+                        <Label Content="Reverse the lens"/>
+                        <CheckBox IsChecked="{Binding ReverseOnInsert}" VerticalAlignment="Center"/>
+                    </controls:FormGrid>
+                    <TextBox DockPanel.Dock="Bottom" Text="{Binding Details, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" Height="140"
+                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0"
+                             Foreground="{DynamicResource TextFaintBrush}"/>
+                    <ListBox ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" FontFamily="Consolas" Margin="0,4,0,0"
+                             AutomationProperties.AutomationId="LensCatalogResultsList"/>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Make private catalog">
+                <StackPanel Margin="4">
+                    <controls:FormGrid>
+                        <Label Content="Source folder"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseSource_Click" Margin="4,0,0,0"/>
+                            <TextBox Text="{Binding PrivateSource, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Every .zmx and .zar file in this folder goes into the catalog; the part name is the first word of each file name."/>
+                        </DockPanel>
+                        <Label Content="Catalog name"/>
+                        <TextBox Text="{Binding PrivateName, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="The file is written to the library folder as name.osslcat; blank uses the source folder's name."/>
+                    </controls:FormGrid>
+                    <WrapPanel Margin="0,8,0,4">
+                        <Button Content="Convert" Command="{Binding MakePrivateCatalogCommand}" MinWidth="70" Margin="0,0,4,4"
+                                AutomationProperties.AutomationId="LensCatalogConvertButton"/>
+                    </WrapPanel>
+                    <TextBox Text="{Binding Details, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" Height="300"
+                             HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                             Foreground="{DynamicResource TextFaintBrush}"/>
+                </StackPanel>
+            </TabItem>
+            <TabItem Header="Design templates">
+                <DockPanel Margin="4">
+                    <controls:FormGrid DockPanel.Dock="Top">
+                        <Label Content="Filter"/>
+                        <TextBox Text="{Binding TemplateFilter, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Text the template's name, kind or description contains."/>
+                        <Label Content="Template"/>
+                        <ComboBox ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}" DisplayMemberPath="Name"
+                                  AutomationProperties.AutomationId="DesignTemplateCombo"/>
+                    </controls:FormGrid>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedTemplate.Description}" TextWrapping="Wrap" Margin="0,6,0,6"
+                               Style="{StaticResource FaintText}"/>
+                    <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <Button Content="Load" Command="{Binding LoadTemplateCommand}" MinWidth="70" Margin="0,0,4,4"
+                                ToolTip="Replace the current lens with the template built from these inputs."
+                                AutomationProperties.AutomationId="DesignTemplateLoadButton"/>
+                    </WrapPanel>
+                    <ItemsControl ItemsSource="{Binding TemplateInputs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <controls:FormGrid>
+                                    <Label Content="{Binding Label}" ToolTip="{Binding Description}"/>
+                                    <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding Description}"/>
+                                </controls:FormGrid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

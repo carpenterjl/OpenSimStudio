@@ -108,8 +108,9 @@ internal static class SavedLensSurgery
         };
     }
 
+    // OP-16: internal (was private) so Insert Lens renumbers the inserted surfaces with the same rules.
     /// <summary>The surface with every surface number it holds mapped.</summary>
-    private static OpticsSurfaceSettings Renumber(OpticsSurfaceSettings s, Func<int, int> map, int where)
+    internal static OpticsSurfaceSettings Renumber(OpticsSurfaceSettings s, Func<int, int> map, int where)
     {
         var r = s;
         if (s.Flags is { Count: > 0 } flags && flags.Any(f => NamesSurface(f)))

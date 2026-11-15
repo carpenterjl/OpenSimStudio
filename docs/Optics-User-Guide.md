@@ -1498,6 +1498,10 @@ a part not built), 2 the run failed or was cancelled.
   <project|lens.osslens>` writes a project's or lens file's system as a `.zmx` (`--out`). Content
   the subset does not hold fails the command (exit 2) with every item listed; `--lenient` lists
   it and goes on (Zemax lens files below).
+- `opensim optics catalog <folder|catalog.osslcat>` indexes a folder of Zemax lens files as a
+  stock lens catalog (or loads a private one), prints the Catalog Report of the lenses meeting
+  `--efl MIN:MAX`, `--epd MIN:MAX`, `--shape`, `--type`, `--elements` and `--text`, and with
+  `--save OUT.osslcat` writes the private catalog (Stock lens catalogs below).
 - Glass catalogs: the app's (the built-in set and your catalog folder); `--builtin-catalogs` uses
   the built-in set alone, for a run that does not depend on the machine.
 - Ctrl+C stops a run between steps. A stopped optimization still writes the best design so far.
@@ -1685,6 +1689,52 @@ Not built: merit-function, tolerance and multi-configuration data; surface types
 listed above; surface tilts and decenters; rectangular, elliptical and user apertures; ray aiming
 and polarization; writing archives; the .zos format; CODE V and OSLO files. Files written here
 have not been opened in OpticStudio. The details are in docs/Optics-Conventions.md §52.
+
+## Stock lens catalogs and design templates
+
+**Lens Catalogs…** in the optics panel opens a dialog with three tabs.
+
+*Stock lenses.* The library folder holds your catalogs: each private catalog file (`.osslcat`)
+in it, and each sub-folder of vendor `.zmx`/`.zar` files (one sub-folder per vendor, named after
+it). No vendor catalog comes with the program; download the vendors' Zemax files yourself. Files
+are read as **Import .zmx** reads them; a file that cannot be read is left out and named in the
+log, with the reason. Choose a vendor or all catalogs and set the criteria as OpticStudio's Lens
+Catalogs tool has them: focal length and entrance pupil diameter ranges in millimeters (each used
+when ticked), the shapes (Equi-, Bi-, Plano-, Meniscus) and types (Spherical, GRIN, Aspheric,
+Toroidal) to accept (none ticked accepts all), the number of elements, and text the part name
+contains. **Set ±5%** takes the ranges from surfaces of the current lens (their focal length in
+air and diameter, plus and minus 5 %). **Search** lists part name, focal length, diameter and the
+code (shape, type, elements), e.g. (P,S,1); **Catalog Report** lists the lenses by name, by focal
+length and by diameter. **Load** replaces the current lens with the selected one; **Insert** puts
+its surfaces before the surface you give, as one step the Lens Data Editor's Undo takes back. The
+file's object thickness becomes a dummy surface unless **Ignore object** is ticked; in mirror
+space the inserted radii and thicknesses change sign unless you clear that box; **Reverse the
+lens** turns it round. Your lens's stop and every surface number in it (pickups, solves,
+configuration and merit rows) follow their surfaces. A lens in inches is converted to your lens
+unit.
+
+The part name is the first word of the file name ("Lens number 5.zmx" is "Lens"), as in
+OpticStudio; name files like "LA1951.zmx". Focal lengths and diameters are the paraxial values of
+each file's own system at its primary wavelength.
+
+*Make private catalog.* Converts a folder of `.zmx`/`.zar` files into one `.osslcat` file in the
+library folder, with every lens file inside it, so it works after the folder is gone.
+
+*Design templates.* Six starting designs worked out from first-order formulas: plano and equi
+singlets that meet a focal length exactly, a cemented achromat (two catalog glasses, colour
+corrected between F and C in the thin-lens limit, scaled to the focal length), a parabolic mirror,
+and Keplerian and Galilean telescopes built from ideal lenses. Filter them by text, edit the inputs
+(focal length, pupil, field, thickness, glass name or a constant index) and **Load** replaces the
+current lens.
+
+From the command line: `opensim optics catalog <folder|catalog.osslcat> [--efl MIN:MAX]
+[--epd MIN:MAX] [--shape EBPM?] [--type SGAT] [--elements N] [--text T] [--save OUT.osslcat]`
+prints the files left out and the Catalog Report.
+
+Not built: OpticStudio's own `.ZMF` catalog files (convert the vendor's `.zmx` files instead);
+non-sequential insertion; the dialog's Prescription and Layout buttons; GRIN lenses; OpticStudio's
+hundreds of design templates. Nothing has been compared with OpticStudio's own Lens Catalogs. The
+details are in docs/Optics-Conventions.md §53.
 
 ## Coming
 
