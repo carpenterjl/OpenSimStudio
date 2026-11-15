@@ -353,9 +353,10 @@ public sealed class DesignToolsTests : IDisposable
 
         var binary = lens with
         {
-            Surfaces = lens.Surfaces!.Select((s, j) => j == 1 ? new OpticsSurfaceSettings
+            Surfaces = lens.Surfaces!.Select((s, j) => j == 1 ? s with
             {
-                Type = "Binary Optic 2", Radius = 40, Thickness = 5, Index = 1.5, SemiDiameter = 10,
+                // Built from the surface it replaces, so the lens keeps its stop and media.
+                Type = "Binary Optic 2", AddOns = null,
                 Parameters = new() { new() { Number = 0, Value = 1 } },
                 ExtraData = new() { new() { Number = 13, Value = 1 }, new() { Number = 14, Value = 10 }, new() { Number = 15, Value = -20 } },
             } : s).ToList(),
