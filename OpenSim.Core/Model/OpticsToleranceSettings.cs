@@ -16,6 +16,58 @@ public sealed record OpticsToleranceSettings
     /// "PowerRemoved" (the default: the peak-to-valley after removing piston, tilt and power, as
     /// ISO 10110 counts irregularity), or "OpticStudio" (the help page's sag formula as written).</summary>
     public string? IrregularityModel { get; init; }
+
+    // OP-64
+    /// <summary>The settings of the last tolerance run (sensitivity and inverse sensitivity,
+    /// plan item OP-64); null for the defaults.</summary>
+    public OpticsToleranceRunSettings? Run { get; init; }
+}
+
+// OP-64
+/// <summary>
+/// The tolerance run's settings as the project and the lens file store them (OpticStudio's
+/// Tolerancing dialog, Set-Up and Criterion tabs, as far as plan item OP-64 builds them). Every
+/// member is nullable; null is the default. The enumerations are stored by name; OpenSim.Optics'
+/// <c>ToleranceRunSettings</c> converts to and from its options and names any value it does not know.
+/// </summary>
+public sealed record OpticsToleranceRunSettings
+{
+    /// <summary>"Sensitivity", "InverseLimit" or "InverseIncrement".</summary>
+    public string? Mode { get; init; }
+
+    /// <summary>"RmsSpotRadius", "RmsSpotX", "RmsSpotY", "RmsWavefront", "MeritFunction",
+    /// "BoresightError" or "StrehlRatio".</summary>
+    public string? Criterion { get; init; }
+
+    /// <summary>"LinearDifference" or "RssDifference".</summary>
+    public string? Change { get; init; }
+
+    /// <summary>"None", "ParaxialFocus", "OptimizeDls" or "OptimizeOd".</summary>
+    public string? Compensation { get; init; }
+
+    /// <summary>"YSymmetric", "XYSymmetric" or "UserDefined".</summary>
+    public string? Fields { get; init; }
+
+    /// <summary>Rays along a radial arm of the Gaussian quadrature (spot and wavefront criteria).</summary>
+    public int? Sampling { get; init; }
+
+    /// <summary>The pupil grid of the Strehl ratio criterion.</summary>
+    public int? PsfSampling { get; init; }
+
+    /// <summary>The optimizer's cycles for the compensators; null or 0 is automatic.</summary>
+    public int? OptimizerCycles { get; init; }
+
+    /// <summary>The 1-based rows of the compensators to optimize; null for all.</summary>
+    public List<int>? CompensatorRows { get; init; }
+
+    /// <summary>The Limit of Inverse Limit mode, in the criterion's unit.</summary>
+    public double? Limit { get; init; }
+
+    /// <summary>The Increment of Inverse Increment mode, in the criterion's unit.</summary>
+    public double? Increment { get; init; }
+
+    /// <summary>How many worst offenders to list.</summary>
+    public int? ShowWorst { get; init; }
 }
 
 /// <summary>

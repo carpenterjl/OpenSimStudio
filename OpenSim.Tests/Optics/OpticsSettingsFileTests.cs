@@ -36,6 +36,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.Equal(2, optics.MultiConfiguration!.Operands![0].Values!.Count);   // OP-30: the table
         Assert.Equal(2, optics.Tolerances!.Operands!.Count);                 // OP-63: the tolerance data
         Assert.NotNull(optics.Tolerances.IrregularityModel);
+        Assert.NotNull(optics.Tolerances.Run?.Limit);                        // OP-64: the tolerance run settings
         Assert.NotNull(optics.Thermal!.GlassMaterials![0].Material!.ThermalExpansionCoefficient);   // OP-91: the glass links
         Assert.Equal(2, optics.GlassSubstitution!.Catalogs!.Count);           // OP-59: the substitution template
         Assert.NotNull(optics.GlassSubstitution.MaxPhosphateResistance);
@@ -260,6 +261,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
             else if (t == typeof(List<string>)) value = new List<string> { $"label {counter}", $"label {counter + 1}" };
             // OP-31: a solve's parameters are a list of numbers.
             else if (t == typeof(List<double>)) value = new List<double> { counter / 7.0 + 0.1, counter / 11.0 + 0.2 };
+            // OP-64: the tolerance run's compensator rows are a list of row numbers.
+            else if (t == typeof(List<int>)) value = new List<int> { 1000 + counter, 1001 + counter };
             else if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(List<>))
             {
                 var list = (System.Collections.IList)Activator.CreateInstance(t)!;

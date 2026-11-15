@@ -934,6 +934,37 @@ single place in the code, so a correction is one line and its test.
     an Extended Source run of a text IMA file for a singlet at two fields, against OpticStudio's
     text output.
 
+38. **Sensitivity and inverse sensitivity readings** (OP-64). Section 42 follows OpticStudio's
+    help pages; nothing is compared with OpticStudio's tolerance report, and these are this
+    program's readings where the help is short:
+    - *Combining fields.* The help says the criterion is "computed as an average over all field
+      positions" through a merit function OpticStudio builds; here the field values are combined
+      as √(Σ w v² / Σ w), the merit function's form (the Strehl ratio, which is not one of
+      OpticStudio's criteria, as the weighted mean).
+    - *The largest field coordinate* of the Y- and XY-Symmetric sets is the largest radial distance
+      of the system's field points; with every field on the axis the set is the one on-axis point.
+    - *Paraxial focus.* "How OpticStudio Computes the Tolerance Analysis" says that without
+      Optimize "the back focal position is set to paraxial focus"; "Evaluating Compensators" says
+      the focus is adjusted "to maintain the amount of defocus in the nominal lens design". This
+      program keeps the nominal lens as entered and holds its defocus (thickness before the image
+      minus the paraxial image distance), so a nominal lens not at its paraxial focus keeps its
+      own defocus.
+    - *Larger-is-better criteria* (the Strehl ratio; MTF when built): the degradation is −Δ, the
+      inverse Increment a decrease (as the help says for MTF), and the estimated performance
+      N − C with the linear difference; with the RSS difference it is not given, since the help's
+      √(N² + C²) is written for a criterion that grows worse upward.
+    - *Compensator bounds* are soft rows of weight 1 next to the criterion's rows (the help says
+      they "may be violated if doing so would provide better performance"; their weight is not
+      published); a COMP with Min = Max = 0 is held at its nominal by that row. CPAR and CMCO
+      bounds are not built.
+    - *Worst offenders* are the individual min and max trials sorted by degradation (the help:
+      "sorts the tolerances by contribution to the criterion"); Show Worst's default 10 is this
+      program's.
+    - *Inverse search.* Brent's method on t in (0, 1) with the limit t·L; an operand whose Min must
+      be −Max keeps the tighter of the two adjusted limits.
+    Check: a lens toleranced by OpticStudio in each mode with each compensator choice, its report's
+    nominal, per-tolerance changes, RSS estimate and inverse limits compared with this program's.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2899,8 +2930,8 @@ of the saved lens by one row at a given value. The operands were read from Optic
 help, saved under `plans/sources/optics/op-63-help/` (Tolerance Operands, the two summary tables,
 each operand's page, Tolerance Control Operands and their pages, Tolerancing with the Irregular
 Surface Type, Nesting Rules for Monte Carlo Analysis, Tolerancing with Solves; the equation
-images under `images/`). The analyses that use the rules (sensitivity, inverse sensitivity,
-Monte Carlo, compensator optimization) are later items.
+images under `images/`). Sensitivity and inverse sensitivity with compensators use the rules (OP-64, §42); Monte
+Carlo is a later item.
 
 - **Rows.** A row is a four-letter code, Int1 to Int3, Min, Max, a comment, and OpticStudio's
   two operand properties (Ignore; Do not adjust during inverse tolerancing). Min and Max are the
@@ -3177,3 +3208,69 @@ Not built: the Huygens PSF option of the diffraction enclosed energy, polarizati
 intermediate surfaces for the diffraction enclosed energy, BIM files, the Geometric Image
 Analysis's own options (parity, rotation, Lambertian source, pixel interpolation), dashed-line
 styling.
+
+## 42. Sensitivity and inverse sensitivity
+
+`OpenSim.Optics/Tolerancing/ToleranceAnalysis.cs`, `ToleranceCriterionEvaluator.cs`,
+`ToleranceCompensators.cs` and `ToleranceRunOptions.cs` (OP-64) run OpticStudio's Sensitivity,
+Inverse Limit and Inverse Increment modes and Quick Sensitivity on the tolerance table of §36. The
+definitions are OpticStudio's 2025 R2 help, saved under `plans/sources/optics/op-63-help/`
+("Tolerancing", the dialog) and `plans/sources/optics/op-64-help/` ("How OpticStudio Computes the
+Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS Estimated Change",
+"Inverse Sensitivity Analysis", "Quick Sensitivity"; the equation images rendered under `images/`).
+§10 item 38 lists the readings where the help is short.
+
+- **Nominal.** The current configuration is toleranced. The compensators are evaluated on the
+  nominal lens first (Optimize: the optimizer drives them; paraxial focus and none: the lens as
+  entered), and its criterion is N.
+- **Trial.** Each tolerance row (not ignored, not a control row) is applied alone to the
+  compensated nominal at its Min, then at its Max, by OP-63's `TolerancePerturber`; the
+  compensators are evaluated and the criterion P recorded. A row the perturber refuses, or a
+  criterion that cannot be evaluated (a failed ray in the quadrature, a lens that cannot be
+  built), records the reason for that trial; the others go on.
+- **Change.** Linear Difference Δ = P − N; RSS Difference Δ = S(P − N)·√|P² − N²|, S(x) = +1 for
+  x ≥ 0 and −1 otherwise (help, "Tolerancing", "Change").
+- **Estimate.** C² = Σᵢ (Δᵢ,min² + Δᵢ,max²)/2; F = N + C (linear) or √(N² + C²) (RSS) (help, "The RSS
+  Estimated Change"). Not given when any trial failed (the help: the statistics are then
+  "usually meaningless"). The worst offenders list the trials by degradation, largest first.
+- **Criteria** (help, "Tolerancing", Criterion tab). RMS spot radius, x and y (lens units) and RMS
+  wavefront (waves of the primary wavelength): OP-40's RMS core (§34) over the Gaussian quadrature
+  with Sampling rings and 2 × Sampling arms ("The number of arms is always twice the number of rays
+  along each arm"), about the centroid ("OpticStudio always uses a centroid reference for
+  tolerancing"), polychromatic over the system's wavelengths and weights, at the Y-Symmetric (±1,
+  ±0.7, 0 of the largest field in y; centre weight 2), XY-Symmetric (plus ±0.7, ±1 in x; centre
+  weight 4) or user-defined field points, combined as √(Σ w v² / Σ w). Merit function: the lens's
+  own merit function over every configuration. Boresight error: the radial image coordinate of
+  the on-axis chief ray at the primary wavelength over |EFL|, radians. Strehl ratio (the plan's
+  addition): OP-38's ratio through the RMS core, weighted mean over the fields. A criterion is
+  added with one enum value, one arm in `ToleranceCriteria.Info` and one in the evaluator.
+- **Compensators** (help, "Evaluating Compensators"). None. Paraxial focus: each perturbed lens is
+  moved at the image so that its defocus (the thickness before the image minus the paraxial image
+  distance −y/u of the marginal ray) equals the nominal's, in every configuration the criterion
+  reads; COMP and CPAR rows are ignored. Optimize (DLS: one Orthogonal Descent cycle, then damped
+  least squares; OD: Orthogonal Descent only): every variable flag is removed, the COMP
+  (thickness, curvature, conic), CPAR and CMCO cells (all, or the rows chosen) are flagged
+  Variable, and OP-57's `LocalOptimizer` (§35) minimises the criterion's rows (weight the field
+  weight, target 0, or 1 for the Strehl ratio) plus a soft bound row per COMP (nominal + Min to
+  nominal + Max, weight 1); with the merit function criterion, the lens's merit function without
+  bounds (help). A compensator cell that carries a solve or pickup is refused. The trial reports
+  each compensator's change from the compensated nominal.
+- **Inverse** (help, "Inverse Sensitivity Analysis"). The target T is the Increment (positive), or
+  the change from N to the Limit (worse than N). For each side, when the degradation at the
+  starting limit L is at most T, or the row is marked Do Not Adjust, L is kept ("the tolerance
+  will never be loosened"); otherwise Brent's method (`RootFinding.Brent`) finds t in (0, 1) where
+  the degradation at t·L is T, to `InverseTolerance` (default 10⁻⁷) of L, and the trial is
+  evaluated again at the new limit. The estimate uses the adjusted limits; the result carries the
+  table with them, which the editor writes back on request.
+- **Quick Sensitivity** (help: "a sensitivity-only analysis with Paraxial Focus compensation"):
+  Sensitivity with the paraxial focus compensator, for the spot, wavefront and boresight criteria.
+- **Determinism.** Rows run in parallel, one slot each; everything inside a slot (perturbation,
+  optimizer, criterion) runs on one thread, so the result is bitwise the same at any thread count.
+- **Lenses the ray launcher refuses.** The launcher needs an axial paraxial model (§15): element
+  decenters and tilts (TEDX … TETZ, the rolls), which wrap the group in coordinate breaks, make
+  the lens non-axial, so their trials fail by name until the launcher handles such lenses (OP-22).
+- **Not built.** The geometric and diffraction MTF criteria (OP-39) and encircled energy (OP-41),
+  RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity and Monte Carlo (OP-65);
+  Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
+  .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
+  CEDV (deprecated) compensators.

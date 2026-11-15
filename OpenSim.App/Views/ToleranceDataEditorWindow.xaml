@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:OpenSim.App.Controls"
         xmlns:sheet="clr-namespace:OpenSim.App.Controls.Spreadsheet"
-        Title="Tolerance Data Editor" Width="1100" Height="560" MinWidth="520" MinHeight="300"
+        Title="Tolerance Data Editor" Width="1100" Height="720" MinWidth="520" MinHeight="300"
         ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource PanelBgBrush}">
     <!-- OP-63: the Tolerance Data Editor. DataContext is the OpticsToleranceEditorViewModel; the
@@ -40,6 +40,79 @@
                 </controls:FormGrid>
                 <ListBox ItemsSource="{Binding FindResults}" MaxHeight="140" Margin="0,4,0,0"/>
             </DockPanel>
+        </Expander>
+
+        <!-- OP-64: the tolerance run (OpticStudio's Tolerancing dialog, Set-Up and Criterion tabs, as far
+             as built; Quick Sensitivity). Run works on the project's lens and the rows above. -->
+        <Expander DockPanel.Dock="Bottom" Header="Tolerance run (sensitivity, inverse limit, inverse increment)" Margin="0,4,0,0"
+                  AutomationProperties.AutomationId="ToleranceRunExpander">
+            <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto">
+                <DockPanel Margin="4">
+                    <controls:FormGrid DockPanel.Dock="Left" Width="380" VerticalAlignment="Top" IsEnabled="{Binding IsRunIdle}">
+                        <Label Content="Mode"/>
+                        <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}" DisplayMemberPath="Label"
+                                  AutomationProperties.AutomationId="ToleranceModeCombo"
+                                  ToolTip="Sensitivity: the criterion at each tolerance's min and max. Inverse Limit / Increment: tighten each limit until the criterion reaches the Limit or changes by the Increment."/>
+                        <Label Content="Criterion"/>
+                        <ComboBox ItemsSource="{Binding Criteria}" SelectedItem="{Binding SelectedCriterion}" DisplayMemberPath="Label"
+                                  AutomationProperties.AutomationId="ToleranceCriterionCombo" ToolTip="{Binding CriteriaNotBuilt}"/>
+                        <Label Content="Change"/>
+                        <ComboBox ItemsSource="{Binding ChangeModes}" SelectedItem="{Binding SelectedChange}" DisplayMemberPath="Label"
+                                  ToolTip="Linear: P − N. RSS: S(P − N)·√|P² − N²|."/>
+                        <Label Content="Compensators"/>
+                        <ComboBox ItemsSource="{Binding Compensations}" SelectedItem="{Binding SelectedCompensation}" DisplayMemberPath="Label"
+                                  AutomationProperties.AutomationId="ToleranceCompensationCombo"
+                                  ToolTip="Paraxial focus holds the nominal defocus; Optimize drives the COMP, CPAR and CMCO rows with the local optimizer."/>
+                        <Label Content="Compensator rows"/>
+                        <TextBox Text="{Binding CompensatorRowsText, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="Optimize only: the COMP, CPAR or CMCO rows to use, as &quot;2, 5&quot;; empty for all."/>
+                        <Label Content="Optimizer cycles"/>
+                        <TextBox Text="{Binding OptimizerCycles}" ToolTip="0 is automatic (run until converged)."/>
+                        <Label Content="Fields"/>
+                        <ComboBox ItemsSource="{Binding FieldSets}" SelectedItem="{Binding SelectedFieldSet}" DisplayMemberPath="Label"/>
+                        <Label Content="Sampling"/>
+                        <TextBox Text="{Binding Sampling}" ToolTip="Rays along each radial arm of the Gaussian quadrature, 1 to 20; twice as many arms."/>
+                        <Label Content="PSF sampling"/>
+                        <TextBox Text="{Binding PsfSampling}" ToolTip="Strehl ratio only: the pupil grid, 16 to 1024."/>
+                        <Label Content="Limit"/>
+                        <TextBox Text="{Binding Limit}" ToolTip="Inverse Limit: the criterion each tolerance may reach (worse than the nominal)."/>
+                        <Label Content="Increment"/>
+                        <TextBox Text="{Binding Increment}" ToolTip="Inverse Increment: the change each tolerance may cause (positive)."/>
+                        <Label Content="Show worst"/>
+                        <TextBox Text="{Binding ShowWorst}"/>
+                        <Label Content="Threads"/>
+                        <TextBox Text="{Binding Threads}" ToolTip="The result is the same at any number."/>
+                    </controls:FormGrid>
+                    <StackPanel Margin="8,0,0,0">
+                        <WrapPanel Margin="0,0,0,4">
+                            <Button Content="Run" Command="{Binding RunToleranceCommand}" MinWidth="70" Margin="0,0,4,4"
+                                    AutomationProperties.AutomationId="ToleranceRunButton"/>
+                            <Button Content="Quick Sensitivity" Command="{Binding QuickSensitivityCommand}" Margin="0,0,4,4"
+                                    ToolTip="Sensitivity with the paraxial focus compensator (spot, wavefront and boresight criteria)."/>
+                            <Button Content="Cancel" Command="{Binding CancelRunCommand}" MinWidth="70" Margin="0,0,4,4"/>
+                            <Button Content="Apply inverse limits" Command="{Binding ApplyInverseLimitsCommand}" Margin="8,0,4,4"
+                                    ToolTip="Write the tightened limits of the last inverse run into the table (one undo step)."/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding RunStatus}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <DataGrid ItemsSource="{Binding RunRows}" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="200"
+                                  HeadersVisibility="Column" AutomationProperties.AutomationId="ToleranceRunGrid">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Row" Binding="{Binding Row}"/>
+                                <DataGridTextColumn Header="Type" Binding="{Binding Type}"/>
+                                <DataGridTextColumn Header="Min" Binding="{Binding Min}"/>
+                                <DataGridTextColumn Header="Max" Binding="{Binding Max}"/>
+                                <DataGridTextColumn Header="Criterion (min)" Binding="{Binding CriterionAtMin}"/>
+                                <DataGridTextColumn Header="Change (min)" Binding="{Binding ChangeAtMin}"/>
+                                <DataGridTextColumn Header="Criterion (max)" Binding="{Binding CriterionAtMax}"/>
+                                <DataGridTextColumn Header="Change (max)" Binding="{Binding ChangeAtMax}"/>
+                                <DataGridTextColumn Header="Note" Binding="{Binding Note}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBox Text="{Binding ReportText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" MaxHeight="200" Margin="0,4,0,0"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap"/>
+                    </StackPanel>
+                </DockPanel>
+            </ScrollViewer>
         </Expander>
 
         <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">

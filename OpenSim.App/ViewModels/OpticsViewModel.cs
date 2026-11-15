@@ -40,7 +40,7 @@ public partial class OpticsViewModel : ObservableObject
         MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
             () => new OpenSim.Optics.Merit.ProjectMeritConfigurations(ToSettings(), BuildLensEditContext().Catalogs));
         // OP-63: the tolerance data editor; Update validates against the project's record.
-        ToleranceEditor = new OpticsToleranceEditorViewModel(PublishFromLensEditor, ToSettings);
+        ToleranceEditor = new OpticsToleranceEditorViewModel(PublishFromLensEditor, ToSettings, () => BuildLensEditContext().Catalogs);   // OP-64: catalogs for the tolerance run
         // OP-30: the multi-configuration editor, applied to the entered system.
         MultiConfig = new OpticsMultiConfigEditorViewModel(PublishFromMultiConfig, () => BuildSettings(withTable: false), ReplaceSystem,
             () => BuildLensEditContext().Catalogs, materials is null ? null : () => materials.Materials);   // OP-91: catalogs and materials for thermal pickups

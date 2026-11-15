@@ -1107,10 +1107,9 @@ same number of fringes.
 
 Each operand's rule (how it changes the lens, which surfaces element tolerances insert) is in
 docs/Optics-Conventions.md §36, and the readings where OpticStudio's help leaves a gap in §10
-item 32. The rules are built and tested; nothing in the program runs them yet.
+item 32. The tolerance run below uses them.
 
-Not built: the sensitivity, inverse sensitivity and Monte Carlo analyses and the optimization
-of compensators; the coating, non-sequential, TEXI and ISO 10110 operands (defined, refused
+Not built: the Monte Carlo analysis; the coating, non-sequential, TEXI and ISO 10110 operands (defined, refused
 when applied, as are TEZI on surfaces other than Toroidal); the default tolerance wizard, the
 tolerance listing, sorting and .TOL files.
 
@@ -1197,6 +1196,43 @@ that did not arrive and the sampling warnings. The rules are in `docs/Optics-Con
 §39; readings not yet checked against OpticStudio are in §10 item 35. Not built: the Huygens PSF
 option, polarization, scattering, BIM files, dashed-line styling.
 
+## Sensitivity and inverse sensitivity
+
+The **Tolerance run** section at the bottom of the Tolerance Data Editor runs the rows of the table
+on the project's lens (its current configuration), as OpticStudio's Tolerancing dialog does in its
+Sensitivity, Inverse Limit and Inverse Increment modes.
+
+- **Mode.** Sensitivity sets each tolerance to its Min, then its Max, alone, compensates, and
+  reports the criterion and its change from the nominal. Inverse Limit tightens each limit until
+  the criterion reaches the Limit; Inverse Increment until it changes by the Increment. A limit
+  is never loosened, and a row marked Do not adjust is kept.
+- **Criterion.** RMS spot radius, x or y (lens units), RMS wavefront (waves), the merit function,
+  the boresight error (radians) or the Strehl ratio. Spot and wavefront are about the centroid
+  over every wavelength, at the field points chosen under Fields (Y-Symmetric, XY-Symmetric or the
+  system's own); Sampling is the rays along each arm of the Gaussian quadrature (twice as many
+  arms). PSF sampling applies to the Strehl ratio only.
+- **Change.** Linear difference (P − N) or RSS difference.
+- **Compensators.** Paraxial focus holds the nominal lens's defocus at the image; Optimize (DLS
+  or OD) drives the COMP, CPAR and CMCO rows with the local optimizer (all of them, or the rows
+  listed under Compensator rows; Optimizer cycles 0 is automatic); None leaves the lens as
+  perturbed.
+- **Run**, **Quick Sensitivity** (Sensitivity with paraxial focus, for the spot, wavefront and
+  boresight criteria) and **Cancel**. The table lists every row's limits, criterion and change
+  at both ends, and the report below it the nominal, the worst offenders, the RSS estimated
+  change and performance, the notes (rows that could not be evaluated, limits that were
+  tightened) and the assumptions. **Apply inverse limits** writes an inverse run's tightened
+  limits into the table as one undo step.
+- The settings are saved with the tolerance data.
+
+The definitions are in docs/Optics-Conventions.md §42, and the readings where OpticStudio's help
+is short in §10 item 38.
+
+Not built: the MTF and encircled energy criteria, RMS angular and user scripts; Monte Carlo;
+Separate Fields/Configs, the polynomial fit and cache, Force Ray Aiming and the "All"
+configurations choice; the tolerance data file and viewer. Element decenter and tilt tolerances
+(TEDX … TETZ and the rolls) cannot be evaluated yet: the ray launcher refuses the decentered lens
+they make, and the report names those rows.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1211,6 +1247,11 @@ Not built yet, and not to be relied on until they appear in this guide:
   optimizer, glass substitution and the tolerance data editor with its operands are built; the
   full operand catalogue, the default merit function wizard, sensitivity, Monte Carlo and
   compensator analyses are not);
+
+- global optimization, glass substitution and the tolerance analyses (the merit function, its
+  editor, the local optimizer, the tolerance data editor with its operands, and sensitivity and
+  inverse sensitivity with compensators are built; the full operand catalogue, the default merit
+  function wizard and Monte Carlo are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

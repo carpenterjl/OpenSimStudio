@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using OpenSim.App.Controls.Spreadsheet;
 using OpenSim.Core.Model;
+using OpenSim.Optics.Materials;
 using OpenSim.Optics.Tolerancing;
 using S = OpenSim.App.ViewModels.OpticsToleranceEditorSchema;
 
@@ -27,26 +28,33 @@ public sealed record IrregularityModelOption(IrregularityModel Model, string Lab
 /// OpticStudio's Validate (help page "Tolerance Data Editor Toolbar": "Checks all tolerance
 /// operands for proper surface ranges and other common errors") and fills the Nominal column;
 /// Loosen 2x and Tighten 2x scale every tolerance's Min and Max as the toolbar's buttons do. Every
-/// edit lands on the sheet's undo stack and publishes the system. The tolerance analyses
-/// themselves (sensitivity, Monte Carlo) are later items.
+/// edit lands on the sheet's undo stack and publishes the system. The tolerance run (OP-64:
+/// sensitivity, inverse limit and increment, Quick Sensitivity) is in the partial file
+/// OpticsToleranceEditorViewModel.Run.cs; Monte Carlo is a later item.
 /// </summary>
 public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
 {
     private readonly Action _publish;
     private readonly Func<OpticsSettings> _lens;
+    private readonly Func<IReadOnlyList<OpticalCatalog>> _catalogs;   // OP-64
     private readonly Dictionary<string, ToleranceOperandDefinition> _byTypeName = new(StringComparer.Ordinal);
     private readonly SheetDocument _document;
     private bool _applying;
 
     /// <param name="publish">Called after every edit, to publish the system.</param>
-    /// <param name="lens">The project's optics record, for Update.</param>
-    public OpticsToleranceEditorViewModel(Action publish, Func<OpticsSettings> lens)
+    /// <param name="lens">The project's optics record, for Update and the tolerance run.</param>
+    /// <param name="catalogs">The active glass catalogs, for the tolerance run (OP-64); null for none.</param>
+    public OpticsToleranceEditorViewModel(Action publish, Func<OpticsSettings> lens, Func<IReadOnlyList<OpticalCatalog>>? catalogs = null)
     {
+        _catalogs = catalogs ?? (() => Array.Empty<OpticalCatalog>());
         _publish = publish ?? throw new ArgumentNullException(nameof(publish));
         _lens = lens ?? throw new ArgumentNullException(nameof(lens));
         foreach (var d in ToleranceOperandRegistry.All) _byTypeName[S.TypeName(d)] = d;
         _document = new SheetDocument(S.Build());
         _document.Changed += OnSheetChanged;
+        _applying = true;
+        InitializeRun();   // OP-64
+        _applying = false;
     }
 
     /// <summary>The sheet the grid shows.</summary>
@@ -112,15 +120,27 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
     // ------------------------------------------------------------------ files
 
     /// <summary>The table as the files store it; null for an empty table with the default model.</summary>
-    public OpticsToleranceSettings? ToSettings() => ToleranceDataSettings.ToSettings(ToTable());
+    public OpticsToleranceSettings? ToSettings()
+    {
+        var data = ToleranceDataSettings.ToSettings(ToTable());
+        var run = RunSettingsToSave();   // OP-64
+        return run is null ? data : (data ?? new OpticsToleranceSettings()) with { Run = run };
+    }
 
     /// <summary>Loads a file's tolerance data; null is an empty table. Unknown codes become TOFF
     /// and are named in <paramref name="notes"/>. Clears the undo history.</summary>
-    public void LoadSettings(OpticsToleranceSettings? saved, ICollection<string> notes) =>
+    public void LoadSettings(OpticsToleranceSettings? saved, ICollection<string> notes)
+    {
         Load(ToleranceDataSettings.FromSettings(saved, notes), notes);
+        LoadRunOptions(ToleranceRunSettings.FromSettings(saved?.Run, notes));   // OP-64
+    }
 
-    /// <summary>A new project's tolerance data: empty.</summary>
-    public void Reset() => Load(new ToleranceTable(), new List<string>());
+    /// <summary>A new project's tolerance data: empty, with the default run settings.</summary>
+    public void Reset()
+    {
+        Load(new ToleranceTable(), new List<string>());
+        LoadRunOptions(new ToleranceRunOptions());   // OP-64
+    }
 
     /// <summary>Replaces the rows with <paramref name="table"/>'s, without an undo step.</summary>
     public void Load(ToleranceTable table, ICollection<string> notes)
