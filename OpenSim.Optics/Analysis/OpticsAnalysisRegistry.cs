@@ -173,6 +173,10 @@ public sealed class OpticsAnalysisRegistry
         // OP-45: Universal Plot 1D and 2D (any registered operand against one or two swept parameters).
         registry.Register(new UniversalPlot.UniversalPlot1DAnalysis());
         registry.Register(new UniversalPlot.UniversalPlot2DAnalysis());
+
+        // OP-49: physical optics propagation and the beam file viewer.
+        registry.Register(new PhysicalOptics.PhysicalOpticsPropagationAnalysis());
+        registry.Register(new PhysicalOptics.BeamFileViewerAnalysis());
         return registry;
     }
 }

@@ -2165,9 +2165,10 @@ coordinates are relative to surface 1. Lengths are in lens units, VOLU in cm³ a
 
 **Not built:** DCRV, DSAG, DSLP, DPHS, QSLP, TSAG; IMSF, PRIM, SVIG, CVIG, FDMO, FDRE (operands
 that change the system data for later rows); EQUA; the skew Gaussian beam operands (GBSD, GBSP,
-GBSR, GBSS, GBSW); the gradient-index, fiber-coupling, POP, non-sequential, hologram-construction
+GBSR, GBSS, GBSW); the gradient-index, fiber-coupling, non-sequential, hologram-construction
 and coating operands (CMGT to CIVA, CODA); UDOC; off-axis coordinates and the Base/Composite sag
-removal in SSAG, SSLP and SCRV; the removal of fitted terms in SPHS and PSLP.
+removal in SSAG, SSLP and SCRV; the removal of fitted terms in SPHS and PSLP. (POPD and POPI are
+built: see Physical optics propagation.)
 
 When you type or load an OpticStudio operand this version does not have, whether from the imaging
 or the constraint half, the message says what it computes and why it is not built, for example
@@ -2216,6 +2217,44 @@ runs it from the command line.
 **Not built:** non-sequential data, the surface plot and grey-scale displays, the contour format
 string, the 1D plot's min and max value, and the UPL and UP2 settings files. Nothing has been
 compared with OpticStudio's output. Details: Optics-Conventions.md section 65.
+
+## Physical optics propagation
+
+Propagates a coherent beam through the lens as a sampled field, so that diffraction between
+surfaces is modelled, after OpticStudio's Physical Optics Propagation
+(docs/Optics-Conventions.md §66). Two analyses, in the Beams group of the analysis menu:
+
+- **Physical Optics Propagation** builds the initial beam in the space before the start surface
+  ("Surf to beam" from it), propagates it surface by surface and shows it just after the end
+  surface (0: the image surface). The beam types are Gaussian waist (with Hermite orders and a
+  truncating aperture), Gaussian angle, Gaussian size+angle, astigmatic Gaussian, top hat, File (a
+  ZBF beam file, full path) and Multimode (a ZMM file of GW, TH, PHASE, COHERENT and INCOHERENT
+  lines). The beam is scaled to a total power (W) or a peak irradiance (W per lens unit²). The
+  sampling is a power of 2 from 32 to 16384; "Auto width" sets the array to ω0·√(π·n), which the
+  help recommends (a multimode beam needs the widths set). "Surface transfer" chooses the phase
+  each surface adds: from a real ray at every sample (ray based) or −φ·r²/2 of its paraxial power.
+  Surface apertures clip the beam. The result shows irradiance and phase maps, x and y
+  cross-sections, encircled power, the beam data (power, peak irradiance, the pilot beam, centroid,
+  beam widths, M²), the propagation report (which operator ran where, and the sample spacing) and
+  any sampling warnings: power in the array's outer eighth (widen the array), power at high
+  spatial frequencies (increase the sampling), or a pilot waist smaller than the wavelength. "Save
+  output beam to" writes the end beam as a ZBF file; with "Save beam at all surfaces" every
+  surface's beam is written too, named name_0001.ZBF and so on.
+- **Beam File Viewer** shows a ZBF file the same way without propagating it.
+
+The phase is shown with OpticStudio's sign: positive where the wavefront is ahead of the reference
+(a plane inside the pilot beam's Rayleigh range, a sphere centred on its waist outside).
+
+The merit operands POPD (power, peak irradiance, pilot beam, centroid, widths, M², moments,
+irradiance and phase variation, encircled power) and POPI (one pixel's irradiance, field or phase)
+run the analysis with its last-used settings; their Surf, Wave and Field columns replace the end
+surface, wavelength and field when not zero. `opensim optics analyse` runs both analyses by their
+ids `PhysicalOpticsPropagation` and `BeamFileViewer`.
+
+Not built: polarized propagation, "Separate X, Y", off-axis fields and tilted, decentered or folded
+systems, the surface properties' physical optics settings, fiber coupling (POPD 0 to 2 and 60 to
+63 are refused), the DLL beam, and POP in non-sequential mode. The readings not yet checked
+against OpticStudio are listed in docs/Optics-Conventions.md §10 item 62.
 
 ## Coming
 

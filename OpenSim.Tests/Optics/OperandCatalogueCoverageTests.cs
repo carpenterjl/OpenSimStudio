@@ -148,8 +148,9 @@ public sealed class OperandCatalogueCoverageTests
     public void ValidateAndFileReading_NameANotBuiltOperand()
     {
         var registry = MeritOperandRegistry.CreateDefault();
-        var problems = MeritEvaluator.Validate(new MeritFunction(new[] { MeritOperandRow.Of("POPD") }), registry, 1);
-        Assert.Contains(problems, p => p.StartsWith("Row 1: POPD (OpticStudio:") && p.Contains("needs OP-49"));
+        // OP-49 built POPD; FICP (fiber coupling, OP-50) is the not-built probe now.
+        var problems = MeritEvaluator.Validate(new MeritFunction(new[] { MeritOperandRow.Of("FICP") }), registry, 1);
+        Assert.Contains(problems, p => p.StartsWith("Row 1: FICP (OpticStudio:") && p.Contains("needs OP-50"));
         var notes = new List<string>();
         var function = MeritFunctionSettings.FromSettings(new OpticsMeritFunctionSettings
         {

@@ -117,9 +117,7 @@ public static class NotBuiltOperands
 
         // ---- Fiber coupling and physical optics ----
         Add("FICL", "Fiber coupling operands", "Single-mode fiber coupling efficiency (fast or Huygens algorithm, power or amplitude coupling).", "fiber coupling is not built", "OP-50");
-        Add("FICP", "Fiber coupling operands", "Fiber coupling computed by Physical Optics Propagation with its saved settings.", "physical optics propagation and fiber coupling are not built", "OP-50");
-        Add("POPD", "Physical Optics Propagation (POP) results", "Physical Optics Propagation data: fiber coupling, power, peak irradiance, pilot beam, centroid, beam widths, M², moments, enclosed power.", "physical optics propagation is not built", "OP-49");
-        Add("POPI", "Physical Optics Propagation (POP) results", "Physical Optics Propagation irradiance, field or phase of one pixel of the beam.", "physical optics propagation is not built", "OP-49");
+        Add("FICP", "Fiber coupling operands", "Fiber coupling computed by Physical Optics Propagation with its saved settings.", "fiber coupling is not built", "OP-50");
 
         // ---- User defined ----
         Add("UDOC", "User defined operands", "A value computed by an externally compiled program written with the ZOS-API.",

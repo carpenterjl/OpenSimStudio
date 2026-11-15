@@ -35,6 +35,12 @@ public interface IMeritConfigurations
     /// <see cref="ArgumentException"/> naming why there is none; by default there is no table.</summary>
     double MultiConfigValue(int operand, int configuration) =>
         throw new ArgumentException("these configurations have no multi-configuration table to read (the evaluation was given a lens, not a project).");
+
+    // OP-49
+    /// <summary>The settings the analysis with saved id <paramref name="analysisId"/> was last
+    /// used with (the project's saved analysis settings), for the operands that read an analysis's
+    /// saved settings (POPD, POPI); null when there are none (the analysis's defaults are used).</summary>
+    System.Text.Json.JsonElement? AnalysisSettings(string analysisId) => null;
 }
 
 /// <summary>One configuration: a lens and its system data.</summary>
@@ -119,6 +125,11 @@ public sealed class ProjectMeritConfigurations : IMeritConfigurations
     }
 
     public int Count => _built.Length;
+
+    // OP-49
+    /// <summary>The project's last-used settings of an analysis (<see cref="OpticsAnalysesSettings.LastSettings"/>).</summary>
+    public System.Text.Json.JsonElement? AnalysisSettings(string analysisId) =>
+        _optics.Analyses?.LastSettings is { } last && last.TryGetValue(analysisId, out var saved) ? saved : null;
 
     // OP-55B
     /// <summary>The table's row <paramref name="operand"/> in configuration

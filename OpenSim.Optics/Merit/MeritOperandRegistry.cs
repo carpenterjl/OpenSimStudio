@@ -219,6 +219,9 @@ public sealed class MeritOperandRegistry
 
         // OP-55B: constraint and system-data operands (Catalogue/Constraint*.cs).
         foreach (var definition in Catalogue.ConstraintOperands.Definitions()) r.Register(definition);
+
+        // OP-49
+        foreach (var definition in Catalogue.PopOperands.Definitions()) r.Register(definition);
         return r;
     }
 
