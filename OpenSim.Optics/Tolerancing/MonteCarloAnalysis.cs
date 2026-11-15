@@ -416,6 +416,62 @@ public static class MonteCarloAnalysis
 
     private sealed record RowPlan(int Index, string Code, ToleranceDistribution Distribution, int Seed, bool Radial, bool Tirr, bool Element);
 
+    // OP-66 / wave 9: shared with QuickYield, so a row's distribution is the same in both.
+    /// <summary>Row <paramref name="i"/>'s distribution: its STAT row's statistics (a .UDD table read once per STAT
+    /// row into <paramref name="udd"/>), or the run's defaults; radial operands with Min or Max 0 centred at zero.</summary>
+    internal static ToleranceDistribution RowDistribution(ToleranceTable table, int i, ToleranceOperandRow row, ToleranceOperandDefinition definition,
+        ToleranceRowContext context, MonteCarloOptions options, Dictionary<int, UserDefinedDistribution> udd)
+    {
+        string who = $"Tolerance row {i + 1} ({definition.Code})";
+        try
+        {
+            if (context.StatisticsRow is not int statRow)
+                return Make(options.Statistics, options.StandardDeviations, null);
+            int n = context.StandardDeviations ?? 0;
+            if (context.Statistics == ToleranceStatistics.Normal && (n < 1 || n > 10))
+                throw new ArgumentException($"STAT row {statRow} sets {n} standard deviations; the normal distribution needs 1 to 10 (help, \"STAT\": \"the number of standard deviations between the mean and the tolerance extremes ... capped at 10\").");
+            UserDefinedDistribution? udt = null;
+            if (context.Statistics == ToleranceStatistics.UserDefined && !udd.TryGetValue(statRow, out udt))
+            {
+                udt = ReadTable(table, statRow, options);
+                udd[statRow] = udt;
+            }
+            return Make(context.Statistics, n, udt);
+        }
+        catch (ArgumentException e) { throw new ArgumentException($"{who}: {e.Message}", e); }
+
+        ToleranceDistribution Make(ToleranceStatistics s, int n, UserDefinedDistribution? t)
+        {
+            bool centred = definition.IsRadial && (row.Min == 0 || row.Max == 0);
+            return s switch
+            {
+                ToleranceStatistics.Normal => ToleranceDistribution.Normal(row.Min, row.Max, n, centred),
+                ToleranceStatistics.Uniform => ToleranceDistribution.Uniform(row.Min, row.Max),
+                ToleranceStatistics.Parabolic => ToleranceDistribution.Parabolic(row.Min, row.Max, centred),
+                _ => ToleranceDistribution.UserDefined(row.Min, row.Max, t!),
+            };
+        }
+    }
+
+    private static UserDefinedDistribution ReadTable(ToleranceTable table, int statRow, MonteCarloOptions options)
+    {
+        string name = table.Rows[statRow - 1].Comment.Trim();
+        if (name.Length == 0)
+            throw new ArgumentException($"STAT row {statRow} chooses a user defined distribution, but its comment names no .UDD file (help: \"the file name (with extension) must be placed in the comments column ... on the same line as the STAT command\").");
+        string text;
+        try
+        {
+            if (options.ReadDistribution is { } read) text = read(name);
+            else if (options.DistributionFolder is { Length: > 0 } folder) text = File.ReadAllText(Path.Combine(folder, name));
+            else throw new ArgumentException($"STAT row {statRow} names the distribution file '{name}', but no distribution folder is set; set the folder that holds it.");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            throw new ArgumentException($"STAT row {statRow}: the distribution file '{name}' cannot be read: {e.Message}", e);
+        }
+        return UserDefinedDistribution.Parse(text, $"STAT row {statRow}, file '{name}'");
+    }
+
     private sealed class Plan
     {
         private readonly ToleranceTable _table;
@@ -461,7 +517,7 @@ public static class MonteCarloAnalysis
                 }
                 var context = table.ContextAt(i);
                 int seed = context.Seed is int s && s != 0 ? s : Seed;
-                rows.Add(new RowPlan(i, d.Code, Distribution(i, row, d, context, udd), seed, d.IsRadial, d.Code == "TIRR", d.IsElement));
+                rows.Add(new RowPlan(i, d.Code, RowDistribution(table, i, row, d, context, Options, udd), seed, d.IsRadial, d.Code == "TIRR", d.IsElement));
             }
             _rows = rows.ToArray();
             foreach (var u in udd.Values) _notes.AddRange(u.Notes);
@@ -517,59 +573,6 @@ public static class MonteCarloAnalysis
             if (o.YieldLimit is double y && !double.IsFinite(y)) throw new ArgumentException("Monte Carlo: the yield limit must be a finite number.");
             if (o.Percentiles.Any(p => !(p >= 0 && p <= 100))) throw new ArgumentException("Monte Carlo: percentiles must lie from 0 to 100.");
             if (o.HistogramBins < 1) throw new ArgumentException($"Monte Carlo: the histogram needs at least one bin, not {o.HistogramBins}.");
-        }
-
-        private ToleranceDistribution Distribution(int i, ToleranceOperandRow row, ToleranceOperandDefinition definition, ToleranceRowContext context,
-            Dictionary<int, UserDefinedDistribution> udd)
-        {
-            string who = $"Tolerance row {i + 1} ({definition.Code})";
-            try
-            {
-                if (context.StatisticsRow is not int statRow)
-                    return Make(Options.Statistics, Options.StandardDeviations, null);
-                int n = context.StandardDeviations ?? 0;
-                if (context.Statistics == ToleranceStatistics.Normal && (n < 1 || n > 10))
-                    throw new ArgumentException($"STAT row {statRow} sets {n} standard deviations; the normal distribution needs 1 to 10 (help, \"STAT\": \"the number of standard deviations between the mean and the tolerance extremes ... capped at 10\").");
-                UserDefinedDistribution? table = null;
-                if (context.Statistics == ToleranceStatistics.UserDefined && !udd.TryGetValue(statRow, out table))
-                {
-                    table = ReadTable(statRow);
-                    udd[statRow] = table;
-                }
-                return Make(context.Statistics, n, table);
-            }
-            catch (ArgumentException e) { throw new ArgumentException($"{who}: {e.Message}", e); }
-
-            ToleranceDistribution Make(ToleranceStatistics s, int n, UserDefinedDistribution? t)
-            {
-                bool centred = definition.IsRadial && (row.Min == 0 || row.Max == 0);
-                return s switch
-                {
-                    ToleranceStatistics.Normal => ToleranceDistribution.Normal(row.Min, row.Max, n, centred),
-                    ToleranceStatistics.Uniform => ToleranceDistribution.Uniform(row.Min, row.Max),
-                    ToleranceStatistics.Parabolic => ToleranceDistribution.Parabolic(row.Min, row.Max, centred),
-                    _ => ToleranceDistribution.UserDefined(row.Min, row.Max, t!),
-                };
-            }
-        }
-
-        private UserDefinedDistribution ReadTable(int statRow)
-        {
-            string name = _table.Rows[statRow - 1].Comment.Trim();
-            if (name.Length == 0)
-                throw new ArgumentException($"STAT row {statRow} chooses a user defined distribution, but its comment names no .UDD file (help: \"the file name (with extension) must be placed in the comments column ... on the same line as the STAT command\").");
-            string text;
-            try
-            {
-                if (Options.ReadDistribution is { } read) text = read(name);
-                else if (Options.DistributionFolder is { Length: > 0 } folder) text = File.ReadAllText(Path.Combine(folder, name));
-                else throw new ArgumentException($"STAT row {statRow} names the distribution file '{name}', but no distribution folder is set; set the folder that holds it.");
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException)
-            {
-                throw new ArgumentException($"STAT row {statRow}: the distribution file '{name}' cannot be read: {e.Message}", e);
-            }
-            return UserDefinedDistribution.Parse(text, $"STAT row {statRow}, file '{name}'");
         }
 
         /// <summary>Trial k: the draws, the perturbed and compensated lens, the criterion.</summary>
