@@ -413,6 +413,11 @@ public sealed class TolerancePerturber
                 throw Fail($"surface {j} is a '{s.Type}' surface; {_d.Code} needs a Standard surface (use the element operands TEDX, TEDY, TETX, TETY for other types).");
             if (s.TiltBefore is not null || s.TiltAfter is not null)
                 throw Fail($"surface {j} has its own tilt or decenter; the Irregular surface's tilt would be added to it in an order the help does not give.");
+            // Wave 11 (OP-32): the Irregular surface's decenter and tilt move the base's own sag only,
+            // but "the Add-on surfaces are physically one with the Base" (help, "Composite Surface"),
+            // so on a composite base they would split the composite. TIRR adds sag and is kept.
+            if (_d.Code != "TIRR" && s.AddOns is { Count: > 0 } addOns)
+                throw Fail($"surface {j} is a composite base with {addOns.Count} add-on{(addOns.Count == 1 ? "" : "s")}; {_d.Code}'s Irregular decenter or tilt would move the base but not its add-ons (use the element operands TEDX, TEDY, TETX, TETY).");
             var t = irregular ? s : s with { Type = "Irregular", Parameters = null, ExtraData = null };
             double Get(int k) => irregular ? SavedSurfaces.Value(s, k) : 0;
             string text;

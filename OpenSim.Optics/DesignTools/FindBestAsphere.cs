@@ -139,6 +139,8 @@ public static class FindBestAsphere
         var s = surfaces[j];
         if (!SavedSurfaces.IsStandard(s)) return $"its type is {s.Type}, not Standard.";
         if (s.Conic != 0) return "it has a conic value.";
+        // Wave 11: a composite base (OP-32) is not the help's Standard sphere; refused by name.
+        if (s.AddOns is { Count: > 0 } addOns) return $"it is a composite base with {addOns.Count} add-on{(addOns.Count == 1 ? "" : "s")}, not a plain Standard surface.";
         if (s.IsIgnored) return "it is ignored.";
         if (SavedSurfaces.IsMirror(s) || SavedSurfaces.IsMirror(surfaces[j - 1])) return "it is a mirror or follows one.";
         bool airBefore = SavedSurfaces.IsAir(surfaces[j - 1]), airAfter = SavedSurfaces.IsAir(s);

@@ -148,4 +148,109 @@ public static class CompositeSurfaces
         }
         return result;
     }
+
+    // ------------------------------------------------------------ Wave 11: COMPOSITEON / COMPOSITEOFF
+
+    /// <summary>
+    /// The ZPL keyword COMPOSITEON surf (OpticStudio 2025 R2 help, "COMPOSITEON (keywords)":
+    /// "Checks the Composite property option 'Composite Surface: Add sag to the next surface' to
+    /// make the surface an Add-on composite"). In this program's model (add-ons are a list on the
+    /// base, not rows) surface <paramref name="j"/> leaves the surface list and becomes the top
+    /// add-on of surface j + 1, above that surface's existing add-ons and below its own (its own add-ons were
+    /// rows above it, which "the sag profile of the Add-on surfaces will be added to the following
+    /// Add-on surface" carries down to the same base; help, "Composite Surface"). Every surface
+    /// number held elsewhere follows (<see cref="Tolerancing.SavedLensSurgery"/>).
+    /// <para>
+    /// Refused, naming the reason, for anything the add-on cannot hold: the object, the image or
+    /// the surface before the image; a type the composite table does not list (base or add-on);
+    /// the stop ("The Add-on composite surface can't be set as stop"); a thickness other than 0 or
+    /// a medium after the surface other than the one before it (removing the row would move the
+    /// surfaces behind it or change the medium the base is met in; the help does not say what an
+    /// add-on row's thickness or glass does); and the cell flags, tilts, coordinate return,
+    /// aperture, coating and other row settings an add-on has no place for.
+    /// </para>
+    /// </summary>
+    public static OpticsSettings MakeAddOn(OpticsSettings optics, int j)
+    {
+        ArgumentNullException.ThrowIfNull(optics);
+        const string who = "COMPOSITEON";
+        var surfaces = optics.Surfaces ?? throw new ArgumentException($"{who}: the lens has no surfaces.");
+        int image = surfaces.Count - 1;
+        if (j < 1 || j > image - 2)
+            throw new ArgumentException($"{who}: surface {j} cannot become an add-on; the surfaces that can are 1 to {image - 2} (an add-on needs a lens surface after it, before the image).");
+        var s = surfaces[j] ?? new OpticsSurfaceSettings();
+        var b = surfaces[j + 1] ?? new OpticsSurfaceSettings();
+        var why = new List<string>();
+        if (!IsSupportedType(s.Type)) why.Add($"a {s.Type} surface cannot be a composite add-on (the types that can are {string.Join(", ", SupportedTypes)})");
+        if (!IsSupportedType(b.Type)) why.Add($"surface {j + 1}, a {b.Type} surface, cannot be a composite base");
+        if (s.IsStop) why.Add("it is the stop, and an add-on cannot be the stop");
+        if (s.ThicknessIsInfinite || s.Thickness != 0) why.Add("its thickness is not 0, and removing the row would move the surfaces after it");
+        if (!SameMedium(s, surfaces[j - 1] ?? new OpticsSurfaceSettings())) why.Add($"the medium after it is not the medium before it (surface {j - 1}'s), and removing the row would change the medium surface {j + 1} is met in");
+        if (s.Flags is { Count: > 0 }) why.Add("it has variables, solves or pickups, which an add-on cannot hold");
+        if (s.TiltBefore is not null || s.TiltAfter is not null) why.Add("it has its own tilt or decenter (an add-on's placement is set relative to the base)");
+        if (s.CoordinateReturn is { Mode: not (null or "None") }) why.Add("it has a coordinate return");
+        if (s.Aperture is not null) why.Add("it has an aperture (the base's aperture is the composite surface's)");
+        if (!string.IsNullOrEmpty(s.Coating)) why.Add("it has a coating");
+        if (s.MechanicalSemiDiameter is not null || s.ChipZone != 0 || s.Tce != 0 || s.SkipRaysTo || s.HideRaysTo || s.DoNotDraw || s.RowColor is not null)
+            why.Add("it has a mechanical semi-diameter, chip zone, TCE, ray or drawing setting or row color, which an add-on cannot hold");
+        if (why.Count > 0) throw new ArgumentException($"{who} {j}: " + string.Join("; ", why) + ".");
+
+        var addOn = new OpticsCompositeAddOnSettings
+        {
+            Type = s.Type, Radius = s.Radius, Conic = s.Conic, Parameters = s.Parameters, ExtraData = s.ExtraData, GridSag = s.GridSag,
+            SemiDiameter = s.SemiDiameter, IsIgnored = s.IsIgnored, Comment = s.Comment,
+        };
+        var list = new List<OpticsCompositeAddOnSettings>();
+        list.AddRange(s.AddOns ?? new List<OpticsCompositeAddOnSettings>());
+        list.Add(addOn);
+        list.AddRange(b.AddOns ?? new List<OpticsCompositeAddOnSettings>());
+        var edited = surfaces.ToList();
+        edited[j + 1] = b with { AddOns = list };
+        try { return Tolerancing.SavedLensSurgery.Remove(optics with { Surfaces = edited }, new[] { j }); }
+        catch (InvalidOperationException)
+        {
+            throw new ArgumentException($"{who} {j}: something still names surface {j} (a pickup, a solve, a coordinate return, a merit or multi-configuration row); remove that first.");
+        }
+    }
+
+    /// <summary>
+    /// The ZPL keyword COMPOSITEOFF surf (OpticStudio 2025 R2 help, "COMPOSITEOFF (keywords)":
+    /// "Unchecks the Composite property option 'Composite Surface: Add sag to the next surface'").
+    /// OpticStudio numbers the add-on rows as surfaces; this program does not, so here
+    /// <paramref name="j"/> is the base and the top add-on of surface j (OpticStudio's first
+    /// add-on row of the stack) becomes surface j again, with thickness 0 and the medium of
+    /// surface j − 1; the base and the rest of its add-ons move to j + 1. It undoes
+    /// <see cref="MakeAddOn"/> of a surface that had no add-ons of its own. Refused when surface j
+    /// has no add-on or the top add-on is decentered or tilted (a surface's own tilt and decenter
+    /// is not an add-on's placement relative to the base).
+    /// </summary>
+    public static OpticsSettings MakeSurface(OpticsSettings optics, int j)
+    {
+        ArgumentNullException.ThrowIfNull(optics);
+        const string who = "COMPOSITEOFF";
+        var surfaces = optics.Surfaces ?? throw new ArgumentException($"{who}: the lens has no surfaces.");
+        if (j < 1 || j >= surfaces.Count) throw new ArgumentException($"{who}: surface {j} is not a surface that can have add-ons (1 to {surfaces.Count - 1}).");
+        var b = surfaces[j] ?? new OpticsSurfaceSettings();
+        if (b.AddOns is not { Count: > 0 } list) throw new ArgumentException($"{who} {j}: surface {j} has no composite add-ons.");
+        var a = list[0] ?? new OpticsCompositeAddOnSettings();
+        if (a.DecenterX != 0 || a.DecenterY != 0 || a.TiltX != 0 || a.TiltY != 0 || a.TiltZ != 0)
+            throw new ArgumentException($"{who} {j}: surface {j}'s add-on 1 is decentered or tilted relative to the base, which a surface of its own does not hold; set its decenters and tilts to 0 first.");
+        var before = surfaces[j - 1] ?? new OpticsSurfaceSettings();
+        var row = new OpticsSurfaceSettings
+        {
+            Type = a.Type, Radius = a.Radius, Conic = a.Conic, Parameters = a.Parameters, ExtraData = a.ExtraData, GridSag = a.GridSag,
+            SemiDiameter = a.SemiDiameter, IsIgnored = a.IsIgnored, Comment = a.Comment,
+            Thickness = 0, Material = before.Material, Index = before.Index, ModelGlass = before.ModelGlass,
+        };
+        var edited = surfaces.ToList();
+        edited[j] = b with { AddOns = list.Count > 1 ? list.Skip(1).ToList() : null };
+        var builder = new Tolerancing.SavedLensSurgery.Builder(edited);
+        builder.CopyRange(0, j - 1);
+        builder.Add(row);
+        builder.CopyRange(j, edited.Count - 1);
+        return builder.Build(optics with { Surfaces = edited }).Settings;
+    }
+
+    private static bool SameMedium(OpticsSurfaceSettings a, OpticsSurfaceSettings b) =>
+        string.Equals(a.Material, b.Material, StringComparison.OrdinalIgnoreCase) && a.Index == b.Index && Equals(a.ModelGlass, b.ModelGlass);
 }

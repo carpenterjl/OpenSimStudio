@@ -38,6 +38,19 @@ public static class ZemaxKeywords
     /// OpticStudio-written file. Their PARM/XDAT numbers map generically through the saved layouts
     /// (PARM n is parameter n, XDAT n is parameter n + 12), as for the types above.
     /// </para>
+    /// <para>
+    /// OP-26's types (DGRATING, TOROGRAT, VARLSGRT, BINARY_1, BINARY_2, FZERNPHA, SZERNPHA,
+    /// AZERNPHA, HOLOGRM1, HOLOGRM2, TOROHOLO): the same table and the same reading (section 10
+    /// item 48). DGRATING alone is also a code a lens-file reader names (RayOptics zmxread.py
+    /// <c>handle_types_and_params</c>, whose PARM 1 and 2 are the lines per micrometer and the
+    /// order, as in the type's layout). The XDAT numbering n + 12 agrees with the help pages that
+    /// number these types' extra data: "Binary 2": "The first extra data term is N, the number of
+    /// terms ... Extra data value number 2 is the normalization radius" (parameters 13 and 14);
+    /// "Toroidal Hologram": "Extra data values 1-6 are the x, y, and z construction points ...
+    /// value 7 is the construction wavelength, and value 8 is the playback order" (parameters 13
+    /// to 20). The Hologram 1 and 2 volume flag (parameter 13, which the help calls "Par 13") is
+    /// always 0 here and so never written.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<(string Code, string? TypeName)> SurfaceTypes { get; } = new (string, string?)[]
     {
@@ -58,6 +71,19 @@ public static class ZemaxKeywords
         ("AZERNSAG", "Zernike Annular Standard Sag"),
         ("OFFAXISCF", "Off-Axis Conic Freeform"),
         ("RADNURBS", "Radial NURBS"),
+        // OP-26: codes from the same SURP surface-type name table; DGRATING is also read by
+        // RayOptics zmxread.py handle_types_and_params (PARM 1 lines per micrometer, 2 order).
+        ("DGRATING", "Diffraction Grating"),
+        ("TOROGRAT", "Toroidal Grating"),
+        ("VARLSGRT", "Variable Line Space Grating"),
+        ("BINARY_1", "Binary Optic 1"),
+        ("BINARY_2", "Binary Optic 2"),
+        ("FZERNPHA", "Zernike Fringe Phase"),
+        ("SZERNPHA", "Zernike Standard Phase"),
+        ("AZERNPHA", "Zernike Annular Phase"),
+        ("HOLOGRM1", "Hologram 1"),
+        ("HOLOGRM2", "Hologram 2"),
+        ("TOROHOLO", "Toroidal Hologram"),
     };
 
     /// <summary>

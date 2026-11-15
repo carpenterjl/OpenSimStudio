@@ -496,4 +496,25 @@ public sealed class ToleranceOperandTests
         var back = a.Remove(b.Remove(c.Remove(c.Perturbed)));
         Assert.Equal(Json(s), Json(back));
     }
+    // ------------------------------------------------------------------ Wave 11: composite add-ons
+
+    /// <summary>A surface's composite add-ons (OP-32) go through a perturbation with the surface:
+    /// TRAD changes the base's radius and keeps them, and an element tilt copies the surfaces with
+    /// them. TSDX (an Irregular decenter of the base's own sag) is refused on a composite base:
+    /// "the Add-on surfaces are physically one with the Base" (OpticStudio 2025 R2 help,
+    /// "Composite Surface").</summary>
+    [Fact]
+    public void CompositeAddOns_GoThroughAPerturbation_AndTsdxIsRefusedOnABase()
+    {
+        var s0 = Doublet();
+        var addOn = new OpticsCompositeAddOnSettings { Radius = -4000, Comment = "kept" };
+        var s = s0 with { Surfaces = s0.Surfaces!.Select((x, j) => j == 2 ? x with { AddOns = new() { addOn } } : x).ToList() };
+        var trad = Apply(s, Row("TRAD", 2), 0.5).Perturbed.Surfaces![2];
+        Assert.Equal(-49.5, trad.Radius);
+        Assert.Equal(addOn, Assert.Single(trad.AddOns!));
+        var tilted = Apply(s, Row("TETX", 1, 2), 0.1).Perturbed.Surfaces!;
+        Assert.Single(tilted, x => x.AddOns is { Count: 1 } list && list[0] == addOn);
+        var e = Assert.Throws<ArgumentException>(() => Apply(s, Row("TSDX", 2), 0.05));
+        Assert.Contains("composite base", e.Message);
+    }
 }

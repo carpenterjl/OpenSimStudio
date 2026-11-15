@@ -334,4 +334,53 @@ public sealed class DesignToolsTests : IDisposable
         Assert.Equal(0, StockLensMatching.ShapeFactor(s, 3, 4));
         Assert.Equal(-1, StockLensMatching.ShapeFactor(s, 5, 6));
     }
+    // ------------------------------------------------------------------ Wave 11: OP-26 and OP-32
+
+    /// <summary>Convert Asphere Types keeps a surface's composite add-ons (only the base's own sag
+    /// is fitted) and says so; it refuses a diffractive surface by name rather than dropping its
+    /// phase.</summary>
+    [Fact]
+    public void Conversion_KeepsCompositeAddOns_AndRefusesADiffractiveSurface()
+    {
+        var lens = AsphereLens(40, -1.2, 0, 1e-6, -2e-9, 3e-12);
+        var addOn = new OpticsCompositeAddOnSettings { Radius = -2000, Comment = "kept" };
+        lens = lens with { Surfaces = lens.Surfaces!.Select((s, j) => j == 1 ? s with { AddOns = new() { addOn } } : s).ToList() };
+        var result = AsphereTypeConversion.Run(lens, NoGlass, new AsphereTypeConversionOptions { Surface = 1, Target = AsphereTarget.QTypeQcon });
+        var saved = result.Settings.Surfaces![1];
+        Assert.Equal("Q-Type Asphere", saved.Type);
+        Assert.Equal(addOn, Assert.Single(saved.AddOns!));
+        Assert.Contains(result.Notes, n => n.Contains("composite add-on is kept unchanged"));
+
+        var binary = lens with
+        {
+            Surfaces = lens.Surfaces!.Select((s, j) => j == 1 ? new OpticsSurfaceSettings
+            {
+                Type = "Binary Optic 2", Radius = 40, Thickness = 5, Index = 1.5, SemiDiameter = 10,
+                Parameters = new() { new() { Number = 0, Value = 1 } },
+                ExtraData = new() { new() { Number = 13, Value = 1 }, new() { Number = 14, Value = 10 }, new() { Number = 15, Value = -20 } },
+            } : s).ToList(),
+        };
+        var e = Assert.Throws<ArgumentException>(() => AsphereTypeConversion.Run(binary, NoGlass, new AsphereTypeConversionOptions { Surface = 1, Target = AsphereTarget.EvenAsphere }));
+        Assert.Contains("Binary Optic 2", e.Message);
+        Assert.Contains("diffractive", e.Message);
+    }
+
+    /// <summary>Find Best Asphere does not take a composite base (a surface with add-ons) or a
+    /// diffractive surface as a candidate, and says why.</summary>
+    [Fact]
+    public void Candidates_ExcludeCompositeBasesAndDiffractiveSurfaces()
+    {
+        var doublet = F.Doublet();
+        Assert.Null(FindBestAsphere.WhyNotCandidate(doublet, 3));
+        var composite = doublet with
+        {
+            Surfaces = doublet.Surfaces!.Select((s, j) => j == 3 ? s with { AddOns = new() { new OpticsCompositeAddOnSettings { Radius = -5000 } } } : s).ToList(),
+        };
+        Assert.Contains("composite base with 1 add-on", FindBestAsphere.WhyNotCandidate(composite, 3));
+        var grating = doublet with
+        {
+            Surfaces = doublet.Surfaces!.Select((s, j) => j == 3 ? s with { Type = "Diffraction Grating", Parameters = new() { new() { Number = 1, Value = 0.1 }, new() { Number = 2, Value = 1 } } } : s).ToList(),
+        };
+        Assert.Contains("Diffraction Grating", FindBestAsphere.WhyNotCandidate(grating, 3));
+    }
 }

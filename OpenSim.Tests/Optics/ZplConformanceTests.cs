@@ -304,6 +304,53 @@ public sealed class ZplConformanceTests : IDisposable
         Assert.Contains("cannot be deleted", Assert.Throws<ZplException>(() => Run("DELETE 3")).Message);
     }
 
+    private const string CompositeOnOffMacro =
+        "COMPOSITEON 2\nOPTRETURN 0, NSUR()\nOPTRETURN 1, CURV(2)\nCOMPOSITEOFF 2\nOPTRETURN 2, NSUR()\nOPTRETURN 3, CURV(2)\nOPTRETURN 4, CURV(3)";
+
+    /// <summary>
+    /// Wave 11: COMPOSITEON surf "checks the Composite property option 'Composite Surface: Add sag
+    /// to the next surface'" and COMPOSITEOFF surf unchecks it (OpticStudio 2025 R2 help pages of
+    /// those names, plans/sources/optics/op-32-help/). Here add-ons are a list on the base, so
+    /// COMPOSITEON 2 moves surface 2 (radius −2000 mm, thickness 0, inside the glass of surface 1)
+    /// into surface 3's add-ons and the lens has one surface fewer; COMPOSITEOFF 2 (surface 2 is
+    /// now the base) makes that add-on surface 2 again, giving back the lens as entered.
+    /// </summary>
+    [Fact]
+    public void CompositeOnAndOff_MoveASurfaceIntoTheNextSurfacesAddOnsAndBack()
+    {
+        var lens = Singlet() with
+        {
+            Surfaces = new()
+            {
+                new() { ThicknessIsInfinite = true },
+                new() { Radius = 50, Thickness = 5, Index = 1.5, IsStop = true },
+                new() { Radius = -2000, Thickness = 0, Index = 1.5, Comment = "add-on" },
+                new() { Radius = -200, Thickness = 95 },
+                new(),
+            },
+        };
+        var result = Run(CompositeOnOffMacro, lens);
+        var r = result.OptReturn;
+        Assert.Equal(3, r[0]);
+        Near(-1 / 200.0, r[1]);
+        Assert.Equal(4, r[2]);
+        Near(-1 / 2000.0, r[3]);
+        Near(-1 / 200.0, r[4]);
+        Assert.Equal(lens.Surfaces!.Select(s => (s.Radius, s.Thickness, s.Index, s.Comment, s.IsStop, s.AddOns is null)),
+            result.System.Surfaces!.Select(s => (s.Radius, s.Thickness, s.Index, s.Comment, s.IsStop, s.AddOns is null)));
+
+        var on = Run("COMPOSITEON 2", lens).System.Surfaces!;
+        Assert.Equal(4, on.Count);
+        var addOn = Assert.Single(on[2].AddOns!);
+        Assert.Equal(-2000, addOn.Radius);
+        Assert.Equal("add-on", addOn.Comment);
+
+        Assert.Contains("stop", Assert.Throws<ZplException>(() => Run("COMPOSITEON 1")).Message);
+        Assert.Contains("thickness is not 0", Assert.Throws<ZplException>(() => Run("COMPOSITEON 2", lens with { Surfaces = lens.Surfaces!.Select((s, j) => j == 2 ? s with { Thickness = 1 } : s).ToList() })).Message);
+        Assert.Contains("medium", Assert.Throws<ZplException>(() => Run("COMPOSITEON 2", lens with { Surfaces = lens.Surfaces!.Select((s, j) => j == 2 ? s with { Index = null } : s).ToList() })).Message);
+        Assert.Contains("has no composite add-ons", Assert.Throws<ZplException>(() => Run("COMPOSITEOFF 1")).Message);
+    }
+
     private const string SolveTypeMacro =
         "SOLVETYPE 2, TP, 1, 2\nOPTRETURN 0, THIC(2)\nSOLVETYPE 2, TF\nOPTRETURN 1, THIC(2)\nSOLVETYPE 2, CP, 1, -1\nOPTRETURN 2, CURV(2)\n"
         + "SOLVETYPE 1, CV\nSOLVETYPE 1, PV_2\nSOLVETYPE 1, SA\nSOLVETYPE 2, SU\nOPTRETURN 3, SDIA(2)";

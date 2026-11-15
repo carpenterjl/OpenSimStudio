@@ -1263,6 +1263,11 @@ single place in the code, so a correction is one line and its test.
       rests on the nine codes read from files and readers all being spelled as in that table.
       Their extra data are read as XDAT n = parameter n + 12, as for the Extended and Q-Type
       aspheres; for Radial NURBS and the Zernike types no file was seen to confirm it.
+    - *OP-26's TYPE codes* (DGRATING, TOROGRAT, VARLSGRT, BINARY_1, BINARY_2, FZERNPHA, SZERNPHA,
+      AZERNPHA, HOLOGRM1, HOLOGRM2, TOROHOLO) are read the same way from the same table; only
+      DGRATING (with PARM 1 and 2) is also named by a reader (RayOptics). Their extra data are
+      XDAT n = parameter n + 12, which the Binary 2 and Toroidal Hologram help pages' extra-data
+      numbering supports; no file with any of these types was seen.
     - *Written lines.* Files are written in the forms read; whether OpticStudio reads them back
       unchanged (in particular the fields this program writes as zeros) was not tried.
     Check: a lens with each solve, pickup, variable and surface type saved by OpticStudio, read
@@ -1381,6 +1386,12 @@ single place in the code, so a correction is one line and its test.
     - *Add-ons are a list on the base surface*, not rows of their own, so surface numbers count the
       traced surfaces only; CSDX–CSTZ take the base surface and the add-on's number.
     - *An add-on's own semi-diameter* (which Irregular normalises to) defaults to the base's.
+    - *COMPOSITEON and COMPOSITEOFF* (ZPL, wave 11): the help's surf is a Lens Data Editor row,
+      which an add-on is in OpticStudio and is not here. COMPOSITEON n moves surface n into
+      surface n + 1's add-ons (refused unless its thickness is 0 and the medium after it is the
+      one before it, since the help does not say what an add-on row's thickness or glass does);
+      COMPOSITEOFF n takes surface n as the base and makes its top add-on (OpticStudio's first
+      add-on row of the stack) a surface again, with thickness 0 and the medium before the base.
     Check: a base with a decentered and a tilted add-on traced in OpticStudio, and its Surface
     Sag map, against this program's.
 
@@ -4603,13 +4614,34 @@ against the type's layout (§20); a number the type does not have is a problem.
 | AZERNSAG | Zernike Annular Standard Sag | help, SURP (§10 item 48) |
 | OFFAXISCF | Off-Axis Conic Freeform | help, SURP (§10 item 48) |
 | RADNURBS | Radial NURBS | help, SURP (§10 item 48) |
+| DGRATING | Diffraction Grating | help, SURP; RayOptics `handle_types_and_params` |
+| TOROGRAT | Toroidal Grating | help, SURP (§10 item 48) |
+| VARLSGRT | Variable Line Space Grating | help, SURP (§10 item 48) |
+| BINARY_1 | Binary Optic 1 | help, SURP (§10 item 48) |
+| BINARY_2 | Binary Optic 2 | help, SURP (§10 item 48) |
+| FZERNPHA | Zernike Fringe Phase | help, SURP (§10 item 48) |
+| SZERNPHA | Zernike Standard Phase | help, SURP (§10 item 48) |
+| AZERNPHA | Zernike Annular Phase | help, SURP (§10 item 48) |
+| HOLOGRM1 | Hologram 1 | help, SURP (§10 item 48) |
+| HOLOGRM2 | Hologram 2 | help, SURP (§10 item 48) |
+| TOROHOLO | Toroidal Hologram | help, SURP (§10 item 48) |
 
-The last seven are OP-25's types (§55). No lens-file reader names them; their codes are the
+POLYNOMI to RADNURBS are OP-25's types (§55). No lens-file reader names them; their codes are the
 surface-type names of the SURP help page's table (the ZPL TYPE names, which the page says the
 Prescription Report lists), and all nine codes above taken from the readers are spelled as in
 that table. Their PARM and XDAT numbers map through the layouts like the others'. GRID_SAG
 (Grid Sag) is refused by name both ways: its grid is a separate .DAT file and no source shows
 how a .zmx stores it (`ZemaxKeywords.Refused`).
+
+DGRATING to TOROHOLO are OP-26's types (§57), mapped the same way (wave 11). Only DGRATING is
+also named by a reader: RayOptics reads its PARM 1 as the lines per micrometer and PARM 2 as the
+order, as the layout has them. The XDAT numbering (n + 12) agrees with the help pages that
+number these types' extra data: Binary 2's extra data 1 and 2 are the number of terms and the
+normalization radius (parameters 13 and 14), and Toroidal Hologram's extra data 1–9 are the two
+construction points, the construction wavelength, the order and the converge/diverge flag
+(parameters 13–21). The Hologram 1 and 2 volume flag (parameter 13, "Par 13" in the help) is
+always 0 here and so never written. OP-26's unbuilt types (§57) have SURP codes too but no type
+here to read them into, so they are refused as unknown TYPEs.
 
 **Media.** `GLAS name 0 …` is a catalog glass, looked up in the GCAT catalogs in order (all
 loaded catalogs when there is no GCAT line; an archive's own catalogs first); `GLAS name 1 0 nd
@@ -4641,7 +4673,9 @@ written as the glass with its catalog added to GCAT (it reads back as the bare n
 "Automatic" flag on a semi-diameter is not written (an automatic DIAM says it). Refused (every
 item listed, or with the option listed and left out): a type with no TYPE code above; surface
 tilts and decenters and coordinate returns (no reader interprets their keywords); apertures other
-than circular and floating, and obscurations; chip zone, mechanical semi-diameter, TCE,
+than circular and floating, and obscurations; composite add-ons (§58; OpticStudio keeps each
+add-on as its own row, but no source shows the keyword of its "Add sag to next surface"
+property, so a surface with add-ons is refused by name rather than written without them); chip zone, mechanical semi-diameter, TCE,
 ignore/skip/hide/do-not-draw and row colour; solves other than those above; system settings away
 from their defaults whose lines are not interpreted (source, analysis and MTF units,
 apodization, semi-diameter margins, field normalization, index-to-environment, the air model,
@@ -4672,9 +4706,9 @@ LENS.osslens] [--lenient] [--builtin-catalogs]` writes a lens file; `opensim opt
 **Not built.** Reading or writing: merit-function rows, tolerance rows other than TOFF,
 multi-configuration data, solves other than the table above (marginal-ray and other computed
 solves on any column, offsets, cross-column pickups), surface types other than the table
-(Biconic, Superconic, Fresnel, ABCD, the Zernike phase types and the rest are not types this
-reader maps; Grid Sag is refused, as above; Chebyshev Polynomial, Toroidal NURBS and Q-Type
-Freeform are not built, §55), surface tilts and decenters, rectangular, elliptical, spider and user apertures and
+(Biconic, Superconic, Fresnel, ABCD and the rest are not types this reader maps, nor are the
+diffractive types §57 does not build; Grid Sag is refused, as above; Chebyshev Polynomial, Toroidal NURBS and Q-Type
+Freeform are not built, §55), composite add-ons (refused, as above), surface tilts and decenters, rectangular, elliptical, spider and user apertures and
 obscurations (SQAP, OBSC and similar keywords have no meaning from a reader), ray aiming,
 polarization and the mechanical semi-diameter; the .zos format; writing a .zar. CODE V and OSLO
 files are read by OP-95 (section 54). No written file has been opened in OpticStudio (§10 item 48).
@@ -5181,7 +5215,15 @@ limited (`OpdLimitation` is the substrate's, null for all eleven).
   the reference wavelength.
 - *Optically Fabricated Hologram*: needs construction optics nested in the lens.
 - The volume hologram option (efficiency only), a negative construction wavelength, efficiency
-  and multiple orders, and the diffractive types in .zmx, CODE V and OSLO files and macros.
+  and multiple orders, and the diffractive types in CODE V and OSLO files.
+
+**Lens files and macros** (wave 11). The eleven types are read from and written to .zmx files
+under their SETSURFACEPROPERTY TYPE codes (§52, §10 item 48). Macros reach them through
+SETSURFACEPROPERTY's TYPE code and the parameter codes, as any registered type. Convert Asphere
+Types refuses a diffractive surface by name (its phase would be dropped) and Find Best Asphere
+does not take one as a candidate (§59); tolerance perturbations and Monte Carlo trial lenses keep a
+diffractive surface's parameters (§60). None is a composite base or add-on: the help's composite
+table lists no diffractive type (§58).
 
 ## 58. Composite surfaces
 
@@ -5238,15 +5280,33 @@ direction for composite add-on surface", … , help "Multi-Configuration Operand
 add-on's placement; their arguments are the base surface and the add-on's number from 1. Scale
 Lens and the lens-unit change scale the add-ons' lengths and parameters as a surface's.
 
+**Macros and lens files** (wave 11). The ZPL keywords COMPOSITEON surf and COMPOSITEOFF surf
+(help pages of those names: they check and uncheck "Composite Surface: Add sag to the next
+surface") are bound by `CompositeSurfaces.MakeAddOn` and `MakeSurface`. Since add-ons are not
+numbered as surfaces here, COMPOSITEON n moves surface n into surface n + 1's add-ons (above the
+add-ons already there, below n's own) and removes the row; it is refused for the object, the
+image and the surface before it, the stop ("The Add-on composite surface can't be set as stop"),
+a type the table does not list (add-on or base), a thickness other than 0 or a change of medium
+across the surface, and any cell flag, tilt, coordinate return, aperture, coating or other row
+setting an add-on cannot hold. COMPOSITEOFF n makes surface n's top add-on a surface again before
+it (thickness 0, the medium of surface n − 1) and is refused when that add-on is decentered or
+tilted. Both renumber every surface number held elsewhere (`SavedLensSurgery`); §10 item 54 has
+the reading. COMPOSITEOFFAXISAPERTUREON is not bound: its help page repeats COMPOSITEON's text.
+The .zmx writer refuses a surface with add-ons by name (no source shows how the file stores them;
+§52). Convert Asphere Types converts the base and keeps its add-ons, Find Best Asphere does not take
+a composite base as a candidate (§59), and the tolerance perturbations keep the add-ons with their
+surface but refuse TSDX, TSDY, TSDR, TSTX, TSTY, TIRX and TIRY on a composite base (§60). The
+diffractive types (§57) cannot be add-ons: the help's Supported Surfaces table lists none of them,
+so phase add-ons are left as they are.
+
 **Not built.** OpticStudio's add-on rows in the editor (Hide/Unhide/Delete All Composite
 Surfaces), "Set Tilt/Decenter to follow Base surface aperture" and "Update Tilt", Decenter Z,
 drawing add-ons or composite surfaces in the layouts (the layouts draw the base), the Remove
 "Base Sag"/"Composite Sag" options of the sag analyses, Seidel sums of composite surfaces,
-Reverse Elements and Make Double Pass of surfaces with add-ons (refused by name), the ZPL keywords
-COMPOSITEON, COMPOSITEOFF and COMPOSITEOFFAXISAPERTUREON, tolerancing irregularity through
-inserted add-ons (TIRR, TEXI, TEZI on other types), .zmx/CODE V/OSLO reading and writing of
-add-ons, and diffractive phase add-ons (OP-26's phase types would need the composite to sum
-their phases in `TryRedirect`).
+Reverse Elements and Make Double Pass of surfaces with add-ons (refused by name), the ZPL keyword
+COMPOSITEOFFAXISAPERTUREON, tolerancing irregularity through inserted add-ons (TIRR, TEXI, TEZI on
+other types), .zmx reading and writing of add-ons (writing refused by name) and CODE V/OSLO
+reading of them, and diffractive phase add-ons (not in the help's table).
 
 ## 59. Design conversion tools
 
@@ -5270,12 +5330,15 @@ when the fixed fit is exact (RMS at most 1e-12 of ρ), so a radius never moves b
 Qbfs's curvature is the best-fit conic's through the vertex and the edge (§17), so only its conic
 is fitted. A curvature or conic held by a solve or pickup is not fitted. The report gives the RMS
 and largest sag residual in lens units, the terms used and the radius and conic before and after.
-Flags on the old type's parameter cells are removed.
+Flags on the old type's parameter cells are removed. A diffractive surface (§57) is refused by
+name, since the fit would drop its phase; a composite base (§58) is converted alone, its add-ons
+kept unchanged, and the report says so.
 
 **Find Best Asphere** (`FindBestAsphere`). First and Last Surface, Asphere Type (conic, or even
 polynomial to a maximum order 4 … 16). A candidate is, as the help lists, a Standard surface with
 no conic, between air and glass, whose radius is variable or held by a marginal-ray-angle or F/#
-solve, with no CRVT row on it; ignored surfaces and mirrors are not candidates. Each candidate in
+solve, with no CRVT row on it; ignored surfaces and mirrors are not candidates, nor (wave 11) a
+composite base, whose sag is not the help's Standard sphere. Each candidate in
 turn is made aspheric on the design as given, its aspheric terms flagged Variable, and the design
 re-optimized with every variable by `LocalOptimizer`; the lowest merit wins (a design meeting the
 exact constraints first; ties keep the earlier surface). The even polynomial is optimized as an
@@ -5448,3 +5511,11 @@ folder convention (the script is text in the run settings, or a file named on th
 Separate Fields/Configs with a script (OpticStudio does not offer it with this criterion either); a
 script in Quick Yield; a NEST operand (OpticStudio has none). No script has been compared with
 OpticStudio's own output (§10 item 56).
+
+**Composite and diffractive surfaces** (wave 11). The perturbations edit the saved surfaces in
+place and copy them whole when surfaces are inserted, so a surface's composite add-ons (§58) and a
+diffractive surface's parameters (§57) go through every trial, and a Monte Carlo trial lens keeps
+them. TSDX, TSDY, TSDR, TSTX, TSTY, TIRX and TIRY, which decenter or tilt the base's own sag through
+the Irregular surface, are refused on a composite base by name ("the Add-on surfaces are physically
+one with the Base", help, "Composite Surface"; use the element operands); TIRR adds sag and is
+kept.

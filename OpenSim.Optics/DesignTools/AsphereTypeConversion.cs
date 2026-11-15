@@ -151,6 +151,9 @@ public static class AsphereTypeConversion
         var context = new LensEditContext(optics.SystemData, catalogs);
         var source = context.ToLens(surfaces).Surfaces[j];
         string fromType = source.Shape?.TypeName ?? SavedSurfaces.StandardType;
+        // Wave 11: a diffractive surface (OP-26) carries a phase the sag fit would drop; refused by name.
+        if (source.Shape is Sequential.Diffractive.DiffractiveShape)
+            throw new ArgumentException($"Convert Asphere Types: surface {j} is a {fromType} surface, a diffractive surface whose phase the conversion would drop; only the Standard surface and the radial asphere forms convert.");
         if (source.Shape is not (null or RadialSagShape))
             throw new ArgumentException($"Convert Asphere Types: surface {j} is a {fromType} surface, which is not rotationally symmetric; only the Standard surface and the radial asphere forms convert.");
         double rhoUnits = options.ApertureRadius ?? ApertureTools.ClearSemiDiameters(surfaces, context)[j];
@@ -162,6 +165,9 @@ public static class AsphereTypeConversion
             throw new ArgumentException($"Convert Asphere Types: {Label(options.Target)} takes 1 to {max} terms, not {t}.");
 
         var notes = new List<string>();
+        // Wave 11: composite add-ons (OP-32) are kept as they are; only the base's own sag is fitted.
+        if (saved.AddOns is { Count: > 0 } addOns)
+            notes.Add($"The surface's {addOns.Count} composite add-on{(addOns.Count == 1 ? " is" : "s are")} kept unchanged; only the base's own sag was converted.");
         bool HeldBy(string column) => saved.Flags?.Any(f => f.Column == column
             && (f.Kind == SavedSurfaces.SolveFlag || f.Kind == SavedSurfaces.PickupFlag)) == true;
         bool IsVariable(string column) => saved.Flags?.Any(f => f.Column == column && f.Kind == SavedSurfaces.VariableFlag) == true;

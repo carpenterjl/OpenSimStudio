@@ -1681,8 +1681,11 @@ stop, radius, thickness, conic, glass, coating name, semi-diameter, parameters a
 circular and floating apertures and their decenter. Surface types: Standard, Even, Odd, Extended,
 Extended Odd and Q-Type aspheres, Toroidal, Paraxial and Coordinate Break, and the freeform types
 Polynomial, Extended Polynomial, Zernike Fringe, Standard and Annular Standard Sag, Off-Axis Conic
-Freeform and Radial NURBS (their codes are taken from OpticStudio's macro help and have not been
-checked against a file OpticStudio wrote; a Grid Sag is refused, as its grid is a separate file).
+Freeform and Radial NURBS, and the diffractive types Diffraction Grating, Toroidal Grating,
+Variable Line Space Grating, Binary Optic 1 and 2, Zernike Fringe, Standard and Annular Phase,
+Hologram 1 and 2 and Toroidal Hologram (the freeform and diffractive codes are taken from
+OpticStudio's macro help and have not been checked against a file OpticStudio wrote; a Grid Sag is
+refused, as its grid is a separate file).
 Solves: curvature,
 thickness, material, semi-diameter and parameter pickups (scale only, same column), and curvature,
 thickness and parameter variables. Glass names are checked against your loaded catalogs, in the
@@ -1695,7 +1698,7 @@ configuration, an unknown keyword, a glass not in your catalogs. Tick **List uns
 lens-file content in the log instead of stopping** to read the rest and have those items listed. Display
 and program settings (drawing, physical optics, ray aiming, polarization and the like) are never
 read; the log names them. Export works the same way the other round: what a .zmx written here
-cannot hold (other surface types, surface tilts and decenters, other apertures, the merit
+cannot hold (other surface types, composite add-ons, surface tilts and decenters, other apertures, the merit
 function, tolerances, configurations, settings away from their defaults) stops it, or with the
 box ticked is listed and left out. A lens exported and imported again comes back the same.
 
@@ -1848,7 +1851,7 @@ without a folder); its macros are listed under **Macro list** (**Edit** opens on
 What runs: the whole language (variables, strings, arrays, expressions, IF, FOR, GOTO, GOSUB,
 PRINT and FORMAT, files, CALLMACRO), and the keywords and functions bound to the program's
 engines — ray tracing (RAYTRACE and RAYX … RAYO), the lens data (SETSURFACEPROPERTY and SPRO, the
-surface functions, INSERT, DELETE, STOPSURF, SOLVETYPE, SETVAR), the system data
+surface functions, INSERT, DELETE, STOPSURF, SOLVETYPE, SETVAR, COMPOSITEON, COMPOSITEOFF), the system data
 (SETSYSTEMPROPERTY and SYPR, the field and wavelength functions), the merit function (SETOPERAND,
 MFCN, OPER, OPEV), OPTIMIZE and QUICKFOCUS, analyses to text files (GETTEXTFILE), and lens files
 (LOADLENS, SAVELENS). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
@@ -1893,7 +1896,9 @@ named; the real ray trace still works.
 
 Not built: Radial Grating, Elliptical Grating 1 and 2, Extended Toroidal Grating, Binary Optic 3
 and 4, Grid Phase, Zone Plate, Optically Fabricated Hologram, the volume hologram option,
-diffraction efficiency, and these types in .zmx, CODE V and OSLO files. The readings not yet
+diffraction efficiency, and these types in CODE V and OSLO files (they are read from and written to
+.zmx files, see Zemax lens files; macros set them with SETSURFACEPROPERTY). Convert Asphere Types
+refuses a diffractive surface, and Find Best Asphere skips one. The readings not yet
 checked against OpticStudio are listed in docs/Optics-Conventions.md §10 item 53.
 
 ## Composite surfaces
@@ -1918,10 +1923,22 @@ aspheres, Biconic, Toroidal, Irregular, the polynomial, Zernike and Grid Sag fre
 NURBS, …); others are refused by name. The multi-configuration operands CSDX, CSDY, CSTX, CSTY
 and CSTZ change an add-on's placement (arguments: the base surface and the add-on's number).
 
+In a macro, `COMPOSITEON n` makes surface n an add-on of surface n + 1 (it leaves the surface
+list, so the surfaces after it move up by one); surface n must have thickness 0, the same medium
+on both sides, no solves, variables, tilts or aperture, and not be the stop. `COMPOSITEOFF n`
+makes the top add-on of surface n a surface again, just before it (thickness 0, the medium before
+it). The numbers are this program's surface numbers, in which add-ons are not counted, unlike
+OpticStudio's rows (docs/Optics-Conventions.md §10 item 54). A .zmx export stops at a surface with
+add-ons (listed and left out with the box ticked), since how the file stores them is not known.
+Convert Asphere Types keeps a surface's add-ons and converts the base; Find Best Asphere skips a
+surface with add-ons; tolerancing keeps the add-ons with their surface, but refuses the surface
+decenter and tilt operands (TSDX, TSDY, TSDR, TSTX, TSTY, TIRX, TIRY) on it: use the element
+operands. Diffractive types cannot be add-ons (OpticStudio does not allow them either).
+
 Not built: add-ons as their own editor rows, "Set Tilt/Decenter to follow Base surface aperture"
 and "Update Tilt", drawing add-ons in the layouts (the base is drawn), the sag analyses' Remove
 "Composite Sag", Seidel sums of composite surfaces, Reverse Elements and Make Double Pass of
-surfaces with add-ons, the COMPOSITEON/COMPOSITEOFF macro keywords, add-ons in .zmx, CODE V and
+surfaces with add-ons, the COMPOSITEOFFAXISAPERTUREON macro keyword, add-ons in .zmx, CODE V and
 OSLO files, and diffractive phase add-ons.
 
 ## Design conversion tools

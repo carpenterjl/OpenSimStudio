@@ -11,7 +11,7 @@ namespace OpenSim.Optics.Interop.Zemax;
 /// <see cref="ZemaxLensReader"/> reads, in the line forms that reader accepts, so that export
 /// then import gives the same record (the gate; radii pass through a curvature and may move by
 /// one rounding). Anything the subset cannot hold — a surface type without a TYPE code here,
-/// surface tilts and decenters, apertures other than circular and floating, solves other than
+/// surface tilts and decenters, composite add-ons, apertures other than circular and floating, solves other than
 /// the pickups and variables listed in section 52, the merit function, tolerances, more than one
 /// configuration, system settings away from their defaults that the file's lines are not read
 /// for — fails the export with every item listed, or with
@@ -136,6 +136,12 @@ public static class ZemaxLensWriter
             else problems.Add($"{where}: the surface type '{s.Type}' has no TYPE code this build writes ({string.Join(", ", ZemaxKeywords.SurfaceTypes.Select(x => x.TypeName ?? SavedSurfaces.StandardType))}).");
             code = "STANDARD";
         }
+        // OP-32: composite add-ons. No source shows how a .zmx stores them (OpticStudio keeps each
+        // add-on as its own row with "Composite Surface: Add sag to next surface" checked, help
+        // "Composite Surface", but no reader or OpticStudio-written file shows that property's
+        // keyword), so a surface with add-ons is refused by name rather than written without them.
+        if (s.AddOns is { Count: > 0 } addOns)
+            problems.Add($"{where}: its {addOns.Count} composite add-on{(addOns.Count == 1 ? " is" : "s are")} not written: no source shows how a .zmx stores a composite surface's add-ons; keep the lens in this program's own file.");
         var flags = new Dictionary<string, OpticsCellFlagSettings>(StringComparer.Ordinal);
         foreach (var f in s.Flags ?? new List<OpticsCellFlagSettings>())
         {

@@ -11,7 +11,7 @@ docs/Optics-Conventions.md §56; the user's view is in docs/Optics-User-Guide.md
 The table is generated from `ZplLibrary.TableMarkdown()`; `ZplConformanceTests` checks that this
 page holds it unchanged and that every bound name has a conformance macro.
 
-Counts: 218 keywords (73 bound, the language's own included), 156 numeric functions (95 bound),
+Counts: 218 keywords (75 bound, the language's own included), 156 numeric functions (95 bound),
 32 string functions (24 bound).
 
 | Name | Kind | Bound | What it does here, or why not |
@@ -29,9 +29,9 @@ Counts: 218 keywords (73 bound, the language's own included), 156 numeric functi
 | CALLSETDBL | keyword | yes | Sets numeric call buffer entry index (0 to 50). |
 | CALLSETSTR | keyword | yes | Sets string call buffer entry index (0 to 50). |
 | COAT | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
-| COMPOSITEOFFAXISAPERTUREON | keyword | no | Not bound: the non-sequential model is not built. |
-| COMPOSITEOFF | keyword | no | Not bound: the non-sequential model is not built. |
-| COMPOSITEON | keyword | no | Not bound: the non-sequential model is not built. |
+| COMPOSITEOFFAXISAPERTUREON | keyword | no | Not bound: its OpticStudio 2025 R2 help page repeats COMPOSITEON's title, syntax and discussion, so what it does is not given (it may be the Composite page's "Set Tilt/Decenter to follow Base surface aperture", which is not built). |
+| COMPOSITEOFF | keyword | yes | Surface n is the base here (add-ons are not numbered as surfaces): its top add-on becomes surface n again (thickness 0, the medium of surface n − 1) and the base moves to n + 1; refused when the add-on is decentered or tilted. Every surface number held elsewhere follows. |
+| COMPOSITEON | keyword | yes | Makes surface n (1 to the surface two before the image) a composite add-on of surface n + 1 (above the add-ons that surface has) and removes it from the surface list; refused for the stop, a non-zero thickness, a change of medium, a type the composite table does not list, or row settings an add-on cannot hold. Every surface number held elsewhere follows. |
 | CLOSE | keyword | yes | Closes the file opened by OPEN. |
 | CLOSEWINDOW | keyword | yes | Without an argument: sets quiet mode (the result says so). With a window number it fails: there are no numbered analysis windows. |
 | COLOR | keyword | no | Not bound: macro graphics and image files are not built. |

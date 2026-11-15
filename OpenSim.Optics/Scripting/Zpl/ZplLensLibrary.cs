@@ -232,6 +232,20 @@ public static partial class ZplLibrary
             if (n == 0 || n == m.Session.ImageSurface) throw new ZplRuntimeException("DELETE: the object and image surfaces cannot be deleted.");
             m.Session.System = SavedLensSurgery.Remove(m.Session.System, new[] { n });
         });
+        // Wave 11: OP-32's composite add-ons (docs/Optics-Conventions.md §58). Add-ons are a list on
+        // the base here, not rows, so the surface numbers are this program's (CompositeSurfaces).
+        Kw("COMPOSITEON", "Makes surface n (1 to the surface two before the image) a composite add-on of surface n + 1 (above the add-ons that surface has) and removes it from the surface list; refused for the stop, a non-zero thickness, a change of medium, a type the composite table does not list, or row settings an add-on cannot hold. Every surface number held elsewhere follows.", (m, a) =>
+        {
+            a.Exactly(1, "COMPOSITEON");
+            int n = m.Session.SurfaceNumber(a.Num(m, 0, "COMPOSITEON's surface"), "COMPOSITEON");
+            m.Session.System = Sequential.Composite.CompositeSurfaces.MakeAddOn(m.Session.System, n);
+        });
+        Kw("COMPOSITEOFF", "Surface n is the base here (add-ons are not numbered as surfaces): its top add-on becomes surface n again (thickness 0, the medium of surface n − 1) and the base moves to n + 1; refused when the add-on is decentered or tilted. Every surface number held elsewhere follows.", (m, a) =>
+        {
+            a.Exactly(1, "COMPOSITEOFF");
+            int n = m.Session.SurfaceNumber(a.Num(m, 0, "COMPOSITEOFF's surface"), "COMPOSITEOFF");
+            m.Session.System = Sequential.Composite.CompositeSurfaces.MakeSurface(m.Session.System, n);
+        });
         Kw("SOLVETYPE", "Sets a solve: " + SolveCodesNote + " Pickup arguments: surface, scale, offset, column (Integer Codes for Column Numbers); a macro solve's argument is the macro's file name.", SolveType);
         Kw("SETVAR", "Makes a cell variable (status ≠ 0) or removes its variable flag (0): R, T, C, D (TCE) and Pn.", (m, a) =>
         {
@@ -1205,7 +1219,8 @@ public static partial class ZplLibrary
 
     private static void RegisterLensNotBound()
     {
-        foreach (var k in new[] { "COMPOSITEOFFAXISAPERTUREON", "COMPOSITEOFF", "COMPOSITEON", "DELETEOBJECT", "INSERTOBJECT", "EXPORTCAD", "GETNSCMTF", "LOADDETECTOR", "SAVEDETECTOR", "MAKEFACETLIST", "NSLT", "NSTR", "NSTR2", "RELOADOBJECTS", "SETDETECTOR", "SETNSCPARAMETER", "SETNSCPOSITION", "SETNSCPROPERTY", "ZRDAPPEND", "ZRDFILTER", "ZRDPLAYBACK", "ZRDSAVERAYS", "ZRDSUM" })
+        NotBound("COMPOSITEOFFAXISAPERTUREON", "Not bound: its OpticStudio 2025 R2 help page repeats COMPOSITEON's title, syntax and discussion, so what it does is not given (it may be the Composite page's \"Set Tilt/Decenter to follow Base surface aperture\", which is not built).");
+        foreach (var k in new[] { "DELETEOBJECT", "INSERTOBJECT", "EXPORTCAD", "GETNSCMTF", "LOADDETECTOR", "SAVEDETECTOR", "MAKEFACETLIST", "NSLT", "NSTR", "NSTR2", "RELOADOBJECTS", "SETDETECTOR", "SETNSCPARAMETER", "SETNSCPOSITION", "SETNSCPROPERTY", "ZRDAPPEND", "ZRDFILTER", "ZRDPLAYBACK", "ZRDSAVERAYS", "ZRDSUM" })
             NotBound(k, "Not bound: the non-sequential model is not built.");
         foreach (var k in new[] { "POP", "ZBFCLR", "ZBFMULT", "ZBFPROPERTIES", "ZBFREAD", "ZBFRESAMPLE", "ZBFSHOW", "ZBFSUM", "ZBFTILT", "ZBFWRITE" })
             NotBound(k, "Not bound: physical optics propagation is not built.");

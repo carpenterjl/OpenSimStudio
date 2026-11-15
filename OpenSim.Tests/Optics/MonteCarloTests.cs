@@ -264,4 +264,34 @@ public sealed class MonteCarloTests
         Assert.Contains(notes, n => n.Contains("Gaussian"));
         Assert.Equal(17, new OpticsToleranceSettings { MonteCarlo = saved }.MonteCarlo!.Seed);
     }
+    // ------------------------------------------------------------------ Wave 11: OP-32 and OP-26
+
+    /// <summary>The saved lens of a Monte Carlo trial keeps a surface's composite add-on (OP-32)
+    /// and a diffractive surface's parameters (OP-26): the perturbations edit the saved surfaces
+    /// in place, so nothing a row does not touch is lost. The add-on (radius −4000 mm on the back
+    /// surface) and the Binary Optic 2 phase (order 1, ρ² coefficient −2 rad over a 5 mm
+    /// normalization radius on a plane surface placed after the singlet) are arbitrary inputs.</summary>
+    [Fact]
+    public void ATrialLens_KeepsCompositeAddOnsAndDiffractiveParameters()
+    {
+        var singlet = X.Singlet();
+        var addOn = new OpticsCompositeAddOnSettings { Radius = -4000, Comment = "add-on" };
+        var binary = new OpticsSurfaceSettings
+        {
+            Type = "Binary Optic 2", Thickness = 0,
+            Parameters = new() { new() { Number = 0, Value = 1 } },
+            ExtraData = new() { new() { Number = 13, Value = 1 }, new() { Number = 14, Value = 5 }, new() { Number = 15, Value = -2 } },
+        };
+        var s = singlet.Surfaces!;
+        var lens = singlet with { Surfaces = new() { s[0], s[1], s[2] with { AddOns = new() { addOn } }, binary, s[3] } };
+        var table = X.Table(X.Row("TRAD", 1, 0, -2, 2), X.Row("TTHI", 1, 1, -0.2, 0.2));
+        var mc = new MonteCarloOptions { Trials = 2, Seed = 4 };
+        var run = X.Wavefront with { Compensation = ToleranceCompensation.None };
+        var saved = MonteCarloAnalysis.TrialLens(lens, table, X.NoCatalogs, run, mc, 2);
+        Assert.NotEqual(lens.Surfaces![1].Radius, saved.Surfaces![1].Radius);
+        Assert.Equal(addOn, Assert.Single(saved.Surfaces[2].AddOns!));
+        Assert.Equal("Binary Optic 2", saved.Surfaces[3].Type);
+        Assert.Equal(binary.Parameters, saved.Surfaces[3].Parameters!);
+        Assert.Equal(binary.ExtraData, saved.Surfaces[3].ExtraData!);
+    }
 }
