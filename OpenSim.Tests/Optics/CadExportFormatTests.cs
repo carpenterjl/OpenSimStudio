@@ -274,7 +274,8 @@ public sealed class CadExportFormatTests
             double r = rim * i / 5003;
             worstProfile = Math.Max(worstProfile, Math.Abs(profile.Basis.Value(profile.Z, r) - cap.Sag(r)));
             // Σ ξᵢNᵢ(t) = t, the property x(u) = u rests on.
-            Assert.Equal(r, profile.Basis.Value(profile.Basis.Greville, r), 15);
+            // To a few ulps of r (r <= 14 mm, ulp about 1.7e-18 m): the identity is exact, the sum rounds.
+            Assert.Equal(r, profile.Basis.Value(profile.Basis.Greville, r), 1e-17);
         }
         for (int i = 0; i <= 301; i++)
             for (int j = 0; j <= 301; j++)

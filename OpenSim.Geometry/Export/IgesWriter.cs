@@ -232,8 +232,8 @@ public static class IgesWriter
         var start = new[]
         {
             "OpenSim Studio optical CAD export (IGES 5.3, fixed ASCII form).",
-            "Lens bodies as rational B-spline surfaces (type 128), rims as circles (100),",
-            "rays as 3-D piecewise linear curves (106 form 12).",
+            "Lens bodies as rational B-spline surfaces (type 128),",
+            "rims as circles (100), rays as 3-D polylines (106 form 12).",
         };
         for (int i = 0; i < start.Length; i++) sb.Append(Line(start[i], 'S', i + 1));
 
@@ -293,8 +293,9 @@ public static class IgesWriter
         return sb.ToString();
     }
 
-    private static string Line(string data, char section, int sequence) =>
-        data.PadRight(72) + section + sequence.ToString(CultureInfo.InvariantCulture).PadLeft(7) + "\n";
+    private static string Line(string data, char section, int sequence) => data.Length > 72
+        ? throw new InvalidOperationException($"IGES export: a {section} line of {data.Length} characters does not fit columns 1-72.")
+        : data.PadRight(72) + section + sequence.ToString(CultureInfo.InvariantCulture).PadLeft(7) + "\n";
 
     /// <summary>Delimited fields packed into lines of at most <paramref name="width"/> columns,
     /// never splitting a field; the last field ends with the record delimiter.</summary>

@@ -25,8 +25,14 @@ namespace OpenSim.Tests.Optics;
 /// face) of the exact surface: the mesh volume is within A·(2c + fit) of the exact one, and for the
 /// all-convex singlet it is not larger (an inscribed polyhedron). A flat triangle of height h under
 /// a sphere of radius R has an area smaller by the fraction h/(2R) to first order (cap 2πRh against
-/// disc π(2Rh − h²), derived), so a face's mesh area is within A·(2c)/R of the exact one (taken
-/// with a factor two: 4c/R).
+/// disc π(2Rh − h²), derived), so the triangles cover their part of a face with an area short by at
+/// most A·(2c)/R (taken with a factor two: 4c/R). The face's boundary is meshed by chords too: along
+/// a rim of perimeter P each chord of length L and sagitta s ≤ c leaves out the circular segment
+/// between it and the rim, (2/3)·L·s to leading order (derived), so a band of area (2/3)·P·c measured
+/// in the rim's plane, or (2/3)·P·c/cos α on a face meeting that plane at α (14.5° for the front
+/// sphere at its rim, 0 for the planes and cylinder; 2/(3 cos α) below 1 for α under 48°), is missing
+/// at every rim: P·c per rim bounds it. For the front sphere this term (about 3.9e-8 m² here) is
+/// about five times the interior one.
 /// </para>
 /// </summary>
 public sealed class CadExportStepTests
@@ -103,9 +109,10 @@ public sealed class CadExportStepTests
         Assert.True(volume <= exact * (1 + 1e-12), $"inscribed mesh volume {volume} exceeds the exact {exact}");
         Assert.True(exact - volume <= total * 2 * c, $"volume {volume} vs exact {exact}: deficit {exact - volume} > A·2c = {total * 2 * c}");
 
-        Assert.InRange(Area(mesh, f => f < 4), frontArea * (1 - 4 * c / Math.Abs(R1)), frontArea * (1 + 1e-12));
-        Assert.InRange(Area(mesh, f => f >= 4 && f < 8), edgeArea * (1 - 4 * c / Semi), edgeArea * (1 + 1e-12));
-        Assert.InRange(Area(mesh, f => f >= 8), backArea * (1 - 4 * c / Math.Abs(R2)), backArea * (1 + 1e-12));
+        double rim = 2 * Math.PI * Semi * c;   // the boundary band of one rim, P·c
+        Assert.InRange(Area(mesh, f => f < 4), frontArea * (1 - 4 * c / Math.Abs(R1)) - rim, frontArea * (1 + 1e-12));
+        Assert.InRange(Area(mesh, f => f >= 4 && f < 8), edgeArea * (1 - 4 * c / Semi) - 2 * rim, edgeArea * (1 + 1e-12));
+        Assert.InRange(Area(mesh, f => f >= 8), backArea * (1 - 4 * c / Math.Abs(R2)) - rim, backArea * (1 + 1e-12));
     }
 
     [Fact]
@@ -138,8 +145,10 @@ public sealed class CadExportStepTests
                 double r = Math.Sqrt(x * x + y * y);
                 if (r > Semi) continue;
                 var p = surface.Point(x / units.MetersPerUnit, y / units.MetersPerUnit);
-                Assert.Equal(x, p.X, 15);   // x(u) = u: the Greville abscissae reproduce the identity
-                Assert.Equal(y, p.Y, 15);
+                // x(u) = u: the Greville abscissae reproduce the identity, exactly up to the rounding
+                // of the sum and of the mm-to-m scaling (a few ulps of 12.5 mm, ulp about 1.7e-18 m).
+                Assert.Equal(x, p.X, 1e-16);
+                Assert.Equal(y, p.Y, 1e-16);
                 Assert.True(shape.TryRadialSag(r, front, out double z, out _));
                 worst = Math.Max(worst, Math.Abs(p.Z - z));
             }
@@ -235,7 +244,7 @@ public sealed class CadExportStepTests
         double c = RelativeChord * DiagonalBound();
         Assert.True(Math.Abs(report.Mesh.ComputeSignedVolume() - exact) <= MeridianArea(body) * 2 * c,
             $"{style}: {report.Mesh.ComputeSignedVolume()} vs {exact}");
-        if (style == CadEdgeStyle.Tapered) Assert.Contains(text, "CONICAL_SURFACE");
+        if (style == CadEdgeStyle.Tapered) Assert.Contains("CONICAL_SURFACE", text);
     }
 
     [Fact]

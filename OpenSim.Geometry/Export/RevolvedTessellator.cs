@@ -74,7 +74,9 @@ public static class RevolvedTessellator
                 if (axisA && axisB) break;
                 if (axisA)
                 {
-                    triangles.Add(new Triangle(first[i], first[i + 1] + j, first[i + 1] + j1));
+                    // Wound like the quads' (a0, a1, b1) seen from the next ring, so the ring edge
+                    // the fan shares with the next band runs the opposite way in each.
+                    triangles.Add(new Triangle(first[i], first[i + 1] + j1, first[i + 1] + j));
                     faces.Add(face);
                 }
                 else if (axisB)
