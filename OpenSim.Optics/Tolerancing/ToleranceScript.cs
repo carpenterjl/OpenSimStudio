@@ -127,8 +127,8 @@ public static class ToleranceScript
         new ZplLibraryEntry("CLEARCOMP", ZplNameKind.Keyword, true, "Removes all current compensators."),
         new ZplLibraryEntry("CLOSEFILE", ZplNameKind.Keyword, true, "Closes the current output file."),
         new ZplLibraryEntry("CMCO", ZplNameKind.Keyword, true, "CMCO operand config: a multi-configuration cell compensator."),
-        new ZplLibraryEntry("CNPA", ZplNameKind.Keyword, false, "Refused: the non-sequential model is not built."),
-        new ZplLibraryEntry("CNPS", ZplNameKind.Keyword, false, "Refused: the non-sequential model is not built."),
+        new ZplLibraryEntry("CNPA", ZplNameKind.Keyword, false, "Refused: non-sequential compensators are not built (the OP-70 core has no tolerancing of objects)."),
+        new ZplLibraryEntry("CNPS", ZplNameKind.Keyword, false, "Refused: non-sequential compensators are not built (the OP-70 core has no tolerancing of objects)."),
         new ZplLibraryEntry("COMP", ZplNameKind.Keyword, true, "COMP surf code: thickness (0), curvature (1) or conic (2) of a surface of the original lens."),
         new ZplLibraryEntry("CPAR", ZplNameKind.Keyword, true, "CPAR surf param: a parameter of a surface of the original lens."),
         new ZplLibraryEntry("FORMAT", ZplNameKind.Keyword, true, "ZPL's FORMAT; the default in a script is 16.8 EXP (help)."),
@@ -436,8 +436,8 @@ internal sealed class ToleranceScriptRunner
             {
                 ["CLEARCOMP"] = (m, a) => { NoArguments(a, "CLEARCOMP"); _compensators.Clear(); },
                 ["CEDV"] = (m, a) => throw new ZplRuntimeException("CEDV is deprecated and has been replaced by CPAR (help); use CPAR surf param."),
-                ["CNPA"] = (m, a) => throw new ZplRuntimeException("CNPA: the non-sequential model is not built."),
-                ["CNPS"] = (m, a) => throw new ZplRuntimeException("CNPS: the non-sequential model is not built."),
+                ["CNPA"] = (m, a) => throw new ZplRuntimeException("CNPA: non-sequential compensators are not built (the OP-70 core has no tolerancing of objects)."),
+                ["CNPS"] = (m, a) => throw new ZplRuntimeException("CNPS: non-sequential compensators are not built (the OP-70 core has no tolerancing of objects)."),
                 ["COMP"] = (m, a) => AddCompensator(m, a, "COMP"),
                 ["CPAR"] = (m, a) => AddCompensator(m, a, "CPAR"),
                 ["CMCO"] = (m, a) => AddCompensator(m, a, "CMCO"),
@@ -754,7 +754,7 @@ internal sealed class ToleranceScriptRunner
             int i1 = Integer(m, it[1], "int1"), i2 = Integer(m, it[2], "int2"), i3 = Integer(m, it[3], "int3");
             int stat = Integer(m, it[4], "the statistics");
             double nstd = Number(m, it[5], "nstd"), min = Number(m, it[6], "min"), max = Number(m, it[7], "max");
-            if (type is 4 or 5) throw new ZplRuntimeException("PERTURB of non-sequential data: the non-sequential model is not built.");
+            if (type is 4 or 5) throw new ZplRuntimeException("PERTURB of non-sequential data: tolerancing of non-sequential objects is not built (the OP-70 core has none).");
             if (type == 2) throw new ZplRuntimeException("PERTURB of extra data (type 2) is not bound in this version.");
             if (type is not (0 or 1 or 3)) throw new ZplRuntimeException($"PERTURB: the type is 0 to 5 (help), not {type}.");
             if (stat is not (0 or 1 or 2)) throw new ZplRuntimeException($"PERTURB: the statistics are 0 (normal), 1 (uniform) or 2 (parabolic) (help), not {stat}.");

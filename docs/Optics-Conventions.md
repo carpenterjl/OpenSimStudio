@@ -4636,7 +4636,7 @@ build the lens from them through `ProjectLens` as the application does.
   record with `r = Type(); r.Property = value` (checked under JGraph on 2026-11-14; pythonnet not
   run). A record is then changed in place, which C# code never does; a script should build a
   record before handing it to an engine and not change it while one holds it.
-- **Not built.** The non-sequential model and plug-ins (OP-100). The global searches and Monte
+- **Not built.** Plug-ins (OP-100); the non-sequential core (OP-70, section 69) is public but not pinned on the scripting surface. The global searches and Monte
   Carlo were pinned by reflection but not run under JGraph. The ZPL macro language (OP-99) is
   §56; `ZplMacro.Run` is on the scripting surface.
 
@@ -5791,7 +5791,7 @@ function" or "user script" is selected"). The trials start from the lens the nom
   CMCO rows are the compensators a run starts with; a script that names COMP, CPAR or CMCO anywhere
   is refused with such rows in the table ("If any compensators are defined in the script, then no
   compensators are allowed in the Tolerance Data Editor"). CEDV is refused ("deprecated and has
-  been replaced by CPAR"), CNPA and CNPS too (no non-sequential model).
+  been replaced by CPAR"), CNPA and CNPS too (the OP-70 non-sequential core has no tolerancing of objects).
 - *LOADMERIT name* replaces the lens's merit function and evaluates it. OpticStudio's .MF layout
   is not published (section 56), so the file is this program's merit function as JSON (the record
   the project file holds; the Tolerance Data Editor's **Save merit function** writes it), read from
