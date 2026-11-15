@@ -58,7 +58,9 @@ public sealed class FiberCouplingTests
 {
     private const double Lambda = 1e-6;          // 1 µm, a test wavelength
     private const double R = 0.1;                // mirror radius, meters
-    private const double EpdMm = 87;             // entrance pupil diameter, mm (sin θ at the rim ≈ 0.399)
+    // Entrance pupil diameter, meters: OpticalSystemData holds lengths in meters, like the
+    // surfaces (the lens unit applies only to the saved settings). sin θ at the rim ≈ 0.399.
+    private const double Epd = 0.087;
 
     private static void Close(double expected, double actual, double tolerance, string what) =>
         Assert.True(Math.Abs(actual - expected) <= tolerance,
@@ -81,7 +83,7 @@ public sealed class FiberCouplingTests
 
     private static OpticalSystemData Sys(ApodizationType apodization = ApodizationType.Uniform) => new()
     {
-        Aperture = new Aperture { Type = ApertureType.EntrancePupilDiameter, Value = EpdMm, Apodization = apodization },
+        Aperture = new Aperture { Type = ApertureType.EntrancePupilDiameter, Value = Epd, Apodization = apodization },
         Fields = new FieldSet { Type = FieldType.ObjectHeight, Points = new[] { new FieldPoint() } },
         Wavelengths = new WavelengthSet { Wavelengths = new[] { new Wavelength { Micrometers = 1.0 } } },
     };
@@ -90,7 +92,7 @@ public sealed class FiberCouplingTests
     /// EPD/2 off the axis in it.</summary>
     private static double RimSine()
     {
-        double a = EpdMm / 2 * 1e-3;
+        double a = Epd / 2;
         return a / Math.Sqrt(a * a + R * R);
     }
 
@@ -331,7 +333,7 @@ public sealed class FiberCouplingTests
     {
         double na = 0.2;
         var r = MultimodeFiberCoupling.Compute(Mirror(), Sys(), new MultimodeCouplingRequest { FiberNa = na, CoreRadius = 25e-6, Sampling = 128 });
-        double a = EpdMm / 2 * 1e-3, rc = R * (na / Math.Sqrt(1 - na * na)) / a, h = 2.0 / 127, e = h / Math.Sqrt(2);
+        double a = Epd / 2, rc = R * (na / Math.Sqrt(1 - na * na)) / a, h = 2.0 / 127, e = h / Math.Sqrt(2);
         Assert.InRange(r.Efficiency, (rc - e) * (rc - e) / ((1 + e) * (1 + e)), (rc + e) * (rc + e) / ((1 - e) * (1 - e)));
         Close(1, r.SystemEfficiency, 1e-12, "everything reaches the image");
 
