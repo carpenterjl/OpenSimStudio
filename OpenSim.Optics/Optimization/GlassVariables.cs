@@ -1,4 +1,5 @@
 using OpenSim.Core.Model;
+using OpenSim.Optics.Materials;
 using OpenSim.Optics.Sequential;
 
 namespace OpenSim.Optics.Optimization;
@@ -52,6 +53,30 @@ public static class GlassVariables
         ArgumentNullException.ThrowIfNull(optics);
         var surfaces = optics.Surfaces ?? new List<OpticsSurfaceSettings>();
         return Enumerable.Range(0, surfaces.Count).Where(j => IsFlagged(surfaces[j], SubstituteColumn)).ToArray();
+    }
+
+    // OP-58: the one glass replacement both the substitution search and the Hammer search make.
+    /// <summary>The surface with its glass replaced by <paramref name="materialText"/> (a catalog
+    /// glass, "catalog:glass"): the model glass and constant index cleared, the model-glass flags
+    /// removed; every other field and flag kept.</summary>
+    public static OpticsSurfaceSettings WithGlass(OpticsSurfaceSettings s, string materialText)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentException.ThrowIfNullOrWhiteSpace(materialText);
+        var result = s with { Material = materialText, ModelGlass = null, Index = null };
+        foreach (string column in ModelColumns) result = WithFlag(result, column, false);
+        return result;
+    }
+
+    // OP-58
+    /// <summary>True when the Material text <paramref name="current"/> names the glass of
+    /// <paramref name="candidate"/> (the same text, or the glass the lens would find for it).</summary>
+    public static bool IsSameGlass(string current, SubstitutionCandidate candidate, IReadOnlyList<OpticalCatalog> catalogs)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        ArgumentNullException.ThrowIfNull(catalogs);
+        return string.Equals(current, candidate.MaterialText, StringComparison.OrdinalIgnoreCase)
+            || ReferenceEquals(Analysis.ProjectLens.FindGlass(current, catalogs), candidate.Glass);
     }
 
     /// <summary>The wavelengths of the system data, µm (the lens's, configuration as entered).</summary>

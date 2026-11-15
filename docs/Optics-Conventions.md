@@ -1069,6 +1069,27 @@ single place in the code, so a correction is one line and its test.
     Check: OpticStudio's RAYTRACE on a lens built to miss, totally reflect and vignette one ray
     each, and one whose aim fails, RAYE and RAYV compared.
 
+39. **Global optimization readings** (OP-58, section 43). Section 43 reads OpticStudio's help
+    pages for the two dialogs' settings and behaviour; the algorithms are this program's own and
+    nothing is compared with OpticStudio's output. Readings:
+    - *What is kept.* "# To Save" and the ten merit values shown are read as one best list of
+      `SaveCount` designs (default 10), kept in memory; no GLOPT_*.ZMX or *_HAMMER.ZMX file is
+      written and Resume is not built.
+    - *Same basic form.* The help rejects "the older design being replaced ... if it has the same
+      basic form as the new lens" without defining form; here two designs have the same form
+      when their glasses are equal and every variable differs by at most 1 % of its range.
+    - *Ranges.* The help says OpticStudio takes variable ranges from MNCT/MNET boundaries and uses
+      the starting focal length "as a scaling parameter"; this program draws starts from
+      explicit ranges (default a curvature of ±3/|EFL| and the other rules of section 43) and
+      leaves MNCT/MNET to the merit function.
+    - *Stopping.* OpticStudio runs both until Stop; here both also stop after a set number of
+      generations or rounds, or a time limit checked between them.
+    - *Applying.* OpticStudio updates the lens with the best design on Exit; here the lens changes
+      only when a listed design is applied.
+    Check: none possible beyond the settings, since the algorithms differ; a common benchmark
+    (the same triplet or double-Gauss start and merit function) run in both, comparing the best
+    merit reached and the forms found.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -1720,8 +1741,8 @@ Semi-Diameter or Semi-Diameter Solves", "Conic Solves", "TCE Solve", "Parameter 
 - **Materials.** The model glass solve uses this program's model-glass stand-in (section 10,
   item 7), from a fit passed in `SolveOptions.ModelGlass`. The offset solve applies
   `GlassOffsets` to the glass as entered, so applying it twice does not double it.
-  The substitute solve leaves the glass unchanged; it is a flag for global optimization, which
-  is not built.
+  The substitute solve leaves the glass unchanged; it is a flag for glass substitution (§41)
+  and the Hammer search (§43).
 - **Semi-diameters.** The automatic solve sets the cell to automatic. The maximum solve writes
   the automatic value of the single configuration, because multiple configurations (OP-30) are
   not built.
@@ -3021,7 +3042,8 @@ shape factor 2(N² − 1)/(N + 2), derived in the test from the Seidel sum, and 
 independent Brent search; results are bitwise identical at 1, 4 and unlimited threads;
 cancellation keeps the best design so far.
 
-**Not built.** Glass variables and substitution (OP-59); global optimization (OP-58); analytic
+Glass variables and substitution are in §41 (OP-59), global optimization in §43 (OP-58).
+**Not built.** Analytic
 or automatic derivatives (finite differences only; the kernel accepts an analytic Jacobian);
 OpticStudio's own Orthogonal Descent (unpublished); the window's per-kind scale and increment
 settings and saving its settings; Auto Update of analysis windows during a run.
@@ -3504,8 +3526,8 @@ Using Glass Substitution, Global Optimization of Glass Selection) and
   after the surface; fails for a non-catalog medium or a cost the catalog does not record. The
   catalogs reach the operands through `IMeritConfigurations.Catalogs` (one added line in
   `MeritEvaluator`).
-- **Not built.** The Hammer and Global optimizers (OP-58), which in OpticStudio run
-  substitution; a per-surface substitute catalog in the saved lens; the template's Save/Load
+- **Not built.** Substitution inside a Global search (the Hammer search of §43 replaces
+  Substitute glasses); a per-surface substitute catalog in the saved lens; the template's Save/Load
   of *.GST files and "Save As New Glass Catalog"; MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and
   INDX; the conversion's last-resort glass.
 
@@ -3681,3 +3703,63 @@ build the lens from them through `ProjectLens` as the application does.
 - **Not on the surface yet.** Global optimization (OP-58) and Monte Carlo tolerancing (OP-65); the
   reflection test marks where their entry points go. The non-sequential model, macro language
   (OP-99) and plug-ins (OP-100) are not built.
+
+## 43. Global optimization
+
+`OpenSim.Optics/Optimization/Global/` (OP-58) searches for better design forms than the local
+optimizer reaches. The help read is OpticStudio 2025 R2's, saved under
+`plans/sources/optics/op-58-help/` (Global Optimizer, Hammer Optimizer, Global Optimization,
+Global Optimization Capabilites of OpticStudio, The Global Optimization Algorithm, The Hammer
+Optimization algorithm, Suggestions for Using Global Optimizers). OpticStudio's two algorithms
+are unpublished; the algorithms below are this program's own, chosen from published methods,
+and are not OpticStudio's.
+
+- **Global search** (`GlobalSearch`). Differential evolution DE/rand/1/bin (R. Storn and K. Price,
+  "Differential Evolution – A Simple and Efficient Heuristic for Global Optimization over
+  Continuous Spaces", J. Global Optim. 11, 341–359, 1997, eqs. 1–4; copy under
+  `op-58-help/storn-price-de.pdf`) over the variables of `LensVariables`. Population NP (default
+  max(8, 2D), at least 4); the first population uniform in the ranges, member 0 the start; for
+  target i the mutant x_r1 + F(x_r2 − x_r3), r1, r2, r3 distinct and ≠ i, clipped into the ranges;
+  binomial crossover with CR, at least one coordinate from the mutant; F = 0.5 and CR = 0.9 by the
+  paper's §4. Each trial vector is locally optimized by `LocalOptimizer` (§35) and the
+  population holds the optimized designs: the evolution runs on basin hopping's transformed
+  surface Ẽ(X) = min{E(X)} (D. J. Wales and J. P. K. Doye, J. Phys. Chem. A 101, 5111, 1997;
+  arXiv:cond-mat/9803344, eq. 2; `op-58-help/wales-doye-1997.pdf`). Generations after the first
+  population: default 10. Global does not change glasses.
+- **Hammer search** (`HammerSearch`). Monotonic basin hopping (Wales and Doye 1997): the start
+  is re-optimized (trial 0); each round runs K trials (default 8) from the current design; a trial
+  either moves every variable by a uniform number in [−1, 1] times the step (default 0.1 of the
+  variable's range) or, with surfaces flagged Substitute and with probability 0.5 (1 when there
+  are no variables), replaces one of their glasses, chosen uniformly, by a candidate chosen
+  uniformly from OP-59's `GlassSubstitutionTemplate.Candidates` (§41) through
+  `GlassVariables.WithGlass`; then the design is re-optimized. The round's best trial replaces the
+  current design when it is better by more than 1e-9 relative; Wales and Doye's Metropolis test
+  at a finite temperature is replaced by accepting only improvements. While the current design
+  misses its exact constraints a glass trial starts from the start's variables, as §41's search
+  does. Model-glass variables move like any variable; a surface flagged Substitute may not also
+  vary its model glass. Default 25 rounds.
+- **Ranges** (`GlobalTrials.DefaultRanges`, this program's choices; per variable through
+  `Ranges`). Curvature ±3/|EFL| of the start (configuration 1, lens units) or ±the curvature
+  limit given, widened to contain the start's value; thickness 0.5 to 1.5 times its value (0 to
+  |EFL|/10 when zero); a model glass's nd with n − 1 from 0.5 to 1.5 times; anything else ±50 % of
+  its value, or ±1 when zero. Ranges bound only the drawing; the local optimizer may leave them.
+- **Ranking and the best list** (`GlobalDesign.Compare`, `GlobalBestList`). A design that meets
+  every negative-weight row (|V − T| ≤ the local optimizer's tolerance × max(1, |T|)) ranks above
+  one that does not (the rule of §41), then the lower merit, then the earlier trial. The list
+  keeps `SaveCount` designs (default 10); a design of the same form as one listed (§10 item 39)
+  replaces it when better and is dropped otherwise. A trial that cannot be built or evaluated is
+  counted and named in the log (the first 20), never listed; in the Global search it never
+  replaces its target, and a failed member of the first population keeps its unoptimized vector
+  with an infinite merit.
+- **Local optimization inside.** The caller's algorithm and cycles (infinite runs as
+  automatic), scales and constraint settings; one thread per trial; an evaluation limit per
+  trial (default 2000); solves and pickups re-evaluated as in §35.
+- **Determinism.** Trial t draws only from `SplitMix64.ForStream(seed, t)` (Global: t = generation
+  × NP + member; Hammer: t − 1 = (round − 1)K + k); the trials of a generation or round run in
+  `ParallelSlots` from the previous state, and selection and the best list take them in index
+  order. A seed and settings reproduce a run bitwise at any thread count. The time limit is
+  checked between generations or rounds, so a timed run equals an untimed one with as many.
+- **Stop** keeps the designs finished before it; a trial cut off by Stop is discarded.
+- **Not built.** OpticStudio's GLOPT and _HAMMER files, Resume, the Global search's periodic
+  return to listed designs, Auto Update of open windows during a run, glass changes in the
+  Global search, saved search settings, a finite-temperature (Metropolis) Hammer.

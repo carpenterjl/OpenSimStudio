@@ -1139,7 +1139,7 @@ The starting design must evaluate with no failed row (as in OpticStudio); during
 design that cannot be built or traced is scored with the failed-row penalty and avoided. Rows
 with a negative weight are met exactly (OpticStudio's Lagrangian multipliers); bound operands
 are ordinary weighted rows. Rules and readings are in docs/Optics-Conventions.md §35. Glass
-variables and substitution are under Glass substitution below. Not built: global optimization (OP-58), analytic derivatives, per-type scale and
+variables and substitution are under Glass substitution below. Global and Hammer searches are under Global and Hammer optimization below. Not built: analytic derivatives, per-type scale and
 derivative-increment settings in the window (the library takes them), saving the Optimize
 window's settings, and the "Auto Update" of open analysis windows during a run (they update
 when the result is applied).
@@ -1209,8 +1209,8 @@ The **Glasses** section of the Optimize window lets the optimizer change glasses
 - **Operands.** RGLA (reasonable glass: distance from each glass of a surface range to the
   nearest catalog glass) and GCOS (glass cost) are in the Merit Function Editor.
 
-Rules and readings are in docs/Optics-Conventions.md §41. Not built: the Hammer and Global
-optimizers, a substitute catalog per surface, saving the template to a *.GST file, and the
+Rules and readings are in docs/Optics-Conventions.md §41. The Hammer search (Global and Hammer
+optimization below) also replaces Substitute glasses. Not built: a substitute catalog per surface, saving the template to a *.GST file, and the
 operands MNIN, MXIN, MNAB, MXAB, MNPD, MXPD, GTCE and INDX.
 
 ## Tolerance data
@@ -1375,6 +1375,35 @@ it into a project (`project.Optics = …`, then the project serializer's Save) a
 Not built: global optimization and Monte Carlo tolerancing from a script; the macro language
 (ZPL); plug-ins.
 
+## Global and Hammer optimization
+
+The **Global and Hammer** section of the Optimize window looks for better design forms than
+Start finds. Both run the algorithm and cycles chosen above for every trial, on the number of
+threads above (the designs do not depend on it), and list the ten best designs found: rank,
+merit, whether the exact (negative-weight) constraints are met, trial number and, for Hammer,
+the glasses. The lens is not changed until you select a design and press **Apply design** (the
+Lens Data Editor's undo takes it back). **Stop** keeps the designs found so far.
+
+- **Start Global** begins from random starts within the ranges and evolves them (differential
+  evolution); each start is optimized locally. Settings: generations (0 is a plain multi-start)
+  and population (empty: twice the number of variables, at least 8). Global does not change
+  glasses. As OpticStudio's help advises, begin from a rough design with the right number of
+  surfaces, glasses, fields and wavelengths and roughly the right focal length (a curvature
+  solve on the last surface holds it), and keep thicknesses physical with boundary operands.
+- **Start Hammer** re-optimizes the lens, then repeatedly moves all variables a random step and
+  re-optimizes, keeping each improvement. With glasses ticked Substitute in the Glasses section,
+  a trial may instead replace one of them by a candidate within the Glass Substitution
+  Template. Settings: rounds, trials per round, step (fraction of each variable's range), glass
+  change probability.
+- **Shared settings:** the seed (the same seed and settings give the same designs), the
+  curvature limit (random curvatures lie within ± this; empty is 3/|EFL| of the lens) and a time
+  limit in minutes.
+
+The algorithms are this program's own (OpticStudio's are unpublished); rules and readings are in
+docs/Optics-Conventions.md §43. Not built: OpticStudio's saved GLOPT and _HAMMER files and
+Resume, Auto Update of open windows during a run, glass changes in the Global search, and saving
+these settings with the lens.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1387,8 +1416,8 @@ Not built yet, and not to be relied on until they appear in this guide:
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);
-- global optimization and the tolerance analyses (the merit function, its editor, the default
-  merit function wizard, the local optimizer, glass substitution, the tolerance data editor with
+- the tolerance analyses (the merit function, its editor, the default merit function wizard,
+  the local optimizer, glass substitution, the Global and Hammer searches, the tolerance data editor with
   its operands, sensitivity and inverse sensitivity with compensators and the MTF and encircled
   energy criteria, and the contrast (MTF) wizard criterion are built; the full operand catalogue,
   the encircled-energy merit operands and Monte Carlo are not);

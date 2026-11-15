@@ -9,7 +9,9 @@
          project's lens against its merit function; Stop keeps the best design so far; the result
          is written into the lens when the run ends, and Undo puts the variables back.
          OP-59: the Glasses section: model-glass variables, the substitution flags, model to real
-         glass conversion, the glass substitution search and the Glass Substitution Template. -->
+         glass conversion, the glass substitution search and the Glass Substitution Template.
+         OP-58: the Global and Hammer section: settings, start, stop, progress, the best ten
+         designs and Apply design. -->
     <DockPanel Margin="8">
         <controls:FormGrid DockPanel.Dock="Top">
             <Label Content="Algorithm"/>
@@ -95,6 +97,56 @@
                     <Label Content="Substitution catalogs"/>
                     <TextBox Text="{Binding TemplateCatalogs}" ToolTip="Catalog names, comma-separated; empty is every active catalog."/>
                 </controls:FormGrid>
+            </StackPanel>
+        </Expander>
+        <!-- OP-58 -->
+        <Expander DockPanel.Dock="Top" Header="Global and Hammer" Margin="0,4,0,4" AutomationProperties.AutomationId="OptimizeGlobalExpander">
+            <StackPanel Margin="0,4,0,0">
+                <TextBlock TextWrapping="Wrap" Margin="0,0,0,4"
+                           Text="Global searches new design forms from random starts; Hammer perturbs and re-optimizes the current design, also replacing Substitute glasses. Both use the algorithm and cycles above for each trial and list the ten best designs; Stop keeps those found so far. The lens changes only when you apply a design."/>
+                <controls:FormGrid IsEnabled="{Binding IsIdle}">
+                    <Label Content="Seed"/>
+                    <TextBox Text="{Binding SearchSeed}" ToolTip="The same seed and settings give the same designs at any number of threads."/>
+                    <Label Content="Curvature limit (1/lens unit)"/>
+                    <TextBox Text="{Binding CurvatureLimit, TargetNullValue=''}" ToolTip="Random curvatures lie within ± this; empty is 3/|EFL| of the lens."/>
+                    <Label Content="Time limit (minutes)"/>
+                    <TextBox Text="{Binding SearchTimeLimitMinutes, TargetNullValue=''}" ToolTip="Checked between generations or rounds; empty for none."/>
+                    <Label Content="Global generations"/>
+                    <TextBox Text="{Binding GlobalGenerations}" ToolTip="Generations of differential evolution after the first population; 0 is a plain multi-start."/>
+                    <Label Content="Global population"/>
+                    <TextBox Text="{Binding GlobalPopulation, TargetNullValue=''}" ToolTip="At least 4; empty is max(8, 2 × the number of variables)."/>
+                    <Label Content="Hammer rounds"/>
+                    <TextBox Text="{Binding HammerRounds}"/>
+                    <Label Content="Hammer trials per round"/>
+                    <TextBox Text="{Binding HammerTrialsPerRound}" ToolTip="Run in parallel from the current design."/>
+                    <Label Content="Hammer step (fraction of range)"/>
+                    <TextBox Text="{Binding HammerStepFraction}"/>
+                    <Label Content="Hammer glass change probability"/>
+                    <TextBox Text="{Binding HammerGlassProbability}" ToolTip="With Substitute surfaces, the chance a trial replaces one glass instead of moving the variables."/>
+                    <Label Content="Progress"/>
+                    <TextBlock Text="{Binding SearchProgressText}" VerticalAlignment="Center"/>
+                </controls:FormGrid>
+                <WrapPanel Margin="0,4,0,4">
+                    <Button Content="Start Global" Command="{Binding StartGlobalCommand}" Margin="0,0,4,4" MinWidth="90"
+                            AutomationProperties.AutomationId="OptimizeStartGlobalButton"/>
+                    <Button Content="Start Hammer" Command="{Binding StartHammerCommand}" Margin="0,0,4,4" MinWidth="90"
+                            AutomationProperties.AutomationId="OptimizeStartHammerButton"/>
+                    <Button Content="Stop" Command="{Binding StopCommand}" Margin="0,0,4,4" MinWidth="70"/>
+                    <Button Content="Apply design" Command="{Binding ApplyBestDesignCommand}" Margin="8,0,4,4" MinWidth="90"
+                            ToolTip="Write the selected design into the lens (the Lens Data Editor's undo takes it back)."
+                            AutomationProperties.AutomationId="OptimizeApplyDesignButton"/>
+                </WrapPanel>
+                <DataGrid ItemsSource="{Binding BestDesigns}" SelectedItem="{Binding SelectedBestDesign}" AutoGenerateColumns="False"
+                          CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" MaxHeight="200" HeadersVisibility="Column"
+                          SelectionMode="Single" AutomationProperties.AutomationId="OptimizeBestDesignsGrid">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="#" Binding="{Binding Rank}"/>
+                        <DataGridTextColumn Header="Merit" Binding="{Binding Merit}"/>
+                        <DataGridTextColumn Header="Constraints" Binding="{Binding Constraints}"/>
+                        <DataGridTextColumn Header="Trial" Binding="{Binding Trial}"/>
+                        <DataGridTextColumn Header="Glasses" Binding="{Binding Glasses}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
             </StackPanel>
         </Expander>
         <TextBlock DockPanel.Dock="Top" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,0,0,4"/>

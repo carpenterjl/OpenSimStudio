@@ -164,8 +164,7 @@ public static class GlassSubstitution
                     // trial starts from the user's own design with the current glasses instead.
                     var baseDesign = bestMet ? best : WithGlassesOf(optics, best, which);
                     var list = baseDesign.Surfaces!.ToList();
-                    list[j] = list[j] with { Material = text, ModelGlass = null, Index = null };
-                    foreach (string column in GlassVariables.ModelColumns) list[j] = GlassVariables.WithFlag(list[j], column, false);
+                    list[j] = GlassVariables.WithGlass(list[j], text);
                     var trial = baseDesign with { Surfaces = list };
                     try
                     {
@@ -262,8 +261,7 @@ public static class GlassSubstitution
     }
 
     private static bool SameGlass(string current, SubstitutionCandidate candidate, IReadOnlyList<OpticalCatalog> catalogs) =>
-        string.Equals(current, candidate.MaterialText, StringComparison.OrdinalIgnoreCase)
-        || ReferenceEquals(Analysis.ProjectLens.FindGlass(current, catalogs), candidate.Glass);
+        GlassVariables.IsSameGlass(current, candidate, catalogs);   // OP-58: shared with the Hammer search
 
     private static string MaterialText(OpticsSurfaceSettings s) => SavedSurfaces.FormatMaterial(s);
 
