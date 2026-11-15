@@ -10,7 +10,7 @@ namespace OpenSim.Optics.Tolerancing;
 // OpticStudio Computes the Tolerance Analysis", "Quick Sensitivity"); docs/Optics-Conventions.md §42.
 
 /// <summary>The analysis a run makes (help, "Tolerancing", Set-Up tab, "Mode"). Skip Sensitivity
-/// (straight to Monte Carlo) is the Monte Carlo item, OP-65, not built.</summary>
+/// (straight to Monte Carlo) is not a mode: the Monte Carlo run is MonteCarloAnalysis (OP-65).</summary>
 public enum ToleranceMode
 {
     /// <summary>"Computes the change in the criterion for each of the extreme values of the tolerances."</summary>

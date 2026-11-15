@@ -1244,7 +1244,7 @@ Each operand's rule (how it changes the lens, which surfaces element tolerances 
 docs/Optics-Conventions.md §36, and the readings where OpticStudio's help leaves a gap in §10
 item 32. The tolerance run below uses them.
 
-Not built: the Monte Carlo analysis; the coating, non-sequential, TEXI and ISO 10110 operands (defined, refused
+Not built: the coating, non-sequential, TEXI and ISO 10110 operands (defined, refused
 when applied, as are TEZI on surfaces other than Toroidal); the default tolerance wizard, the
 tolerance listing, sorting and .TOL files.
 
@@ -1285,7 +1285,7 @@ The definitions are in docs/Optics-Conventions.md §42, and the readings where O
 is short in §10 item 38.
 
 Not built: ensquared, x-only and y-only enclosed energy as criteria, RMS angular and user
-scripts; Monte Carlo;
+scripts;
 Separate Fields/Configs, the polynomial fit and cache, Force Ray Aiming and the "All"
 configurations choice; the tolerance data file and viewer. Element decenter and tilt tolerances
 (TEDX … TETZ and the rolls) cannot be evaluated yet: the ray launcher refuses the decentered lens
@@ -1404,6 +1404,54 @@ docs/Optics-Conventions.md §43. Not built: OpticStudio's saved GLOPT and _HAMME
 Resume, Auto Update of open windows during a run, glass changes in the Global search, and saving
 these settings with the lens.
 
+## Monte Carlo tolerancing
+
+The **Monte Carlo** section of the Tolerance Data Editor simulates production, as OpticStudio's
+Monte Carlo analysis does: each trial draws every tolerance row at random from its distribution,
+applies them all at once to the project's lens (its current configuration), compensates and
+evaluates the criterion. It uses the criterion, compensator, field, sampling and pupil grid
+settings of the Tolerance run section.
+
+- **Trials** (default 20, OpticStudio's default) and **Seed**. Trial k depends only on the seed
+  and k, so a run repeats exactly, and one trial run alone, in a run on one thread or in a run on
+  many is the same lens. Seed 0 draws a seed from the clock and the report names it. A SEED row
+  gives the rows below it a seed of their own (SEED 0: the run's seed).
+- **Statistics** for rows no STAT row governs: normal (default), uniform or parabolic, and **Std
+  devs to extremes** for the normal (default 2: the tolerance range is ±2σ, and draws beyond it
+  are drawn again). A STAT row sets the statistics of the rows below it: 0 normal with Int2
+  standard deviations (1 to 10), 1 uniform, 2 parabolic (more draws near the extremes), 3 user
+  defined, read from the .UDD file named in the STAT row's comment, in **Distribution folder**.
+  A .UDD file is two columns "X T", X from 0.0 to 1.0, T the probability at X; the range Min to
+  Max is mapped onto X.
+- Radial operands (TEDR, TSDR, TARR, TRLR) draw a random direction too, and TIRR a random
+  astigmatism angle. A radial operand with a zero limit is drawn about zero (normal, parabolic).
+- **Yield limit** (empty for none): the share of evaluated trials whose criterion is at or below
+  the limit (at or above it for the Strehl ratio, MTF and encircled energy). **Percentiles** lists
+  the percentiles reported.
+- **Run Monte Carlo**, **Stop** and the progress line. The statistics table gives the nominal, the
+  number of trials evaluated and failed, the mean, standard deviation (n − 1), min, max, the
+  percentiles, the best and worst trials, the yield and the seed. Beside it: a histogram of the
+  criterion (**Histogram bins**) and, with **Overlay MTF** on, the FFT MTF of the nominal (dashed)
+  and of the first **Overlay trials** trials at **Overlay field**, up to **Overlay max frequency**
+  (cycles/mm). The trials table lists each trial's criterion, change, compensators and, for a
+  failed trial, why. The report below repeats it all with the notes and assumptions.
+- **Save trial…** writes the trial named in **Trial to save** as a lens file (default name
+  MC_T0001 and so on, as OpticStudio names its Monte Carlo files): the perturbed, compensated
+  lens. With paraxial focus the focus shift is written into the thickness before the image; that
+  is refused for a multi-configuration lens or a thickness set by a solve or pickup.
+- Failed trials are listed with their reason and left out of the statistics and the yield, with
+  their count shown. Trials carrying element decenters and tilts fail for now: the ray launcher
+  refuses the decentered lens they make.
+- The settings are saved with the tolerance data.
+
+The definitions are in docs/Optics-Conventions.md §45, and the readings where OpticStudio's help
+is short in §10 item 41.
+
+Not built: TEZI's random per-term coefficients (a trial applies the drawn RMS equally over the
+terms), correlated draws, Save Best and Worst files by name, tolerance scripts, the Tolerance
+Data Viewer, the yield curve and the ZTD data file; rows whose operand cannot be applied in this
+version (coatings, TEXI, ISO 10110) are left out of every trial and named in the report.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1419,8 +1467,8 @@ Not built yet, and not to be relied on until they appear in this guide:
 - the tolerance analyses (the merit function, its editor, the default merit function wizard,
   the local optimizer, glass substitution, the Global and Hammer searches, the tolerance data editor with
   its operands, sensitivity and inverse sensitivity with compensators and the MTF and encircled
-  energy criteria, and the contrast (MTF) wizard criterion are built; the full operand catalogue,
-  the encircled-energy merit operands and Monte Carlo are not);
+  energy criteria, Monte Carlo tolerancing and the contrast (MTF) wizard criterion are built; the
+  full operand catalogue and the encircled-energy merit operands are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

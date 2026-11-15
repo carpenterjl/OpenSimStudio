@@ -68,6 +68,11 @@ public sealed record ToleranceRowContext
 
     /// <summary>The SEED value in effect, or null when no SEED row precedes.</summary>
     public int? Seed { get; init; }
+
+    // OP-65
+    /// <summary>The 1-based row of the STAT row in effect, or null when none precedes (a user
+    /// defined distribution names its file in that row's comment).</summary>
+    public int? StatisticsRow { get; init; }
 }
 
 /// <summary>A compensator a COMP, CPAR or CMCO row defines (the optimization of compensators is
@@ -104,7 +109,7 @@ public sealed class ToleranceTable
             {
                 case "TWAV": c = c with { TestWavelengthMicrometers = r.Min }; break;
                 case "MPVT": c = c with { Pivot = (TolerancePivot)Math.Clamp(r.Int1, 0, 4) }; break;
-                case "STAT": c = c with { Statistics = (ToleranceStatistics)Math.Clamp(r.Int1, 0, 3), StandardDeviations = r.Int2 }; break;
+                case "STAT": c = c with { Statistics = (ToleranceStatistics)Math.Clamp(r.Int1, 0, 3), StandardDeviations = r.Int2, StatisticsRow = i + 1 }; break;   // OP-65: StatisticsRow
                 case "SEED": c = c with { Seed = r.Int1 }; break;
             }
         }

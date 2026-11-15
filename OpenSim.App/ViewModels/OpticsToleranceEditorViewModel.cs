@@ -30,7 +30,7 @@ public sealed record IrregularityModelOption(IrregularityModel Model, string Lab
 /// Loosen 2x and Tighten 2x scale every tolerance's Min and Max as the toolbar's buttons do. Every
 /// edit lands on the sheet's undo stack and publishes the system. The tolerance run (OP-64:
 /// sensitivity, inverse limit and increment, Quick Sensitivity) is in the partial file
-/// OpticsToleranceEditorViewModel.Run.cs; Monte Carlo is a later item.
+/// OpticsToleranceEditorViewModel.Run.cs; the Monte Carlo run (OP-65) in OpticsToleranceEditorViewModel.MonteCarlo.cs.
 /// </summary>
 public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
 {
@@ -54,6 +54,7 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
         _document.Changed += OnSheetChanged;
         _applying = true;
         InitializeRun();   // OP-64
+        InitializeMonteCarlo();   // OP-65
         _applying = false;
     }
 
@@ -124,7 +125,9 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
     {
         var data = ToleranceDataSettings.ToSettings(ToTable());
         var run = RunSettingsToSave();   // OP-64
-        return run is null ? data : (data ?? new OpticsToleranceSettings()) with { Run = run };
+        var monteCarlo = MonteCarloSettingsToSave();   // OP-65
+        if (run is null && monteCarlo is null) return data;
+        return (data ?? new OpticsToleranceSettings()) with { Run = run, MonteCarlo = monteCarlo };
     }
 
     /// <summary>Loads a file's tolerance data; null is an empty table. Unknown codes become TOFF
@@ -133,6 +136,7 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
     {
         Load(ToleranceDataSettings.FromSettings(saved, notes), notes);
         LoadRunOptions(ToleranceRunSettings.FromSettings(saved?.Run, notes));   // OP-64
+        LoadMonteCarloSettings(saved?.MonteCarlo, notes);   // OP-65
     }
 
     /// <summary>A new project's tolerance data: empty, with the default run settings.</summary>
@@ -140,6 +144,7 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
     {
         Load(new ToleranceTable(), new List<string>());
         LoadRunOptions(new ToleranceRunOptions());   // OP-64
+        InitializeMonteCarlo();   // OP-65
     }
 
     /// <summary>Replaces the rows with <paramref name="table"/>'s, without an undo step.</summary>

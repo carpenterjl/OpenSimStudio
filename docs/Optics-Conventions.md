@@ -1090,6 +1090,30 @@ single place in the code, so a correction is one line and its test.
     (the same triplet or double-Gauss start and merit function) run in both, comparing the best
     merit reached and the forms found.
 
+41. **Monte Carlo readings** (OP-65). Section 45 follows OpticStudio's help pages; nothing is
+    compared with OpticStudio's Monte Carlo output, and these are this program's readings where
+    the help is short:
+    - *Truncated normal.* The help restricts the normal draw "to lie within n standard deviations
+      of zero"; here a draw outside ±Δ is drawn again (truncation, not clamping to the extremes).
+    - *Radial operands.* For TEDR, TSDR, TARR and TRLR with a zero limit the help says the
+      normal and parabolic distributions are "centered at 0"; the half-width is taken as
+      max(|Min|, |Max|), and the direction is drawn uniform over 0–360°. The uniform and user
+      defined pages do not say this, so those keep [Min, Max].
+    - *User defined tables.* T is read as linear between the tabulated points and its integral
+      inverted exactly; X must increase strictly; more than 200 points is accepted with a note
+      (the help "warns").
+    - *Seeds.* OpticStudio increments a SEED value "for each generated system"; here each SEED
+      value and trial number select one SplitMix64 stream, so the numbers differ from
+      OpticStudio's while keeping its property (reproducible, each trial unique). SEED 0 and rows
+      under no SEED use the run's seed. The draw order within a trial is the row order: value,
+      then a radial direction, then TIRR's angle.
+    - *Statistics.* The help does not list the report's statistics; reported are the mean, the
+      sample standard deviation (n − 1), min, max, chosen percentiles (linear interpolation
+      between order statistics) and a yield against a limit, over the evaluated trials only.
+    - *Saved trial lens.* The paraxial focus shift is written into the thickness before the image.
+    Check: a lens with a seeded Monte Carlo run in OpticStudio, the spread of its criterion (mean,
+    standard deviation) compared with this program's over the same tolerances and statistics.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3055,8 +3079,8 @@ of the saved lens by one row at a given value. The operands were read from Optic
 help, saved under `plans/sources/optics/op-63-help/` (Tolerance Operands, the two summary tables,
 each operand's page, Tolerance Control Operands and their pages, Tolerancing with the Irregular
 Surface Type, Nesting Rules for Monte Carlo Analysis, Tolerancing with Solves; the equation
-images under `images/`). Sensitivity and inverse sensitivity with compensators use the rules (OP-64, §42); Monte
-Carlo is a later item.
+images under `images/`). Sensitivity and inverse sensitivity with compensators use the rules (OP-64, §42), and so does
+Monte Carlo (OP-65, §45).
 
 - **Rows.** A row is a four-letter code, Int1 to Int3, Min, Max, a comment, and OpticStudio's
   two operand properties (Ignore; Do not adjust during inverse tolerancing). Min and Max are the
@@ -3127,8 +3151,8 @@ Carlo is a later item.
 **Not built.** Applying coating operands (the per-surface coating multipliers and offsets are
 not saved), non-sequential operands (OP-70), Zernike Fringe and Standard Sag surfaces (OP-25)
 and composite add-ons (OP-32) with the operands that need them, cylindrical roll surfaces, the
-default tolerances wizard, the tolerance listing, sorting, .TOL files, the sensitivity and Monte
-Carlo analyses (OP-64, OP-65) and compensator optimization.
+default tolerances wizard, the tolerance listing, sorting and .TOL files (the sensitivity and Monte Carlo analyses and
+compensator optimization are §42 and §45).
 
 ## 37. Thermal analysis
 
@@ -3603,7 +3627,7 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
   (`EncircledRadiusMicrometers`) are saved on `OpticsToleranceRunSettings` with the rest; neither
   has a default (0 is refused for its criteria).
 - **Not built.** Ensquared, x-only and y-only enclosed energy as criteria; MTF warnings (aliasing)
-  are not reported per trial; RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity and Monte Carlo (OP-65);
+  are not reported per trial; RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity (Monte Carlo runs on its own, §45);
   Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
   .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
   CEDV (deprecated) compensators.
@@ -3763,3 +3787,58 @@ and are not OpticStudio's.
 - **Not built.** OpticStudio's GLOPT and _HAMMER files, Resume, the Global search's periodic
   return to listed designs, Auto Update of open windows during a run, glass changes in the
   Global search, saved search settings, a finite-temperature (Metropolis) Hammer.
+
+## 45. Monte Carlo tolerancing
+
+`OpenSim.Optics/Tolerancing/MonteCarloAnalysis.cs` and `MonteCarloDistributions.cs` (OP-65).
+Sources: OpticStudio 2025 R2 help, "Monte Carlo Analysis", "Normal Statistical Distribution",
+"Uniform Statistical Distribution", "Parabolic Statistical Distribution" (and its equation image),
+"User Defined Statistical Distribution", "Discussion of Monte Carlo Analysis Method", "Histogram",
+"Yield", "Tolerance Data Viewer" (saved under `plans/sources/optics/op-65-help/`), "STAT",
+"SEED", "Nesting Rules for Monte Carlo Analysis", "TIRR" (`op-63-help/`) and "Tolerancing", the
+dialog's Monte Carlo tab (`op-64-help/Tolerancing.txt`).
+
+- **Set-up.** The criterion, compensators, fields and sampling are OP-64's (§42), built by the
+  same code (`ToleranceAnalysis.Prepare`); the compensated nominal lens gives N.
+- **Distributions.** Offsets from the midpoint of Min and Max, Δ = (Max − Min)/2. Normal: σ = Δ/n,
+  n from the STAT row's Int2 (1 to 10) or the run's default 2, truncated at ±Δ. Uniform: equal
+  probability over ±Δ. Parabolic: p(x) = 3x²/(2Δ³), drawn as Δ·∛(2u − 1). User defined: the .UDD
+  table named in the STAT row's comment (two columns X, T; X from 0 to 1, first 0, last 1),
+  mapped onto [Min, Max]. Rows no STAT row governs use the run's statistics (normal, uniform or
+  parabolic; default normal).
+- **A trial.** Every tolerance row (not ignored, not a control row) draws its value in row order;
+  radial operands also draw a direction and TIRR its astigmatism angle, uniform over 0–360°. The
+  rows are applied one after another by `TolerancePerturber` to the compensated nominal, each
+  change's `MapSurface` composed so later rows find their surfaces (§36); the compensators are
+  evaluated (§42) and the criterion and its change recorded. Rows whose operand this version
+  cannot apply are left out of every trial and named.
+- **Random numbers and determinism.** Rows under one SEED value draw from
+  `SplitMix64.ForStream(seed, k)` for trial k; SEED 0 and rows under no SEED use the run's seed
+  (0 draws one from the clock, reported). Trial k is therefore the same alone
+  (`MonteCarloAnalysis.Trial`), in sequence or in parallel. Trials run on `ParallelSlots`, one
+  thread each, and the statistics are reduced in trial order: the result is bitwise identical at
+  any thread count.
+- **Failures.** A trial whose perturbation or evaluation fails keeps its draws and reason and is
+  left out of the statistics and the yield, with the count reported. Element decenters and tilts
+  make the lens non-axial, which the ray launcher refuses (§15), so such trials fail by name.
+- **Results.** Mean, sample standard deviation, min, max, percentiles (linear interpolation
+  between order statistics, as `ParameterSweep`'s statistics), best and worst trial, each
+  compensator's statistics, the yield (criterion ≤ limit, or ≥ where larger is better) over the
+  evaluated trials, a histogram (bins between Min Value and Max Value, results outside counted in
+  one bar each, help "Histogram"), and an MTF overlay (OP-39's FFT MTF of each compensated trial
+  lens at one field, every wavelength, the help's "Overlay MC Graphics"). `TrialLens` regenerates
+  trial k's compensated lens for saving (help, "# Monte Carlo Save"); with paraxial focus the
+  shift is written into the thickness before the image, refused for several configurations or a
+  thickness set by a solve, pickup or multi-configuration row.
+- **Distributions not in ParameterSweep.** The tolerance distributions stay in `Tolerancing`
+  (their ranges, truncation and radial rules are OpticStudio's); `ParameterSweep` is unchanged.
+  Its statistics are not reused directly because they take a sweep result; the percentile
+  definition is the same.
+- **Readings** where the help is short are in §10, item 41.
+
+**Not built.** TEZI's random per-term coefficients ("each polynomial term is assigned a
+coefficient randomly chosen between -1.0 and 1.0 ... normalized"; a trial applies the drawn RMS
+equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst
+Monte Carlo files by name and the File Prefix, the ZTD data file, the Tolerance Data Viewer and
+Yield curve (OP-66), tolerance scripts (OP-67), overlay of analyses other than the MTF, and
+evaluation of element decenter and tilt trials (the launcher, OP-22).

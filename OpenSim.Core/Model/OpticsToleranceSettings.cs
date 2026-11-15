@@ -21,6 +21,59 @@ public sealed record OpticsToleranceSettings
     /// <summary>The settings of the last tolerance run (sensitivity and inverse sensitivity,
     /// plan item OP-64); null for the defaults.</summary>
     public OpticsToleranceRunSettings? Run { get; init; }
+
+    // OP-65
+    /// <summary>The settings of the last Monte Carlo run (plan item OP-65); null for the defaults.</summary>
+    public OpticsToleranceMonteCarloSettings? MonteCarlo { get; init; }
+}
+
+// OP-65
+/// <summary>
+/// The Monte Carlo run's settings as the project and the lens file store them (OpticStudio's
+/// Tolerancing dialog, Monte Carlo tab, as far as plan item OP-65 builds it). Every member is
+/// nullable; null is the default. OpenSim.Optics' <c>MonteCarloSettings</c> converts to and from
+/// its options and names any value it does not know.
+/// </summary>
+public sealed record OpticsToleranceMonteCarloSettings
+{
+    /// <summary>The number of trials ("# Monte Carlo Runs").</summary>
+    public int? Trials { get; init; }
+
+    /// <summary>The run's seed; 0 draws one from the clock.</summary>
+    public int? Seed { get; init; }
+
+    /// <summary>"Normal", "Uniform" or "Parabolic": the distribution of rows no STAT row governs.</summary>
+    public string? Statistics { get; init; }
+
+    /// <summary>The normal distribution's standard deviations to the extremes for rows no STAT row governs.</summary>
+    public int? StandardDeviations { get; init; }
+
+    /// <summary>The criterion limit the yield is counted against, in the criterion's unit.</summary>
+    public double? YieldLimit { get; init; }
+
+    /// <summary>The percentiles reported, in percent.</summary>
+    public List<double>? Percentiles { get; init; }
+
+    /// <summary>The folder user-defined distribution (.UDD) files are read from.</summary>
+    public string? DistributionFolder { get; init; }
+
+    /// <summary>True to compute the MTF of each trial for the overlay plot.</summary>
+    public bool? OverlayMtf { get; init; }
+
+    /// <summary>The overlay's field, 1-based.</summary>
+    public int? OverlayField { get; init; }
+
+    /// <summary>The overlay's largest frequency, MTF units (cycles per millimeter).</summary>
+    public double? OverlayMaxFrequency { get; init; }
+
+    /// <summary>The overlay's number of frequencies.</summary>
+    public int? OverlayPoints { get; init; }
+
+    /// <summary>How many trials the overlay draws (the first ones).</summary>
+    public int? OverlayTrials { get; init; }
+
+    /// <summary>The histogram's number of bins.</summary>
+    public int? HistogramBins { get; init; }
 }
 
 // OP-64

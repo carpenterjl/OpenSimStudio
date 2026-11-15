@@ -216,38 +216,15 @@ public static class ToleranceAnalysis
         ArgumentNullException.ThrowIfNull(catalogs);
         options ??= new ToleranceRunOptions();
         var token = options.CancellationToken;
-        Check(options);
-
-        // The table: control and ignored rows set context only; rows this version cannot apply are
-        // recorded as failed trials, not refused.
-        var problems = ToleranceValidation.Validate(table, nominal)
-            .Where(p => !p.Contains("defined but not applied in this version", StringComparison.Ordinal)).ToList();
-        if (problems.Count > 0)
-            throw new ArgumentException("The tolerance data has problems; fix them first (Update in the Tolerance Data Editor):"
-                + Environment.NewLine + string.Join(Environment.NewLine, problems));
-        var rows = Enumerable.Range(0, table.Rows.Count)
-            .Where(i => !table.Rows[i].Ignore && ToleranceOperandRegistry.Find(table.Rows[i].Code) is { IsControl: false })
-            .ToArray();
-
-        var notes = new List<string>();
-        int configuration = MultiConfiguration.CurrentConfiguration(nominal);
-        int configurations = MultiConfiguration.ConfigurationCount(nominal);
-        var (nominalLens, system) = ToleranceCriterionEvaluator.Build(nominal, configuration, catalogs);
-        var fields = options.Criterion is ToleranceCriterion.MeritFunction or ToleranceCriterion.BoresightError
-            ? Array.Empty<ToleranceField>() : ToleranceCriterionEvaluator.FieldsOf(system, options.Fields, notes);
-        MeritFunction? merit = null;
-        if (options.Criterion == ToleranceCriterion.MeritFunction)
-        {
-            var registry = MeritOperandRegistry.CreateDefault();
-            var mfNotes = new List<string>();
-            merit = MeritFunctionSettings.FromSettings(nominal.MeritFunction, registry, mfNotes);
-            notes.AddRange(mfNotes);
-            if (merit.Rows.Count == 0)
-                throw new ArgumentException("The merit function criterion needs a merit function: build one in the Merit Function Editor.");
-        }
-        var evaluator = new ToleranceCriterionEvaluator(options, catalogs, configuration, fields, merit);
-        var compensator = new ToleranceCompensators(options, table, nominal, catalogs, evaluator, configurations);
-        var unit = ToleranceCriteria.Unit(options.Criterion, system.Units.LensUnit);
+        var setup = Prepare(nominal, table, catalogs, options);   // OP-65: shared with the Monte Carlo run
+        var rows = setup.Rows;
+        var notes = setup.Notes;
+        int configuration = setup.Configuration, configurations = setup.Configurations;
+        var nominalLens = setup.NominalLens;
+        var system = setup.System;
+        var evaluator = setup.Evaluator;
+        var compensator = setup.Compensator;
+        var unit = setup.Unit;
 
         // The compensated nominal.
         token.ThrowIfCancellationRequested();
@@ -301,6 +278,48 @@ public static class ToleranceAnalysis
             Assumptions = Assumptions(options, evaluator, compensator, nominalLens, system, configuration, configurations),
             Notes = notes, Trials = trials + 1,
         };
+    }
+
+    // OP-65: the set-up the sensitivity run and the Monte Carlo run (MonteCarloAnalysis) share.
+    /// <summary>Checks the options and the table against the lens and builds the criterion
+    /// evaluator and the compensators; the tolerance rows are the non-control rows not ignored.</summary>
+    internal static ToleranceSetup Prepare(OpticsSettings nominal, ToleranceTable table, IReadOnlyList<OpticalCatalog> catalogs,
+        ToleranceRunOptions options)
+    {
+        Check(options);
+
+        // The table: control and ignored rows set context only; rows this version cannot apply are
+        // recorded as failed trials, not refused.
+        var problems = ToleranceValidation.Validate(table, nominal)
+            .Where(p => !p.Contains("defined but not applied in this version", StringComparison.Ordinal)).ToList();
+        if (problems.Count > 0)
+            throw new ArgumentException("The tolerance data has problems; fix them first (Update in the Tolerance Data Editor):"
+                + Environment.NewLine + string.Join(Environment.NewLine, problems));
+        var rows = Enumerable.Range(0, table.Rows.Count)
+            .Where(i => !table.Rows[i].Ignore && ToleranceOperandRegistry.Find(table.Rows[i].Code) is { IsControl: false })
+            .ToArray();
+
+        var notes = new List<string>();
+        int configuration = MultiConfiguration.CurrentConfiguration(nominal);
+        int configurations = MultiConfiguration.ConfigurationCount(nominal);
+        var (nominalLens, system) = ToleranceCriterionEvaluator.Build(nominal, configuration, catalogs);
+        var fields = options.Criterion is ToleranceCriterion.MeritFunction or ToleranceCriterion.BoresightError
+            ? Array.Empty<ToleranceField>() : ToleranceCriterionEvaluator.FieldsOf(system, options.Fields, notes);
+        MeritFunction? merit = null;
+        if (options.Criterion == ToleranceCriterion.MeritFunction)
+        {
+            var registry = MeritOperandRegistry.CreateDefault();
+            var mfNotes = new List<string>();
+            merit = MeritFunctionSettings.FromSettings(nominal.MeritFunction, registry, mfNotes);
+            notes.AddRange(mfNotes);
+            if (merit.Rows.Count == 0)
+                throw new ArgumentException("The merit function criterion needs a merit function: build one in the Merit Function Editor.");
+        }
+        var evaluator = new ToleranceCriterionEvaluator(options, catalogs, configuration, fields, merit);
+        var compensator = new ToleranceCompensators(options, table, nominal, catalogs, evaluator, configurations);
+        var unit = ToleranceCriteria.Unit(options.Criterion, system.Units.LensUnit);
+
+        return new ToleranceSetup(rows, notes, configuration, configurations, nominalLens, system, evaluator, compensator, unit);
     }
 
     private static void Check(ToleranceRunOptions o)
@@ -423,7 +442,8 @@ public static class ToleranceAnalysis
         };
     }
 
-    private static IReadOnlyList<string> Assumptions(ToleranceRunOptions o, ToleranceCriterionEvaluator e, ToleranceCompensators comp,
+    // OP-65: internal for the Monte Carlo run.
+    internal static IReadOnlyList<string> Assumptions(ToleranceRunOptions o, ToleranceCriterionEvaluator e, ToleranceCompensators comp,
         SequentialLens lens, OpticalSystemData system, int configuration, int configurations)
     {
         var lines = new List<string>();
@@ -470,7 +490,14 @@ public static class ToleranceAnalysis
         if (o.Mode != ToleranceMode.Sensitivity)
             lines.Add($"Inverse: each limit is searched by Brent's method to {ToleranceRunSettings.F(o.InverseTolerance)} of its starting value, assuming the criterion changes monotonically with the tolerance (help); limits are only ever tightened.");
         lines.Add("Radial operands (TSDR, TEDR, TARR, TRLR) are applied along +y, TIRR's astigmatism along y (OP-63's defaults).");
-        lines.Add("Not built: Separate Fields/Configs, the polynomial fit and the cache, Force Ray Aiming, the Config \"All\" choice (the current configuration is toleranced), the RMS angular and user script criteria, Monte Carlo (OP-65).");
+        lines.Add("Not built: Separate Fields/Configs, the polynomial fit and the cache, Force Ray Aiming, the Config \"All\" choice (the current configuration is toleranced), the RMS angular and user script criteria, Skip Sensitivity (Monte Carlo runs on its own: MonteCarloAnalysis, OP-65).");
         return lines;
     }
 }
+
+// OP-65
+/// <summary>What <see cref="ToleranceAnalysis.Prepare"/> builds: the tolerance rows (0-based), the
+/// notes so far, the configuration toleranced, the nominal lens and system, the criterion evaluator,
+/// the compensators and the criterion's unit.</summary>
+internal sealed record ToleranceSetup(int[] Rows, List<string> Notes, int Configuration, int Configurations, SequentialLens NominalLens,
+    OpticalSystemData System, ToleranceCriterionEvaluator Evaluator, ToleranceCompensators Compensator, string Unit);

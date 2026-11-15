@@ -95,6 +95,8 @@ public sealed partial class OpticsToleranceEditorViewModel
     [NotifyCanExecuteChangedFor(nameof(QuickSensitivityCommand))]
     [NotifyCanExecuteChangedFor(nameof(CancelRunCommand))]
     [NotifyCanExecuteChangedFor(nameof(ApplyInverseLimitsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RunMonteCarloCommand))]   // OP-65
+    [NotifyCanExecuteChangedFor(nameof(SaveTrialCommand))]   // OP-65
     [NotifyPropertyChangedFor(nameof(IsRunIdle))]
     private bool _isRunning;
 
@@ -178,7 +180,7 @@ public sealed partial class OpticsToleranceEditorViewModel
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName is { } name && RunSettingNames.Contains(name) && !_applying) _publish();
+        if (e.PropertyName is { } name && (RunSettingNames.Contains(name) || MonteCarloSettingNames.Contains(name)) && !_applying) _publish();   // OP-65: Monte Carlo settings too
     }
 
     private bool CanRun() => !IsRunning;

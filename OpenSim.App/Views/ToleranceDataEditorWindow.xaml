@@ -3,12 +3,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:OpenSim.App.Controls"
         xmlns:sheet="clr-namespace:OpenSim.App.Controls.Spreadsheet"
+        xmlns:analyses="clr-namespace:OpenSim.App.Views.Analyses"
         Title="Tolerance Data Editor" Width="1100" Height="720" MinWidth="520" MinHeight="300"
         ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource PanelBgBrush}">
     <!-- OP-63: the Tolerance Data Editor. DataContext is the OpticsToleranceEditorViewModel; the
          sheet is OP-10's SpreadsheetGrid. Type an operand's code (TRAD) or name in the Operand
          column. Update validates the rows and fills the Nominal column. -->
+    <Window.Resources>
+        <analyses:AnalysisPlotViewConverter x:Key="PlotView"/>
+    </Window.Resources>
     <DockPanel Margin="8">
         <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
             <Button Content="Update" Command="{Binding UpdateCommand}" Margin="0,0,4,4"
@@ -40,6 +44,80 @@
                 </controls:FormGrid>
                 <ListBox ItemsSource="{Binding FindResults}" MaxHeight="140" Margin="0,4,0,0"/>
             </DockPanel>
+        </Expander>
+
+        <!-- OP-65: the Monte Carlo run (OpticStudio's Tolerancing dialog, Monte Carlo tab, as far as built). It uses
+             the criterion, compensator, field and sampling settings of the tolerance run (the expander above it). -->
+        <Expander DockPanel.Dock="Bottom" Header="Monte Carlo" Margin="0,4,0,0" AutomationProperties.AutomationId="MonteCarloExpander">
+            <ScrollViewer MaxHeight="460" VerticalScrollBarVisibility="Auto">
+                <DockPanel Margin="4">
+                    <controls:FormGrid DockPanel.Dock="Left" Width="380" VerticalAlignment="Top" IsEnabled="{Binding IsRunIdle}">
+                        <Label Content="Trials"/>
+                        <TextBox Text="{Binding MonteCarloTrials}" AutomationProperties.AutomationId="MonteCarloTrials"
+                                 ToolTip="The number of random lenses (OpticStudio's default is 20)."/>
+                        <Label Content="Seed"/>
+                        <TextBox Text="{Binding MonteCarloSeed}" ToolTip="Trial k depends only on the seed and k. 0 draws a seed from the clock; the result names it. SEED rows override it for the rows below them."/>
+                        <Label Content="Statistics"/>
+                        <ComboBox ItemsSource="{Binding MonteCarloStatisticsChoices}" SelectedItem="{Binding SelectedMonteCarloStatistics}" DisplayMemberPath="Label"
+                                  ToolTip="The distribution of rows no STAT row governs."/>
+                        <Label Content="Std devs to extremes"/>
+                        <TextBox Text="{Binding MonteCarloStandardDeviations}" ToolTip="Normal statistics: n standard deviations from the midpoint to the tolerance extremes, 1 to 10 (default 2)."/>
+                        <Label Content="Yield limit"/>
+                        <TextBox Text="{Binding YieldLimitText, UpdateSourceTrigger=LostFocus}" ToolTip="The criterion limit, in its unit; empty for no yield. Larger-is-better criteria count trials at or above it."/>
+                        <Label Content="Percentiles (%)"/>
+                        <TextBox Text="{Binding PercentilesText, UpdateSourceTrigger=LostFocus}"/>
+                        <Label Content="Distribution folder"/>
+                        <TextBox Text="{Binding DistributionFolder, UpdateSourceTrigger=LostFocus}" ToolTip="The folder of the .UDD files that STAT 3 rows name in their comment."/>
+                        <Label Content="Histogram bins"/>
+                        <TextBox Text="{Binding HistogramBins}"/>
+                        <Label Content="Overlay MTF"/>
+                        <CheckBox IsChecked="{Binding OverlayMtf}" VerticalAlignment="Center" ToolTip="Compute each trial's FFT MTF at one field for an overlay plot."/>
+                        <Label Content="Overlay field"/>
+                        <TextBox Text="{Binding OverlayField}"/>
+                        <Label Content="Overlay max frequency (cycles/mm)"/>
+                        <TextBox Text="{Binding OverlayMaxFrequency}"/>
+                        <Label Content="Overlay frequencies"/>
+                        <TextBox Text="{Binding OverlayPoints}"/>
+                        <Label Content="Overlay trials"/>
+                        <TextBox Text="{Binding OverlayTrials}" ToolTip="The overlay draws the first this many trials."/>
+                        <Label Content="Trial to save"/>
+                        <TextBox Text="{Binding TrialToSave}"/>
+                    </controls:FormGrid>
+                    <StackPanel Margin="8,0,0,0">
+                        <WrapPanel Margin="0,0,0,4">
+                            <Button Content="Run Monte Carlo" Command="{Binding RunMonteCarloCommand}" Margin="0,0,4,4"
+                                    AutomationProperties.AutomationId="MonteCarloRunButton"/>
+                            <Button Content="Stop" Command="{Binding CancelRunCommand}" MinWidth="70" Margin="0,0,4,4"/>
+                            <Button Content="Save trial…" Command="{Binding SaveTrialCommand}" Margin="8,0,4,4"
+                                    ToolTip="Write the lens of the trial above (compensated) to a lens file."/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding MonteCarloStatus}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <WrapPanel>
+                            <DataGrid ItemsSource="{Binding MonteCarloStatistics}" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="260"
+                                      HeadersVisibility="Column" Margin="0,0,8,4" AutomationProperties.AutomationId="MonteCarloStatisticsGrid">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Statistic" Binding="{Binding Quantity}"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value}"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <ContentControl Content="{Binding HistogramPlot, Converter={StaticResource PlotView}}" Margin="0,0,8,4"/>
+                            <ContentControl Content="{Binding MtfOverlayPlot, Converter={StaticResource PlotView}}" Margin="0,0,0,4"/>
+                        </WrapPanel>
+                        <DataGrid ItemsSource="{Binding MonteCarloRows}" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="200"
+                                  HeadersVisibility="Column" AutomationProperties.AutomationId="MonteCarloTrialsGrid">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Trial" Binding="{Binding Trial}"/>
+                                <DataGridTextColumn Header="Criterion" Binding="{Binding Criterion}"/>
+                                <DataGridTextColumn Header="Change" Binding="{Binding Change}"/>
+                                <DataGridTextColumn Header="Compensators" Binding="{Binding Compensators}"/>
+                                <DataGridTextColumn Header="Note" Binding="{Binding Note}"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBox Text="{Binding MonteCarloReportText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" MaxHeight="200" Margin="0,4,0,0"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap"/>
+                    </StackPanel>
+                </DockPanel>
+            </ScrollViewer>
         </Expander>
 
         <!-- OP-64: the tolerance run (OpticStudio's Tolerancing dialog, Set-Up and Criterion tabs, as far
