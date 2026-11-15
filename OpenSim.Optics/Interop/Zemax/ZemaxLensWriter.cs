@@ -131,7 +131,9 @@ public static class ZemaxLensWriter
         string? code = ZemaxKeywords.CodeOf(s.Type);
         if (code is null)
         {
-            problems.Add($"{where}: the surface type '{s.Type}' has no TYPE code this build writes ({string.Join(", ", ZemaxKeywords.SurfaceTypes.Select(x => x.TypeName ?? SavedSurfaces.StandardType))}).");
+            if (s.Type is not null && ZemaxKeywords.RefusalOf(s.Type) is { } refused)   // OP-25: Grid Sag
+                problems.Add($"{where}: the surface type '{s.Type}' is not written: {refused}.");
+            else problems.Add($"{where}: the surface type '{s.Type}' has no TYPE code this build writes ({string.Join(", ", ZemaxKeywords.SurfaceTypes.Select(x => x.TypeName ?? SavedSurfaces.StandardType))}).");
             code = "STANDARD";
         }
         var flags = new Dictionary<string, OpticsCellFlagSettings>(StringComparer.Ordinal);

@@ -204,7 +204,7 @@ public sealed partial class OpticsLensCatalogViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(InsertLensCommand))]
     private StockLensRow? _selectedResult;
 
-    [ObservableProperty] private string _status = "Choose a library folder holding private catalogs (.osslcat) or one sub-folder of .zmx/.zar files per vendor, then Search.";
+    [ObservableProperty] private string _status = "Choose a library folder holding private catalogs (.osslcat) or one sub-folder of .zmx/.zar/.seq/.len files per vendor, then Search.";
 
     /// <summary>The report, the problems, or the notes of the last action, one line each.</summary>
     [ObservableProperty] private string _details = "";
@@ -300,7 +300,7 @@ public sealed partial class OpticsLensCatalogViewModel : ObservableObject
 
     // ---------------------------------------------------------------- Make Private Lens Catalog
 
-    /// <summary>The folder of .zmx/.zar files to convert.</summary>
+    /// <summary>The folder of .zmx/.zar/.seq/.len files to convert.</summary>
     [ObservableProperty] private string _privateSource = "";
 
     /// <summary>The catalog's name; the file is &lt;name&gt;.osslcat in the library folder.</summary>
@@ -309,7 +309,7 @@ public sealed partial class OpticsLensCatalogViewModel : ObservableObject
     [RelayCommand]
     private void MakePrivateCatalog()
     {
-        if (string.IsNullOrWhiteSpace(PrivateSource)) { Status = "Choose the source folder of .zmx/.zar files first."; return; }
+        if (string.IsNullOrWhiteSpace(PrivateSource)) { Status = "Choose the source folder of .zmx/.zar/.seq/.len files first."; return; }
         string name = string.IsNullOrWhiteSpace(PrivateName) ? new DirectoryInfo(PrivateSource).Name : PrivateName.Trim();
         if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) { Status = $"The catalog name '{name}' cannot be a file name."; return; }
         string path = Path.Combine(LibraryFolder, name + LensCatalog.FileExtension);

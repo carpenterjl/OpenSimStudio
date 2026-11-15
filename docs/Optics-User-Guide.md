@@ -1672,7 +1672,11 @@ What is read: the title and notes, the lens unit, the aperture, fields with thei
 wavelengths, temperature and pressure, the glass catalog list, and per surface the type, comment,
 stop, radius, thickness, conic, glass, coating name, semi-diameter, parameters and extra data,
 circular and floating apertures and their decenter. Surface types: Standard, Even, Odd, Extended,
-Extended Odd and Q-Type aspheres, Toroidal, Paraxial and Coordinate Break. Solves: curvature,
+Extended Odd and Q-Type aspheres, Toroidal, Paraxial and Coordinate Break, and the freeform types
+Polynomial, Extended Polynomial, Zernike Fringe, Standard and Annular Standard Sag, Off-Axis Conic
+Freeform and Radial NURBS (their codes are taken from OpticStudio's macro help and have not been
+checked against a file OpticStudio wrote; a Grid Sag is refused, as its grid is a separate file).
+Solves: curvature,
 thickness, material, semi-diameter and parameter pickups (scale only, same column), and curvature,
 thickness and parameter variables. Glass names are checked against your loaded catalogs, in the
 file's catalog order; a model glass and a constant index are read as such. An archive's own glass
@@ -1693,7 +1697,7 @@ From the command line: `opensim optics import <file.zmx|file.zar> [--out lens.os
 
 Not built: merit-function, tolerance and multi-configuration data; surface types and solves not
 listed above; surface tilts and decenters; rectangular, elliptical and user apertures; ray aiming
-and polarization; writing archives; the .zos format. CODE V and OSLO files are imported as
+and polarization; writing archives; the .zos format; Grid Sag surfaces. CODE V and OSLO files are imported as
 described in the next section. Files written here
 have not been opened in OpticStudio. The details are in docs/Optics-Conventions.md §52.
 
@@ -1702,10 +1706,11 @@ have not been opened in OpticStudio. The details are in docs/Optics-Conventions.
 **Lens Catalogs…** in the optics panel opens a dialog with three tabs.
 
 *Stock lenses.* The library folder holds your catalogs: each private catalog file (`.osslcat`)
-in it, and each sub-folder of vendor `.zmx`/`.zar` files (one sub-folder per vendor, named after
-it). No vendor catalog comes with the program; download the vendors' Zemax files yourself. Files
-are read as **Import .zmx** reads them; a file that cannot be read is left out and named in the
-log, with the reason. Choose a vendor or all catalogs and set the criteria as OpticStudio's Lens
+in it, and each sub-folder of vendor `.zmx`/`.zar` files, or CODE V `.seq` and OSLO `.len` files
+(one sub-folder per vendor, named after it). No vendor catalog comes with the program; download
+the vendors' lens files yourself. Files are read as **Import .zmx** and **Import CODE V .seq /
+OSLO .len…** read them; a file that cannot be read is left out and named in the log, with the
+reason. Choose a vendor or all catalogs and set the criteria as OpticStudio's Lens
 Catalogs tool has them: focal length and entrance pupil diameter ranges in millimeters (each used
 when ticked), the shapes (Equi-, Bi-, Plano-, Meniscus) and types (Spherical, GRIN, Aspheric,
 Toroidal) to accept (none ticked accepts all), the number of elements, and text the part name
@@ -1724,7 +1729,7 @@ The part name is the first word of the file name ("Lens number 5.zmx" is "Lens")
 OpticStudio; name files like "LA1951.zmx". Focal lengths and diameters are the paraxial values of
 each file's own system at its primary wavelength.
 
-*Make private catalog.* Converts a folder of `.zmx`/`.zar` files into one `.osslcat` file in the
+*Make private catalog.* Converts a folder of `.zmx`/`.zar`/`.seq`/`.len` files into one `.osslcat` file in the
 library folder, with every lens file inside it, so it works after the folder is gone.
 
 *Design templates.* Six starting designs worked out from first-order formulas: plano and equi
@@ -1775,8 +1780,9 @@ refused with the cause named.
 Not built: Chebyshev Polynomial in the editor (the shape is built in code; its coefficient
 columns are not given by its help page), Toroidal NURBS, Q-Type Freeform (its source paper is
 not on this machine), TrueFreeForm and Make TrueFreeForm, Grid Point Selector, Export Point
-Cloud, a Grid Sag import button, optimizing grid points, and reading or writing these types in
-.zmx files. The Off-Axis Conic Freeform sign and the NURBS degree are readings not checked against
+Cloud, a Grid Sag import button, optimizing grid points, Grid Sag in .zmx files, and these types
+in CODE V and OSLO files. The other freeform types are read and written in .zmx files (see Zemax
+lens files above); a macro sets their parameters with SURP like any other type. The Off-Axis Conic Freeform sign and the NURBS degree are readings not checked against
 OpticStudio (docs/Optics-Conventions.md §10 item 51).
 
 ## CODE V and OSLO lens files

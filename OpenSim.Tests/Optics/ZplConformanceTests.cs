@@ -271,6 +271,26 @@ public sealed class ZplConformanceTests : IDisposable
         Assert.Contains("not built", Assert.Throws<ZplException>(() => Run("SURP 2, TYPE, \"GRINSUR1\"")).Message);
     }
 
+    // Wave 10 wiring: SURP's TYPE and PARM reach OP-25's types through the generic SurfaceTypes
+    // layouts. Zernike Standard Sag (OpticStudio 2025 R2 help, "Zernike Standard Sag", parameter
+    // table; FreeformLayouts): 13 number of terms, 14 normalization radius, 14 + i Zernike i. The
+    // values are inputs.
+    private const string ZernikeSagMacro =
+        "SURP 2, TYPE, \"SZERNSAG\"\nSURP 2, PARM, 4, 13\nSURP 2, PARM, 10, 14\nSURP 2, PARM, 0.001, 18\n"
+        + "OPTRETURN 0, PARM(18, 2)\nOPTRETURN 1, SPRX(2, 10, 14)\nOPTRETURN 2, PARM(13, 2)\nd = SPRO(2, 0)\nT$ = $BUFFER()\nPRINT T$";
+
+    [Fact]
+    public void SetSurfaceProperty_SetsAZernikeStandardSagCoefficient()
+    {
+        var result = Run(ZernikeSagMacro);
+        Assert.Equal(new double?[] { 0.001, 10, 4 }, result.OptReturn.Take(3));
+        Assert.Equal(Lines("SZERNSAG"), result.Output);
+        var s = result.System.Surfaces![2];
+        Assert.Equal("Zernike Standard Sag", s.Type);
+        Assert.Null(s.Parameters);
+        Assert.Equal(new[] { (13, 4.0), (14, 10.0), (18, 0.001) }, s.ExtraData!.Select(p => (p.Number, p.Value)));
+    }
+
     private const string StopInsertDeleteMacro =
         "STOPSURF 2\nINSERT 2\nOPTRETURN 0, NSUR()\nOPTRETURN 1, THIC(2)\nOPTRETURN 2, THIC(3)\nDELETE 2\nOPTRETURN 3, NSUR()\nOPTRETURN 4, THIC(2)";
 

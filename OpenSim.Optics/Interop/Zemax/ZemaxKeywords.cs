@@ -28,6 +28,16 @@ public static class ZemaxKeywords
     /// observed in rayoptics/zemax/tests/ASL5040-UV-Zemax(ZMX).zmx, whose XDAT 1–9 (type 0,
     /// 6 terms, normalization radius 27, six coefficients) match the Q-Type Asphere's extra data
     /// (type, maximum term, normalization radius, A0 …) of OpticStudio's help page.
+    /// <para>
+    /// OP-25's types (POLYNOMI, XPOLYNOM, FZERNSAG, SZERNSAG, AZERNSAG, OFFAXISCF, RADNURBS): no
+    /// lens-file reader names them, so their codes are copied from the surface-type name table of
+    /// OpticStudio 2025 R2 help, "SETSURFACEPROPERTY, SURP" (the ZPL TYPE names, which the page
+    /// says the Prescription Report lists). That these names are also the .zmx TYPE codes is a
+    /// reading: the nine codes above, taken from the readers and files, are all spelled as in that
+    /// table. Docs/Optics-Conventions.md section 10 item 48 lists it as not yet checked against an
+    /// OpticStudio-written file. Their PARM/XDAT numbers map generically through the saved layouts
+    /// (PARM n is parameter n, XDAT n is parameter n + 12), as for the types above.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<(string Code, string? TypeName)> SurfaceTypes { get; } = new (string, string?)[]
     {
@@ -40,7 +50,35 @@ public static class ZemaxKeywords
         ("TOROIDAL", "Toroidal"),
         ("PARAXIAL", "Paraxial"),
         ("COORDBRK", Sequential.SurfaceTypes.CoordinateBreak),
+        // OP-25: codes from OpticStudio 2025 R2 help, "SETSURFACEPROPERTY, SURP", surface-type name table.
+        ("POLYNOMI", "Polynomial"),
+        ("XPOLYNOM", "Extended Polynomial"),
+        ("FZERNSAG", "Zernike Fringe Sag"),
+        ("SZERNSAG", "Zernike Standard Sag"),
+        ("AZERNSAG", "Zernike Annular Standard Sag"),
+        ("OFFAXISCF", "Off-Axis Conic Freeform"),
+        ("RADNURBS", "Radial NURBS"),
     };
+
+    /// <summary>
+    /// Types this program has whose TYPE code is known (same help table) but which the lens file
+    /// cannot carry, each with the reason the reader and writer give. Grid Sag (GRID_SAG): its
+    /// grid is a separate .DAT file and no source this build has shows how, or whether, a .zmx
+    /// stores it, so a Grid Sag is refused by name both ways rather than written without its grid.
+    /// </summary>
+    public static IReadOnlyList<(string Code, string TypeName, string Reason)> Refused { get; } = new[]
+    {
+        ("GRID_SAG", Sequential.Freeform.FreeformLayouts.GridSag,
+            "a Grid Sag's grid is a separate .DAT data file and no source shows how a .zmx stores it, so the surface is not carried by the lens file; import the grid in the Lens Data Editor instead"),
+    };
+
+    /// <summary>The refusal reason of a TYPE code or type name in <see cref="Refused"/>, or null.</summary>
+    public static string? RefusalOf(string codeOrTypeName)
+    {
+        foreach (var (c, t, why) in Refused)
+            if (string.Equals(c, codeOrTypeName, StringComparison.OrdinalIgnoreCase) || string.Equals(t, codeOrTypeName, StringComparison.OrdinalIgnoreCase)) return why;
+        return null;
+    }
 
     /// <summary>This program's type name of a TYPE code, or false when the code is not read.</summary>
     public static bool TryTypeName(string code, out string? typeName)

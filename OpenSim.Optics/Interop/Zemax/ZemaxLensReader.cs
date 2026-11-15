@@ -309,7 +309,9 @@ public static class ZemaxLensReader
                 s.Code = t.Length > 1 ? t[1] : "";
                 if (!ZemaxKeywords.TryTypeName(s.Code, out s.Type))
                 {
-                    st.Problem(n, $"{at}TYPE {s.Code}: the surface type is not one this build reads ({string.Join(", ", ZemaxKeywords.SurfaceTypes.Select(x => x.Code))}).");
+                    if (ZemaxKeywords.RefusalOf(s.Code) is { } refused)   // OP-25: Grid Sag
+                        st.Problem(n, $"{at}TYPE {s.Code}: {refused}.");
+                    else st.Problem(n, $"{at}TYPE {s.Code}: the surface type is not one this build reads ({string.Join(", ", ZemaxKeywords.SurfaceTypes.Select(x => x.Code))}).");
                     s.Type = null;
                 }
                 return;

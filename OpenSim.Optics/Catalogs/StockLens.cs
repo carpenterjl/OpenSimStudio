@@ -47,7 +47,7 @@ public sealed record StockLens
     /// <summary>The catalog the lens is in (the vendor list's entry).</summary>
     public required string Vendor { get; init; }
 
-    /// <summary>The file name (.zmx or .zar) the lens was read from, without a folder.</summary>
+    /// <summary>The file name (.zmx, .zar, .seq or .len) the lens was read from, without a folder.</summary>
     public required string Source { get; init; }
 
     /// <summary>The file's title (NAME line), or null.</summary>

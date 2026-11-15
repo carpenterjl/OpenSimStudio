@@ -5,7 +5,7 @@ using OpenSim.Optics.Interop.Zemax;
 namespace OpenSim.Cli;
 
 // OP-16: stock lens catalogs on the command line (docs/Optics-Conventions.md section 53):
-// "optics catalog" indexes a folder of .zmx/.zar files (or loads a private catalog), searches it
+// "optics catalog" indexes a folder of .zmx/.zar/.seq/.len files (or loads a private catalog), searches it
 // and prints the search results and the Catalog Report; --save writes the private catalog.
 
 public static partial class CliRunner
@@ -22,7 +22,7 @@ public static partial class CliRunner
         else if (File.Exists(source) && string.Equals(Path.GetExtension(source), LensCatalog.FileExtension, StringComparison.OrdinalIgnoreCase))
             catalog = LensCatalog.Load(source);
         else
-            throw new UsageException($"'optics catalog' needs a folder of .zmx/.zar files or a {LensCatalog.FileExtension} file; '{source}' is neither.");
+            throw new UsageException($"'optics catalog' needs a folder of .zmx/.zar/.seq/.len files or a {LensCatalog.FileExtension} file; '{source}' is neither.");
         foreach (var p in catalog.Problems) stdout.WriteLine("Problem: " + p);
 
         LensSearchCriteria criteria;

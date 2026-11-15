@@ -21,7 +21,7 @@ namespace OpenSim.Cli;
 public static partial class CliRunner
 {
     /// <summary>The optics subcommands, in the order Usage lists them.</summary>
-    public static readonly IReadOnlyList<string> OpticsSubcommands = new[] { "list", "analyse", "trace", "optimise", "tolerance", "import", "export" };   // OP-94: import, export
+    public static readonly IReadOnlyList<string> OpticsSubcommands = new[] { "list", "analyse", "trace", "optimise", "tolerance", "import", "export", "catalog", "macro" };   // OP-94: import, export; OP-16: catalog; OP-99: macro
 
     /// <summary>Subcommands planned but not built; each fails with a message naming its item.
     /// Empty since wave 8 wired the Global and Hammer searches (OP-58) and Monte Carlo (OP-65).</summary>

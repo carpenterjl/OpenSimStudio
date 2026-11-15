@@ -2,6 +2,7 @@ using System.Globalization;
 using OpenSim.Core.Model;
 using OpenSim.Optics;
 using OpenSim.Optics.Catalogs;
+using OpenSim.Optics.Interop;
 using OpenSim.Optics.Interop.Zemax;
 using OpenSim.Optics.Materials;
 using OpenSim.Optics.Sequential;
@@ -410,5 +411,43 @@ public sealed class LensCatalogTests : IDisposable
         // The help's example (Make Private Lens Catalog): "Lens number 5.ZMX" → "Lens"; "L005.ZMX" → "L005".
         Assert.Equal("Lens", LensCatalog.PartNameOf("Lens number 5.ZMX"));
         Assert.Equal("L005", LensCatalog.PartNameOf("L005.ZMX"));
+    }
+
+    /// <summary>
+    /// Wave 10 wiring: a catalog folder indexes CODE V .seq and OSLO .len files through OP-95's
+    /// readers (docs/Optics-Conventions.md sections 53 and 54), beside a .zmx. Both files are
+    /// written here from section 54's command rules (none is a vendor's). The OSLO lens is
+    /// plano-convex with constant index 1.5 and R1 = 50, so its EFL is R1/(n − 1) = 100 mm
+    /// (derived, as for PCX-100 above). The CODE V lens uses a model glass (the reader's only
+    /// numeric glass form), so its EFL is checked against the same file read by
+    /// <see cref="LensFileImport.Import"/>, which is the import the catalog must agree with.
+    /// </summary>
+    [Fact]
+    public void ACatalogFolder_IndexesCodeVAndOsloFiles_ThroughTheirReaders()
+    {
+        string dir = Path.Combine(_root, "MIXED");
+        Directory.CreateDirectory(dir);
+        ZemaxLensFiles.Export(Lens("PCX-100", 10, new[] { S(50, 4, 1.5), S(null, 96) }), Path.Combine(dir, "PCX-100.zmx"));
+        File.WriteAllText(Path.Combine(dir, "OSL-100 oslo.len"),
+            "LEN NEW \"OSL-100\" 1 3\nEBR 5; ANG 0; WV 0.55\nTH 1e20\nNXT; RD 50; TH 4; GLA 1.5 1.5; AST\nNXT; TH 96\nNXT\nEND 3\n");
+        string seq = Path.Combine(dir, "CDV-1 codev.seq");
+        File.WriteAllText(seq, "RDM\nEPD 10\nWL 587.5618\nYAN 0\nSO 0 1e20\nS 50 4 1.5:60\nSTO\nS 0 96\nSI 0 0\n");
+
+        var catalog = LensCatalog.FromFolder(dir, NoGlass);
+        foreach (var p in catalog.Problems) _out.WriteLine(p);
+        Assert.Empty(catalog.Problems);
+        Assert.Equal(new[] { "CDV-1", "OSL-100", "PCX-100" }, catalog.Lenses.Select(l => l.PartName));
+        Assert.Equal(new[] { "CDV-1 codev.seq", "OSL-100 oslo.len", "PCX-100.zmx" }, catalog.Lenses.Select(l => l.Source));
+
+        var oslo = catalog.Lenses.Single(l => l.PartName == "OSL-100");
+        Close(100, oslo.EffectiveFocalLengthMm, 1e-12, "OSL-100 EFL");
+        var codeV = catalog.Lenses.Single(l => l.PartName == "CDV-1");
+        var direct = StockLensProperties.Of(LensFileImport.Import(seq, NoGlass).Optics, NoGlass);
+        Assert.Equal(direct.EffectiveFocalLengthMm, codeV.EffectiveFocalLengthMm);
+        Assert.True(codeV.EffectiveFocalLengthMm > 0);
+
+        // Read again from the catalog (the Insert Lens path) by the same extension dispatch.
+        Assert.Equal(1.5, catalog.Import(oslo, NoGlass).Optics.Surfaces![1].Index);
+        Assert.Equal(1.5, catalog.Import(codeV, NoGlass).Optics.Surfaces![1].ModelGlass!.Nd);
     }
 }

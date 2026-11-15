@@ -21,7 +21,7 @@
                                     AutomationProperties.AutomationId="LensCatalogReloadButton"/>
                             <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseLibrary_Click" Margin="4,0,0,0"/>
                             <TextBox Text="{Binding LibraryFolder, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="Private catalogs (.osslcat) in this folder and each sub-folder of .zmx/.zar files are the catalogs."/>
+                                     ToolTip="Private catalogs (.osslcat) in this folder and each sub-folder of .zmx/.zar/.seq/.len files are the catalogs."/>
                         </DockPanel>
                         <Label Content="Vendor"/>
                         <ComboBox ItemsSource="{Binding Vendors}" SelectedItem="{Binding SelectedVendor}"
@@ -103,7 +103,7 @@
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Content="Browse…" Click="BrowseSource_Click" Margin="4,0,0,0"/>
                             <TextBox Text="{Binding PrivateSource, UpdateSourceTrigger=PropertyChanged}"
-                                     ToolTip="Every .zmx and .zar file in this folder goes into the catalog; the part name is the first word of each file name."/>
+                                     ToolTip="Every .zmx, .zar, .seq and .len file in this folder goes into the catalog; the part name is the first word of each file name."/>
                         </DockPanel>
                         <Label Content="Catalog name"/>
                         <TextBox Text="{Binding PrivateName, UpdateSourceTrigger=PropertyChanged}"

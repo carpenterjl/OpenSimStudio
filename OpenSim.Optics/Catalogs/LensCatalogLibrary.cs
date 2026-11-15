@@ -10,7 +10,7 @@ namespace OpenSim.Optics.Catalogs;
 /// The stock lens catalogs of one folder, the counterpart of OpticStudio's <c>&lt;data&gt;\Stockcat</c>
 /// folder ("The vendor files must be placed in the &lt;data&gt;\Stockcat folder"; help, Lens
 /// Catalogs): each private catalog file (<see cref="LensCatalog.FileExtension"/>) in it is one
-/// catalog, and each sub-folder holding .zmx or .zar files is one catalog named after the
+/// catalog, and each sub-folder holding .zmx, .zar, .seq or .len files is one catalog named after the
 /// sub-folder (its files are read when the library opens). No vendor catalog ships with the
 /// program; the user supplies the vendor files.
 /// </summary>

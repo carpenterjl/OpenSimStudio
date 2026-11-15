@@ -1,5 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenSim.Optics.Interop;
+using OpenSim.Optics.Interop.CodeV;
+using OpenSim.Optics.Interop.Oslo;
 using OpenSim.Optics.Interop.Zemax;
 using OpenSim.Optics.Materials;
 
@@ -13,8 +16,10 @@ namespace OpenSim.Optics.Catalogs;
 /// Parts Group › Lens Catalogs and Make Private Lens Catalog;
 /// plans/sources/optics/op-16-help/).
 /// <para>
-/// A catalog is built from a folder of Zemax lens files (.zmx, or the lens in a .zar), each read
-/// with OP-94's reader (<see cref="ZemaxLensFiles"/>, section 52) as it is (<see cref="FromFolder"/>),
+/// A catalog is built from a folder of lens files (<see cref="FromFolder"/>): Zemax .zmx, or the
+/// lens in a .zar, read with OP-94's reader (<see cref="ZemaxLensFiles"/>, section 52), and
+/// CODE V .seq and OSLO .len files read with OP-95's readers (<see cref="CodeVLensReader"/>,
+/// <see cref="OsloLensReader"/>, section 54), each as it is,
 /// or loaded from a private catalog file (<see cref="Load"/>), which <see cref="Save"/> writes
 /// with every lens file's bytes inside it — the help's "convert a folder full of ZMX files to a
 /// stock lens catalog file". OpticStudio's own .ZMF format has no public description and is not
@@ -77,16 +82,12 @@ public sealed class LensCatalog
         return space < 0 ? stem : stem[..space];
     }
 
-    /// <summary>True for a file this catalog reads (.zmx or .zar, case ignored).</summary>
-    public static bool IsLensFile(string path)
-    {
-        string ext = Path.GetExtension(path);
-        return string.Equals(ext, ZemaxLensFiles.LensExtension, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(ext, ZemaxLensFiles.ArchiveExtension, StringComparison.OrdinalIgnoreCase);
-    }
+    /// <summary>True for a file this catalog reads (.zmx, .zar, .seq or .len, case ignored;
+    /// <see cref="LensFileImport.IsLensFile"/>).</summary>
+    public static bool IsLensFile(string path) => LensFileImport.IsLensFile(path);
 
     /// <summary>
-    /// The catalog of every .zmx and .zar file directly in <paramref name="folder"/> (sub-folders
+    /// The catalog of every .zmx, .zar, .seq and .len file directly in <paramref name="folder"/> (sub-folders
     /// are not read), named <paramref name="name"/> or after the folder. Glass names are checked
     /// against <paramref name="glassCatalogs"/> as the import does; <paramref name="options"/> are
     /// the import's (strict by default: a file with content the reader does not hold is left out
@@ -113,7 +114,7 @@ public sealed class LensCatalog
             }
             if (Index(catalogName, file, bytes, glassCatalogs, options, problems) is { } lens) lenses.Add(lens);
         }
-        if (files.Count == 0) problems.Add($"The folder '{folder}' has no .zmx or .zar files.");
+        if (files.Count == 0) problems.Add($"The folder '{folder}' has no .zmx, .zar, .seq or .len files.");
         NameDuplicates(lenses, problems);
         return new LensCatalog(catalogName, Path.GetFullPath(folder), null, Sorted(lenses), problems, null);
     }
@@ -149,12 +150,19 @@ public sealed class LensCatalog
         }
     }
 
-    /// <summary>Reads a lens file's bytes, a .zmx or a .zar by the file name's extension.</summary>
+    /// <summary>Reads a lens file's bytes by the file name's extension: a .zar as an archive, a
+    /// .seq as CODE V, a .len as OSLO, anything else as a .zmx (the dispatch of
+    /// <see cref="LensFileImport.Import"/>, on bytes instead of a path).</summary>
     private static ZemaxImportResult Read(string file, byte[] bytes, IReadOnlyList<OpticalCatalog> glassCatalogs, ZemaxImportOptions? options)
     {
         if (string.Equals(Path.GetExtension(file), ZemaxLensFiles.ArchiveExtension, StringComparison.OrdinalIgnoreCase))
             return ZemaxLensFiles.ImportArchive(bytes, file, glassCatalogs, options);
         var (text, encoding) = ZemaxText.Decode(bytes);
+        string ext = Path.GetExtension(file);
+        if (string.Equals(ext, CodeVLensReader.Extension, StringComparison.OrdinalIgnoreCase))   // wave 10: OP-95's readers
+            return CodeVLensReader.Read(text, glassCatalogs, options, encoding);
+        if (string.Equals(ext, OsloLensReader.Extension, StringComparison.OrdinalIgnoreCase))
+            return OsloLensReader.Read(text, glassCatalogs, options, encoding);
         return ZemaxLensReader.Read(text, glassCatalogs, options, encoding);
     }
 

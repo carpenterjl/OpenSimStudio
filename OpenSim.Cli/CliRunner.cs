@@ -206,7 +206,7 @@ public static partial class CliRunner
 
         opensim optics catalog <folder|catalog.osslcat> [--efl MIN:MAX] [--epd MIN:MAX] [--shape EBPM?]
                 [--type SGAT] [--elements N] [--text T] [--save OUT.osslcat] [--name NAME] [--lenient]
-            Indexes a folder of .zmx/.zar lens files as a stock lens catalog (or loads a private
+            Indexes a folder of .zmx/.zar/.seq/.len lens files as a stock lens catalog (or loads a private
             catalog), prints the files left out and the Catalog Report of the lenses meeting the
             criteria (mm); --save writes the private catalog with every file inside it (OP-16).
 

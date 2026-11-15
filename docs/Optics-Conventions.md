@@ -1257,6 +1257,12 @@ single place in the code, so a correction is one line and its test.
     - *XASPHERE and XOSPHERE* are read as the Extended Asphere and Extended Odd Asphere from their
       names, *QED_TYPE* as the Q-Type Asphere from the one file that has it (`ASL5040-UV`), whose
       extra data fit that layout.
+    - *OP-25's TYPE codes* (POLYNOMI, XPOLYNOM, FZERNSAG, SZERNSAG, AZERNSAG, OFFAXISCF, RADNURBS,
+      and GRID_SAG, which is refused) are the surface-type names of the help's SETSURFACEPROPERTY
+      table; no file or reader with these types was available. That they are the .zmx TYPE codes
+      rests on the nine codes read from files and readers all being spelled as in that table.
+      Their extra data are read as XDAT n = parameter n + 12, as for the Extended and Q-Type
+      aspheres; for Radial NURBS and the Zernike types no file was seen to confirm it.
     - *Written lines.* Files are written in the forms read; whether OpticStudio reads them back
       unchanged (in particular the fields this program writes as zeros) was not tried.
     Check: a lens with each solve, pickup, variable and surface type saved by OpticStudio, read
@@ -4509,6 +4515,20 @@ against the type's layout (§20); a number the type does not have is a problem.
 | TOROIDAL | Toroidal | Optiland, RayOptics |
 | PARAXIAL | Paraxial | RayOptics |
 | COORDBRK | Coordinate Break | Optiland, RayOptics |
+| POLYNOMI | Polynomial | help, "SETSURFACEPROPERTY, SURP" (§10 item 48) |
+| XPOLYNOM | Extended Polynomial | help, SURP (§10 item 48) |
+| FZERNSAG | Zernike Fringe Sag | help, SURP (§10 item 48) |
+| SZERNSAG | Zernike Standard Sag | help, SURP (§10 item 48) |
+| AZERNSAG | Zernike Annular Standard Sag | help, SURP (§10 item 48) |
+| OFFAXISCF | Off-Axis Conic Freeform | help, SURP (§10 item 48) |
+| RADNURBS | Radial NURBS | help, SURP (§10 item 48) |
+
+The last seven are OP-25's types (§55). No lens-file reader names them; their codes are the
+surface-type names of the SURP help page's table (the ZPL TYPE names, which the page says the
+Prescription Report lists), and all nine codes above taken from the readers are spelled as in
+that table. Their PARM and XDAT numbers map through the layouts like the others'. GRID_SAG
+(Grid Sag) is refused by name both ways: its grid is a separate .DAT file and no source shows
+how a .zmx stores it (`ZemaxKeywords.Refused`).
 
 **Media.** `GLAS name 0 …` is a catalog glass, looked up in the GCAT catalogs in order (all
 loaded catalogs when there is no GCAT line; an archive's own catalogs first); `GLAS name 1 0 nd
@@ -4571,8 +4591,9 @@ LENS.osslens] [--lenient] [--builtin-catalogs]` writes a lens file; `opensim opt
 **Not built.** Reading or writing: merit-function rows, tolerance rows other than TOFF,
 multi-configuration data, solves other than the table above (marginal-ray and other computed
 solves on any column, offsets, cross-column pickups), surface types other than the table
-(Biconic, Superconic, Fresnel, ABCD, the Zernike types and the rest have no TYPE code from a
-source), surface tilts and decenters, rectangular, elliptical, spider and user apertures and
+(Biconic, Superconic, Fresnel, ABCD, the Zernike phase types and the rest are not types this
+reader maps; Grid Sag is refused, as above; Chebyshev Polynomial, Toroidal NURBS and Q-Type
+Freeform are not built, §55), surface tilts and decenters, rectangular, elliptical, spider and user apertures and
 obscurations (SQAP, OBSC and similar keywords have no meaning from a reader), ray aiming,
 polarization and the mechanical semi-diameter; the .zos format; writing a .zar. CODE V and OSLO
 files are read by OP-95 (section 54). No written file has been opened in OpticStudio (§10 item 48).
@@ -4592,7 +4613,9 @@ found, so vendor files are user-supplied (decided 2026-11-12). OpticStudio's .ZM
 has no public description and is not read or written.
 
 **A catalog.** `LensCatalog.FromFolder` reads every .zmx and .zar directly in a folder with OP-94's
-reader as it is (§52; strict by default, or with unsupported content listed), and lists for each
+reader, and every CODE V .seq and OSLO .len with OP-95's readers (§54; the file name's extension
+chooses, as `LensFileImport` does), each as it is (§52; strict by default, or with unsupported
+content listed), and lists for each
 lens: the part name (the first space-delimited word of the file name, as the help's Make Private
 Lens Catalog assigns it), the title, the file, and the search data. A file that cannot be read or
 traced is left out and named in `Problems` with the reason; two files giving the same part name
@@ -4605,7 +4628,7 @@ are both kept and named. Lengths are millimeters whatever the file's lens unit.
 | EFL | paraxial effective focal length (§11) of the file's lens with its solves evaluated, at its primary wavelength; none when afocal |
 | EPD | paraxial entrance pupil diameter of the file's system |
 | Shape | E, B, P, M or ? (help: "Equi-, Bi-, Plano-, Meniscus, or other … Other is used if the lens is multi-element"); a singlet: P when either radius is a plane, M when both centres of curvature are on one side, E when on opposite sides with magnitudes equal to 1e-9 relative, B otherwise; a mirror is ? |
-| Type | S, G, A or T; G when a surface type's name says gradient index (no such type is read from a .zmx, so G does not occur), else T for a Toroidal surface, else A for an asphere type or a non-zero conic, else S |
+| Type | S, G, A or T; G when a surface type's name says gradient index (no such type is read from a lens file, so G does not occur), else T for a Toroidal surface, else A for an asphere type or a non-zero conic, else S |
 | Elements | lens surfaces followed by a glass, plus mirrors |
 
 **Search** (`LensSearchCriteria`, `LensCatalogSearch.Find`): the focal-length and diameter ranges,
@@ -4627,7 +4650,8 @@ it refuses a folder with no readable lens. `Load` refuses a file that is not one
 an incomplete entry or a code that is not a shape or type letter, naming the entry.
 
 **Library.** `LensCatalogLibrary.Open(folder)` is the counterpart of OpticStudio's Stockcat
-folder: each `.osslcat` file in it and each sub-folder holding .zmx or .zar files is one catalog.
+folder: each `.osslcat` file in it and each sub-folder holding .zmx, .zar, .seq or .len files is
+one catalog.
 A catalog file that does not load is named and left out. The folder is the user's choice, saved in
 `%AppData%\OpenSimStudio\stock-lens-catalogs.json` (default `%AppData%\OpenSimStudio\StockLensCatalogs`).
 
@@ -4891,7 +4915,8 @@ degrees or how the limits bound the surface); Q-Type Freeform (Forbes, Opt. Expr
 is not on this machine, and the equations are not taken from memory); TrueFreeForm (its basis is
 not published) and a local-support stand-in for it; Make TrueFreeForm; Grid Point Selector;
 Export Point Cloud; a Grid Sag import button in the app (a grid enters a lens from code or a
-saved lens); the .zmx, CODE V and OSLO mappings of the new types; optimization variables on grid
+saved lens); reading the new types from CODE V or OSLO files (neither reader has a freeform
+command from a source; the .zmx mapping is §52, where Grid Sag is refused); optimization variables on grid
 points ("No optimization or tolerancing of grid data is possible", help).
 
 ## 56. ZPL macros
@@ -4936,7 +4961,11 @@ values the editor shows); SETSURFACEPROPERTY, SETSYSTEMPROPERTY and the other se
 lens as entered. The lens is rebuilt for every trace and analysis, so a change takes effect at
 once; UPDATE checks that the lens builds. On a lens with a multi-configuration table the setters
 are refused (the help also changes the current configuration's table entry, which is not built).
-RAYTRACE is `OpticsScripting.TraceRay` (§47), its intercepts converted to lens units; RAYE and
+SETSURFACEPROPERTY's TYPE takes the help's surface-type names and accepts any type `SurfaceTypes`
+registers, OP-25's freeform types among them (§55); PARM n (and PARM(n, s), SPRX code 10) is
+column n of the type's layout, so a Zernike Standard Sag's terms, normalization radius and
+coefficients (columns 13, 14, 15 …) are set and read as any other parameter. A Grid Sag set by
+TYPE has no grid, and the next trace or UPDATE refuses it by name. RAYTRACE is `OpticsScripting.TraceRay` (§47), its intercepts converted to lens units; RAYE and
 RAYV are §47's codes. RAYX … RAYO read the local frame of each surface; a surface the ray did not
 reach is an error rather than invalid data.
 

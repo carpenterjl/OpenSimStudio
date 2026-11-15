@@ -25,7 +25,7 @@ public partial class LensCatalogWindow : Window
 
     private void BrowseSource_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFolderDialog { Title = "Folder of .zmx and .zar lens files" };
+        var dialog = new OpenFolderDialog { Title = "Folder of .zmx, .zar, .seq and .len lens files" };
         if (dialog.ShowDialog(this) == true) _catalog.PrivateSource = dialog.FolderName;
     }
 
