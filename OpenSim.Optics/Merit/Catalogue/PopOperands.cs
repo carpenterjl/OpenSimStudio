@@ -31,7 +31,7 @@ public static class PopOperands
         yield return new MeritOperandDefinition
         {
             Code = "POPD", Name = "Physical optics propagation data", Category = Category, Source = Page,
-            Description = "Physical optics propagation data of the end surface: 3 total power, 4 peak irradiance, 5–10 pilot position, Rayleigh range and waist (x, y), 11–13 the array centre, 21–22 centroid, 23–26 beam widths and M², 27–29 Wigner second moments, 30–35 irradiance and phase variation, 40–42 enclosed power at radius Xtr1, 50–52 radius enclosing fraction Xtr1. Fiber coupling (0–2, 60–63) is OP-50 and refused.",
+            Description = "Physical optics propagation data of the end surface: 3 total power, 4 peak irradiance, 5–10 pilot position, Rayleigh range and waist (x, y), 11–13 the array centre, 21–22 centroid, 23–26 beam widths and M², 27–29 Wigner second moments, 30–35 irradiance and phase variation, 40–42 enclosed power at radius Xtr1, 50–52 radius enclosing fraction Xtr1; fiber coupling (OP-50) with the saved fiber data: 0 total, 1 system efficiency, 2 receiver efficiency, 60–63 the Ex and Ey amplitude and phase (0: the propagation is unpolarized).",
             Int1 = "Surf", Int2 = "Wave", Data = new[] { "Field", "Data", "Xtr1", "Xtr2" },
             Compute = Guard(Popd),
         };
@@ -57,7 +57,11 @@ public static class PopOperands
     private static readonly ConditionalWeakTable<SequentialLens, ConditionalWeakTable<OpticalSystemData, ConcurrentDictionary<string, Lazy<PopRun>>>> Cache = new();
 
     /// <summary>The run of the row: saved settings with Surf, Wave and Field applied.</summary>
-    private static PopRun RunFor(MeritRowContext c)
+    private static PopRun RunFor(MeritRowContext c) => RunWithSettings(c).Run;
+
+    /// <summary>The run of the row and the settings it ran with (OP-50 reads the fiber data
+    /// from them).</summary>
+    internal static (PopRun Run, PhysicalOpticsSettings Settings) RunWithSettings(MeritRowContext c)
     {
         var analysis = new PhysicalOpticsPropagationAnalysis();
         var saved = c.Configurations?.AnalysisSettings(PhysicalOpticsPropagationAnalysis.SavedId);
@@ -81,7 +85,7 @@ public static class PopOperands
         var perSystem = Cache.GetOrCreateValue(c.Lens);
         var runs = perSystem.GetValue(c.System, _ => new ConcurrentDictionary<string, Lazy<PopRun>>());
         var lazy = runs.GetOrAdd(key, _ => new Lazy<PopRun>(() => PopRunner.Run(c.Lens, c.System, settings), LazyThreadSafetyMode.ExecutionAndPublication));
-        return lazy.Value;
+        return (lazy.Value, settings);
     }
 
     private static int Data(MeritRowContext c)
@@ -95,8 +99,15 @@ public static class PopOperands
     private static double Popd(MeritRowContext c)
     {
         int data = Data(c);
-        if (data is 0 or 1 or 2 or >= 60 and <= 63)
-            throw new MeritOperandException($"POPD data {data} is a fiber coupling result; fiber coupling is OP-50 and is not built.");
+        if (data is >= 60 and <= 63)
+            return 0;   // help: "values of 0.0 will be returned if the input beam is unpolarized" (the propagation is scalar)
+        if (data is 0 or 1 or 2)
+        {
+            // OP-50: the fiber coupling integral with the saved fiber data.
+            var (fiberRun, saved) = RunWithSettings(c);
+            var coupling = FiberCoupling.PopFiberCoupling.Compute(fiberRun, saved.ToFiber(c.Unit), c.Unit);
+            return data switch { 0 => coupling.Coupling, 1 => coupling.SystemEfficiency, _ => coupling.ReceiverEfficiency };
+        }
         bool defined = data is >= 3 and <= 13 or >= 21 and <= 35 or >= 40 and <= 42 or >= 50 and <= 52;
         if (!defined) return 0;   // help: "Undefined Data values will return 0."
         var run = RunFor(c);

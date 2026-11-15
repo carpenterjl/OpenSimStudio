@@ -222,6 +222,9 @@ public sealed class MeritOperandRegistry
 
         // OP-49
         foreach (var definition in Catalogue.PopOperands.Definitions()) r.Register(definition);
+
+        // OP-50
+        foreach (var definition in Catalogue.FiberOperands.Definitions()) r.Register(definition);
         return r;
     }
 

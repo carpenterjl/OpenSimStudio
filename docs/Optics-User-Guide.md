@@ -2170,10 +2170,10 @@ coordinates are relative to surface 1. Lengths are in lens units, VOLU in cm³ a
 
 **Not built:** DCRV, DSAG, DSLP, DPHS, QSLP, TSAG; IMSF, PRIM, SVIG, CVIG, FDMO, FDRE (operands
 that change the system data for later rows); EQUA; the skew Gaussian beam operands (GBSD, GBSP,
-GBSR, GBSS, GBSW); the gradient-index, fiber-coupling, non-sequential, hologram-construction
+GBSR, GBSS, GBSW); the gradient-index, non-sequential, hologram-construction
 and coating operands (CMGT to CIVA, CODA); UDOC; off-axis coordinates and the Base/Composite sag
 removal in SSAG, SSLP and SCRV; the removal of fitted terms in SPHS and PSLP. (POPD and POPI are
-built: see Physical optics propagation.)
+built: see Physical optics propagation; FICL and FICP: see Fiber coupling.)
 
 When you type or load an OpticStudio operand this version does not have, whether from the imaging
 or the constraint half, the message says what it computes and why it is not built, for example
@@ -2257,8 +2257,8 @@ surface, wavelength and field when not zero. `opensim optics analyse` runs both 
 ids `PhysicalOpticsPropagation` and `BeamFileViewer`.
 
 Not built: polarized propagation, "Separate X, Y", off-axis fields and tilted, decentered or folded
-systems, the surface properties' physical optics settings, fiber coupling (POPD 0 to 2 and 60 to
-63 are refused), the DLL beam, and POP in non-sequential mode. The readings not yet checked
+systems, the surface properties' physical optics settings, the DLL beam, and POP in
+non-sequential mode. Fiber coupling of the propagated beam is described under Fiber coupling. The readings not yet checked
 against OpticStudio are listed in docs/Optics-Conventions.md §10 item 62.
 
 ## Extended scenes and image simulation
@@ -2297,6 +2297,38 @@ Not built: polarization, ray scattering, JPG and palette bitmaps, ZBF files, Lig
 (Premium; non-sequential source files), afocal image space, surface plots, true-colour pictures
 (each colour is its own map). The readings not yet checked against OpticStudio are listed in
 docs/Optics-Conventions.md §10 item 63.
+
+## Fiber coupling
+
+How much light a system couples into a fiber (docs/Optics-Conventions.md §68). Two analyses in the
+Beams group, the POP fiber coupling integral, and two operands:
+
+- **Single Mode Fiber Coupling**: a source fiber at the object point (NA x and y, angles, along the
+  object z axis or the chief ray) or, with "Ignore source fiber", the pupil lit by the system
+  apodization, coupled into a Gaussian receiving fiber (NA x and y, tilt about X then Y, decenter
+  X, Y, Z in lens units, at the image surface's vertex or the chief ray). It reports the system
+  efficiency (light through the system), the receiver efficiency (overlap of the arriving wave with
+  the fiber's mode), their product, the maximum with the aberrations ignored and the amplitude
+  coupling, with maps of the beam and the fiber mode over the pupil. "Use Huygens integral" sums the
+  beam on the fiber's plane first (and maps it); the two methods agree where both apply.
+- **Multimode Fiber Coupling**: the geometric estimate: the share of the source's light whose rays
+  land inside the core (radius, decenter) within the fiber's NA (given, or from the core and
+  cladding indices), with a plot of the ray intercepts.
+- **Physical Optics Propagation** with "Compute fiber coupling": the "Fiber:" settings define the
+  receiving fiber's mode at the end surface (any beam type except DLL and Multimode, with its own
+  decenter and tilt); the result adds the system, receiver and total efficiencies.
+- **FICL** returns the single-mode coupling (fast or Huygens, power or amplitude, or from the
+  analysis's saved settings); **FICP** and POPD 0 to 2 return the POP fiber coupling with the saved
+  settings. The polarized values (FICP 1 to 6, POPD 60 to 63) are 0, because the propagation is
+  unpolarized.
+
+`opensim optics analyse` runs the analyses by their ids `SingleModeFiberCoupling` and
+`MultimodeFiberCoupling`.
+
+Not built: polarization (refused), the receiving fiber's index on the image surface in the
+single-mode analysis (use POP), OpticStudio's automatic switch-off of the fast algorithm, DLL and
+multimode fiber modes, polarized POP coupling. The readings not yet checked against OpticStudio are
+listed in docs/Optics-Conventions.md §10 item 64.
 
 ## Coming
 

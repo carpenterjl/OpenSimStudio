@@ -186,6 +186,10 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new ExtendedDiffractionImageAnalysis());
         registry.Register(new ImaBimFileViewerAnalysis());
         registry.Register(new BitmapFileViewerAnalysis());
+
+        // OP-50: single-mode and multimode fiber coupling (POP's fiber coupling is in its own analysis).
+        registry.Register(new FiberCoupling.SingleModeFiberCouplingAnalysis());
+        registry.Register(new FiberCoupling.MultimodeFiberCouplingAnalysis());
         return registry;
     }
 }

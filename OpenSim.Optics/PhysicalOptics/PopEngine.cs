@@ -76,7 +76,8 @@ public sealed record PopRun
 /// Built: a scalar field along the axis of an axial lens (no tilt, decenter or coordinate break
 /// up to the end surface), on-axis fields. Refused by name: off-axis chief rays, tilted systems,
 /// polarized propagation, separate x and y pilot beams, ABCD and diffractive surfaces,
-/// birefringent media, the DLL beam, fiber coupling (OP-50), non-sequential surfaces.
+/// birefringent media, the DLL beam, non-sequential surfaces. Fiber coupling of the end beam is
+/// FiberCoupling.PopFiberCoupling (OP-50).
 /// </para>
 /// </summary>
 public static class PopEngine

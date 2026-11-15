@@ -115,10 +115,6 @@ public static class NotBuiltOperands
         Add("InVA", grin, "Index of a gradient-index surface at point n (see InGT): I1VA to I6VA.", noGrin, "OP-28");
         Add("LPTD", grin, "Keeps the slope of the axial gradient-index profile from changing sign inside the component.", noGrin, "OP-28");
 
-        // ---- Fiber coupling and physical optics ----
-        Add("FICL", "Fiber coupling operands", "Single-mode fiber coupling efficiency (fast or Huygens algorithm, power or amplitude coupling).", "fiber coupling is not built", "OP-50");
-        Add("FICP", "Fiber coupling operands", "Fiber coupling computed by Physical Optics Propagation with its saved settings.", "fiber coupling is not built", "OP-50");
-
         // ---- User defined ----
         Add("UDOC", "User defined operands", "A value computed by an externally compiled program written with the ZOS-API.",
             "OP-98's scripting surface drives this program from outside but defines no operand that calls back into user code; user operands wait for the plug-in assemblies", "OP-100");

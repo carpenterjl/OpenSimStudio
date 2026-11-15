@@ -1676,6 +1676,36 @@ single place in the code, so a correction is one line and its test.
     - *Byte order.* BIM and binary IMA are little-endian.
     Check: each analysis in OpticStudio and here on one lens and one file.
 
+64. **Fiber coupling readings** (OP-50, section 68). From the help pages under
+    `plans/sources/optics/op-50-help/` and `op-49-help/`; nothing has been compared with
+    OpticStudio's output.
+    - *System efficiency.* The help's equation writes S as the square of a ratio of amplitude
+      integrals; its text says "the sum of the energy collected ... divided by the sum of all the
+      energy which radiates from the source fiber". S is computed as that energy ratio.
+    - *The fiber's power.* ∫|Fr|² is over the whole Gaussian (π·NAx·NAy/(2n²)), not only the
+      pupil, so a fiber whose NA exceeds the system's does not couple fully.
+    - *Tilt.* Modelled in both single-mode engines as in the help's POP page, a "linear phase
+      shift" (the Gaussian shifted to the tilted axis's direction cosines), so the tilt closed form
+      has sin θ.
+    - *Source angles.* The X and Y angles add tan(angle) to the nominal axis's x/z and y/z slopes
+      (the help gives no formula); with "Align source to chief ray" the nominal axis is the chief
+      ray.
+    - *Maximum efficiency.* "ignoring the aberrations" is read as every phase dropped (decenter
+      phases included): the most these amplitudes could couple.
+    - *Amplitude coupling* (FICL 2–5) is √S·η, η the normalised overlap ∫Fr·W*/√(∫|Fr|²·∫|W|²)
+      with W's phase +2π·OPD (ahead positive); |A|² = S·T. Its sign convention is unchecked.
+    - *The fast algorithm's failure.* OpticStudio returns zero with a warning when "the fast
+      ray-based integration cannot be computed accurately"; its test is not documented and is not
+      reproduced.
+    - *Operand columns.* FICL: Int1 Samp, Int2 Wave, Data1 Field, Data2 IgSrc, Data3 Sna, Data4
+      Rna, Data5 Data, Data6 Pol?; FICP: Int1 Surf, Int2 Wave, Data1 Field, Data2 Data (as POPD).
+      With FICL Data 0–5 the tilts, decenters and alignments are the defaults (none). FICP and
+      POPD 0–2 use the saved fiber data even when "Compute fiber coupling" is off.
+    - *Multimode.* A ray is accepted when it lands in the core disc on the image surface and
+      n·sin θ ≤ NA, θ from the fiber's (tilted) axis, weighted by the source power it carries.
+    Check: Single Mode Coupling, POP fiber coupling and FICL/FICP in OpticStudio on one system,
+    with a decenter, a tilt and a mismatched fiber.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6091,7 +6121,7 @@ cannot be computed fails naming the surface and the reason.
 **Not-built table.** `NotBuiltOperands` lists every summary-table code this build does not
 register, with the help's description, the reason and the plan item it waits for: DCRV, DSAG,
 DSLP, DPHS, QSLP, TSAG, GOPT, IMSF, PRIM, SVIG, CVIG, FDMO, FDRE, EQUA, the skew Gaussian beam
-operands, the gradient-index operands, fiber coupling, UDOC, the non-sequential operands,
+operands, the gradient-index operands, UDOC, the non-sequential operands,
 CMFV, the coating operands and CODA, and the obsolete PnGT, PnLT, PnVA. OP-55A's not-built codes
 join through its `Imaging` hook. `MeritOperandCatalogue.Describe` and `Unknown` turn a code into
 "NSDD (OpticStudio: …) is not built yet: needs OP-79: …"; the merit function editor's operand
@@ -6298,8 +6328,9 @@ with the same settings share one run.
   the vertex); 21–22 centroid; 23–24 widths (Xtr1 = 1: principal axes); 25–26 M²; 27–29 square
   roots of the moments (signed for a negative mixed moment); 30–35 irradiance and phase variation;
   40–42 the fraction within radius Xtr1 of the centroid, the chief ray and the vertex (the last
-  two the array centre); 50–52 the radius holding fraction Xtr1. Fiber coupling (0–2, 60–63) is
-  refused (OP-50); other data return 0, as the help says.
+  two the array centre); 50–52 the radius holding fraction Xtr1; 0–2 fiber coupling (total,
+  system, receiver efficiency) with the saved fiber data and 60–63 its Ex/Ey amplitude and phase,
+  0 because the propagation is unpolarized (OP-50, section 68); other data return 0, as the help says.
 - POPI: pixel x + y·nx; 0 and 1 the irradiance, 3 and 4 the real and imaginary part, 7 the phase
   (printed sign); the Ey data are 0.
 
@@ -6313,7 +6344,7 @@ incoherent ZBFSUM and the sum of files that differ in sampling are refused by na
 reference); off-axis fields and tilted, decentered or folded systems; the per-surface physical
 optics settings (Use Rays To Propagate, Do Not Rescale, Use Angular Spectrum, Re-Compute Pilot,
 X-axis Reference, Resample After Refraction, Auto Resample, Output Pilot Radius); the beam's
-stretch by the probing rays; fiber coupling (OP-50); POP in non-sequential mode and through
+stretch by the probing rays; POP in non-sequential mode and through
 non-sequential surfaces; disk storage; projection other than along the beam; zoom; the
 transfer-function, ensquared and enslitted displays; the DLL beam and fiber types. Readings in
 §10 item 62.
@@ -6443,3 +6474,67 @@ files; listed in `ExtendedSceneNotBuilt`), afocal image space, the image surface
 cut in the partially coherent analysis, the help's per-pixel OPD-spread check of the Extended
 Diffraction analysis, surface plots, the Suppress Frame switch, true-colour pictures (each colour is
 its own map plot), the Geometric Image Analysis's ray listing. Readings in §10 item 63.
+
+## 68. Fiber coupling
+
+OP-50 adds `OpenSim.Optics/FiberCoupling/`: single-mode coupling by rays (OpticStudio's "fast"
+algorithm) and through the Huygens PSF, the geometric multimode estimate, POP's fiber coupling
+integral, and the operands FICL and FICP. Pages read: "Fiber Coupling", "Single Mode Coupling",
+"Multi-Mode Coupling", "Fiber Coupling Operands", "Where the Integral is Computed", "Defining the
+Fiber Mode", "Decenters and Tilts", "Choosing the Location for the Receiving Fiber"
+(`plans/sources/optics/op-50-help/`) and "Computing Fiber Coupling", "Physical Optics
+Propagation", "Physical Optics Propagation (POP) Results" (`op-49-help/`). Wagner and Tomlinson
+(Appl. Opt. 21, 1982) were not on hand; the overlap results are derived in the tests.
+
+**Efficiencies.** The help's system efficiency S (power through the system over the power the
+source radiates), receiver efficiency T = |∫Fr·W*|²/(∫|Fr|²·∫|W|²) and coupling S·T. One-fiber
+model ("Ignore source fiber"): the pupil is lit by the system apodization and S is relative to the
+power entering the entrance pupil. Two-fiber model: a Gaussian source fiber at the object point
+(object at a finite distance; refused at infinity), along object z or the chief ray.
+
+**Gaussian modes** (`GaussianFiberMode`). NA is n·sin of the half angle to the 1/e² intensity
+(help). The mode's plane-wave spectrum against direction cosines is exp(−n²(α²/NAx² + β²/NAy²)),
+the waist λ/(π·NA) with λ in the system's air, its power π·NAx·NAy/(2n²). Tilt "first around X,
+then around Y" is R = Rx(θx)·Ry(θy) (section 4) applied to the nominal axis ±z (the sign of the
+chief ray's z), axis (sin θy, −sin θx·cos θy, cos θx·cos θy); the mode keeps its shape and is
+centred on the axis's direction cosines (a linear phase across its face).
+
+**The traced pupil** (`FiberPupil`). OP-38's n × n node grid from −1 to 1 (h = 2/(n − 1)); each
+node's ray traced to the image surface with its path relative to the chief ray; the source power
+per unit pupil area P (apodization², or the source fiber's |a|² times the object-space Jacobian of
+the direction cosines); the image-space Jacobian J = |∂(α, β)/∂(Px, Py)| from rays 1e-5 away in
+the pupil traced with the apertures ignored. A node whose ray fails carries no light (counted in
+the warnings); a node whose neighbours both fail stops the computation, naming the pupil point.
+A lens whose OPD is approximate or undefined (OP-38's limitations) is refused.
+
+**Ray-based coupling** (`SingleModeFiberCoupling`). Each lit node is a plane wave of spectral
+amplitude √(P/J) and phase 2π·(OPD_abs + n·d·(Q − C)/λ) at the fiber's centre C (the image
+surface's vertex or the chief ray's intercept, plus the decenter x, y, z in the image surface's
+frame). By Parseval T = 2n²·h²·|Σ F·√(P·J)·e^{−iφ}|²/(π·NAx·NAy·Σ P) and S = Σ P·h²/(source
+power). The maximum coupling drops every phase. **Huygens**: the same plane waves summed by
+OP-38's Huygens sum on a grid in the plane through C normal to the image z, ±5 waists, spacing
+0.9·λ/(n·α_max + n·|αt| + 5·NA) so that the grid sum is the integral to about e^{−25}; the overlap
+with the mode on that grid. A window wider than the pupil sum's period is reported.
+
+**Multimode** (`MultimodeFiberCoupling`). The help's Geometric Image Analysis recipe: the source
+power of the rays landing in a core disc (radius, decenter, at the vertex or the chief ray) with
+n·sin θ ≤ NA (θ from the fiber's axis), over the source power; NA given or √(n_core² − n_cladding²).
+
+**POP** (`PopFiberCoupling`). The fiber mode is any initial-beam type except DLL and Multimode,
+built on the end beam's grid with its decenter (a File mode must match the grid), tilted by
+e^{+ik(αt·x + βt·y)}; both fields with their reference phase put back; T over the samples; S the end
+power over the start power. The propagation is scalar, so only Ex is used and the polarized
+amplitudes are 0, as the help says for an unpolarized beam; the fiber position (chief ray or
+vertex) is one point for OP-49's axial beams. The POP analysis's "Fiber:" settings hold the Fiber
+Data tab; with "Compute fiber coupling" its result shows the three efficiencies.
+
+**Operands** (`Merit/Catalogue/FiberOperands.cs`, `PopOperands.cs`). FICL Data 0/1 the power
+coupling by the fast or Huygens algorithm, 2–5 the amplitude coupling's real and imaginary parts,
+6–11 the same with the Single Mode Fiber Coupling analysis's saved settings (non-zero Samp, Wave,
+Field, Sna, Rna replace them; Samp n gives 32·2^(n−1)). FICP and POPD 0–2 run the saved POP
+settings and fiber data; FICP 1–6 and POPD 60–63 are 0 (unpolarized).
+
+**Not built:** polarization (Use Polarization, FICL Pol? 1: refused), materials on the image
+surface in the single-mode tool (the help itself points to POP), OpticStudio's fast-algorithm
+failure test, fiber modes from DLLs or multimode files, polarized POP coupling, non-sequential
+fiber coupling. Readings in §10 item 64.

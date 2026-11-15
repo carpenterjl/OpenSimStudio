@@ -539,7 +539,6 @@ public sealed class PhysicalOpticsTests : IDisposable
         var settings = new PhysicalOpticsSettings();
         Assert.Contains("Use polarization", Assert.Throws<NotSupportedException>(() => (settings with { UsePolarization = true }).ToRequest(LensUnit.Millimeter, 1)).Message);
         Assert.Contains("Separate X, Y", Assert.Throws<NotSupportedException>(() => (settings with { SeparateXY = true }).ToRequest(LensUnit.Millimeter, 1)).Message);
-        Assert.Contains("OP-50", Assert.Throws<NotSupportedException>(() => (settings with { ComputeFiberCoupling = true }).ToRequest(LensUnit.Millimeter, 1)).Message);
         // The tilt sits on surface 2: the real trace itself refuses a tilt before surface 1 with the
         // object at infinity, before the engine's own check is reached.
         var tilted = Lens(Surface(0.1, stop: true), new SequentialSurface { Thickness = 0.1, TiltBefore = new TiltDecenter(0, 0, 5, 0, 0) });
@@ -611,7 +610,12 @@ public sealed class PhysicalOpticsTests : IDisposable
         Close(1, V(5), 1e-9, "POPD 25 M² x");
         Close(Math.Atan(1), V(6), 1e-9, "POPI 7 axial phase, the help's sign");
         Close(V(1), V(7), 1e-9 * V(1), "POPI 0 centre irradiance is the peak");
-        Assert.Contains("OP-50", e.Rows[8].Error);
+        // OP-50: POPD 0 is the fiber coupling with the saved fiber data (a 1 mm waist mode at the
+        // end surface). The beam there is that waist one Rayleigh range on; the overlap of a waist
+        // with the same waist propagated z is 1/(1 + i·z/(2z_R)) (derived in
+        // FiberCouplingTests.Pop_WaistAgainstTheSameWaistPropagated), so T = 1/(1 + 1/4) = 0.8 and
+        // nothing is lost on the way (S = 1).
+        Close(0.8, V(8), 1e-9, "POPD 0 fiber coupling");
         Close(0, V(9), 0, "undefined data returns 0");
     }
 

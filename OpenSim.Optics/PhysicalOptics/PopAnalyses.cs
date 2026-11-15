@@ -146,8 +146,83 @@ public sealed record PhysicalOpticsSettings
     public bool SaveBeamAtAllSurfaces { get; init; }
 
     [DisplayName("Compute fiber coupling")]
-    [Description("Fiber coupling is OP-50 (not built: refused).")]
+    [Description("Compute the fiber coupling integral at the end surface with the fiber settings below (help, \"Computing Fiber Coupling\").")]
     public bool ComputeFiberCoupling { get; init; }
+
+    // OP-50: the Fiber Data tab (help, "Physical Optics Propagation"; FiberCoupling/PopFiberCoupling).
+    [DisplayName("Fiber: ignore polarization")]
+    [Description("Treat the fiber mode as unpolarized (the propagation is scalar, so it always is).")]
+    public bool FiberIgnorePolarization { get; init; }
+
+    [DisplayName("Fiber: tilt about X (deg)")]
+    [Description("Tilt of the fiber mode about x, then about the new y; a linear phase across the mode.")]
+    public double FiberTiltX { get; init; }
+
+    [DisplayName("Fiber: tilt about Y (deg)")]
+    public double FiberTiltY { get; init; }
+
+    [DisplayName("Fiber: type")]
+    [Description("The fiber mode, defined as an initial beam is (DLL and Multimode are refused).")]
+    public PopBeamType FiberType { get; init; } = PopBeamType.GaussianWaist;
+
+    [DisplayName("Fiber: file")]
+    [Description("Full path of a ZBF file holding the fiber mode on the end beam's grid.")]
+    public string FiberFile { get; init; } = "";
+
+    [DisplayName("Fiber: waist x")]
+    [Description("Gaussian waist and astigmatic Gaussian: 1/e² waist radius; top hat: semi-width; lens units.")]
+    public double FiberWaistX { get; init; } = 1;
+
+    [DisplayName("Fiber: waist y")]
+    public double FiberWaistY { get; init; } = 1;
+
+    [DisplayName("Fiber: decenter x")]
+    [Description("Shift of the fiber mode within the end beam's array, lens units.")]
+    public double FiberDecenterX { get; init; }
+
+    [DisplayName("Fiber: decenter y")]
+    public double FiberDecenterY { get; init; }
+
+    [DisplayName("Fiber: angle x (deg)")]
+    [Description("Gaussian angle and size+angle: far-field half-angle divergence.")]
+    public double FiberAngleX { get; init; } = 1;
+
+    [DisplayName("Fiber: angle y (deg)")]
+    public double FiberAngleY { get; init; } = 1;
+
+    [DisplayName("Fiber: size x")]
+    [Description("Gaussian size+angle: the mode size, lens units.")]
+    public double FiberSizeX { get; init; } = 1;
+
+    [DisplayName("Fiber: size y")]
+    public double FiberSizeY { get; init; } = 1;
+
+    [DisplayName("Fiber: waist position x")]
+    [Description("Astigmatic Gaussian: distance from the end surface to the mode's waist, lens units.")]
+    public double FiberWaistPositionX { get; init; }
+
+    [DisplayName("Fiber: waist position y")]
+    public double FiberWaistPositionY { get; init; }
+
+    [DisplayName("Fiber: position")]
+    [Description("Centre the fiber on the chief ray or the end surface's vertex.")]
+    public FiberCoupling.PopFiberPosition FiberPosition { get; init; } = FiberCoupling.PopFiberPosition.ChiefRay;
+
+    /// <summary>OP-50: the receiving fiber of these settings, in meters.</summary>
+    public FiberCoupling.PopFiberDefinition ToFiber(LensUnit unit)
+    {
+        double m = OpticsConventions.MetersPer(unit);
+        return new FiberCoupling.PopFiberDefinition
+        {
+            Mode = new PopBeamDefinition
+            {
+                Type = FiberType, File = FiberFile, WaistX = FiberWaistX * m, WaistY = FiberWaistY * m,
+                DecenterX = FiberDecenterX * m, DecenterY = FiberDecenterY * m, AngleX = FiberAngleX, AngleY = FiberAngleY,
+                SizeX = FiberSizeX * m, SizeY = FiberSizeY * m, WaistPositionX = FiberWaistPositionX * m, WaistPositionY = FiberWaistPositionY * m,
+            },
+            TiltX = FiberTiltX, TiltY = FiberTiltY, Position = FiberPosition, IgnorePolarization = FiberIgnorePolarization,
+        };
+    }
 
     /// <summary>The engine's request in meters, or <see cref="NotSupportedException"/> naming a
     /// refused option.</summary>
@@ -157,8 +232,6 @@ public sealed record PhysicalOpticsSettings
             throw new NotSupportedException("Physical optics: \"Use polarization\" (propagating Ex and Ey through the polarization ray trace) is not built; this propagation is scalar. Clear the option.");
         if (SeparateXY)
             throw new NotSupportedException("Physical optics: \"Separate X, Y\" (separate x and y pilot beams and a bispherical reference) is not built. Clear the option.");
-        if (ComputeFiberCoupling)
-            throw new NotSupportedException("Physical optics: fiber coupling is plan item OP-50 and is not built. Clear \"Compute fiber coupling\".");
         if (Wavelength < 0 || Wavelength > wavelengthCount)
             throw new ArgumentException($"Physical optics: the wavelength row must be 0 (primary) or 1 to {wavelengthCount} (it is {Wavelength}).");
         if (!(ZeroPhaseBelow >= 0) || ZeroPhaseBelow > 1)
@@ -288,7 +361,7 @@ internal static class PopDisplay
         "Physical optics propagation (docs/Optics-Conventions.md §66): one scalar field; angular spectrum (PTP) inside the pilot beam's Rayleigh range, Fresnel with a reference sphere (WTS, STW) outside, the four cases of the help's \"Propagating In and Out of the Rayleigh Range\".",
         "Phase is shown in the help's sign: positive where the wavefront is ahead of the reference (plane inside the Rayleigh range, sphere centred on the pilot's waist outside). Irradiance is W per lens unit².",
         "Beam width is 2σ from the second moments; M² is Siegman's (4π/λ)·√(⟨x²⟩⟨θ²⟩ − ⟨xθ⟩²) with angles in the medium.",
-        "Not built: polarized propagation, separate x and y pilots, off-axis and tilted systems, per-surface physical optics settings, fiber coupling (OP-50), projection other than along the beam, zoom.",
+        "Not built: polarized propagation, separate x and y pilots, off-axis and tilted systems, per-surface physical optics settings, projection other than along the beam, zoom.",
     };
 }
 
@@ -366,7 +439,23 @@ public sealed class PhysicalOpticsPropagationAnalysis : OpticsAnalysis<PhysicalO
             }
             sections.Add(new ReportSection("Beam files written") { Lines = written });
         }
-        var assumptions = PopDisplay.Assumptions.Concat(run.Notes).Concat(notes).ToList();
+        var fiberNotes = new List<string>();
+        if (settings.ComputeFiberCoupling)
+        {
+            // OP-50: the fiber coupling integral at the end surface.
+            var coupling = FiberCoupling.PopFiberCoupling.Compute(run, settings.ToFiber(unit), unit);
+            fiberNotes.AddRange(coupling.Notes);
+            sections.Insert(1, new ReportSection("Fiber coupling")
+            {
+                Pairs = new[]
+                {
+                    ("System efficiency", StudyReport.Number(coupling.SystemEfficiency, "g8")),
+                    ("Receiver efficiency", StudyReport.Number(coupling.ReceiverEfficiency, "g8")),
+                    ("Total coupling", StudyReport.Number(coupling.Coupling, "g8")),
+                },
+            });
+        }
+        var assumptions = PopDisplay.Assumptions.Concat(run.Notes).Concat(fiberNotes).Concat(notes).ToList();
         return OpticsAnalysisResult.FromSections(Name, sections, assumptions, PopDisplay.Plots(run.Field, data, unit, settings.ZeroPhaseBelow, "POP"));
     }
 }
