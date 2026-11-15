@@ -249,7 +249,9 @@ public sealed class PhysicalOpticsTests : IDisposable
             var probe = PopSurfaceTransfer.Probe(trace, s, s.Shape, 1, x, y, 1, 1, 1);
             Assert.Equal(RayStatus.Ok, probe.Status);
             double r2 = x * x + y * y;
-            Close(f - Math.Sqrt(f * f + r2), probe.Path, 1e-15 * r2 / f, $"path at ({x}, {y})");
+            // f − √(f² + r²) cancels: both the closed form and the traced path carry an absolute
+            // rounding error of order ε·f (ε = 2.2e-16), not ε times the small path itself.
+            Close(f - Math.Sqrt(f * f + r2), probe.Path, 1e-15 * f, $"path at ({x}, {y})");
         }
     }
 
@@ -538,7 +540,9 @@ public sealed class PhysicalOpticsTests : IDisposable
         Assert.Contains("Use polarization", Assert.Throws<NotSupportedException>(() => (settings with { UsePolarization = true }).ToRequest(LensUnit.Millimeter, 1)).Message);
         Assert.Contains("Separate X, Y", Assert.Throws<NotSupportedException>(() => (settings with { SeparateXY = true }).ToRequest(LensUnit.Millimeter, 1)).Message);
         Assert.Contains("OP-50", Assert.Throws<NotSupportedException>(() => (settings with { ComputeFiberCoupling = true }).ToRequest(LensUnit.Millimeter, 1)).Message);
-        var tilted = Lens(new SequentialSurface { Thickness = 0.1, IsStop = true, TiltBefore = new TiltDecenter(0, 0, 5, 0, 0) });
+        // The tilt sits on surface 2: the real trace itself refuses a tilt before surface 1 with the
+        // object at infinity, before the engine's own check is reached.
+        var tilted = Lens(Surface(0.1, stop: true), new SequentialSurface { Thickness = 0.1, TiltBefore = new TiltDecenter(0, 0, 5, 0, 0) });
         Assert.Contains("tilted or decentered", Assert.Throws<NotSupportedException>(() => PopEngine.Run(tilted, Sys(), request)).Message);
     }
 

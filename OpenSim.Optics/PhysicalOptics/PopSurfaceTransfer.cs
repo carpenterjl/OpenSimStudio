@@ -82,7 +82,9 @@ public static class PopSurfaceTransfer
         double vertexPath = 0;
         if (rays)
         {
-            var vertex = Probe(trace, s, shape, j, 0, 0, sense, nIn, nOut);
+            // The axial ray only sets the reference path, so the aperture does not clip it: a
+            // central obscuration (a disc, a secondary mirror) would otherwise stop every beam.
+            var vertex = Probe(trace, s, shape, j, 0, 0, sense, nIn, nOut, clip: false);
             if (vertex.Status != RayStatus.Ok)
                 throw new InvalidOperationException($"Physical optics: the probing ray along the axis fails at surface {j} ({vertex.Status}); the beam cannot be carried across it.");
             vertexPath = vertex.Path;
@@ -137,7 +139,7 @@ public static class PopSurfaceTransfer
 
     /// <summary>
     /// One probing ray: launched at (x, y, 0) along the travel (0, 0, sense), carried to the
-    /// surface (closed-form conic or the shape's own intersection), clipped by the aperture,
+    /// surface (closed-form conic or the shape's own intersection), clipped by the aperture (unless <paramref name="clip"/> is false),
     /// refracted, reflected or redirected as the real trace does (§13), and carried back along
     /// its new direction to the vertex plane z = 0. The optical path, in the indices relative to
     /// the system's air, is n·(to the surface) + the shape's extra path + n′·(back to the plane),
@@ -145,7 +147,7 @@ public static class PopSurfaceTransfer
     /// outgoing wavefront's slope n′·(L, M) (to first order in the landing shift; docs §66).
     /// </summary>
     internal static ProbeResult Probe(SequentialTrace trace, SequentialSurface s, SurfaceShape? shape, int j,
-        double x, double y, double sense, double nIn, double nOut)
+        double x, double y, double sense, double nIn, double nOut, bool clip = true)
     {
         var d = new Vector3D(0, 0, sense);
         Vector3D point;
@@ -154,7 +156,7 @@ public static class PopSurfaceTransfer
             ? ConicIntersection.Intersect(x, y, d, s.Curvature, s.Conic, out point, out delta)
             : shape.Intersect(x, y, d, s, out point, out delta);
         if (!met || !double.IsFinite(delta)) return new ProbeResult(RayStatus.MissedSurface, 0);
-        if (s.Aperture is { } aperture && !aperture.Passes(point.X, point.Y, trace.SemiDiameters[j]))
+        if (clip && s.Aperture is { } aperture && !aperture.Passes(point.X, point.Y, trace.SemiDiameters[j]))
             return new ProbeResult(RayStatus.Vignetted, 0);
         if (j == trace.Lens.ImageIndex) return new ProbeResult(RayStatus.Ok, 0);
         var normal = shape is null ? ConicIntersection.Normal(point, s.Curvature, s.Conic) : shape.Normal(point, s);
