@@ -25,6 +25,90 @@ public sealed record OpticsToleranceSettings
     // OP-65
     /// <summary>The settings of the last Monte Carlo run (plan item OP-65); null for the defaults.</summary>
     public OpticsToleranceMonteCarloSettings? MonteCarlo { get; init; }
+
+    // OP-66
+    /// <summary>The Tolerance Wizard's settings (plan item OP-66); null for the defaults.</summary>
+    public OpticsToleranceWizardSettings? Wizard { get; init; }
+
+    // OP-66
+    /// <summary>The Quick Yield settings (plan item OP-66); null for the defaults.</summary>
+    public OpticsToleranceQuickYieldSettings? QuickYield { get; init; }
+}
+
+// OP-66
+/// <summary>
+/// The Tolerance Wizard's settings as the project and the lens file store them (OpticStudio's
+/// Tolerance Wizard, as far as plan item OP-66 builds it). Every member is nullable; null is the
+/// default. OpenSim.Optics' <c>ToleranceWizardSettings</c> converts to and from its options and
+/// names any value it does not know.
+/// </summary>
+public sealed record OpticsToleranceWizardSettings
+{
+    public bool? Radius { get; init; }
+
+    /// <summary>"LensUnits", "Percent" or "Fringes".</summary>
+    public string? RadiusUnit { get; init; }
+
+    public double? RadiusValue { get; init; }
+    public bool? Thickness { get; init; }
+    public double? ThicknessValue { get; init; }
+    public bool? DecenterX { get; init; }
+    public double? DecenterXValue { get; init; }
+    public bool? DecenterY { get; init; }
+    public double? DecenterYValue { get; init; }
+    public bool? TiltX { get; init; }
+
+    /// <summary>"LensUnits" (total indicator runout) or "Degrees".</summary>
+    public string? TiltXUnit { get; init; }
+
+    public double? TiltXValue { get; init; }
+    public bool? TiltY { get; init; }
+
+    /// <summary>"LensUnits" (total indicator runout) or "Degrees".</summary>
+    public string? TiltYUnit { get; init; }
+
+    public double? TiltYValue { get; init; }
+    public bool? Irregularity { get; init; }
+    public double? IrregularityFringes { get; init; }
+    public bool? ElementDecenterX { get; init; }
+    public double? ElementDecenterXValue { get; init; }
+    public bool? ElementDecenterY { get; init; }
+    public double? ElementDecenterYValue { get; init; }
+    public bool? ElementTiltX { get; init; }
+    public double? ElementTiltXDegrees { get; init; }
+    public bool? ElementTiltY { get; init; }
+    public double? ElementTiltYDegrees { get; init; }
+    public bool? Index { get; init; }
+    public double? IndexValue { get; init; }
+    public bool? Abbe { get; init; }
+    public double? AbbePercent { get; init; }
+
+    /// <summary>"Start At Row": 1 replaces every row, n &gt; 1 keeps rows 1 to n − 1, −1 appends.</summary>
+    public int? StartAtRow { get; init; }
+
+    /// <summary>The test wavelength, micrometers.</summary>
+    public double? TestWavelength { get; init; }
+
+    public int? StartSurface { get; init; }
+
+    /// <summary>The last surface; null for the surface before the image.</summary>
+    public int? StopSurface { get; init; }
+
+    public bool? FocusCompensator { get; init; }
+
+    /// <summary>The focus compensator's ± range, lens units; null for none (Min = Max = 0).</summary>
+    public double? FocusCompensatorRange { get; init; }
+}
+
+// OP-66
+/// <summary>The Quick Yield settings as the project and the lens file store them. Null is the default.</summary>
+public sealed record OpticsToleranceQuickYieldSettings
+{
+    /// <summary>The number of samples of the quadratic model.</summary>
+    public int? Samples { get; init; }
+
+    /// <summary>False to leave out the cross terms (one evaluation per pair of rows).</summary>
+    public bool? CrossTerms { get; init; }
 }
 
 // OP-65

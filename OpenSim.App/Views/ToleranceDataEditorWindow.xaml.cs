@@ -27,8 +27,17 @@ public partial class ToleranceDataEditorWindow : Window
         };
         Grid.Message += (_, e) => _editor.Status = e.Text;
         _editor.PropertyChanged += OnEditorChanged;
-        Closed += (_, _) => _editor.PropertyChanged -= OnEditorChanged;
+        _editor.DataViewerRequested += OnDataViewerRequested;   // OP-66
+        Closed += (_, _) =>
+        {
+            _editor.PropertyChanged -= OnEditorChanged;
+            _editor.DataViewerRequested -= OnDataViewerRequested;   // OP-66
+        };
     }
+
+    // OP-66: Open data viewer shows a new viewer window over this one.
+    private void OnDataViewerRequested(object? sender, ToleranceDataViewerViewModel viewer) =>
+        new ToleranceDataViewerWindow(viewer) { Owner = this }.Show();
 
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
     {

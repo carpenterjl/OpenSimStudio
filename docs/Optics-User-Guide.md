@@ -1594,6 +1594,45 @@ Not built: Biocular Field of View and Dipvergence/Convergence, saving the ghost 
 ghosts of tilted or decentered lenses, GPIM's worst-pair columns, GAOI with vignetting factors,
 coated surfaces in GPRT.
 
+## Tolerance wizard, summary, data viewer and Quick Yield
+
+Four more sections of the Tolerance Data Editor, after OpticStudio's tools of the same names.
+
+- **Tolerance Wizard**: default tolerance rows for the project's lens. Tick the tolerances wanted
+  and give their values: radius (lens units, percent of the radius, or fringes; a plano surface
+  always takes fringes), thickness, surface decenter X/Y, surface tilt X/Y (lens units of total
+  indicator runout, or degrees), S + A irregularity (fringes), element decenter X/Y and tilt X/Y
+  (degrees), index and Abbe (percent of the glass's Abbe number). **Start at row** 1 replaces
+  the rows, n keeps rows 1 to n − 1, −1 appends; **Start/Stop at surface** limit the surfaces
+  (Stop 0: the surface before the image); **Use focus compensation** adds a compensator on the
+  thickness before the image, with the range in **Focus compensator ±** (empty: none, and the
+  status says so). **Apply wizard** writes the rows as one undo step and lists the surfaces it
+  passed over and why; **Reset** restores the defaults, the values OpticStudio's help shows in its
+  picture of the dialog (0.2 lens units, 0.2 fringes, 0.2°, index 0.001, Abbe 1 %, test
+  wavelength 0.633 µm). The settings are saved with the tolerance data.
+- **Tolerance Summary**: the rows in words for a fabricator (what, where, nominal, tolerance,
+  unit), the compensators and the control settings, with no operand codes. **Save summary…**
+  writes Markdown, HTML or text.
+- **Quick Yield**: a predicted Monte Carlo yield at a fraction of the cost. It evaluates each row
+  at the two ends of its Monte Carlo range and, with **Cross terms**, each pair of rows together,
+  compensating each lens as Monte Carlo does, fits a quadratic model of the criterion, and samples
+  that model **Samples** times with the Monte Carlo statistics, seed and yield limit (sample k
+  draws what Monte Carlo trial k draws). The status gives the predicted yield with the sampling
+  error of the samples; the plots show the histogram and yield curve, with the last Monte Carlo
+  run's beside them. It is this program's second-order estimate, not OpticStudio's method (which
+  is proprietary), and is wrong where the response is far from quadratic (clipping, compensators
+  at their limits).
+- **Data viewer…** opens the Tolerance Data Viewer on the last runs: the Monte Carlo trials as a
+  table (criterion, change, compensators, every drawn tolerance), **Statistics** of every column,
+  **Save CSV…**; the Histogram (bin count, min and max value, values outside counted in one bar)
+  and the Yield curve of any column, the criterion's with the Quick Yield curve dashed; the last
+  sensitivity rows and report; the last Quick Yield report.
+
+Not built: OpticStudio's vendor and grade presets (the help gives no numbers), the wizard's
+Zernike irregularity, named wizard settings files, the .ZTD data file, Quick Yield's precision
+levels and own field and sampling controls. The definitions are in docs/Optics-Conventions.md
+§51, the readings in §10 item 47.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1609,8 +1648,9 @@ Not built yet, and not to be relied on until they appear in this guide:
 - the tolerance analyses (the merit function, its editor, the default merit function wizard,
   the local optimizer, glass substitution, the Global and Hammer searches, the tolerance data editor with
   its operands, sensitivity and inverse sensitivity with compensators and the MTF and encircled
-  energy criteria, Monte Carlo tolerancing and the contrast (MTF) wizard criterion are built; the
-  full operand catalogue and the encircled-energy merit operands are not);
+  energy criteria, Monte Carlo tolerancing, the tolerance wizard, summary, data viewer and Quick
+  Yield and the contrast (MTF) wizard criterion are built; the full operand catalogue and the
+  encircled-energy merit operands are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

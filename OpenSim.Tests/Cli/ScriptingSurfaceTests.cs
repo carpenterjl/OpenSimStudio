@@ -389,6 +389,23 @@ public class ScriptingSurfaceTests
         HasReadableProperty(TP + "TestPlateFitStep", "Surface", "Int32");
         HasReadableProperty(TP + "TestPlateFitStep", "Plate", "TestPlate");
         HasReadableProperty(TP + "TestPlateFitStep", "Merit", "Double");
+
+        // OP-66: the Tolerance Wizard, Summary, Quick Yield and the data viewer's data set.
+        HasMethod(T + "ToleranceWizard", "Generate", "OpticsSettings", "ToleranceTable", "IReadOnlyList<OpticalCatalog>", "ToleranceWizardOptions");
+        Assert.NotNull(Named(T + "ToleranceWizardOptions").GetConstructor(Type.EmptyTypes));
+        HasSettableProperty(T + "ToleranceWizardOptions", "RadiusValue", "Double");
+        HasSettableProperty(T + "ToleranceWizardOptions", "StartAtRow", "Int32");
+        HasReadableProperty(T + "ToleranceWizardResult", "Table", "ToleranceTable");
+        HasMethod(T + "ToleranceSummary", "Build", "OpticsSettings", "ToleranceTable", "String");
+        HasMethod(T + "QuickYield", "Run", "OpticsSettings", "ToleranceTable", "IReadOnlyList<OpticalCatalog>", "ToleranceRunOptions", "MonteCarloOptions", "QuickYieldOptions");
+        HasSettableProperty(T + "QuickYieldOptions", "Samples", "Int32");
+        HasSettableProperty(T + "QuickYieldOptions", "CrossTerms", "Boolean");
+        HasReadableProperty(T + "QuickYieldResult", "Yield", "MonteCarloYield");
+        HasReadableProperty(T + "QuickYieldResult", "Samples", "IReadOnlyList<Double>");
+        HasReadableProperty(T + "QuickYieldResult", "Model", "ToleranceQuadraticModel");
+        HasMethod(T + "ToleranceDataSet", "FromMonteCarlo", "MonteCarloResult");
+        HasMethod(T + "ToleranceDataSet", "YieldCurve", "String", "QuickYieldResult");
+        HasMethod(T + "ToleranceDataSet", "ToCsv");
     }
 
     /// <summary>The lens of <c>examples/jgraph/optics_from_jgraph.m</c>, built with the same

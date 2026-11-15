@@ -55,6 +55,7 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
         _applying = true;
         InitializeRun();   // OP-64
         InitializeMonteCarlo();   // OP-65
+        HookWizard();   // OP-66
         _applying = false;
     }
 
@@ -126,8 +127,10 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
         var data = ToleranceDataSettings.ToSettings(ToTable());
         var run = RunSettingsToSave();   // OP-64
         var monteCarlo = MonteCarloSettingsToSave();   // OP-65
-        if (run is null && monteCarlo is null) return data;
-        return (data ?? new OpticsToleranceSettings()) with { Run = run, MonteCarlo = monteCarlo };
+        var wizard = WizardSettingsToSave();   // OP-66
+        var quickYield = QuickYieldSettingsToSave();   // OP-66
+        if (run is null && monteCarlo is null && wizard is null && quickYield is null) return data;
+        return (data ?? new OpticsToleranceSettings()) with { Run = run, MonteCarlo = monteCarlo, Wizard = wizard, QuickYield = quickYield };
     }
 
     /// <summary>Loads a file's tolerance data; null is an empty table. Unknown codes become TOFF
@@ -137,6 +140,7 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
         Load(ToleranceDataSettings.FromSettings(saved, notes), notes);
         LoadRunOptions(ToleranceRunSettings.FromSettings(saved?.Run, notes));   // OP-64
         LoadMonteCarloSettings(saved?.MonteCarlo, notes);   // OP-65
+        LoadYieldSettings(saved, notes);   // OP-66
     }
 
     /// <summary>A new project's tolerance data: empty, with the default run settings.</summary>
@@ -145,6 +149,7 @@ public sealed partial class OpticsToleranceEditorViewModel : ObservableObject
         Load(new ToleranceTable(), new List<string>());
         LoadRunOptions(new ToleranceRunOptions());   // OP-64
         InitializeMonteCarlo();   // OP-65
+        LoadYieldSettings(null, new List<string>());   // OP-66
     }
 
     /// <summary>Replaces the rows with <paramref name="table"/>'s, without an undo step.</summary>

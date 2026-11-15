@@ -181,6 +181,7 @@ public sealed partial class OpticsToleranceEditorViewModel
     {
         base.OnPropertyChanged(e);
         if (e.PropertyName is { } name && (RunSettingNames.Contains(name) || MonteCarloSettingNames.Contains(name)) && !_applying) _publish();   // OP-65: Monte Carlo settings too
+        OnYieldPropertyChanged(e.PropertyName);   // OP-66
     }
 
     private bool CanRun() => !IsRunning;

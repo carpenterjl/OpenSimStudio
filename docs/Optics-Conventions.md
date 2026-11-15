@@ -1208,6 +1208,27 @@ single place in the code, so a correction is one line and its test.
     Check: OpticStudio's Ghost Focus Generator on a cemented doublet (focus distances, EFLs, RMS
     radii), GPIM in each mode, YNIP on a germanium lens, and both power maps on a toroidal lens.
 
+47. **Tolerance wizard and Quick Yield readings** (OP-66, section 51). Nothing is compared with
+    OpticStudio's wizard output or Quick Yield; these are this program's readings where the help
+    is short:
+    - *Defaults.* The wizard's defaults are the values its help figure shows. The figure also
+      shows Vendor Generic and Grade Precision, so they may be that preset's values rather than
+      the Reset values; the page does not say.
+    - *Plano surfaces.* "the default tolerance is specified as a variation in fringes" names no
+      number; the Radius box's number is used as fringes.
+    - *Adjustment surface.* "the first air space which follows" is read as the first later surface
+      followed by air; an air space with none after it before the image has no adjustment.
+    - *Lens groups.* From a surface followed by glass to the first later surface followed by air;
+      a group running past Stop At Surface is left out. Dummy surfaces (same medium both sides)
+      have no radius, decenter, tilt or irregularity rows; their thickness is toleranced.
+    - *Start At Row.* n > 1 is read as keeping rows 1 to n − 1 and replacing the rest.
+    - *Row order and the focus range.* The help gives neither; TWAV first, surfaces, groups,
+      index, then COMP with Min = Max = 0 unless a range is entered.
+    - *Quick Yield* is not OpticStudio's method (proprietary, help); its numbers will differ
+      wherever the response is not quadratic.
+    Check: OpticStudio's Tolerance Wizard on a doublet-plus-singlet lens, the rows compared; its
+    Quick Yield against this one on a linear-regime lens.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3245,7 +3266,7 @@ Monte Carlo (OP-65, §45).
 **Not built.** Applying coating operands (the per-surface coating multipliers and offsets are
 not saved), non-sequential operands (OP-70), Zernike Fringe and Standard Sag surfaces (OP-25)
 and composite add-ons (OP-32) with the operands that need them, cylindrical roll surfaces, the
-default tolerances wizard, the tolerance listing, sorting and .TOL files (the sensitivity and Monte Carlo analyses and
+tolerance listing (the default tolerances wizard and the summary are §51), sorting and .TOL files (the sensitivity and Monte Carlo analyses and
 compensator optimization are §42 and §45).
 
 ## 37. Thermal analysis
@@ -3723,7 +3744,7 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
 - **Not built.** Ensquared, x-only and y-only enclosed energy as criteria; MTF warnings (aliasing)
   are not reported per trial; RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity (Monte Carlo runs on its own, §45);
   Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
-  .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
+  .ZTD file and compensator statistics (the Tolerance Data Viewer is §51); CPAR and CMCO bounds;
   CEDV (deprecated) compensators.
 
 ## 43. Global optimization
@@ -3908,8 +3929,8 @@ dialog's Monte Carlo tab (`op-64-help/Tolerancing.txt`).
 **Not built.** TEZI's random per-term coefficients ("each polynomial term is assigned a
 coefficient randomly chosen between -1.0 and 1.0 ... normalized"; a trial applies the drawn RMS
 equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst
-Monte Carlo files by name and the File Prefix, the ZTD data file, the Tolerance Data Viewer and
-Yield curve (OP-66), tolerance scripts (OP-67), overlay of analyses other than the MTF, and
+Monte Carlo files by name and the File Prefix, the ZTD data file (the Tolerance Data Viewer and
+Yield curve are §51), tolerance scripts (OP-67), overlay of analyses other than the MTF, and
 evaluation of element decenter and tilt trials (the launcher, OP-22).
 
 ## 46. Command-line optics
@@ -4206,3 +4227,62 @@ features follow OpticStudio 2025 R2's help pages saved under `plans/sources/opti
 - **Not built.** Biocular Field of View and Biocular Dipvergence/Convergence; Save Files (no
   GHfffsss.ZMX files); ghosts of lenses with coordinate breaks or tilts; the power maps' surface
   plot, grey scale and scan displays.
+
+## 51. Tolerance wizard, viewers and yield
+
+`OpenSim.Optics/Tolerancing/ToleranceWizard.cs`, `ToleranceSummary.cs`, `ToleranceDataSet.cs` and
+`QuickYield.cs` (OP-66). Sources: OpticStudio 2025 R2 help, "Tolerance Wizard" and "Tolerance
+Summary" (`plans/sources/optics/op-64-help/`), the wizard's figure of the dialog and its equation
+image (`op-66-help/images/ToleranceWizard.png`, `eq_Tolerance_Wizard_1.svg`, θx = atan(Δy/(2S))),
+"Tolerance Data Viewer", "Histogram", "Yield" (`op-65-help/`), "Quick Yield"
+(`op-66-help/Quick_Yield.html`), "TTHI", "TABB", "COMP" (`op-63-help/`). §10 item 47 lists the
+readings.
+
+- **Wizard defaults.** The values the help's figure of the dialog shows: radius, thickness,
+  decenters and TIR tilts 0.2 (lens units), S + A irregularity 0.2 fringes, element decenters
+  0.2, element tilts 0.2°, index 0.001, Abbe 1 %, Start At Row 1, test wavelength 0.633 µm,
+  focus compensation on, Zernike irregularity off. The focus compensator's range has no default.
+  Each tolerance is written Min = −v, Max = +v.
+- **Wizard rows.** TWAV first; then per surface Start to Stop: radius (TRAD Code 0 or 1, or
+  TFRN) on surfaces with power (different media on the two sides, or a mirror), TFRN for a plano
+  surface whatever the unit; TTHI on each finite thickness, adjusted by the first later surface
+  followed by air (none for the last air space); TSDX/TSDY and TIRX/TIRY or TSTX/TSTY on a
+  Standard surface with power, TEDX/TEDY and TETX/TETY (j to j) on another, a TIR there turned
+  into θ = atan(Δ/(2S)) about the other axis, S the clear semi-diameter; TIRR on Standard
+  surfaces with power. Then TEDX, TEDY, TETX, TETY on each lens group (from a surface followed by
+  glass to the first later surface followed by air, wholly inside Start to Stop); TIND on each
+  surface followed by glass and TABB = Vd × percent/100 where Vd is known (model glass, catalog);
+  COMP (Code 0) on the thickness before the image. Cells set by a solve or pickup are passed over
+  with a note. **Start At Row** 1 replaces the rows, n keeps rows 1 to n − 1 and replaces the
+  rest, −1 appends.
+- **Summary.** A `StudyReport`: a table of the tolerances (row, where, what, nominal from
+  `ToleranceNominal`, limits as ± v or Min / Max, unit, comment), the compensators with their
+  allowed change, the control rows as sentences, the ignored rows; no operand codes in the text.
+- **Data viewer.** `ToleranceDataSet.FromMonteCarlo`: one row per evaluated trial, columns
+  criterion, change, each compensator, each drawn tolerance. Histogram: bins from Min Value to
+  Max Value (the data's own when empty), values outside counted in one bar each side (the rule of
+  `MonteCarloResult.Histogram`). Yield: the empirical distribution function, the percentage of
+  trials at or below each value, at or above for the criterion of a larger-is-better run. CSV:
+  invariant culture, full precision.
+- **Quick Yield.** OpticStudio's reconstruction is "confidential and proprietary" (help). Built
+  instead: the quadratic model f(x) = N + Σ gᵢxᵢ + ½ Σ hᵢxᵢ² + Σᵢ<ⱼ Hᵢⱼxᵢxⱼ in the tolerance values.
+  Each row is evaluated alone at the two ends of its Monte Carlo range, Mid ± Δ (a zero end
+  replaced by half the other, a one-value range v by v and v/2), the parabola through (0, N) and
+  the two points giving gᵢ and hᵢ; each pair at (bᵢ, bⱼ) gives
+  Hᵢⱼ = (f(bᵢ, bⱼ) − f(bᵢ) − f(bⱼ) + N)/(bᵢbⱼ). Every evaluation is compensated exactly as a Monte
+  Carlo trial (§42, §45). The model is then sampled M times (default 10 000) with OP-65's
+  distributions and streams, sample k drawing what trial k draws; the predicted yield, statistics
+  and histogram are those of the samples, and the report gives the binomial standard error
+  √(q(1 − q)/M) of the samples (not the model's error). Cost 1 + 2n + n(n − 1)/2 evaluations
+  (1 + 2n without cross terms). A failed evaluation is named and no estimate is given. Radial
+  operands and TIRR are modelled along +y; their directions and angles are drawn but not used.
+- **Determinism.** The evaluations are independent slots on one thread each; the samples are
+  drawn in order on one thread: the result is bitwise the same at any thread count.
+- **Settings.** `OpticsToleranceSettings.Wizard` and `.QuickYield`, every member nullable.
+
+**Not built.** The vendor and grade presets (the help names Commercial, Precision, High Precision
+and Cell Phone Lens grades and gives no numbers); the wizard's Zernike irregularity (TEZI on a
+Standard surface needs OP-25); Save/Load of named wizard settings (they are saved with the lens);
+the .ZTD file and tolerance-script reported values (OP-67); Quick Yield's Precision levels and its
+own wavelength, field, sampling and compensation controls (the tolerance run's are used); the
+Histogram and Yield as entries of the analysis registry (they are in the viewer window).

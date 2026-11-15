@@ -27,6 +27,10 @@
                     ToolTip="Halve every tolerance's Min and Max."/>
             <Button Content="Undo" Command="{Binding UndoCommand}" Margin="8,0,4,4"/>
             <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,4,4"/>
+            <!-- OP-66 -->
+            <Button Content="Data viewer…" Command="{Binding OpenDataViewerCommand}" Margin="8,0,4,4"
+                    AutomationProperties.AutomationId="ToleranceDataViewerButton"
+                    ToolTip="The last sensitivity, Monte Carlo and Quick Yield results: the trial table, statistics, histogram and yield curve."/>
         </WrapPanel>
 
         <controls:FormGrid DockPanel.Dock="Top" Width="560" HorizontalAlignment="Left" Margin="0,0,0,4">
@@ -44,6 +48,147 @@
                 </controls:FormGrid>
                 <ListBox ItemsSource="{Binding FindResults}" MaxHeight="140" Margin="0,4,0,0"/>
             </DockPanel>
+        </Expander>
+
+        <!-- OP-66: Quick Yield (a predicted Monte Carlo yield from a quadratic model; uses the tolerance run's and the
+             Monte Carlo run's settings). -->
+        <Expander DockPanel.Dock="Bottom" Header="Quick Yield" Margin="0,4,0,0" AutomationProperties.AutomationId="QuickYieldExpander">
+            <ScrollViewer MaxHeight="460" VerticalScrollBarVisibility="Auto">
+                <DockPanel Margin="4">
+                    <controls:FormGrid DockPanel.Dock="Left" Width="380" VerticalAlignment="Top" IsEnabled="{Binding IsRunIdle}">
+                        <Label Content="Samples"/>
+                        <TextBox Text="{Binding QuickYieldSamples}" ToolTip="Samples of the quadratic model; sample k draws what Monte Carlo trial k draws. No lens is traced per sample."/>
+                        <Label Content="Cross terms"/>
+                        <CheckBox IsChecked="{Binding QuickYieldCrossTerms}" VerticalAlignment="Center"
+                                  ToolTip="Fit each pair's cross term (one lens evaluation per pair of rows)."/>
+                    </controls:FormGrid>
+                    <StackPanel Margin="8,0,0,0">
+                        <WrapPanel Margin="0,0,0,4">
+                            <Button Content="Run Quick Yield" Command="{Binding RunQuickYieldCommand}" Margin="0,0,4,4"
+                                    AutomationProperties.AutomationId="QuickYieldRunButton"/>
+                            <Button Content="Stop" Command="{Binding CancelRunCommand}" MinWidth="70" Margin="0,0,4,4"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding QuickYieldStatus}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <WrapPanel>
+                            <ContentControl Content="{Binding QuickYieldHistogramPlot, Converter={StaticResource PlotView}}" Margin="0,0,8,4"/>
+                            <ContentControl Content="{Binding QuickYieldCurvePlot, Converter={StaticResource PlotView}}" Margin="0,0,0,4"/>
+                        </WrapPanel>
+                        <TextBox Text="{Binding QuickYieldReportText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" MaxHeight="200" Margin="0,4,0,0"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap"/>
+                    </StackPanel>
+                </DockPanel>
+            </ScrollViewer>
+        </Expander>
+
+        <!-- OP-66: the Tolerance Summary (help: a listing "easier to understand for fabricators", no mnemonics). -->
+        <Expander DockPanel.Dock="Bottom" Header="Tolerance Summary" Margin="0,4,0,0" AutomationProperties.AutomationId="ToleranceSummaryExpander">
+            <DockPanel Margin="4">
+                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+                    <Button Content="Show summary" Command="{Binding ShowSummaryCommand}" Margin="0,0,4,4"/>
+                    <Button Content="Save summary…" Command="{Binding SaveSummaryCommand}" Margin="0,0,4,4" ToolTip="Markdown, HTML or plain text."/>
+                </WrapPanel>
+                <TextBox Text="{Binding SummaryText, Mode=OneWay}" IsReadOnly="True" FontFamily="Consolas" MaxHeight="260"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap"/>
+            </DockPanel>
+        </Expander>
+
+        <!-- OP-66: the Tolerance Wizard (help, "Tolerance Wizard"). Lengths are in lens units. -->
+        <Expander DockPanel.Dock="Bottom" Header="Tolerance Wizard" Margin="0,4,0,0" AutomationProperties.AutomationId="ToleranceWizardExpander">
+            <ScrollViewer MaxHeight="460" VerticalScrollBarVisibility="Auto">
+                <DockPanel Margin="4">
+                    <WrapPanel DockPanel.Dock="Top" DataContext="{Binding Wizard}">
+                        <GroupBox Header="Surface tolerances" Margin="0,0,8,4" Width="340">
+                            <controls:FormGrid>
+                                <Label Content="Radius"/>
+                                <CheckBox IsChecked="{Binding Radius}" VerticalAlignment="Center"/>
+                                <Label Content="Radius unit"/>
+                                <ComboBox ItemsSource="{Binding RadiusUnits}" SelectedItem="{Binding RadiusUnit}" DisplayMemberPath="Label"
+                                          ToolTip="A plano surface always takes fringes (help)."/>
+                                <Label Content="Radius tolerance"/>
+                                <TextBox Text="{Binding RadiusValue}"/>
+                                <Label Content="Thickness"/>
+                                <CheckBox IsChecked="{Binding Thickness}" VerticalAlignment="Center"/>
+                                <Label Content="Thickness tolerance"/>
+                                <TextBox Text="{Binding ThicknessValue}" ToolTip="The first air space after each thickness takes up the change (help, TTHI)."/>
+                                <Label Content="Decenter X"/>
+                                <CheckBox IsChecked="{Binding DecenterX}" VerticalAlignment="Center"/>
+                                <Label Content="Decenter X tolerance"/>
+                                <TextBox Text="{Binding DecenterXValue}"/>
+                                <Label Content="Decenter Y"/>
+                                <CheckBox IsChecked="{Binding DecenterY}" VerticalAlignment="Center"/>
+                                <Label Content="Decenter Y tolerance"/>
+                                <TextBox Text="{Binding DecenterYValue}"/>
+                                <Label Content="Tilt X"/>
+                                <CheckBox IsChecked="{Binding TiltX}" VerticalAlignment="Center"/>
+                                <Label Content="Tilt X unit"/>
+                                <ComboBox ItemsSource="{Binding TiltUnits}" SelectedItem="{Binding TiltXUnit}" DisplayMemberPath="Label"/>
+                                <Label Content="Tilt X tolerance"/>
+                                <TextBox Text="{Binding TiltXValue}"/>
+                                <Label Content="Tilt Y"/>
+                                <CheckBox IsChecked="{Binding TiltY}" VerticalAlignment="Center"/>
+                                <Label Content="Tilt Y unit"/>
+                                <ComboBox ItemsSource="{Binding TiltUnits}" SelectedItem="{Binding TiltYUnit}" DisplayMemberPath="Label"/>
+                                <Label Content="Tilt Y tolerance"/>
+                                <TextBox Text="{Binding TiltYValue}"/>
+                                <Label Content="S + A irregularity"/>
+                                <CheckBox IsChecked="{Binding Irregularity}" VerticalAlignment="Center"/>
+                                <Label Content="Irregularity (fringes)"/>
+                                <TextBox Text="{Binding IrregularityFringes}"/>
+                            </controls:FormGrid>
+                        </GroupBox>
+                        <GroupBox Header="Element tolerances" Margin="0,0,8,4" Width="300">
+                            <controls:FormGrid>
+                                <Label Content="Decenter X"/>
+                                <CheckBox IsChecked="{Binding ElementDecenterX}" VerticalAlignment="Center"/>
+                                <Label Content="Decenter X tolerance"/>
+                                <TextBox Text="{Binding ElementDecenterXValue}"/>
+                                <Label Content="Decenter Y"/>
+                                <CheckBox IsChecked="{Binding ElementDecenterY}" VerticalAlignment="Center"/>
+                                <Label Content="Decenter Y tolerance"/>
+                                <TextBox Text="{Binding ElementDecenterYValue}"/>
+                                <Label Content="Tilt X"/>
+                                <CheckBox IsChecked="{Binding ElementTiltX}" VerticalAlignment="Center"/>
+                                <Label Content="Tilt X (degrees)"/>
+                                <TextBox Text="{Binding ElementTiltXDegrees}"/>
+                                <Label Content="Tilt Y"/>
+                                <CheckBox IsChecked="{Binding ElementTiltY}" VerticalAlignment="Center"/>
+                                <Label Content="Tilt Y (degrees)"/>
+                                <TextBox Text="{Binding ElementTiltYDegrees}"/>
+                            </controls:FormGrid>
+                        </GroupBox>
+                        <GroupBox Header="Index tolerances and options" Margin="0,0,8,4" Width="320">
+                            <controls:FormGrid>
+                                <Label Content="Index"/>
+                                <CheckBox IsChecked="{Binding Index}" VerticalAlignment="Center"/>
+                                <Label Content="Index tolerance"/>
+                                <TextBox Text="{Binding IndexValue}"/>
+                                <Label Content="Abbe"/>
+                                <CheckBox IsChecked="{Binding Abbe}" VerticalAlignment="Center"/>
+                                <Label Content="Abbe tolerance (%)"/>
+                                <TextBox Text="{Binding AbbePercent}"/>
+                                <Label Content="Start at row"/>
+                                <TextBox Text="{Binding StartAtRow}" ToolTip="1 replaces every row; n keeps rows 1 to n − 1; −1 appends."/>
+                                <Label Content="Test wavelength (µm)"/>
+                                <TextBox Text="{Binding TestWavelength}"/>
+                                <Label Content="Start at surface"/>
+                                <TextBox Text="{Binding StartSurface}"/>
+                                <Label Content="Stop at surface"/>
+                                <TextBox Text="{Binding StopSurface}" ToolTip="0 for the surface before the image."/>
+                                <Label Content="Use focus compensation"/>
+                                <CheckBox IsChecked="{Binding FocusCompensator}" VerticalAlignment="Center"/>
+                                <Label Content="Focus compensator ±"/>
+                                <TextBox Text="{Binding FocusCompensatorRange, UpdateSourceTrigger=LostFocus}" ToolTip="Lens units; empty for none (Min = Max = 0)."/>
+                            </controls:FormGrid>
+                        </GroupBox>
+                    </WrapPanel>
+                    <WrapPanel DockPanel.Dock="Top">
+                        <Button Content="Apply wizard" Command="{Binding ApplyWizardCommand}" Margin="0,0,4,4"
+                                AutomationProperties.AutomationId="ToleranceWizardApplyButton"/>
+                        <Button Content="Reset" Command="{Binding ResetWizardCommand}" Margin="0,0,4,4"/>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding WizardStatus}" TextWrapping="Wrap"/>
+                </DockPanel>
+            </ScrollViewer>
         </Expander>
 
         <!-- OP-65: the Monte Carlo run (OpticStudio's Tolerancing dialog, Monte Carlo tab, as far as built). It uses
