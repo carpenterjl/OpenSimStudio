@@ -64,10 +64,10 @@ public static partial class ZplLibrary
         Fn0("PVPY", "ZPLM's Data4 (0 outside an operand).", m => N(m.Session.PassValues[3]));
         Fn0("PVEX", "ZPLM's Data5 (0 outside an operand).", m => N(m.Session.PassValues[4]));
         Fn0("PVEY", "ZPLM's Data6 (0 outside an operand).", m => N(m.Session.PassValues[5]));
-        Fn("SOSO", 0, 1, "Code 0: the surface of the macro solve being computed; fails outside a solve. Code 1 (the NSC object) is not bound.", (m, v) =>
+        Fn("SOSO", 0, 1, "Code 0: the surface of the macro solve being computed; fails outside a solve. Code 1 (the NSC object) is not bound: solves on non-sequential object data belong to the Non-Sequential Component Editor, plan item OP-71.", (m, v) =>
         {
             int code = v.Length == 0 ? 0 : Int(v, 0, "the code");
-            if (code != 0) throw new ZplRuntimeException($"code {code} is not bound in this version (code 0, the solve's surface, is).");
+            if (code != 0) throw new ZplRuntimeException(code == 1 ? "code 1 (the non-sequential object of a solve) is not bound: solves on object data belong to the Non-Sequential Component Editor, plan item OP-71 (code 0, the solve's surface, is bound)." : $"code {code} is not bound in this version (code 0, the solve's surface, is).");
             return N(m.Session.SolveSurface ?? throw new ZplRuntimeException("the macro is not running as a solve, so there is no solve surface."));
         });
 
@@ -354,7 +354,7 @@ public static partial class ZplLibrary
         FunctionNotBound("$COATINGPATH", "Not bound: the program has no coating file folder.");
         FunctionNotBound("$EXTENSIONPATH", "Not bound.");
         FunctionNotBound("$GLASSPATH", "Not bound.");
-        FunctionNotBound("$OBJECTPATH", "Not bound: no non-sequential objects.");
+        FunctionNotBound("$OBJECTPATH", "Not bound: there is no objects folder; object files (polygon objects, CAD parts) are plan items OP-74 and OP-75.");
         FunctionNotBound("$PROGRAMPATH", "Not bound.");
         foreach (var g in new[] { "ASPR", "XMIN", "XMAX", "YMIN", "YMAX", "PIXX", "PIXY" })
             FunctionNotBound(g, "Not bound: macro graphics are not built.");

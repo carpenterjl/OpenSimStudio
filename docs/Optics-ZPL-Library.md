@@ -11,7 +11,7 @@ docs/Optics-Conventions.md §56; the user's view is in docs/Optics-User-Guide.md
 The table is generated from `ZplLibrary.TableMarkdown()`; `ZplConformanceTests` checks that this
 page holds it unchanged and that every bound name has a conformance macro.
 
-Counts: 218 keywords (85 bound, the language's own included), 156 numeric functions (96 bound),
+Counts: 218 keywords (89 bound, the language's own included), 156 numeric functions (102 bound),
 32 string functions (24 bound).
 
 | Name | Kind | Bound | What it does here, or why not |
@@ -49,12 +49,12 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | DELETEFILE | keyword | yes | Deletes a file (a name without a folder is in the macro folder); a file that does not exist is an error. |
 | DELETEMCO | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
 | DELETEMFO | keyword | yes | Deletes a row, or every row (ALL). |
-| DELETEOBJECT | keyword | no | Not bound: the non-sequential model is not built. |
+| DELETEOBJECT | keyword | no | Not bound: inserting and deleting objects (renumbering the references to them) is the Non-Sequential Component Editor's, plan item OP-71. |
 | DELETETOL | keyword | no | Not bound: the tolerance editor's keywords are not bound. |
 | EDVA | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | END | keyword | yes | Language core (Conventions §56). |
 | EXPORTBMP | keyword | no | Not bound: macro graphics and image files are not built. |
-| EXPORTCAD | keyword | no | Not bound: the non-sequential model is not built. |
+| EXPORTCAD | keyword | yes | Writes the sequential lens as IGES (VEC1(1) = 0), STEP (1) or STL (3) through OP-96's CAD export, with the help's VEC1(1) to VEC1(24); a name without a folder is in the macro folder. Read: the file type, the spline points (16 to 512; checked, not used: the writers fit to the tolerance), first and last surface, surfaces as solids (1 for STEP, 0 for IGES), the ray pattern (XY, X, Y, ring, none, grid), number of rays, wavelength and field (0 all), delete vignetted, the tolerance code. Refused by name: SAT (OP-76); layers, dummy surfaces and their thickness, the list and solid-beam patterns, the NSC trace flags, chosen or all configurations, mixed-mode object ranges, footprints and the chief ray when not 0; a filter string; a system in non-sequential mode. |
 | EXPORTJPG | keyword | no | Not bound: macro graphics and image files are not built. |
 | FINDFILE | keyword | yes | Puts the next file name (without its folder) matching the filter into the string variable, in ordinal order; the empty string when there are no more. A new filter starts again. |
 | FLDX | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
@@ -77,7 +77,7 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | GETLSF | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETMTF | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETMTFUSER1D | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
-| GETNSCMTF | keyword | no | Not bound: the non-sequential model is not built. |
+| GETNSCMTF | keyword | no | Not bound: it reads detector objects, plan item OP-79 (the non-sequential image-quality analyses are OP-87). |
 | GETPSF | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETSYSTEMDATA | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETTEXTFILE | keyword | yes | Writes an analysis's text (its default settings) to a file (UTF-8): the 3-letter code of the help's String Codes for the analyses this program has of that name (Conventions §56); no code is the single ray trace (Rtr), as the help says. A settings file is not read or written (fails). |
@@ -111,24 +111,24 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | INSERTCONFIG | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
 | INSERTMCO | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
 | INSERTMFO | keyword | yes | Inserts a BLNK row at row (1 to the row count + 1). |
-| INSERTOBJECT | keyword | no | Not bound: the non-sequential model is not built. |
+| INSERTOBJECT | keyword | no | Not bound: inserting and deleting objects (renumbering the references to them) is the Non-Sequential Component Editor's, plan item OP-71. |
 | INSERTTOL | keyword | no | Not bound: the tolerance editor's keywords are not bound. |
 | LABEL | keyword | yes | Language core (Conventions §56). |
 | LINE | keyword | no | Not bound: macro graphics and image files are not built. |
 | LOADARCHIVE | keyword | no | Not bound (LOADLENS reads a .zar). |
 | LOADCATALOG | keyword | no | Not bound: catalogs are loaded once per run. |
-| LOADDETECTOR | keyword | no | Not bound: the non-sequential model is not built. |
+| LOADDETECTOR | keyword | no | Not bound: detector objects and their data are plan item OP-79. |
 | LOADLENS | keyword | yes | Replaces the lens with a .zmx or .zar (OP-94 reader), .osslens or .ossproj file; a name without a folder is in the lens folder. Appending (appendflag ≠ 0) and session files are not bound. |
 | LOADMERIT | keyword | no | Not bound: OpticStudio's .MF file layout is not published. |
 | LOADTOLERANCE | keyword | no | Not bound. |
 | LOCALTOGLOBAL | keyword | no | Not bound. |
 | LOCKWINDOW | keyword | no | Not bound: macros here do not drive analysis windows or their settings files. |
-| MAKEFACETLIST | keyword | no | Not bound: the non-sequential model is not built. |
+| MAKEFACETLIST | keyword | no | Not bound: imported CAD parts are plan item OP-75. |
 | MAKEFOLDER | keyword | yes | Creates a folder; an existing folder is left alone. |
 | MODIFYSETTINGS | keyword | no | Not bound: macros here do not drive analysis windows or their settings files. |
-| NSLT | keyword | no | Not bound: the non-sequential model is not built. |
-| NSTR | keyword | no | Not bound: the non-sequential model is not built. |
-| NSTR2 | keyword | no | Not bound: the non-sequential model is not built. |
+| NSLT | keyword | no | Not bound: Lightning Trace is plan item OP-85. |
+| NSTR | keyword | no | Not bound: a trace starts from the system's source objects, which are plan item OP-77 (OP-70's source stand-in is for code, not a saved object); saving rays to ZRD and PAF files is OP-83. |
+| NSTR2 | keyword | no | Not bound: a trace starts from the system's source objects, which are plan item OP-77 (OP-70's source stand-in is for code, not a saved object); saving rays to ZRD and PAF files is OP-83. |
 | NUMFIELD | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | NUMWAVE | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | OPEN | keyword | yes | Opens a text file for READ; a name without a folder is taken in the macro folder. |
@@ -162,14 +162,14 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | READSKIP | keyword | yes | Skips n characters, or to the end of the line when n is negative. |
 | READSTRING | keyword | yes | Reads a whole line into a string variable (at most 359 characters, as the help says); at the end of the file EOFF() becomes 1 and the variable is set to the empty string. |
 | RELEASE | keyword | yes | Language core (Conventions §56). |
-| RELOADOBJECTS | keyword | no | Not bound: the non-sequential model is not built. |
+| RELOADOBJECTS | keyword | no | Not bound: objects read from files (polygon objects, CAD parts) are plan items OP-74 and OP-75; OP-70's objects are parametric, so there is nothing to reload. |
 | REM | keyword | yes | Language core (Conventions §56). |
 | REMOVEVARIABLES | keyword | yes | Fixes every variable cell of the lens data and the multi-configuration table. |
 | RESUMEUPDATES | keyword | yes | Accepted; counted (see SUSPENDUPDATES). |
 | RENAMEFILE | keyword | yes | Renames a file; an existing target is an error. |
 | REWIND | keyword | yes | Erases the last line printed to the screen; on output sent to a file it fails (not bound there). |
 | SAVEARCHIVE | keyword | no | Not bound. |
-| SAVEDETECTOR | keyword | no | Not bound: the non-sequential model is not built. |
+| SAVEDETECTOR | keyword | no | Not bound: detector objects and their data are plan item OP-79. |
 | SAVELENS | keyword | yes | Saves the lens as .zmx (OP-94 writer) or .osslens; without a name, to the lens's own file. Session files are not bound. |
 | SAVEMERIT | keyword | no | Not bound: OpticStudio's .MF file layout is not published. |
 | SAVETOLERANCE | keyword | no | Not bound. |
@@ -180,11 +180,11 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | SETAIMDATA | keyword | no | Not bound (SETAIM and SETSYSTEMPROPERTY 70–78 are). |
 | SETAPODIZATION | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | SETCONFIG | keyword | yes | Makes configuration n current. |
-| SETDETECTOR | keyword | no | Not bound: the non-sequential model is not built. |
+| SETDETECTOR | keyword | no | Not bound: detector objects and their data are plan item OP-79. |
 | SETMCOPERAND | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
-| SETNSCPARAMETER | keyword | no | Not bound: the non-sequential model is not built. |
-| SETNSCPOSITION | keyword | no | Not bound: the non-sequential model is not built. |
-| SETNSCPROPERTY | keyword | no | Not bound: the non-sequential model is not built. |
+| SETNSCPARAMETER | keyword | yes | Sets a parameter of an object (surface 1), lens units as saved; the parameters of OP-70's types only (Sphere 1–2, Rectangle 1–2, Standard Lens 1–9). |
+| SETNSCPOSITION | keyword | yes | Sets x, y, z (lens units) or tilt x, y, z (degrees) of an object (surface 1), codes 1 to 6. |
+| SETNSCPROPERTY | keyword | yes | Sets a property of an object (surface 1) by the help's codes OP-70 holds: 0 type (NSC_SPHE, NSC_RECT, NSC_SLEN), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 29 "Face Is" (0 Object Default, 1 Reflective, 2 Absorbing). A new type keeps the saved parameters (the help does not say what becomes of them). Any other code is refused by number with the plan item it waits for. |
 | SETOPERAND | keyword | yes | Sets a Merit Function Editor cell: column 1 type (ONUM number), 2 int1, 3 int2, 4–7 data1–4, 8 target, 9 weight, 10 comment, 11 type by name, 12–13 data5–6. |
 | SETSTDD | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | SETSURFACEPROPERTY | keyword | yes | Sets a surface property by code or mnemonic; bound codes: 0 TYPE (the surface names this program builds), 1 COMM, 2 CURV, 3 THIC, 4 GLAS, 5 CONI, 6 SDIA, 7 TCE, 8 COAT, 10 PARM, 14 row color, 16 ignore, 23 APDX, 24 APDY, 27 CHZN, 28 MCSD, 60–65 tilt/decenter before, 66 APU, 70–75 after, 76–77 coordinate return, 90–92 draw flags. Not on a lens with a multi-configuration table. |
@@ -229,11 +229,11 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | ZBFSUM | keyword | yes | Coherent sum (coherent ≠ 0) of two ZBF files with the same sampling, point spacing, polarization and pilot beam (so the same reference radii), written to the third file with the first file's header. Refused: the incoherent sum (the help does not say how its real-valued result is stored) and files that differ (the help's scaling and interpolation is not built). |
 | ZBFTILT | keyword | yes | Adds the phase θ = (x − cx)·tx + (y − cy)·ty (radians; x, y in lens units from the sample (nx/2 + 1, ny/2 + 1)) to a ZBF file's stored phase, Ex and Ey, and writes it back (binary, the header unchanged). |
 | ZBFWRITE | keyword | yes | Writes two DECLAREd arrays (laid out as ZBFREAD fills them) to a binary ZBF file in the current lens units. Total power and peak irradiance (positions 12, 13) are not read: they follow from the field. nx and ny must be powers of 2 from 32 to 16384. |
-| ZRDAPPEND | keyword | no | Not bound: the non-sequential model is not built. |
-| ZRDFILTER | keyword | no | Not bound: the non-sequential model is not built. |
-| ZRDPLAYBACK | keyword | no | Not bound: the non-sequential model is not built. |
-| ZRDSAVERAYS | keyword | no | Not bound: the non-sequential model is not built. |
-| ZRDSUM | keyword | no | Not bound: the non-sequential model is not built. |
+| ZRDAPPEND | keyword | no | Not bound: the ray database (ZRD) files and filter strings are plan item OP-83. |
+| ZRDFILTER | keyword | no | Not bound: the ray database (ZRD) files and filter strings are plan item OP-83. |
+| ZRDPLAYBACK | keyword | no | Not bound: the ray database (ZRD) files and filter strings are plan item OP-83. |
+| ZRDSAVERAYS | keyword | no | Not bound: the ray database (ZRD) files and filter strings are plan item OP-83. |
+| ZRDSUM | keyword | no | Not bound: the ray database (ZRD) files and filter strings are plan item OP-83. |
 | ABSO | numeric function | yes | Absolute value. |
 | ACOS | numeric function | yes | Arc cosine in radians; \|x\| > 1 fails. |
 | APMN | numeric function | yes | Aperture: circular minimum radius; rectangular or elliptical x half-width; spider arm width; 0 without an aperture. |
@@ -258,7 +258,7 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | ETIM | numeric function | yes | Seconds since the last TIMER (or the start of the run). |
 | EXPE | numeric function | yes | e to the power x. |
 | EXPT | numeric function | yes | 10 to the power x. |
-| FICL | numeric function | no | Not bound: fiber coupling is not built. |
+| FICL | numeric function | yes | The single-mode fiber coupling efficiency S·T (OP-50's Single Mode Fiber Coupling engine) with the 19 settings the help (Using the FICL() Function) puts in VECn positions 0 to 18: sampling (1 → 32 × 32, 2 → 64 × 64, …), wavelength and field numbers, ignore source, source and receiver NA x, source angles, receiver tilts and decenters (lens units), the two align-to-chief-ray flags, polarization (1 is refused: not built), source and receiver NA y (0 → NA x), Huygens. Flags must be 0 or 1. |
 | FLDX | numeric function | yes | Field x (degrees or lens units, by the field type). |
 | FLDY | numeric function | yes | Field y. |
 | FTAN | numeric function | yes | Field tangential angle (degrees). |
@@ -292,7 +292,7 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | ISMS | numeric function | no | Not bound. |
 | LOGE | numeric function | yes | Natural logarithm; x ≤ 0 fails. |
 | LOGT | numeric function | yes | Base-10 logarithm; x ≤ 0 fails. |
-| LOST | numeric function | no | Not bound: the non-sequential model is not built. |
+| LOST | numeric function | no | Not bound: it reads the most recent NSTR trace, and NSTR waits for source objects (plan item OP-77). |
 | LVAL | numeric function | yes | Number of a string in the current culture's decimal separator; text that is not a number fails. |
 | MAGN | numeric function | yes | √(x² + y²). |
 | MAXF | numeric function | yes | The largest radial field (degrees or lens units). |
@@ -303,17 +303,17 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | MFCN | numeric function | yes | Evaluates the merit function over every configuration and returns its value; a row that cannot be computed fails, naming it. |
 | NCON | numeric function | yes | The number of configurations. |
 | NFLD | numeric function | yes | The number of fields. |
-| NOBJ | numeric function | no | Not bound: the non-sequential model is not built. |
-| NPAR | numeric function | no | Not bound: the non-sequential model is not built. |
-| NPOS | numeric function | no | Not bound: the non-sequential model is not built. |
-| NPRO | numeric function | no | Not bound: the non-sequential model is not built. |
-| NSDC | numeric function | no | Not bound: the non-sequential model is not built. |
-| NSDD | numeric function | no | Not bound: the non-sequential model is not built. |
-| NSDE | numeric function | no | Not bound: the non-sequential model is not built. |
-| NSDP | numeric function | no | Not bound: the non-sequential model is not built. |
+| NOBJ | numeric function | yes | The number of non-sequential objects; the surface must be 1 (the system's objects, as in non-sequential mode; mixed mode is OP-86). |
+| NPAR | numeric function | yes | A parameter of an object (surface 1), as saved in lens units; the parameters of OP-70's types only (Sphere 1–2, Rectangle 1–2, Standard Lens 1–9). |
+| NPOS | numeric function | yes | x, y, z (lens units) or tilt x, y, z (degrees) of an object (surface 1) by SETNSCPOSITION's codes 1 to 6. The help's NPOS page names seven values (the reference object first) for codes 1 to 6; the codes are read as SETNSCPOSITION's, which it points to, and the reference object is NPRO code 2. |
+| NPRO | numeric function | yes | A property of an object (surface 1) by SETNSCPROPERTY's codes OP-70 holds: 0 type (NSC_SPHE, NSC_RECT, NSC_SLEN), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 29 "Face Is" (0 Object Default, 1 Reflective, 2 Absorbing); string values go to $BUFFER() and 0 is returned. Any other code is refused by number. |
+| NSDC | numeric function | no | Not bound: detector rectangle (coherent) and detector polar objects are plan item OP-79. |
+| NSDD | numeric function | no | Not bound: detector data follows an NSTR trace, which waits for source objects (OP-77); detector objects are OP-79 (OP-70's detecting stand-in counts flux only). |
+| NSDE | numeric function | no | Not bound: detector data follows an NSTR trace, which waits for source objects (OP-77); detector objects are OP-79 (OP-70's detecting stand-in counts flux only). |
+| NSDP | numeric function | no | Not bound: detector rectangle (coherent) and detector polar objects are plan item OP-79. |
 | NSUR | numeric function | yes | The image surface's number (surfaces are 0 to NSUR(); the help's Example Macro 1 reads the image intercept as RAYX(NSUR())). |
 | NWAV | numeric function | yes | The number of wavelengths. |
-| OBJC | numeric function | no | Not bound: the non-sequential model is not built. |
+| OBJC | numeric function | yes | The first non-sequential object whose comment matches the string, case ignored; −1 when none does. |
 | OCOD | numeric function | yes | The same number as ONUM, for OPEV and OPEW. |
 | ONUM | numeric function | yes | This program's number of a merit operand code (its place in the operand registry, from 1), or 0 for an unknown code. The numbers are not OpticStudio's. |
 | OPDC | numeric function | no | Not bound: the OPD of one RAYTRACE ray needs the chief ray and the exit pupil reference sphere the help does not define for a single ray. |
@@ -363,7 +363,7 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | SLEN | numeric function | yes | Number of characters of a string. |
 | SOLM | numeric function | no | Not bound. |
 | SOLV | numeric function | no | Not bound. |
-| SOSO | numeric function | yes | Code 0: the surface of the macro solve being computed; fails outside a solve. Code 1 (the NSC object) is not bound. |
+| SOSO | numeric function | yes | Code 0: the surface of the macro solve being computed; fails outside a solve. Code 1 (the NSC object) is not bound: solves on non-sequential object data belong to the Non-Sequential Component Editor, plan item OP-71. |
 | SPRO | numeric function | yes | A surface property by integer code (as SETSURFACEPROPERTY's bound codes); string values go to $BUFFER() and 0 is returned. |
 | SPRX | numeric function | yes | As SPRO with value2: code 10 gives parameter value2. |
 | SRCN | numeric function | yes | The n-th surface whose comment matches A$ (backwards for negative n; the count for n = 0), or −1. |
@@ -410,7 +410,7 @@ Counts: 218 keywords (85 bound, the language's own included), 156 numeric functi
 | $MACROPATH | string function | yes | The macro folder (fails when none is set). |
 | $NEWLINE | string function | yes | A newline. The help says "the tab character (\n)"; \n is the newline, which this returns. |
 | $NOTE | string function | yes | Line n of the notes (a line ends at a newline or after 100 characters); empty past the end. |
-| $OBJECTPATH | string function | no | Not bound: no non-sequential objects. |
+| $OBJECTPATH | string function | no | Not bound: there is no objects folder; object files (polygon objects, CAD parts) are plan items OP-74 and OP-75. |
 | $PATHNAME | string function | yes | The folder of the lens file (fails when the lens has no file). |
 | $PROGRAMPATH | string function | no | Not bound. |
 | $QUOTE | string function | yes | The double quote character. |
