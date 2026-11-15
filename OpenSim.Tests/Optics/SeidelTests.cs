@@ -92,14 +92,16 @@ public sealed class SeidelTests
     /// Z11 is W040 times the Z11 of ρ⁴; at the full field the coma term W131·Py·ρ² gives Z7 = W131
     /// times the Z7 of Py·ρ² (field along +y, so the meridional pupil coordinate is Py). Those
     /// two factors are fitted here on the same nodes, so no Zernike normalisation is typed. The
-    /// higher orders are ~(a/f)² ≈ 4·10⁻⁵ and Θ² ≈ 3·10⁻⁴ (1°) of the coefficients; the tolerance
-    /// is 2·10⁻³. This also pins the sign: W040 > 0 means the rim ray's wavefront is ahead
+    /// higher orders are ~(a/f)² ≈ 4·10⁻⁵ and c·Θ² of the coefficients. The field term's c is
+    /// not 1: Z7/(W131·Z7(Py·ρ²)) − 1 measured on this lens at 2°, 1°, 0.5° is −1.4·10⁻², −3.6·10⁻³,
+    /// −8.9·10⁻⁴ (quartering with each halving, so fifth order, c ≈ 12), so the full field is
+    /// 0.25°, where the remainder is ~2·10⁻⁴; the tolerance is 2·10⁻³. This also pins the sign: W040 > 0 means the rim ray's wavefront is ahead
     /// (Conventions §6), as for this undercorrected singlet.
     /// </summary>
     [Fact]
     public void WaveCoefficients_AreTheZernikeFitOfTheOpd_InTheThirdOrderLimit()
     {
-        var system = F.Sys(0.001, new[] { 0.0, 1.0 });
+        var system = F.Sys(0.001, new[] { 0.0, 0.25 });
         var lens = F.Singlet(system);
         var r = SeidelEngine.Compute(lens, system);
         var w = r.Wave(r.Sum);
