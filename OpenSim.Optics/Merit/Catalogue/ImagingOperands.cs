@@ -63,6 +63,7 @@ public static partial class ImagingOperands
         ["BIOD"] = "no biocular dipvergence engine.",
         ["OSCD"] = "no offense-against-the-sine-condition engine (Welford's definition and Shack's real-ray form).",
         ["SPCH"] = "spherochromatism needs the real marginal axial colour of the extreme wavelengths; the longitudinal aberration engine gives the crossings, but the help's sign and zone reading is not done.",
+        ["TRAD"] = "the x twin of TRAE (\"the x component of the TRAR only\" with TRAC's restrictions); not built for the same reason as TRAE.",
         ["TRAE"] = "the help's definition (\"the y component of the TRAR only\" with TRAC's restrictions) contradicts itself; not built.",
         ["CEHX"] = "the Huygens PSF engine does not return the PSF centroid's image position.",
         ["CEHY"] = "as CEHX.",

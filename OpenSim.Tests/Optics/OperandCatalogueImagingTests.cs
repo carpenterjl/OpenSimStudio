@@ -73,7 +73,7 @@ public sealed class OperandCatalogueImagingTests
     public static readonly string[] BriefCodes =
     (
         "AMAG CARD ENPP EFLA EFLX EFLY EPDI EXPD EXPP ISFN ISNA LINV OBSN PIMH PMAG POWF POWP POWR SFNO TFNO WFNO " +
-        "ABCD ASTI AXCL BIOC BIOD BSER COMA DIMX DISA DISC DISG DIST FCGS FCGT FCUR LACL LONA OSCD PETC PETZ RSCE RSCH RSRE RSRH RWCE RWCH RWRE RWRH SMIA SPCH SPHA TRAE TRAI ZERN " +
+        "ABCD ASTI AXCL BIOC BIOD BSER COMA DIMX DISA DISC DISG DIST FCGS FCGT FCUR LACL LONA OSCD PETC PETZ RSCE RSCH RSRE RSRH RWCE RWCH RWRE RWRH SMIA SPCH SPHA TRAD TRAE TRAI ZERN " +
         "GMTN GMTX MSWA MSWN MSWS MSWT MSWX MTFN MTFX MTHA MTHN MTHS MTHT MTHX " +
         "STRH DENC DENF ERFP GENC GENF XENC XENF " +
         "PANA PANB PANC PARA PARB PARC PARR PARX PARY PARZ PATX PATY " +
@@ -86,7 +86,7 @@ public sealed class OperandCatalogueImagingTests
     {
         var registry = MeritOperandRegistry.CreateDefault();
         var mine = ImagingOperands.Definitions().Select(d => d.Code).ToHashSet();
-        Assert.Equal(133, BriefCodes.Length);
+        Assert.Equal(134, BriefCodes.Length);   // 133 briefed + TRAD, found by the merged coverage test
         Assert.Equal(BriefCodes.Length, BriefCodes.Distinct().Count());
         foreach (var code in BriefCodes)
         {
