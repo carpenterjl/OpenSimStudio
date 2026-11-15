@@ -691,6 +691,10 @@ public static class SurfaceTypes
         // from their OpticStudio 2025 R2 help pages (saved under plans/sources/optics/op-25-help/).
         list.AddRange(Freeform.FreeformLayouts.Build());
 
+        // OP-26: diffractive, grating and holographic surfaces (docs/Optics-Conventions.md §57),
+        // from their OpticStudio 2025 R2 help pages (saved under plans/sources/optics/op-26-help/).
+        list.AddRange(Diffractive.DiffractiveLayouts.Build());
+
         return list.ToArray();
     }
 }

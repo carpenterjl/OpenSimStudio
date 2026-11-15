@@ -220,6 +220,9 @@ public sealed class ParaxialSystem
         {
             var s = surfaces[j];
             power[j] = s.Curvature * (signed[j] - signed[j - 1]) + s.ThinLensPower;
+            // OP-26: a diffractive phase's power scales with the wavelength (in the system's air).
+            if (s.DiffractivePowerPerWavelength != 0)
+                power[j] += s.DiffractivePowerPerWavelength * OpticsConventions.MicrometersToMeters(WavelengthMicrometers);
             // OP-27: an ABCD matrix on (y, u) in reduced form on (y, n·u), signed indices.
             if (s.SlopeMatrix is { } abcd)
             {

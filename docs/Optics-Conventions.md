@@ -1353,6 +1353,18 @@ single place in the code, so a correction is one line and its test.
     Check: each conformance macro of `ZplConformanceTests` run in OpticStudio on the same singlet,
     the outputs compared.
 
+53. **Diffractive surface readings** (OP-26, section 57). Where a help page leaves the surface open:
+    - *Curved substrates.* The phase written in the intercept's x and y is projected on the
+      tangent plane (the surface gradient); the help gives the rule only for a plane.
+    - *Wavelength.* The phase acts with the wavelength in the system's air, as the indices do.
+    - *Evanescent order.* Reported as `EvanescentOrder`, not as a ray miss.
+    - *Hologram 2.* The second construction beam is the converging one; the Toroidal Hologram's
+      flag 0 is refused; "10⁸ lens units" is applied as 10⁵ m.
+    - *Variable Line Space Grating* traced in transmission as well as reflection, by the same rule.
+    - *Diffraction order* need not be a whole number.
+    Check: the diffracted direction cosines and OPD of a few rays through each type against
+    OpticStudio's Single Ray Trace.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -5014,3 +5026,90 @@ and PAUSE ask in dialogs. A run that changed only surfaces is one undoable Lens 
 any other change loads the whole record. `opensim optics macro <macro.zpl> [--lens FILE]
 [--arg NAME=VALUE,...] [--macro-folder DIR] [--lens-folder DIR] [--out FILE] [--save-lens FILE]`
 runs a macro from the command line ($GETARG("IsAutomated") is "True"); a macro error gives exit 2.
+
+## 57. Diffractive, grating and holographic surfaces
+
+OP-26 adds eleven sequential surface types in `OpenSim.Optics/Sequential/Diffractive/`,
+registered by `SurfaceTypes` (layouts in `DiffractiveLayouts.cs`) so the Lens Data Editor, saved
+lenses, solves and Scale Lens handle them like the other types. Each definition and parameter
+table is copied from the type's OpticStudio 2025 R2 help page (saved under
+`plans/sources/optics/op-26-help/`).
+
+**One mechanism** (`DiffractiveShape`). A type gives a substrate (the Standard conic of the
+surface's radius and conic, the Even Asphere or the Toroidal surface) and a phase Φ(P), radians
+with the order included, with its 3-D gradient ∇Φ. At the intersection point, with unit normal
+n̂, incoming unit direction d and indices n before and n′ after (n′ = n for MIRROR):
+
+- G = ∇Φ − (∇Φ·n̂)n̂, the surface gradient;
+- v_t = n(d − (d·n̂)n̂) + (λ/2π)G, the new tangential part of n′d′;
+- n′d′ = v_t + s·√(n′² − |v_t|²)·n̂, s the sign of d·n̂ in transmission, its opposite in
+  reflection;
+- n′² < |v_t|² stops the ray with `RayStatus.EvanescentOrder` (total internal reflection when
+  G = 0); OpticStudio reports a ray miss there;
+- the optical path gains (λ/2π)Φ.
+
+This reproduces the help's l′ = l + (λ/2π)∂Φ/∂x, m′ = m + (λ/2π)∂Φ/∂y and "Optical Path =
+Optical Path + (λ/2π)φ" ("Binary 1"), the grating equation n₂sin θ₂ − n₁sin θ₁ = MλT ("Diffraction
+Grating") and Welford's n̂ × (r′ₒ − r′ᵣ) = (mλp/λc) n̂ × (rₒ − rᵣ) ("Hologram 1"). Welford's book is
+not on this machine; the projection form is derived in `DiffractiveShape`'s comments. λ is the
+wavelength in the system's air (`SurfaceRedirectInput.AirWavelength`, the table wavelength),
+because indices and optical paths are relative to that air: dividing the absolute grating
+equation by n_air turns λvac into λair. This is OP-26's one change to `SequentialTrace.cs`: it
+passes that wavelength to the redirect hook.
+
+| Type | Substrate | Phase Φ | Parameters |
+|---|---|---|---|
+| Diffraction Grating | Standard | 2πM·T·y | 1 T (lines/µm), 2 M |
+| Toroidal Grating | Toroidal, no aspheric terms | 2πM·T·y | 1 radius of rotation, 2 T, 3 M |
+| Variable Line Space Grating | plane only | (2πM/λ₀)(S_α − S_β), S_c = √(y² + L² − 2Ly·c) | 1 M, 2 L, 3 cos α₀, 4 cos β₀, 5 λ₀ (µm) |
+| Binary Optic 1 | Even Asphere | M·Σ Aᵢ Eᵢ(x/R, y/R), extended polynomial terms, radians | 0 M, 1–8 α, 9 absolute, 13 N (230), 14 R, 15–244 |
+| Binary Optic 2 | Even Asphere | M·Σ Aᵢ ρ²ⁱ, radians | 0 M, 1–8 α, 13 N (240), 14 R, 15–254 |
+| Zernike Fringe Phase | Standard | M·Σ 2πAᵢ Zᵢ, Fringe, waves | 0 M, 1 extrapolate, 13 N (37), 14 R, 15–51 |
+| Zernike Standard Phase | Standard | the same, Standard terms | 0 M, 1 extrapolate, 13 N (231), 14 R, 15–245 |
+| Zernike Annular Phase | Standard | the same, annular terms, obscuration ε | 0 M, 1 extrapolate, 3 ε, 13 N (80), 14 R, 15–94 |
+| Hologram 1 | Standard | m(2π/λc)(D₁ − D₂), both beams diverging | 1–6 points, 7 λc (µm), 8 m, 13 volume (0 only) |
+| Hologram 2 | Standard | m(2π/λc)(D₁ + D₂), the second beam converging | as Hologram 1 |
+| Toroidal Hologram | Toroidal, α1–α7 | as Hologram 1 (flag > 0) or 2 (flag < 0) | 1 R, 2–8 α, 13–18 points, 19 λc, 20 m, 21 flag, 22 volume (0 only) |
+
+T, λ₀ and λc are in micrometers and the phase coefficients in radians or waves whatever the lens
+units; they do not scale with Scale Lens. The grating lines are the planes y = const ("parallel to
+the local x-axis", "evenly spaced when projected onto a plane"). For the holograms D = |P − Q| −
+|Q| (computed without cancellation), so its gradient is the unit vector of a beam diverging from
+Q; a point farther than 10⁵ m from the vertex is at infinity, D = −Q̂·P. The Binary Optic 1
+"absolute" option evaluates Φ at (|x|, |y|).
+
+**Sign.** "a positive power binary optic has a negative quadratic phase coefficient" ("Binary
+Optic Coefficients Sign Conventions"): with A₁ < 0 and M = 1 the Binary Optic 2 converges a
+collimated beam and adds a negative path to the marginal ray, which the rule above gives.
+
+**Paraxial model.** Φ is expanded along the surface at the vertex. A slope (a grating, a
+Binary Optic 1 x or y term, a Zernike tilt, an off-axis construction point) deviates the axis ray
+and a mixed second derivative twists the y meridian: the paraxial lens is then refused with the
+surface and the cause named, as for the anamorphic sags (section 23). Otherwise ∂²Φ/∂y² gives a
+power φ = −λΦ″/(2π) that scales with the wavelength: `SurfaceShape.ParaxialEquivalent` returns it
+per unit wavelength (`ParaxialShapeEquivalent.DiffractivePowerPerWavelength`, 1/m²), the
+paraxial lens carries it (`ParaxialSurface.DiffractivePowerPerWavelength`), and
+`ParaxialSystem` adds it times the system-air wavelength of the trace in meters to the surface's
+power. A Binary Optic 2 with A₁ alone thus has f = −R²/(2A₁Mλ/2π) at each wavelength. Seidel
+coefficients and Coddington field curvature refuse these types (they cover only refracting sags).
+
+**Optical path.** The path term is exact, so OPD, PSF and MTF through these surfaces are not
+limited (`OpdLimitation` is the substrate's, null for all eleven).
+
+**Not built** (not registered; a saved lens naming one is refused by name):
+
+- *Radial Grating*: its page's spacing equation d(p) = A₀ + A₁p + A₂p⁻¹ + A₃p² + A₄p⁻² … and its
+  parameter table ("Coefficient on p^(n−15)") disagree on the exponents, and the phase needs
+  ∫dr/d(r) by quadrature; left until the order is settled.
+- *Elliptical Grating 1 and 2*: an elliptical substrate with extended polynomial terms not
+  built yet, and a groove density 1/(1/T₀ + αy + … + εy⁵) whose phase needs quadrature.
+- *Extended Toroidal Grating*: needs a toroid with α1–α8 plus extended polynomial sag terms, a
+  substrate not built (the Toroidal surface holds α1–α7).
+- *Binary Optic 3 and 4*: two and many zones with sag and phase offsets.
+- *Grid Phase*: needs its grid data saved with the surface, and `SavedSurfaces.cs` was not this
+  item's to change.
+- *Zone Plate*: not diffractive in OpticStudio's model; its depths need both media's indices at
+  the reference wavelength.
+- *Optically Fabricated Hologram*: needs construction optics nested in the lens.
+- The volume hologram option (efficiency only), a negative construction wavelength, efficiency
+  and multiple orders, and the diffractive types in .zmx, CODE V and OSLO files and macros.

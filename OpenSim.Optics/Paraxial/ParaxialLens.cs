@@ -72,6 +72,9 @@ public sealed record ParaxialLens
             // OP-27: idealised surfaces.
             if (!double.IsFinite(s.ThinLensPower))
                 problems.Add($"{where}: the thin-lens power must be a number (it is {s.ThinLensPower}).");
+            // OP-26: diffractive surfaces.
+            if (!double.IsFinite(s.DiffractivePowerPerWavelength))
+                problems.Add($"{where}: the diffractive power per wavelength must be a number (it is {s.DiffractivePowerPerWavelength}).");
             if (s.SlopeMatrix is { } m)
             {
                 if (!double.IsFinite(m.A) || !double.IsFinite(m.B) || !double.IsFinite(m.C) || !double.IsFinite(m.D))

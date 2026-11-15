@@ -87,6 +87,10 @@ public readonly record struct ParaxialShapeEquivalent
     public double Curvature { get; init; }
     public double ThinLensPower { get; init; }
     public Paraxial.ParaxialMatrix? SlopeMatrix { get; init; }
+
+    /// <summary>OP-26: the power of a diffractive phase per unit wavelength, 1/m²
+    /// (<see cref="Paraxial.ParaxialSurface.DiffractivePowerPerWavelength"/>); zero otherwise.</summary>
+    public double DiffractivePowerPerWavelength { get; init; }
 }
 
 /// <summary>What <see cref="SurfaceShape.TryRedirect"/> is given at one surface.</summary>
@@ -105,4 +109,13 @@ public readonly record struct SurfaceRedirectInput
     public required double IndexAfter { get; init; }
     /// <summary>The vacuum wavelength of the ray, meters.</summary>
     public required double VacuumWavelength { get; init; }
+
+    /// <summary>
+    /// OP-26: the ray's wavelength in the system's air, meters (the table wavelength). The
+    /// indices are relative to that air, so a phase acts with this wavelength: dividing the
+    /// absolute grating equation n′ₐ·sin θ′ − nₐ·sin θ = M·λvac/d by n_air gives the relative
+    /// indices and λvac/n_air = λair. Zero when the caller does not give it; a diffractive surface
+    /// then refuses the ray (<see cref="Diffractive.DiffractiveShape"/>).
+    /// </summary>
+    public double AirWavelength { get; init; }
 }

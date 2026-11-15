@@ -60,4 +60,16 @@ public sealed record ParaxialSurface
     /// and slopes of one surface together.
     /// </summary>
     public ParaxialMatrix? SlopeMatrix { get; init; }
+
+    // OP-26: diffractive surfaces (docs/Optics-Conventions.md §57).
+
+    /// <summary>
+    /// The power of a diffractive phase per unit wavelength, 1/m²: the engine adds
+    /// φ = <see cref="DiffractivePowerPerWavelength"/>·λ to the surface's power, λ its wavelength
+    /// in the system's air in meters (the medium the indices are relative to). A phase
+    /// Φ(y) = ½·Φ″·y² (radians, order included) turns a ray by Δ(n·sin θ) = (λ/2π)·Φ′(y), so
+    /// n′u′ = n·u − y·φ with φ = −λ·Φ″/(2π) whatever the indices, like a thin lens; this is
+    /// −Φ″/(2π). Zero for an ordinary surface.
+    /// </summary>
+    public double DiffractivePowerPerWavelength { get; init; }
 }

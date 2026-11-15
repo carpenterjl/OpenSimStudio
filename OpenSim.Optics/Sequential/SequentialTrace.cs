@@ -246,6 +246,7 @@ public sealed class SequentialTrace
                     Surface = s, SurfaceIndex = j, Point = point, Incoming = d, Normal = normal,
                     IndexBefore = nBefore, IndexAfter = s.IsMirror ? nBefore : nAfter,
                     VacuumWavelength = VacuumWavelength,
+                    AirWavelength = OpticsConventions.MicrometersToMeters(AirMicrometers),   // OP-26
                 }, out var redirected, out double extra, out var redirectFailure))
             {
                 if (redirectFailure != RayStatus.Ok)

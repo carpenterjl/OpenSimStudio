@@ -1866,6 +1866,29 @@ multi-configuration table, parameter macro solves, the macro solve in the Lens D
 JGraph script as a macro solve or operand, and tolerance scripts. No macro has been compared with
 OpticStudio's own output. The rules are in docs/Optics-Conventions.md §56.
 
+## Diffractive, grating and holographic surfaces
+
+The type column of the Lens Data Editor offers eleven surfaces that add a phase to the rays
+(docs/Optics-Conventions.md §57): **Diffraction Grating**, **Toroidal Grating**, **Variable Line
+Space Grating**, **Binary Optic 1**, **Binary Optic 2**, **Zernike Fringe Phase**, **Zernike
+Standard Phase**, **Zernike Annular Phase**, **Hologram 1**, **Hologram 2** and **Toroidal
+Hologram**, each with its OpticStudio parameter columns. Grating frequencies are in lines per
+micrometer and construction wavelengths in micrometers whatever the lens units; binary
+coefficients are in radians and Zernike phase coefficients in waves.
+
+The phase turns each ray by the order times its local gradient and adds (λ/2π) times the phase to
+the optical path, so OPD, PSF and MTF through these surfaces are exact. A ray whose order does not
+propagate stops with "evanescent order". A surface with a purely quadratic phase (Binary Optic 2,
+a Zernike defocus term, an on-axis hologram) has a paraxial power that scales with the
+wavelength, which the paraxial data and the chromatic analyses use. A grating, a tilt term or an
+off-axis hologram deviates the axis, so paraxial data are refused for that lens with the surface
+named; the real ray trace still works.
+
+Not built: Radial Grating, Elliptical Grating 1 and 2, Extended Toroidal Grating, Binary Optic 3
+and 4, Grid Phase, Zone Plate, Optically Fabricated Hologram, the volume hologram option,
+diffraction efficiency, and these types in .zmx, CODE V and OSLO files. The readings not yet
+checked against OpticStudio are listed in docs/Optics-Conventions.md §10 item 53.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

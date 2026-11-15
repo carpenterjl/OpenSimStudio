@@ -126,6 +126,7 @@ public sealed record SequentialLens
                 Curvature = equivalent.Curvature,
                 ThinLensPower = equivalent.ThinLensPower,
                 SlopeMatrix = equivalent.SlopeMatrix,
+                DiffractivePowerPerWavelength = equivalent.DiffractivePowerPerWavelength,   // OP-26
                 Thickness = s.Thickness,
                 Medium = dummy && j > 0 ? media[j - 1] : s.Medium,
                 IsStop = s.IsStop,
