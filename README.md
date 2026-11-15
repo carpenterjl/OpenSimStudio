@@ -71,7 +71,11 @@ one-at-a-time, full-factorial, corner or Monte Carlo plans (mean, σ, percentile
 inside limits; the draws are a fixed function of the seed), `sweep` a board's net over its
 stackup — each run re-meshes the net and reports the pad-to-pad resistance and the trace's
 Z0/RLGC over the board's own reference planes — plus the `impedance` calculator, `spacing`
-checks, `emi` estimates and planar `magnetics`. Every command writes a report (Markdown and
+checks, `emi` estimates and planar `magnetics`. `opensim optics` runs a saved lens: any
+registered analysis by id with its settings (the report is byte for byte the app's Save report),
+a real ray trace, the local optimizer and tolerance sensitivity or inverse sensitivity; optics
+cells (radius, thickness, conic, index, aperture, wavelengths, fields) are sweep targets
+(docs/Optics-User-Guide.md, "Command line"). Every command writes a report (Markdown and
 HTML) with its assumptions, CSV tables and the log, so a study is reproducible from a script.
 
 For loops, decisions between solves, post-processing and plots, drive the same libraries from

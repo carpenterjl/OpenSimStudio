@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -8,6 +9,8 @@ using OpenSim.Core.Persistence;
 using OpenSim.Core.Studies;
 using OpenSim.Geometry;
 using OpenSim.Pcb.Import;
+using OpenSim.Optics.Optimization;
+using OpenSim.Optics.Sequential;
 using OpenSim.Rf.Si;
 
 namespace OpenSim.Cli;
@@ -528,5 +531,193 @@ public sealed class ImpedanceSpec
         o["C (pF/m)"] = mode.CapacitanceFaradsPerMeter * 1e12;
         if (report.NearEndCoupling is { } near) o["Near-end crosstalk (%)"] = near * 100;
         return o;
+    }
+}
+
+// OP-97: optics parameters as sweep targets.
+
+/// <summary>
+/// The things an optics sweep can set on a project's saved lens, named <c>optics:&lt;where&gt;.&lt;property&gt;</c>
+/// in the lens's saved units (lens units; a TCE in 1e-6 per °C; wavelengths in µm):
+/// <list type="bullet">
+/// <item><c>optics:surface&lt;n&gt;.radius|curvature|thickness|conic|semiDiameter|tce|index|par&lt;k&gt;|modelNd|modelVd|modelDeltaPgF</c>
+/// — surface n as the Lens Data Editor numbers it (0 = object). A radius of 0 is a plane, as the
+/// editor reads it; a curvature of 0 writes a plane. <c>index</c> is a constant-index medium's
+/// index; <c>par&lt;k&gt;</c> the surface type's parameter column k; the model-glass ones need a
+/// model glass on the surface.</item>
+/// <item><c>optics:system.apertureValue|temperature|pressure</c>: the aperture value in the
+/// system's aperture type, the temperature in °C, the pressure in atmospheres.</item>
+/// <item><c>optics:wavelength&lt;n&gt;</c> (µm) and <c>optics:wavelength&lt;n&gt;.weight</c>, n from 1.</item>
+/// <item><c>optics:field&lt;n&gt;.x|y|weight</c>, n from 1, in the system's field type.</item>
+/// </list>
+/// A cell driven by a solve or a pickup is refused (the solve would overwrite the swept value), as
+/// is an infinite thickness, a surface or row that does not exist, and a property not listed.
+/// Every refusal names the target. A multi-configuration operand on the same cell still overrides
+/// it in its configurations; multi-configuration cells themselves are not targets yet.
+/// </summary>
+public static class OpticsTargets
+{
+    public const string Prefix = "optics:";
+
+    private static readonly CultureInfo Ci = CultureInfo.InvariantCulture;
+
+    public static bool Handles(string target) => target.TrimStart().StartsWith(Prefix, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Checks every parameter's target against the lens by applying its nominal (or first)
+    /// value; throws <see cref="InvalidOperationException"/> naming each bad parameter and target.</summary>
+    public static void Validate(OpticsSettings optics, IEnumerable<SweepParameterSpec> parameters)
+    {
+        ArgumentNullException.ThrowIfNull(optics);
+        ArgumentNullException.ThrowIfNull(parameters);
+        var problems = new List<string>();
+        foreach (var p in parameters)
+        {
+            double probe = p.Nominal ?? (p.Values is { Length: > 0 } v ? v[0] : double.NaN);
+            try
+            {
+                if (!Handles(p.Target)) throw new InvalidOperationException($"'{p.Target}' is not an optics target (optics:...).");
+                Apply(optics, p.Target, double.IsFinite(probe) ? probe : 1);
+            }
+            catch (InvalidOperationException ex) { problems.Add($"Parameter '{p.Name}': {ex.Message}"); }
+        }
+        if (problems.Count > 0)
+            throw new InvalidOperationException("The optics sweep's targets do not fit the lens:" + Environment.NewLine + string.Join(Environment.NewLine, problems));
+    }
+
+    /// <summary>The optics record with one value set. Throws <see cref="InvalidOperationException"/> naming the target.</summary>
+    public static OpticsSettings Apply(OpticsSettings optics, string target, double value)
+    {
+        ArgumentNullException.ThrowIfNull(optics);
+        ArgumentNullException.ThrowIfNull(target);
+        string spec = target.Trim();
+        if (!Handles(spec)) throw new InvalidOperationException($"'{target}' is not an optics target (optics:...).");
+        if (!double.IsFinite(value)) throw new InvalidOperationException($"{target}: the value {value.ToString(Ci)} is not finite.");
+        string rest = spec[Prefix.Length..];
+        int dot = rest.IndexOf('.');
+        string where = (dot < 0 ? rest : rest[..dot]).Trim();
+        string property = (dot < 0 ? "" : rest[(dot + 1)..]).Trim();
+        string lower = where.ToLowerInvariant();
+
+        if (lower.StartsWith("surface")) return Surface(optics, target, Index(target, where, "surface".Length, 0), property, value);
+        if (lower == "system")
+        {
+            var data = optics.SystemData ?? new OpticsSystemSettings();
+            data = property.ToLowerInvariant() switch
+            {
+                "aperturevalue" => data with { ApertureValue = Positive(target, value) },
+                "temperature" => data with { TemperatureCelsius = value },
+                "pressure" => data with { PressureAtmospheres = NotNegative(target, value) },
+                _ => throw new InvalidOperationException($"{target}: the system property '{property}' is not a target; use apertureValue, temperature or pressure.")
+            };
+            return optics with { SystemData = data };
+        }
+        if (lower.StartsWith("wavelength"))
+        {
+            int w = Index(target, where, "wavelength".Length, 1);
+            var data = optics.SystemData ?? new OpticsSystemSettings();
+            var list = data.Wavelengths?.ToList() ?? new List<OpticsWavelengthSettings>();
+            if (w > list.Count) throw new InvalidOperationException($"{target}: the system has {list.Count} saved wavelength(s), numbered from 1.");
+            list[w - 1] = property.ToLowerInvariant() switch
+            {
+                "" or "micrometers" => list[w - 1] with { Micrometers = Positive(target, value) },
+                "weight" => list[w - 1] with { Weight = NotNegative(target, value) },
+                _ => throw new InvalidOperationException($"{target}: the wavelength property '{property}' is not a target; use the wavelength itself (µm) or weight.")
+            };
+            return optics with { SystemData = data with { Wavelengths = list } };
+        }
+        if (lower.StartsWith("field"))
+        {
+            int f = Index(target, where, "field".Length, 1);
+            var data = optics.SystemData ?? new OpticsSystemSettings();
+            var list = data.Fields?.ToList() ?? new List<OpticsFieldSettings>();
+            if (f > list.Count) throw new InvalidOperationException($"{target}: the system has {list.Count} saved field(s), numbered from 1.");
+            list[f - 1] = property.ToLowerInvariant() switch
+            {
+                "x" => list[f - 1] with { X = value },
+                "y" => list[f - 1] with { Y = value },
+                "weight" => list[f - 1] with { Weight = NotNegative(target, value) },
+                _ => throw new InvalidOperationException($"{target}: the field property '{property}' is not a target; use x, y or weight.")
+            };
+            return optics with { SystemData = data with { Fields = list } };
+        }
+        throw new InvalidOperationException(
+            $"'{target}' is not understood. Optics targets: optics:surface<n>.<property>, optics:system.<property>, optics:wavelength<n>[.weight], optics:field<n>.<x|y|weight>.");
+    }
+
+    private static int Index(string target, string where, int start, int min) =>
+        int.TryParse(where.AsSpan(start), NumberStyles.None, Ci, out int n) && n >= min
+            ? n : throw new InvalidOperationException($"{target}: '{where}' needs a number of at least {min} after '{where[..start]}'.");
+
+    private static double Positive(string target, double value) =>
+        value > 0 ? value : throw new InvalidOperationException($"{target} must be positive.");
+
+    private static double NotNegative(string target, double value) =>
+        value >= 0 ? value : throw new InvalidOperationException($"{target} cannot be negative.");
+
+    private static OpticsSettings Surface(OpticsSettings optics, string target, int j, string property, double value)
+    {
+        var surfaces = optics.Surfaces ?? throw new InvalidOperationException($"{target}: the lens has no surfaces.");
+        if (j >= surfaces.Count) throw new InvalidOperationException($"{target}: the lens has surfaces 0 to {surfaces.Count - 1}.");
+        var s = surfaces[j] ?? throw new InvalidOperationException($"{target}: surface {j} is empty in the file.");
+        string where = SavedSurfaces.Where(j, surfaces.Count);
+        string key = property.ToLowerInvariant();
+        string column = key switch
+        {
+            "radius" or "curvature" => SavedSurfaces.RadiusColumn,
+            "thickness" => SavedSurfaces.ThicknessColumn,
+            "conic" => SavedSurfaces.ConicColumn,
+            "semidiameter" => SavedSurfaces.SemiDiameterColumn,
+            "tce" => SavedSurfaces.TceColumn,
+            "index" => SavedSurfaces.MaterialColumn,
+            "modelnd" => GlassVariables.ModelNdColumn,
+            "modelvd" => GlassVariables.ModelVdColumn,
+            "modeldeltapgf" => GlassVariables.ModelDeltaPgFColumn,
+            _ when key.StartsWith("par") && SavedSurfaces.ParameterNumber("Par" + key[3..]) is int n => "Par" + n.ToString(Ci),
+            _ => throw new InvalidOperationException(
+                $"{target}: the surface property '{property}' is not a target; use radius, curvature, thickness, conic, semiDiameter, tce, index, par<k>, modelNd, modelVd or modelDeltaPgF.")
+        };
+        if (s.Flags?.FirstOrDefault(fl => fl is not null && fl.Column == column
+                && (fl.Kind == SavedSurfaces.SolveFlag || fl.Kind == SavedSurfaces.PickupFlag)) is { } driven)
+            throw new InvalidOperationException($"{target}: the {column} cell of {where} is driven by a {driven.Kind!.ToLowerInvariant()}" +
+                                                $"{(driven.Solve is { Length: > 0 } name ? $" ({name})" : "")}, which would overwrite the swept value; remove it or sweep another cell.");
+        OpticsSurfaceSettings changed;
+        switch (key)
+        {
+            case "radius": changed = s with { Radius = value == 0 ? null : value }; break;
+            case "curvature": changed = s with { Radius = value == 0 ? null : 1 / value }; break;
+            case "thickness":
+                if (s.ThicknessIsInfinite) throw new InvalidOperationException($"{target}: the thickness of {where} is infinite; give it a finite value in the lens first.");
+                changed = s with { Thickness = value };
+                break;
+            case "conic": changed = s with { Conic = value }; break;
+            case "semidiameter": changed = s with { SemiDiameter = Positive(target, value) }; break;
+            case "tce": changed = s with { Tce = value }; break;
+            case "index":
+                if (!string.IsNullOrWhiteSpace(s.Material) || s.ModelGlass is not null || s.Index is null)
+                    throw new InvalidOperationException($"{target}: {where} is not a constant-index medium" +
+                                                        $"{(string.IsNullOrWhiteSpace(s.Material) ? "" : $" (its material is '{s.Material}')")}; only a constant index can be swept this way.");
+                if (value == 0) throw new InvalidOperationException($"{target}: an index of zero is not a medium.");
+                changed = s with { Index = value };
+                break;
+            default:
+            {
+                // A parameter or a model-glass cell: the optimizer's writer, so the value lands where the surface type keeps it.
+                var kind = column switch
+                {
+                    GlassVariables.ModelNdColumn => LensVariableKind.ModelIndex,
+                    GlassVariables.ModelVdColumn => LensVariableKind.ModelAbbe,
+                    GlassVariables.ModelDeltaPgFColumn => LensVariableKind.ModelPartialDispersion,
+                    _ => LensVariableKind.Parameter,
+                };
+                if (kind != LensVariableKind.Parameter && s.ModelGlass is null)
+                    throw new InvalidOperationException($"{target}: {where} has no model glass.");
+                var variable = new LensVariable { Kind = kind, Surface = j, Column = column, Label = target };
+                try { return LensVariables.Apply(optics, new[] { variable }, new[] { value }); }
+                catch (ArgumentException ex) { throw new InvalidOperationException($"{target}: {ex.Message}", ex); }
+            }
+        }
+        var list = surfaces.ToList();
+        list[j] = changed;
+        return optics with { Surfaces = list };
     }
 }

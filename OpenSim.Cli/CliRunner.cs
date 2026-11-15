@@ -15,7 +15,8 @@ using OpenSim.Rf.Si;
 namespace OpenSim.Cli;
 
 /// <summary>
-/// The command line: <c>opensim solve</c>, <c>sweep</c>, <c>impedance</c> and <c>spacing</c>.
+/// The command line: <c>opensim solve</c>, <c>sweep</c>, <c>impedance</c>, <c>spacing</c> and the
+/// others in <see cref="Usage"/>, with the <c>optics</c> family in CliRunner.Optics.cs.
 /// Every command reads files and writes a results folder — a report (Markdown and HTML)
 /// with the assumptions, the tables as CSV, the log — so a study can be run again from a
 /// script and compared. Exit codes: 0 done, 1 usage, 2 the run failed.
@@ -132,10 +133,59 @@ public static partial class CliRunner
                                 "outerRadius": 12e-3, "plateThickness": 2e-3, "windowHeight": 3e-3,
                                 "centreGap": 2e-4, "relativePermeability": 2000 }
 
+        opensim optics list [--analysis ID]
+            The registered optics analyses by id; with --analysis, its settings and defaults.
+
+        opensim optics analyse <project.ossproj> --analysis ID[,ID...] [options]
+            Runs analyses on the project's saved lens (its current configuration) with the
+            settings the project saved for each, as a new analysis window would, and writes the
+            report the app's Save report writes for the same windows, byte for byte; each
+            analysis's text (<ID>.txt) and plot data (<ID>-plot<n>.csv); log.txt.
+            --settings FILE     settings as JSON (the project file's form; one analysis only)
+            --set "Name=value[;Name=value...]"   override settings by name; with several
+                                analyses "ID.Name=value"
+            --builtin-catalogs  only the built-in glass catalogs (not the user's catalog folder)
+            --out DIR           results folder (default <project>-optics-analyse)
+
+        opensim optics trace <project.ossproj> [--hx X --hy Y --px X --py Y --wavelength N --global]
+            One real ray through the saved lens (the Single ray trace analysis), surface by
+            surface; written as analyse writes it (default folder <project>-optics-trace).
+
+        opensim optics optimise <project.ossproj> [options]
+            Local optimization of the saved variables against the saved merit function. Writes
+            report.md/.html, variables.csv, merit.csv, log.txt and <project>-optimised.ossproj
+            (the input is not changed). Ctrl+C stops and keeps the best design so far (exit 2).
+            --algorithm dls|od  damped least squares (default) or orthogonal descent
+            --cycles auto|N|infinite                 --max-evaluations N   --threads N
+            --global, --hammer  not built yet (global optimization, OP-58)
+
+        opensim optics tolerance <project.ossproj> [options]
+            Sensitivity or inverse sensitivity of the saved tolerance rows, with the saved run
+            settings as defaults. Writes report.md/.html, tolerance.txt (the Tolerance Data
+            Editor's report text), rows.csv, log.txt; exit 2 when a row could not be evaluated.
+            --mode sensitivity|inverse-limit|inverse-increment|quick
+            --criterion NAME    RmsSpotRadius, RmsWavefront, MeritFunction, StrehlRatio, ...
+            --compensation none|paraxial|dls|od      --change linear|rss   --fields y|xy|user
+            --sampling N --limit V --increment V --mtf-frequency V --radius UM --cycles N
+            --worst N --threads N
+            --montecarlo        not built yet (Monte Carlo tolerancing, OP-65)
+
+        Optics sweeps: a sweep job whose targets are all optics:... sets the lens instead of
+        solving a body, and tabulates the saved merit function and each row's value.
+            Targets: optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|
+                       par<k>|modelNd|modelVd|modelDeltaPgF (n = 0 for the object),
+                     optics:system.apertureValue|temperature|pressure,
+                     optics:wavelength<n>[.weight], optics:field<n>.x|y|weight
+
         opensim help
         """;
 
-    public static int Run(string[] args, TextWriter stdout, TextWriter stderr)
+    public static int Run(string[] args, TextWriter stdout, TextWriter stderr) =>
+        Run(args, stdout, stderr, CancellationToken.None);
+
+    /// <summary>Runs a command; <paramref name="cancellation"/> (Ctrl+C in <c>Program</c>) stops
+    /// the optics commands and optics sweeps between steps, exit code 2.</summary>
+    public static int Run(string[] args, TextWriter stdout, TextWriter stderr, CancellationToken cancellation)
     {
         if (args.Length == 0 || args[0] is "help" or "--help" or "-h")
         {
@@ -145,20 +195,29 @@ public static partial class CliRunner
         try
         {
             string command = args[0].ToLowerInvariant();
-            var options = ParseOptions(args.Skip(command == "foils" ? 1 : 2));     // foils takes no positional argument
+            // foils takes no positional argument; optics takes a subcommand and (except list) a project.
+            int positional = command switch
+            {
+                "foils" => 1,
+                "optics" => args.Length > 1 && args[1].Equals("list", StringComparison.OrdinalIgnoreCase) ? 2 : 3,
+                _ => 2
+            };
+            var options = ParseOptions(args.Skip(Math.Min(positional, args.Length)));
             return command switch
             {
                 "solve" => Solve(Require(args, "a project file"), options, stdout),
-                "sweep" => Sweep(Require(args, "a sweep job file"), options, stdout),
+                "sweep" => Sweep(Require(args, "a sweep job file"), options, stdout, cancellation),
                 "impedance" => Impedance(Require(args, "an impedance job file"), options, stdout),
                 "spacing" => Spacing(Require(args, "a board"), options, stdout),
                 "emi" => Emi(Require(args, "an EMI job file"), options, stdout),
                 "magnetics" => Magnetics(Require(args, "a board"), options, stdout),
                 "foils" => Foils(options, stdout),
+                "optics" => Optics(args, options, stdout, cancellation),   // OP-97
                 _ => Fail(stderr, $"Unknown command '{args[0]}'.{Environment.NewLine}{Usage}", 1)
             };
         }
         catch (UsageException ex) { return Fail(stderr, ex.Message, 1); }
+        catch (OperationCanceledException) { return Fail(stderr, "Cancelled.", 2); }
         catch (Exception ex) { return Fail(stderr, ex.Message, 2); }
     }
 
@@ -318,7 +377,7 @@ public static partial class CliRunner
 
     // ---------------- sweep ----------------
 
-    private static int Sweep(string jobPath, Dictionary<string, string> o, TextWriter stdout)
+    private static int Sweep(string jobPath, Dictionary<string, string> o, TextWriter stdout, CancellationToken cancellation = default)
     {
         var spec = SweepSpec.Load(jobPath);
         var plan = spec.Plan();
@@ -327,7 +386,13 @@ public static partial class CliRunner
         StudyReport? nominal;
         string title;
         SweepResult result;
-        if (spec.Board is { } board)
+        if (IsOpticsSweep(spec))   // OP-97
+        {
+            result = SweepOptics(spec, plan, progress, stdout, cancellation, out var opticsNominal);
+            nominal = opticsNominal;
+            title = $"{Path.GetFileNameWithoutExtension(spec.Project)} — optics sweep";
+        }
+        else if (spec.Board is { } board)
         {
             result = SweepBoard(spec, board, plan, stdout, progress, out nominal);
             title = $"{Path.GetFileNameWithoutExtension(board.Path)} — board stackup sweep";

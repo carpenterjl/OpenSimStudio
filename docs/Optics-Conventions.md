@@ -3568,3 +3568,56 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
   Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
   .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
   CEDV (deprecated) compensators.
+
+## 46. Command-line optics
+
+`OpenSim.Cli/CliRunner.Optics.cs`, `OpenSim.Cli/SweepSpec.cs` (`OpticsTargets`) and
+`OpenSim.Optics/Analysis/OpticsBatch.cs` (OP-97) run the optics of a saved project from the
+command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics targets in
+`opensim sweep`).
+
+- **One report function.** An analysis report is `OpticsAnalysisReport.Compose` over the
+  analyses' results, the function the app's Save report calls
+  (`OpticsAnalysesViewModel.ComposeReport`). `OpticsBatch.Context` builds the snapshot the app's
+  windows take (`OpticsAnalysesViewModel.Snapshot`): the optics record with `Analyses` null and the
+  lens's active catalogs among the loaded ones. `OpticsBatch.SavedSettings` gives an analysis the
+  settings a new window opens with: the project's `LastSettings` for its id, read by
+  `OpticsAnalysisSettingsCodec.Load`, or its defaults. `OpticsBatch.Run` titles each entry as a
+  window is titled (the name, then "(2)", "(3)") and records a failed compute as the window does
+  ("Failed: " and the message). With the same file, settings and catalogs the Markdown and HTML
+  are therefore byte-identical (gate in docs/Optics-Gates.md). The app's `Snapshot` is not changed
+  to call `OpticsBatch.Context` (that view model is OP-60's in this wave); the parity test holds
+  the two to the same output.
+- **Catalogs.** The command line loads `GlassCatalogLibrary` as the app does (built-ins, then the
+  user's catalog folder); `--builtin-catalogs` takes the built-in set alone, in the library's
+  order (by name).
+- **Settings overrides.** `--settings FILE` is read strictly (`JsonUnmappedMemberHandling.Disallow`):
+  an unknown property is an error, not a silent default as in a project load. `--set` names the
+  settings record's properties (any case); numbers in the invariant culture, enums by name.
+- **Plot data.** `AnalysisPlotCsv` writes a `LinePlot` and an `AnalysisScatterPlot` as long-form
+  points and an `AnalysisMapPlot` as a matrix, through `PlotCsv` (RFC 4180, invariant culture,
+  shortest round-trip numbers, `#` metadata lines), so the file reads back to the plotted doubles.
+- **Optimise and tolerance** call `LocalOptimizer.Run` (§35) and `ToleranceAnalysis.Run` or
+  `QuickSensitivity` (§42) on the saved record with its active catalogs; the saved run settings
+  (`OpticsToleranceRunSettings`) are the defaults the options override. The optimised record is
+  written with `LocalOptimizationResult.ApplyTo` into a copy of the project; `tolerance.txt` is
+  `ToleranceRunResult.ReportLines` joined by newlines, the editor's report text.
+- **Sweep targets.** `OpticsTargets.Apply` sets one cell of the saved record, in saved units:
+  radius (0 a plane, as the editor reads it), curvature (0 a plane), thickness, conic,
+  semi-diameter, TCE, a constant index, a parameter column and the model-glass values through
+  `LensVariables.Apply`, the aperture value, temperature, pressure, a wavelength and its weight,
+  a field's x, y and weight. Surfaces are numbered as the editor numbers them (0 is the object);
+  wavelengths and fields from 1. `Validate` applies each parameter's nominal (or first value)
+  before the sweep and lists every refusal by parameter and target. A cell with a solve or pickup
+  flag is refused, since the solve would overwrite the value. The outputs are the saved merit
+  function (`MeritEvaluator.Evaluate` over `ProjectMeritConfigurations`) and each evaluated row's
+  value; a failed row fails that run, naming the row. A job mixing optics and other targets is
+  refused.
+- **Cancellation.** `Program` turns the first Ctrl+C into a cancellation token
+  (`CliRunner.Run(args, out, err, token)`); the analyses, the optimizer, the tolerance run and the
+  optics sweep poll it. A cancelled optimization writes its best design and exits 2; the others
+  exit 2 with "Cancelled.". The other commands do not take the token.
+- **Not built.** `optics optimise --global|--hammer` (OP-58) and `optics tolerance --montecarlo`
+  (OP-65) exit 1 saying so; each has a one-arm hook (`// OP-58 hook`, `// OP-65 hook`) in
+  `CliRunner.Optics.cs`. Multi-configuration cells as sweep targets, lens files (`.osslens`) as
+  input, and CSV of the analyses' tables (their text is written) are not built.

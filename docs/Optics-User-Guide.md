@@ -1320,6 +1320,47 @@ as OpticStudio's Make Thermal does.
   thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
   thermal table at a changed temperature.
 
+## Command line
+
+The `opensim` command line (`OpenSim.Cli`) runs the optics of a saved project without the app.
+Each subcommand writes a results folder as the other commands do (`report.md`, `report.html`, CSV
+tables, `log.txt`); `opensim help` lists every option. Exit codes: 0 done, 1 a usage error (or
+a part not built), 2 the run failed or was cancelled.
+
+- `opensim optics list [--analysis ID]` lists the analyses by their saved ids; with an id, its
+  settings and their defaults.
+- `opensim optics analyse <project> --analysis ID[,ID...]` computes analyses on the saved lens
+  (its current configuration) with the settings the project saved for each, which is what a new
+  analysis window opens with. `--settings FILE` (JSON, as the project file stores settings) and
+  `--set "Name=value;..."` override them; a setting the analysis does not have, or a value of the
+  wrong kind, is refused by name. The folder holds the composite report, which is byte for byte
+  what **Save report** writes for the same windows in the app, each analysis's text
+  (`<ID>.txt`, the window's Text tab) and each plot's data (`<ID>-plot<n>.csv`).
+- `opensim optics trace <project> --hx --hy --px --py --wavelength --global` is the Single ray
+  trace analysis with those options.
+- `opensim optics optimise <project>` runs the local optimizer (Optimization above) on the saved
+  variables and merit function: `--algorithm dls|od`, `--cycles auto|N|infinite`,
+  `--max-evaluations`, `--threads`. It writes the report, `variables.csv`, `merit.csv` and the
+  optimised project as `<project>-optimised.ossproj` in the results folder; the input file is not
+  changed.
+- `opensim optics tolerance <project>` runs the saved tolerance rows with the saved run settings
+  (Sensitivity and inverse sensitivity above); `--mode sensitivity|inverse-limit|inverse-increment|quick`,
+  `--criterion`, `--compensation`, `--limit`, `--increment` and the others override them.
+  `tolerance.txt` is the editor's report text. A row that could not be evaluated gives exit 2.
+- Optics sweeps: an `opensim sweep` job whose targets are all `optics:...` sets cells of the saved
+  lens at each point and tabulates the saved merit function and each row's value. Targets:
+  `optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|par<k>|modelNd|modelVd|modelDeltaPgF`
+  (surface 0 is the object), `optics:system.apertureValue|temperature|pressure`,
+  `optics:wavelength<n>[.weight]` and `optics:field<n>.x|y|weight`. A cell driven by a solve or
+  pickup, a surface that does not exist and a property not listed are refused, naming the target.
+- Glass catalogs: the app's (the built-in set and your catalog folder); `--builtin-catalogs` uses
+  the built-in set alone, for a run that does not depend on the machine.
+- Ctrl+C stops a run between steps. A stopped optimization still writes the best design so far.
+
+Not built: global optimization and Hammer (`--global`, `--hammer`) and Monte Carlo tolerancing
+(`--montecarlo`), which say so; multi-configuration cells as sweep targets; lens files
+(`.osslens`) as input. The definitions are in docs/Optics-Conventions.md §46.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
