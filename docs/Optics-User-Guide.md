@@ -1861,8 +1861,10 @@ surface functions, INSERT, DELETE, STOPSURF, SOLVETYPE, SETVAR, COMPOSITEON, COM
 (SETSYSTEMPROPERTY and SYPR, the field and wavelength functions), the merit function (SETOPERAND,
 MFCN, OPER, OPEV), OPTIMIZE and QUICKFOCUS, analyses to text files (GETTEXTFILE), lens files
 (LOADLENS, SAVELENS), physical optics and beam files (POP, ZBFREAD, ZBFWRITE, ZBFPROPERTIES,
-ZBFCLR, ZBFMULT, ZBFTILT, the coherent ZBFSUM) and the geometric image analysis (IMA, IMAE,
-IMASUM). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
+ZBFCLR, ZBFMULT, ZBFTILT, the coherent ZBFSUM), the geometric image analysis (IMA, IMAE,
+IMASUM), single-mode fiber coupling (FICL), CAD export (EXPORTCAD: IGES, STEP, STL) and the saved
+non-sequential objects (NOBJ, NPAR, NPOS, NPRO, OBJC, SETNSCPARAMETER, SETNSCPOSITION,
+SETNSCPROPERTY; surface 1). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
 with what each does here or why it is not bound. Lengths are in lens units; the lens-data
 functions show solved values, as the editor does; a change made by a keyword takes effect at once
 (UPDATE is accepted and checks the lens builds). POP and IMA run their analysis with its
@@ -1879,7 +1881,9 @@ From the command line: `opensim optics macro <macro.zpl> [--lens FILE] [--arg NA
 [--macro-folder DIR] [--lens-folder DIR] [--out FILE] [--save-lens FILE]`.
 
 Not built: macro graphics and plots, analysis windows driven from a macro (GETT, OPENANALYSISWINDOW),
-the non-sequential keywords, ZBFRESAMPLE, the incoherent ZBFSUM, XDIFFIA, the viewer windows
+non-sequential traces and detectors (NSTR, NSTR2, LOST, NSDD …: they wait for source and
+detector objects), inserting and deleting objects, the ray database keywords, SAT and the
+EXPORTCAD settings with no counterpart in the export, ZBFRESAMPLE, the incoherent ZBFSUM, XDIFFIA, the viewer windows
 (ZBFSHOW, IMASHOW), RAYTRACEX and polarization traces, DEFAULTMERIT,
 HAMMER and the tolerancing keywords, the multi-configuration and tolerance editor keywords, the
 GET… vector keywords, paraxial ray tracing (PARAXIAL ON), the setters on a lens with a
@@ -2323,6 +2327,9 @@ Beams group, the POP fiber coupling integral, and two operands:
   analysis's saved settings); **FICP** and POPD 0 to 2 return the POP fiber coupling with the saved
   settings. The polarized values (FICP 1 to 6, POPD 60 to 63) are 0, because the propagation is
   unpolarized.
+- **In a macro**, FICL(n) returns the single-mode coupling with the 19 settings placed in vector
+  VECn (sampling, wavelength, field, the source and receiving fibers, Huygens), as OpticStudio's
+  help lays them out. POP from a macro uses the saved POP settings, fiber data included.
 
 `opensim optics analyse` runs the analyses by their ids `SingleModeFiberCoupling` and
 `MultimodeFiberCoupling`.
@@ -2367,6 +2374,10 @@ and one analysis.
 - **Library API.** `NscTracer.Run` traces any list of rays as a Monte Carlo run, the same to the
   bit at any thread count; `NscSourceStandIn` makes a point-into-a-cone or a collimated-disk
   source; a surface object flagged as a detecting stand-in absorbs and counts what it receives.
+- **Macros.** NOBJ, NPAR, NPOS, NPRO and OBJC read the saved objects and SETNSCPARAMETER,
+  SETNSCPOSITION and SETNSCPROPERTY change them (surface 1; the built types' parameters and the
+  type, comment, reference object, inside of, material, face coating, rotation order and "Face Is"
+  properties). NSTR and the detector functions wait for source and detector objects.
 
 Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
 OP-75), sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
@@ -2416,7 +2427,9 @@ From the command line: `opensim optics export <project|lens.osslens> --format st
 The exported STEP files are read back by OpenSim's own STEP importer in the tests (same volume and
 areas); they have not been opened in a CAD program here. Not built: SAT (OP-76), point clouds, 3-D
 DXF and IGES Linework, dummy surfaces, solid beams, ray footprints, configurations by file or layer,
-chamfers, and the ZPL keyword EXPORTCAD. The equations are in `docs/Optics-Conventions.md` §70.
+and chamfers. The macro keyword EXPORTCAD writes IGES, STEP or STL with the settings placed in
+VEC1 (see ZPL macros); SAT and the settings the export has no counterpart for are refused by name.
+The equations are in `docs/Optics-Conventions.md` §70.
 
 ## Coming
 

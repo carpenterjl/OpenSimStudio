@@ -1376,6 +1376,19 @@ single place in the code, so a correction is one line and its test.
       set; a name with a folder is used as given (the help says no paths should be given).
     - *IMAE's seed* changes nothing: the Geometric Image Analysis draws its rays from a Sobol
       sequence (section 67), so the efficiency is the same on every call.
+    - *FICL's wavelength and field* must be numbers of the table (the help says "Wavelength #"
+      and "Field #"; 0 for the primary is not read); the decenters are in lens units, as the
+      Single Mode Coupling settings are.
+    - *EXPORTCAD's spline points* (VEC1(2)) are checked against the help's 16 to 512 and not used:
+      OP-96's writers fit each surface to the tolerance. VEC1(3) and VEC1(4) must be surface
+      numbers (the help gives no meaning to 0). VEC1(8) "surfaces as solids" must be 1 for STEP and
+      0 for IGES, the only forms OP-96 writes; STL takes either. A file extension of another CAD
+      format than VEC1(1) is refused.
+    - *NPOS's codes.* The help's NPOS page lists seven values (reference object, x, y, z, tilt x,
+      tilt y, tilt z) for "code is 1-6"; the codes are read as SETNSCPOSITION's 1 to 6 (x to tilt
+      z), the page it points to, and the reference object is NPRO code 2.
+    - *SETNSCPROPERTY code 0* changes the type and keeps the saved parameters (the help does not
+      say what becomes of them); a trace refuses a list too short for the new type.
     Check: each conformance macro of `ZplConformanceTests` run in OpticStudio on the same singlet,
     the outputs compared.
 
@@ -1675,25 +1688,6 @@ single place in the code, so a correction is one line and its test.
       paraxial Jacobian at the chosen field.
     - *Byte order.* BIM and binary IMA are little-endian.
     Check: each analysis in OpticStudio and here on one lens and one file.
-65. **Non-sequential core readings** (OP-70, section 69). From the help pages under
-    `plans/sources/optics/op-70-help/`; nothing has been compared with OpticStudio's output.
-    - *Contact faces.* Hits on different objects within the glue distance of the nearest are one
-      contact, and the highest-numbered of them decides (the help's "last object listed" rule);
-      a surface object with a blank or glass material and no "Face Is" override never decides.
-    - *Coating direction.* A face's layers are applied in their written order when the ray enters
-      the deciding object and reversed when it leaves it (the sequential rule, air to glass
-      forward, carried over); the help states no rule for objects.
-    - *No splitting with energy accounted.* The help says only that the transmitted path is taken;
-      here that ray carries the transmitted power and the reflected power is listed as "not
-      traced".
-    - *Limits.* A ray that reaches the intersection limit is stopped after that intersection; the
-      segment limit counts traced segments of one launched ray, the source point not included.
-    - *Thresholds.* Applied to child rays when they are about to be traced, against the launched
-      ray's starting intensity.
-    - *Segment numbering.* Depth first, the transmitted child before the reflected one.
-    Check: the NSC Single Ray Trace of a glass sphere and a lens pair with splitting on, here and in
-    OpticStudio.
-
 64. **Fiber coupling readings** (OP-50, section 68). From the help pages under
     `plans/sources/optics/op-50-help/` and `op-49-help/`; nothing has been compared with
     OpticStudio's output.
@@ -1723,6 +1717,25 @@ single place in the code, so a correction is one line and its test.
       n·sin θ ≤ NA, θ from the fiber's (tilted) axis, weighted by the source power it carries.
     Check: Single Mode Coupling, POP fiber coupling and FICL/FICP in OpticStudio on one system,
     with a decenter, a tilt and a mismatched fiber.
+
+65. **Non-sequential core readings** (OP-70, section 69). From the help pages under
+    `plans/sources/optics/op-70-help/`; nothing has been compared with OpticStudio's output.
+    - *Contact faces.* Hits on different objects within the glue distance of the nearest are one
+      contact, and the highest-numbered of them decides (the help's "last object listed" rule);
+      a surface object with a blank or glass material and no "Face Is" override never decides.
+    - *Coating direction.* A face's layers are applied in their written order when the ray enters
+      the deciding object and reversed when it leaves it (the sequential rule, air to glass
+      forward, carried over); the help states no rule for objects.
+    - *No splitting with energy accounted.* The help says only that the transmitted path is taken;
+      here that ray carries the transmitted power and the reflected power is listed as "not
+      traced".
+    - *Limits.* A ray that reaches the intersection limit is stopped after that intersection; the
+      segment limit counts traced segments of one launched ray, the source point not included.
+    - *Thresholds.* Applied to child rays when they are about to be traced, against the launched
+      ray's starting intensity.
+    - *Segment numbering.* Depth first, the transmitted child before the reflected one.
+    Check: the NSC Single Ray Trace of a glass sphere and a lens pair with splitting on, here and in
+    OpticStudio.
 
 66. **CAD export readings** (OP-96, section 70). From the help pages under
     `plans/sources/optics/op-96-help/` and `ansyshelp-op31/`; nothing has been compared with
@@ -5437,6 +5450,25 @@ in `ZplRunOptions.PopFolder` (beam files) or `ImagesFolder` (IMA and BIM files),
 folder when not set; a ZBF name's extension is made .ZBF. Readings in §10 item 52
 (`ZplBeamLibrary.cs`).
 
+**Fiber coupling, CAD export and non-sequential objects** (`ZplObjectsLibrary.cs`). FICL(n) is
+the coupling S·T of OP-50's single-mode engine (section 68) with the 19 values the help ("Using the
+FICL() Function") puts in VECn positions 0 to 18; flags must be 0 or 1, and "use polarization" 1 is
+refused as the engine refuses it. EXPORTCAD writes the sequential lens through OP-96's
+`CadExporter` (section 70) with the help's VEC1(1) to VEC1(24): IGES (0), STEP (1) or STL (3); SAT
+(2) is refused (OP-76), as is every argument OP-96 has no counterpart for unless it is 0 (layers,
+dummy surfaces and their thickness, the NSC trace flags, a chosen or all configurations, mixed-mode
+object ranges, footprints, the chief ray), the list and solid-beam ray patterns, a filter string
+and a system in non-sequential mode. NOBJ, NPAR, NPOS, NPRO and OBJC read, and SETNSCPARAMETER,
+SETNSCPOSITION and SETNSCPROPERTY change, OP-70's saved objects (section 69) in lens units; the
+surface argument must be 1, as the help says for non-sequential mode (non-sequential component
+surfaces in a sequential lens are OP-86). Only the parameters of the built types (Sphere 2,
+Rectangle 2, Standard Lens 9) and the property codes the saved objects hold (0 type, 1 comment, 2
+reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 29 "Face
+Is") are bound; any other code is refused by number with the plan item it waits for. NSTR, NSTR2,
+LOST, NSDD and NSDE wait for source objects (OP-77; OP-70's source stand-in is not a saved object),
+NSDC, NSDP and the detector keywords for detectors (OP-79), INSERTOBJECT and DELETEOBJECT for the
+editor (OP-71), the ZRD keywords for the ray database (OP-83). Readings in §10 item 52.
+
 **Calling macros.** CALLMACRO runs a macro of the macro folder as a child with its own variables;
 the call buffers (51 numbers and 51 strings), the lens, the vectors, OPTRETURN and SOLVERETURN are
 shared; the child's screen output is copied into the parent's when it returns; a child's error
@@ -5444,7 +5476,7 @@ names the child and its line. Nesting is limited to 64 (a macro calling itself).
 
 **Not bound** (each fails by name and line when reached; the table gives the reason): graphics
 (GRAPHICS, PLOT, LINE …), analysis windows (OPENANALYSISWINDOW, GETT, WINL …), the non-sequential
-keywords and functions, ZBFRESAMPLE, ZBFSHOW, IMASHOW, XDIFFIA, RAYTRACEX, POLTRACE,
+traces, detectors, object insertion and ray database (above), ZBFRESAMPLE, ZBFSHOW, IMASHOW, XDIFFIA, RAYTRACEX, POLTRACE,
 DEFAULTMERIT, HAMMER, TOLERANCE, QUICKSENSITIVITY, the multi-configuration and tolerance editor
 keywords, LOADMERIT/SAVEMERIT, GETSYSTEMDATA and the other GET… vector keywords, PARAXIAL ON, the
 global coordinate functions (GLC…, RAG…), OPDC, OPTH, the glass catalog functions (GIND, GABB,
@@ -6569,6 +6601,14 @@ coupling by the fast or Huygens algorithm, 2–5 the amplitude coupling's real a
 Field, Sna, Rna replace them; Samp n gives 32·2^(n−1)). FICP and POPD 0–2 run the saved POP
 settings and fiber data; FICP 1–6 and POPD 60–63 are 0 (unpolarized).
 
+**ZPL.** The macro function FICL(n) reaches the single-mode engine with the 19 values of VECn
+(section 56); its result is the power coupling S·T. POP from a macro runs with the lens's saved POP
+settings, fiber data included: the help sets POP's fiber settings from a macro only through
+MODIFYSETTINGS on a .CFG settings file, which is not bound. GETTEXTFILE has no code for the two
+analyses: the help's String Codes table lists "Fcl" FIBER_COUPLING, the name of the menu group that
+holds both Single Mode and Multi-Mode Coupling, so which analysis it opens is not given and it is
+not mapped.
+
 **Not built:** polarization (Use Polarization, FICL Pol? 1: refused), materials on the image
 surface in the single-mode tool (the help itself points to POP), OpticStudio's fast-algorithm
 failure test, fiber modes from DLLs or multimode files, polarized POP coupling, non-sequential
@@ -6681,6 +6721,12 @@ global position, direction and normal, intensity, path, optical path, index and 
 what happened. Segment 0 is the source point; every other row is at the segment's end before the
 interaction there. "Ignore trace errors" leaves the error section out; the rows keep their Z.
 
+**ZPL.** NOBJ, NPAR, NPOS, NPRO and OBJC read, and SETNSCPARAMETER, SETNSCPOSITION and
+SETNSCPROPERTY change, the saved objects (surface 1; the built types' parameters and the property
+codes the objects hold, section 56). NSTR, NSTR2, LOST, NSDD and NSDE are not bound: a trace starts
+from saved source objects (OP-77), which the stand-in source is not. The String Codes table has no
+code for NSC Single Ray Trace, so GETTEXTFILE does not reach it.
+
 **Not built:** the object library (OP-72) and illumination, constructive and CAD objects
 (OP-73 to OP-75); sources (OP-77) and detectors (OP-79) beyond the stand-ins (transparent
 detectors, pixels, objects as detectors); scattering (OP-80); volume physics (OP-81);
@@ -6764,7 +6810,9 @@ done (none was installed where this was built).
 **Command line and app.** `opensim optics export <project|lens> --format step|iges|stl|dxf` (or a
 CAD `--out` extension) with `--first`, `--last`, `--edges`, `--substrate`, `--tolerance`, `--rays`,
 `--nrays`, `--field`, `--wavelength`, `--delete-vignetted`, `--ascii`; the Optics panel's "Export CAD
-Files…" dialog. The settings are not saved with the project. ZPL's EXPORTCAD is not bound.
+Files…" dialog. The settings are not saved with the project. ZPL's EXPORTCAD writes IGES, STEP
+and STL through `CadExporter` with the help's VEC1 values; SAT and the values OP-96 has no
+counterpart for are refused by name (section 56).
 
 **Not built:** SAT (OP-76), point clouds, 3-D DXF and IGES Linework, non-rotational surfaces
 (refused by name), apertures other than centred circles (refused), dummy surfaces, solid beams and
