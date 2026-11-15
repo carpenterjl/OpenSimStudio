@@ -84,12 +84,19 @@ public sealed class NonSequentialTests
         // The internal hits: one segment inside the sphere at each level L ≥ 2, ending at P(L − 1).
         var inside = tree.Segments.Where(s => s.Inside == 1).OrderBy(s => s.Level).ToList();
         Assert.True(inside.Count >= 4, $"only {inside.Count} internal segments");
+        // Each internal hit inherits the previous one's position error and adds its own: the
+        // robust self-intersection offset moves every new origin by up to γ₃₂(|p|₁ + t) ≈ 7e-15 R
+        // (RobustRayOrigin, PBR §6.8.6), and the refracted direction's rounding carries into the
+        // next chord. Over five levels that reaches about 1.2e-13 R (seen at level 5), so the
+        // internal hit points and the exit directions allow 1e-12 (R for positions); the entry, the chord
+        // lengths and the intensities keep 1e-13.
+        const double tolHit = 1e-12;
         foreach (var s in inside)
         {
             var expected = P(s.Level - 1);
-            Close(0, s.Position.X, 1e-13 * radius, $"internal hit x, level {s.Level}");
-            Close(expected.Y, s.Position.Y, 1e-13 * radius, $"internal hit y, level {s.Level}");
-            Close(expected.Z, s.Position.Z, 1e-13 * radius, $"internal hit z, level {s.Level}");
+            Close(0, s.Position.X, tolHit * radius, $"internal hit x, level {s.Level}");
+            Close(expected.Y, s.Position.Y, tolHit * radius, $"internal hit y, level {s.Level}");
+            Close(expected.Z, s.Position.Z, tolHit * radius, $"internal hit z, level {s.Level}");
             Close(2 * radius * cosT, s.PathLength, 1e-13 * radius, $"chord length 2R·cos θt, level {s.Level}");
         }
 
@@ -114,8 +121,10 @@ public sealed class NonSequentialTests
             var nHat = exit / radius;
             var ut = u - nHat * Vector3D.Dot(u, nHat);
             var dOut = ut * n + nHat * Math.Sqrt(1 - n * n * ut.LengthSquared);
-            Close(dOut.Y, s.Direction.Y, 1e-13, $"exit M after {m}");
-            Close(dOut.Z, s.Direction.Z, 1e-13, $"exit N after {m}");
+            // The exit normal is the exit point over R, so it carries the hit-point error above
+            // (about 1.2e-13 after four reflections), magnified by up to n on refraction: tolHit.
+            Close(dOut.Y, s.Direction.Y, tolHit, $"exit M after {m}");
+            Close(dOut.Z, s.Direction.Z, tolHit, $"exit N after {m}");
             checkedPaths++;
         }
         Assert.True(checkedPaths >= 4);
