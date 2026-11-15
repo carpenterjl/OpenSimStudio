@@ -101,19 +101,28 @@ public sealed partial class OpticsOptimizeViewModel
         }));
     }
 
+    private readonly object _bestGate = new();
+
     private async Task RunSearchAsync(string name, Func<CancellationToken, Action<GlobalSearchProgress>, GlobalSearchResult> run)
     {
         _cancel = new CancellationTokenSource();
         var token = _cancel.Token;
         var context = SynchronizationContext.Current;
         void Post(Action action) { if (context is null) action(); else context.Post(_ => action(), null); }
+        // A context that runs posts on the thread pool (xUnit's, unlike WPF's dispatcher) can run a
+        // progress report late, at the same time as the final listing; the gate and the flag keep
+        // a late report from interleaving with, or overwriting, the result.
+        bool finished = false;
         void Progress(GlobalSearchProgress p) => Post(() =>
         {
-            if (!IsRunning) return;   // a late report after the run ended
-            MeritBeforeText = Format(p.StartMerit);
-            if (p.Best.Count > 0) MeritNowText = Format(p.Best[0].Merit);
-            SearchProgressText = $"{(p.Kind == GlobalSearchKind.Global ? "Generation" : "Round")} {p.Iteration}: {p.Trials} trials, {p.FailedTrials} failed";
-            ShowBest(p.Best);
+            lock (_bestGate)
+            {
+                if (finished || !IsRunning) return;   // a late report after the run ended
+                MeritBeforeText = Format(p.StartMerit);
+                if (p.Best.Count > 0) MeritNowText = Format(p.Best[0].Merit);
+                SearchProgressText = $"{(p.Kind == GlobalSearchKind.Global ? "Generation" : "Round")} {p.Iteration}: {p.Trials} trials, {p.FailedTrials} failed";
+                ShowBest(p.Best);
+            }
         });
         IsRunning = true;
         Status = $"{name} running… Stop keeps the designs found so far.";
@@ -121,13 +130,14 @@ public sealed partial class OpticsOptimizeViewModel
         try
         {
             var result = await Task.Run(() => run(token, Progress));
+            lock (_bestGate) finished = true;
             LastSearch = result;
             foreach (var line in result.Log) Log.Add(line);
             MeritBeforeText = Format(result.StartMerit);
             if (result.Best.Count > 0) MeritNowText = Format(result.Best[0].Merit);
             SearchProgressText = $"{result.Iterations} {(result.Kind == GlobalSearchKind.Global ? "generation" : "round")}{(result.Iterations == 1 ? "" : "s")}, "
                 + $"{result.Trials} trials, {result.FailedTrials} failed";
-            ShowBest(result.Best);
+            lock (_bestGate) ShowBest(result.Best);
             Status = result.Best.Count == 0
                 ? $"{name} stopped before any design was found."
                 : $"{name} {(result.Cancelled ? "stopped" : "done")}: {result.Best.Count} design{(result.Best.Count == 1 ? "" : "s")} listed, best merit {Format(result.Best[0].Merit)}. "
