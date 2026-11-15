@@ -34,6 +34,8 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.Equal(2, optics.MeritFunction!.Operands!.Count);              // OP-54
         Assert.Equal(2, optics.MeritFunction.Operands[1].Data!.Count);
         Assert.Equal(2, optics.MultiConfiguration!.Operands![0].Values!.Count);   // OP-30: the table
+        Assert.Equal(2, optics.Tolerances!.Operands!.Count);                 // OP-63: the tolerance data
+        Assert.NotNull(optics.Tolerances.IrregularityModel);
         Assert.NotNull(optics.Thermal!.GlassMaterials![0].Material!.ThermalExpansionCoefficient);   // OP-91: the glass links
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");

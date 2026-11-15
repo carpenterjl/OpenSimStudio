@@ -858,6 +858,35 @@ single place in the code, so a correction is one line and its test.
     Check: FFT and Huygens PSFs of a singlet off axis, saved by OpticStudio as text, compared here
     at the same sampling.
 
+32. **Tolerance operand readings** (OP-63). Section 36's rules come from OpticStudio's help;
+    these choices fill its gaps and none is compared with OpticStudio's tolerance files:
+    - *Radial direction:* TSDR and TEDR take the drawn direction (+y when none is drawn), as the
+      help sets +y for TARR and TRLR in the sensitivity analysis; their own pages give none.
+    - *TIR sign:* TIRX tilts about +y by +atan(TIR/(2S)) and TIRY about +x by the same, as the
+      help's angle formula writes them; with right-handed tilts (§4) a positive TIRX then lowers
+      the sag at +x, opposite to the help's ΔZx = (TIRX/2)·ρx. Only the sign of an equal and
+      opposite pair is affected.
+    - *Rolls:* a roll "along x" turns the element about the axis (sin φ, −cos φ, 0) through the
+      roll surface's center of curvature, φ = 0 for TARX and TRLX and 90° for TARY and TRLY, so a
+      positive angle moves the vertex of a surface with positive radius toward +x or +y. The
+      roll TIR is read at the lateral positions ±h of the rolled read surface, along the
+      element's original axis.
+    - *Pivots:* a mechanical edge (MPVT 2, 3) is the axial point at the sag of the surface's
+      mechanical semi-diameter; the geometric center (MPVT 4) is the midpoint of the front and
+      rear vertices. Pivots other than the front vertex need a group without breaks or surface
+      tilts.
+    - *Element wrap:* the help describes OpticStudio's breaks only in words ("insert a coordinate
+      break surface before and after the lens group, and to use a dummy surface at the end of
+      the group to return to the front vertex"); this program's surfaces (§36) place every
+      surface the same, but a merit row that sums thicknesses across the group (TTHI, MNCT)
+      sees the inserted ones.
+    - *ISO operands:* Int2 is Units and Int3 Statistics, as the ISOB and ISOC pages order them
+      (the ISOD page lists Statistics first).
+    - *TIND and TABB on a catalog glass* use this program's glass offset rule (`GlassOffsets`,
+      item 7), not OpticStudio's model-glass difference.
+    Check: a lens with one row of each built operand, OpticStudio's Monte Carlo file saved for a
+    sensitivity case of each (SAVE), compared surface by surface with the perturbed record.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -2877,3 +2906,85 @@ the gate uses are derived in its comments.
 Not built: polarization (vector diffraction), the image rotation setting, surface plots,
 intermediate surfaces, the help's pupil-grid stretching, the Huygens spherical phase reference,
 the Huygens sum over configurations, True Color, and "Use Coherent PSF" in the line/edge spread.
+
+## 36. Tolerance data editor and tolerance operands
+
+`OpenSim.Optics/Tolerancing` (OP-63) holds the tolerance table and the rules that perturb a copy
+of the saved lens by one row at a given value. The operands were read from OpticStudio's 2025 R2
+help, saved under `plans/sources/optics/op-63-help/` (Tolerance Operands, the two summary tables,
+each operand's page, Tolerance Control Operands and their pages, Tolerancing with the Irregular
+Surface Type, Nesting Rules for Monte Carlo Analysis, Tolerancing with Solves; the equation
+images under `images/`). The analyses that use the rules (sensitivity, inverse sensitivity,
+Monte Carlo, compensator optimization) are later items.
+
+- **Rows.** A row is a four-letter code, Int1 to Int3, Min, Max, a comment, and OpticStudio's
+  two operand properties (Ignore; Do not adjust during inverse tolerancing). Min and Max are the
+  extreme changes from nominal in the operand's unit. The control rows act on the rows below
+  them: TWAV sets the test wavelength (its Min, micrometers; none means the primary wavelength),
+  MPVT the element pivot (none means the front vertex), STAT and SEED the Monte Carlo
+  statistics. COMP, CPAR, CEDV and CMCO define compensators (`ToleranceTable.Compensators`).
+- **Direct values.** TRAD adds to the radius (Code 0, lens units) or scales it by 1 + v/100
+  (Code 1); TCUR adds to the curvature; TFRN adds ΔC = 2ΔZ/r², ΔZ = λN/2, r the clear
+  semi-diameter; TTHI adds to the thickness and takes the same amount from the adjustment
+  surface unless Int2 = Int1; TCON adds to the conic; TSDI fixes the semi-diameter at its value
+  (or the nominal lens's automatic one) plus v; TPAR adds to a parameter; TPAI sets
+  P′ = 1/(1/P + Δ); TUDX … TUTZ add to the values of an existing coordinate break; TMCO adds to
+  a multi-configuration cell. A cell set by a solve, a pickup or a multi-configuration row is
+  refused by name, since the change would be overwritten (OpticStudio leaves solves in place,
+  "How OpticStudio Computes the Tolerance Analysis").
+- **Index and Abbe.** A constant index takes TIND as an offset (TABB is ignored, as the help
+  says for glass that is neither a model nor a catalog glass); a model glass changes nd or Vd;
+  a catalog glass, when every wavelength lies in 0.3–2.5 µm, takes a glass offset solve
+  (ΔNd, ΔVd) on its material. Outside that band the help's constant offset is refused (the
+  saved lens cannot hold it).
+- **The Irregular surface.** TSDX, TSDY, TSDR, TSTX, TSTY, TIRX, TIRY and TIRR turn a Standard
+  surface into the Irregular surface (§23) and add to its decenter, tilt or terms; a surface
+  already Irregular takes the sum. TIR: θ = atan((TIR/2)/S), S the clear semi-diameter, about y
+  for TIRX and x for TIRY. TIRR: half spherical, half astigmatic, Zs = Za; a surface with an
+  automatic semi-diameter gets the nominal one fixed, since the Irregular terms are scaled by it.
+- **TIRR's fringes** (OQ-10). The help's formula ΔZ = (λt/2)(W/2·ρ⁴ + W/2·ρ′y²) makes the raw
+  peak-to-valley of the sag change W double-pass fringes, Zs = Za = λtW/4 (the setting
+  "OpticStudio"). The default ("PowerRemoved") scales the same shape so its peak-to-valley after
+  removing piston, tilt and power by least squares over the aperture is W·λt/2, the
+  irregularity a drawing or a test-plate count means ("Per ISO-10110, power and tilt should be
+  removed", help page ISOB). That peak-to-valley is 17/32 of the raw one (derived in
+  `IrregularityModels`, checked on a grid), so the default's terms are 32/17 of OpticStudio's.
+  No secondary source disputing the help's formula was available to read; the help page is the
+  source of both settings.
+- **Zernike irregularity.** TEZI on a Toroidal surface sets its own Zernike Standard terms Min
+  term to Max term to rms/√n each (their root sum of squares is the RMS, the terms being
+  orthonormal), and the normalization radius to the clear semi-diameter. TEZI on other surfaces,
+  TEXI (Zernike Fringe Sag) and ISOA to ISOD (Zernike Standard Sag composite add-ons) are
+  defined and refused by name: those surfaces are OP-25 and OP-32. TEXI's coefficient
+  c = (λ/2)f/√n and ISOA's A4 = Max/(2√3), A1 = √3·A4 are in `IrregularityModels`.
+- **Element tolerances.** TEDX, TEDY, TEDR, TETX, TETY, TETZ, TARX, TARY, TARR, TRLX, TRLY and
+  TRLR wrap the group First–Last: before it a zero coordinate break (the return target), a break
+  to the pivot P (decenter x, y; thickness z) when P ≠ 0, the perturbing break(s), a break back
+  from P; after it a break that returns to the target (orientation and XYZ, tilt then decenter)
+  and one break per group surface that repeats the group's steps (thickness picked up from the
+  surface, a break's values picked up from the break, a surface's own tilts copied). So the
+  group turns as one about P and every surface after it stays where it was, whatever solves and
+  compensators make of the group's thicknesses. A roll turns about the roll surface's center of
+  curvature; a roll TIR is turned into the angle whose TIR it is (Brent's method). A group
+  holding a coordinate return is refused. The pivot and the roll read the saved radii, conics
+  and thicknesses of the group; one of those set by a solve, a pickup or a multi-configuration
+  row is refused, since the trace would use another value.
+- **Renumbering.** Inserted surfaces renumber the pickup sources, the surface arguments of
+  solves, tilt pick-ups and coordinate returns, the surface arguments of multi-configuration
+  rows (and the values of CRSR and STPS), and the Surf arguments of merit rows. The tolerance
+  table is not renumbered: each change maps its numbers (`ToleranceChange.MapSurface`), so rows
+  applied one after another (the Monte Carlo case, nested element groups included) find their
+  surfaces.
+- **Removal.** `ToleranceChange.Remove` deletes the inserted surfaces, renumbers back and
+  restores the values it changed from the copies it kept: the record comes back bitwise.
+- **Validation.** Each row's integers and limits against its page (surface ranges, codes, term
+  ranges, Min ≤ Max, non-negative radial limits, Min = −Max where the help sets it) and the
+  element rows against the nesting rules: ranges must be nested or apart, and the outermost of a
+  nest comes first; a range sharing a limit with an earlier one counts as nested.
+- **Readings** where the help leaves a gap are listed in §10, item 32.
+
+**Not built.** Applying coating operands (the per-surface coating multipliers and offsets are
+not saved), non-sequential operands (OP-70), Zernike Fringe and Standard Sag surfaces (OP-25)
+and composite add-ons (OP-32) with the operands that need them, cylindrical roll surfaces, the
+default tolerances wizard, the tolerance listing, sorting, .TOL files, the sensitivity and Monte
+Carlo analyses (OP-64, OP-65) and compensator optimization.

@@ -1099,6 +1099,42 @@ are in §10 item 29. Not built: polarization, image rotation, surface plots, int
 surfaces, OpticStudio's pupil-grid stretching, the Huygens spherical phase reference, the sum
 over configurations, True Color and the coherent line/edge spread.
 
+## Tolerance data
+
+**Tolerance Data Editor…** in the Optics panel opens the tolerance table: what may go wrong in
+manufacture and assembly, one operand per row, saved with the project and the lens file. Type an
+operand's four-letter code (TRAD, TETX, …) or its name in the Operand column; the integer
+columns then show what the operand reads (Surf, Adjust, First surf, Last surf, Roll surf, …),
+and Min and Max are the extreme changes from nominal in the operand's unit. "Find an operand"
+searches the codes and names. Insert, Delete, Undo and Redo work as in the other editors.
+**Loosen 2x** and **Tighten 2x** double or halve every tolerance's limits as one undo step.
+Each row has OpticStudio's two operand properties as Yes/No columns: Ignore, and Do not adjust
+(during inverse tolerancing).
+
+**Update** checks every row against the lens (surface numbers, codes, term ranges, Min not above
+Max, the nesting of element groups) and fills the Nominal column with the value a row
+tolerances, where that is one number of the lens. Problems are listed below the grid, each
+naming its row.
+
+Control rows act on the rows below them: TWAV sets the test wavelength of the fringe operands
+(in its Min column, micrometers; without one the primary wavelength is used), MPVT the pivot of
+element tilts (front vertex, rear vertex, front or rear mechanical edge, geometric center),
+STAT and SEED the Monte Carlo statistics, COMP, CPAR and CMCO the compensators.
+
+**TIRR irregularity model** picks how a TIRR row's fringes become sag. The default counts the
+irregularity with power removed, as an ISO 10110 drawing or a test plate does; "OpticStudio's
+TIRR formula" applies the help's formula as written, which gives terms 17/32 as large for the
+same number of fringes.
+
+Each operand's rule (how it changes the lens, which surfaces element tolerances insert) is in
+docs/Optics-Conventions.md §36, and the readings where OpticStudio's help leaves a gap in §10
+item 32. The rules are built and tested; nothing in the program runs them yet.
+
+Not built: the sensitivity, inverse sensitivity and Monte Carlo analyses and the optimization
+of compensators; the coating, non-sequential, TEXI and ISO 10110 operands (defined, refused
+when applied, as are TEZI on surfaces other than Toroidal); the default tolerance wizard, the
+tolerance listing, sorting and .TOL files.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1119,6 +1155,10 @@ Not built yet, and not to be relied on until they appear in this guide:
 - global optimization, glass substitution and tolerancing of a lens (the merit function, its
   editor and the local optimizer are built; the full operand catalogue and the default merit
   function wizard are not);
+
+- optimization and tolerancing of a lens (the merit function and its editor, and the tolerance
+  data editor with its operands, are built; the full operand catalogue, the default merit
+  function wizard, the optimizer and the tolerance analyses are not);
 - thermal configurations (Make Thermal, thermal pickups) and Make Conjugate in the
   Multi-Configuration Editor;
 

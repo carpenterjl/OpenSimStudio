@@ -57,6 +57,11 @@ public sealed record OpticsSettings
     /// and every single-configuration lens — is one configuration: the system as entered.</summary>
     public OpticsMultiConfigSettings? MultiConfiguration { get; init; }
 
+    // OP-63
+    /// <summary>The tolerance data (OP-63's Tolerance Data Editor). Null — every file written
+    /// before OP-63 — is an empty table.</summary>
+    public OpticsToleranceSettings? Tolerances { get; init; }
+
     // OP-91
     /// <summary>The thermal analysis's own data: which glasses name a mechanical material for
     /// their expansion (OP-91, owner decision OQ-12). Null — every file written before OP-91 —

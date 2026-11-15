@@ -39,6 +39,8 @@ public partial class OpticsViewModel : ObservableObject
         // OP-54: the merit function editor, evaluated over the project's configurations (OP-30).
         MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
             () => new OpenSim.Optics.Merit.ProjectMeritConfigurations(ToSettings(), BuildLensEditContext().Catalogs));
+        // OP-63: the tolerance data editor; Update validates against the project's record.
+        ToleranceEditor = new OpticsToleranceEditorViewModel(PublishFromLensEditor, ToSettings);
         // OP-30: the multi-configuration editor, applied to the entered system.
         MultiConfig = new OpticsMultiConfigEditorViewModel(PublishFromMultiConfig, () => BuildSettings(withTable: false), ReplaceSystem,
             () => BuildLensEditContext().Catalogs, materials is null ? null : () => materials.Materials);   // OP-91: catalogs and materials for thermal pickups
@@ -98,6 +100,10 @@ public partial class OpticsViewModel : ObservableObject
     // OP-54
     /// <summary>The merit function (OP-54), saved with the lens.</summary>
     public OpticsMeritEditorViewModel MeritEditor { get; }
+
+    // OP-63
+    /// <summary>The tolerance data (OP-63), saved with the lens.</summary>
+    public OpticsToleranceEditorViewModel ToleranceEditor { get; }
 
     // OP-57
     private OpticsOptimizeViewModel? _optimize;
@@ -168,6 +174,7 @@ public partial class OpticsViewModel : ObservableObject
         Coatings = Coatings?.ToSettings(),
         Surfaces = LensEditor?.ToSettings(),
         MeritFunction = MeritEditor?.ToSettings(),   // OP-54
+        Tolerances = ToleranceEditor?.ToSettings(),   // OP-63
         MultiConfiguration = withTable ? MultiConfig?.ToSettings() : null,
         Thermal = MultiConfig?.ToThermalSettings(),   // OP-91
     };
@@ -192,6 +199,7 @@ public partial class OpticsViewModel : ObservableObject
         Coatings.LoadSettings(saved.Coatings, notes);
         LensEditor.LoadSettings(saved.Surfaces, notes);
         MeritEditor.LoadSettings(saved.MeritFunction, notes);   // OP-54
+        ToleranceEditor.LoadSettings(saved.Tolerances, notes);   // OP-63
 
         MultiConfig.LoadThermalSettings(saved.Thermal);   // OP-91: before the table, whose thermal pickups read it
         MultiConfig.LoadSettings(saved.MultiConfiguration, notes);   // OP-30: null is one configuration
@@ -208,6 +216,7 @@ public partial class OpticsViewModel : ObservableObject
         Coatings.Reset();
         LensEditor.Reset();
         MeritEditor.Reset();   // OP-54
+        ToleranceEditor.Reset();   // OP-63
 
         MultiConfig.LoadThermalSettings(null);   // OP-91
         MultiConfig.Reset();

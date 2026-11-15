@@ -205,6 +205,8 @@ public static class SavedSolves
             (SolveColumn.Thickness, "Center of curvature") => new CenterOfCurvatureSolve { Surface = j, Of = Surface(0) },
             (SolveColumn.Thickness, "Pupil position") => new PupilPositionSolve { Surface = j },
             (SolveColumn.SemiDiameter, Maximum) => new MaximumSemiDiameterSolve { Surface = j },
+            // OP-63: the glass offset a TIND or TABB row writes on a catalog glass (ΔNd, ΔVd).
+            (SolveColumn.Material, "Offset") => new GlassOffsetSolve { Surface = j, DeltaNd = P(0), DeltaVd = P(1) },
             (SolveColumn.Parameter, "Chief ray") => new ParameterChiefRaySolve { Surface = j, Parameter = parameter, Field = Surface(0), Wavelength = Surface(1) },
             _ => null,
         };

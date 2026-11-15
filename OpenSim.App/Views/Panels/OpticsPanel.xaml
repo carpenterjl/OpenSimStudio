@@ -34,6 +34,13 @@
                 <TextBlock Text="{Binding Optics.MeritEditor.OperandCount, StringFormat='{}{0} operands'}"
                            VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
             </DockPanel>
+            <!-- OP-63: the tolerance data, edited in the Tolerance Data Editor window. -->
+            <DockPanel Margin="0,4,0,0">
+                <Button DockPanel.Dock="Left" Content="Tolerance Data Editor…" Click="ToleranceDataEditor_Click"
+                        AutomationProperties.AutomationId="OpticsToleranceDataEditorButton"/>
+                <TextBlock Text="{Binding Optics.ToleranceEditor.OperandCount, StringFormat='{}{0} tolerance operands'}"
+                           VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
+            </DockPanel>
             <!-- OP-30: the configurations, edited in the Multi-Configuration Editor window; the
                  current one is what the analyses use. -->
             <DockPanel Margin="0,8,0,0">

@@ -42,6 +42,23 @@ public partial class OpticsPanel : UserControl
         _meritEditor.Show();
     }
 
+    // OP-63
+    private ToleranceDataEditorWindow? _toleranceEditor;
+
+    /// <summary>Opens the Tolerance Data Editor (OP-63), or brings the open one forward.</summary>
+    private void ToleranceDataEditor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_toleranceEditor is { IsLoaded: true })
+        {
+            _toleranceEditor.Activate();
+            return;
+        }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _toleranceEditor = new ToleranceDataEditorWindow(optics.ToleranceEditor) { Owner = Window.GetWindow(this) };
+        _toleranceEditor.Closed += (_, _) => _toleranceEditor = null;
+        _toleranceEditor.Show();
+    }
+
     // OP-57
     private OptimizeWindow? _optimize;
 
