@@ -225,6 +225,12 @@ internal sealed class ZplInterpreter : IZplEvaluator
         return ZplLibrary.CallFunction(this, name, values);
     }
 
+    // wire-13: ZBFREAD and ZBFWRITE take arrays by name.
+    /// <summary>The array DECLAREd as <paramref name="name"/> (upper case), or an error naming
+    /// <paramref name="who"/>.</summary>
+    internal ZplArray ArrayNamed(string name, string who) => _arrays.TryGetValue(name, out var array) ? array
+        : throw new ZplRuntimeException($"{who}: there is no array {name}; declare it first with DECLARE.");
+
     private int[] Indices(string name, ZplArray array, IReadOnlyList<ZplExpr> expressions)
     {
         if (expressions.Count != array.Sizes.Length)

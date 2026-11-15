@@ -11,7 +11,7 @@ docs/Optics-Conventions.md §56; the user's view is in docs/Optics-User-Guide.md
 The table is generated from `ZplLibrary.TableMarkdown()`; `ZplConformanceTests` checks that this
 page holds it unchanged and that every bound name has a conformance macro.
 
-Counts: 218 keywords (75 bound, the language's own included), 156 numeric functions (95 bound),
+Counts: 218 keywords (85 bound, the language's own included), 156 numeric functions (96 bound),
 32 string functions (24 bound).
 
 | Name | Kind | Bound | What it does here, or why not |
@@ -100,11 +100,11 @@ Counts: 218 keywords (75 bound, the language's own included), 156 numeric functi
 | THEN | keyword | yes | Language core (Conventions §56). |
 | ELSE | keyword | yes | Language core (Conventions §56). |
 | ENDIF | keyword | yes | Language core (Conventions §56). |
-| IMA | keyword | no | Not bound: image analysis files are not built. |
+| IMA | keyword | yes | Runs the Geometric Image Analysis (OP-42) with the lens's saved settings (its last-used settings, or the defaults) and writes its detector image to the BIM file (BIM appended when no extension is given), in the images folder; infilename (with its extension, in the images folder) replaces the source file. Show must not be the spot diagram. |
 | IMAGECOMBINE | keyword | no | Not bound: macro graphics and image files are not built. |
 | IMAGEEXTRACT | keyword | no | Not bound: macro graphics and image files are not built. |
-| IMASHOW | keyword | no | Not bound: image analysis files are not built. |
-| IMASUM | keyword | no | Not bound: image analysis files are not built. |
+| IMASHOW | keyword | no | Not bound: it opens a viewer window, and macros here open no windows (the IMA and BIM File Viewer analysis shows the file). |
+| IMASUM | keyword | yes | Adds two BIM files pixel by pixel into a third (the names may repeat), all in the images folder with the BIM extension; the two must have the same pixels. |
 | IMPORTEXTRADATA | keyword | no | Not bound. |
 | INPUT | keyword | yes | Asks the host (the macro window) for a number or a string; fails when the run has no host (the command line). |
 | INSERT | keyword | yes | Inserts a new Standard surface (thickness 0, air) at n (1 to the image surface); every surface number held elsewhere follows (pickups, solves, merit and multi-configuration rows). |
@@ -144,7 +144,7 @@ Counts: 218 keywords (75 bound, the language's own included), 156 numeric functi
 | PLOT2D | keyword | no | Not bound: macro graphics and image files are not built. |
 | POLDEFINE | keyword | no | Not bound. |
 | POLTRACE | keyword | no | Not bound. |
-| POP | keyword | no | Not bound: physical optics propagation is not built. |
+| POP | keyword | yes | Runs the Physical Optics Propagation analysis (OP-49) with the lens's saved settings (its last-used settings, or the defaults) and writes the end beam to the ZBF file, in the beam folder; lastsurface replaces the end surface. When the saved settings save the beam at all surfaces, those files (name_nnnn.ZBF) are written too. A settings file is not read (fails). |
 | PRINT | keyword | yes | Language core (Conventions §56). |
 | PRINTFILE | keyword | no | Not bound: no printer is driven. |
 | PRINTWINDOW | keyword | no | Not bound: no printer is driven. |
@@ -219,16 +219,16 @@ Counts: 218 keywords (75 bound, the language's own included), 156 numeric functi
 | VEC4 | keyword | yes | Sets element subscript (rounded down; 0 to the vector size) of VEC4. |
 | WAVL | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | WWGT | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
-| XDIFFIA | keyword | no | Not bound: image analysis files are not built. |
-| ZBFCLR | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFMULT | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFPROPERTIES | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFREAD | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFRESAMPLE | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFSHOW | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFSUM | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFTILT | keyword | no | Not bound: physical optics propagation is not built. |
-| ZBFWRITE | keyword | no | Not bound: physical optics propagation is not built. |
+| XDIFFIA | keyword | no | Not bound: the Extended Diffraction Image Analysis's ZBF output is not built (OP-42). |
+| ZBFCLR | keyword | yes | Sets every sample of a ZBF file to zero and writes it back (binary, the header unchanged). |
+| ZBFMULT | keyword | yes | Multiplies a ZBF file's samples, Ex by (Ax + i·Bx) and Ey by (Ay + i·By), and writes it back (binary, the header unchanged); Ay and By have no effect on an unpolarized file. |
+| ZBFPROPERTIES | keyword | yes | Puts a ZBF file's 15 beam values in VECn positions 1 to 15 (nx, ny, dx, dy, waists, positions and Rayleigh ranges x and y, wavelength, total power, peak irradiance, is-polarized, media index); lengths in the current lens units, power in watts, irradiance in watts per lens unit². |
+| ZBFREAD | keyword | yes | Reads a ZBF file into two DECLAREd arrays: the field into beam(i, j, k) (i along x, j along y, k = 1, 2 Ex real and imaginary, 3, 4 Ey's when polarized), as the file stores it; the 15 beam values of ZBFPROPERTIES into property(1 to 15). The property array needs 15 elements (the help lists 15 values though it says 14). |
+| ZBFRESAMPLE | keyword | no | Not bound: the help does not say how the beam is "resampled and interpolated", and physical optics propagation (OP-49) has no resampler. |
+| ZBFSHOW | keyword | no | Not bound: it opens a viewer window, and macros here open no windows (the Beam File Viewer analysis shows a ZBF file). |
+| ZBFSUM | keyword | yes | Coherent sum (coherent ≠ 0) of two ZBF files with the same sampling, point spacing, polarization and pilot beam (so the same reference radii), written to the third file with the first file's header. Refused: the incoherent sum (the help does not say how its real-valued result is stored) and files that differ (the help's scaling and interpolation is not built). |
+| ZBFTILT | keyword | yes | Adds the phase θ = (x − cx)·tx + (y − cy)·ty (radians; x, y in lens units from the sample (nx/2 + 1, ny/2 + 1)) to a ZBF file's stored phase, Ex and Ey, and writes it back (binary, the header unchanged). |
+| ZBFWRITE | keyword | yes | Writes two DECLAREd arrays (laid out as ZBFREAD fills them) to a binary ZBF file in the current lens units. Total power and peak irradiance (positions 12, 13) are not read: they follow from the field. nx and ny must be powers of 2 from 32 to 16384. |
 | ZRDAPPEND | keyword | no | Not bound: the non-sequential model is not built. |
 | ZRDFILTER | keyword | no | Not bound: the non-sequential model is not built. |
 | ZRDPLAYBACK | keyword | no | Not bound: the non-sequential model is not built. |
@@ -285,7 +285,7 @@ Counts: 218 keywords (75 bound, the language's own included), 156 numeric functi
 | GPAR | numeric function | no | Not bound. |
 | GRIN | numeric function | no | Not bound. |
 | GTEM | numeric function | no | Not bound. |
-| IMAE | numeric function | no | Not bound. |
+| IMAE | numeric function | yes | The Geometric Image Analysis's efficiency (a fraction) with the lens's saved settings. The seed is read and changes nothing: the rays come from a Sobol sequence (Conventions §67), so every call gives the same value. |
 | INDX | numeric function | yes | Index of the medium after the surface at the primary wavelength, relative to the system's air (as the trace uses it). |
 | INTE | numeric function | yes | Largest integer not greater than x. |
 | ISCS | numeric function | no | Not bound. |
@@ -506,3 +506,15 @@ code fails, naming it. No code at all is the single ray trace (`Rtr`), as the he
 | Vig | VignettingPlot |
 | Yni | YniContributions |
 | Yyb | YYbarDrawing |
+| Uni | UniversalPlot1D |
+| Un2 | UniversalPlot2D |
+| Pop | PhysicalOpticsPropagation |
+| Bfv | BeamFileViewer |
+| Sim | ImageSimulation |
+| Ima | GeometricImageAnalysis |
+| Ibm | GeometricBitmapImageAnalysis |
+| Dim | PartiallyCoherentImageAnalysis |
+| Pci | PartiallyCoherentImageAnalysis |
+| Xdi | ExtendedDiffractionImageAnalysis |
+| Imv | ImaBimFileViewer |
+| Jbv | BitmapFileViewer |

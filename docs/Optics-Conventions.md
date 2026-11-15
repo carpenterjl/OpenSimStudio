@@ -1360,6 +1360,22 @@ single place in the code, so a correction is one line and its test.
       (section 56 says why).
     - *GETTEXTFILE* runs this program's analysis of the same name for each String Code it maps;
       the text is this program's, not OpticStudio's layout.
+    - *Beam values* (ZBFPROPERTIES, ZBFREAD): every length is in the current lens units (the
+      help says so of the wavelength, and of the ZBF keywords' lengths in general on the ZBFSUM,
+      ZBFTILT and ZBFRESAMPLE pages); the total power is Σ(|Ex|² + |Ey|²) over the samples (the
+      ZBF format's "Ex*Ex + Ey*Ey is in units of watts") and the peak irradiance the largest
+      sample's power over dx·dy. The property array needs 15 elements: the help lists 15 values
+      in positions 1 to 15 though it says "minimum size 14". ZBFWRITE writes the current lens
+      units and ignores positions 12 and 13.
+    - *ZBFTILT* adds θ to the stored phase (multiplies each sample by e^{iθ}); the file keeps the
+      help's phase sign (section 66).
+    - *Written beam files* are binary, whatever the source's layout; ZBFCLR, ZBFMULT and ZBFTILT
+      keep the header, ZBFSUM writes the first file's.
+    - *Folders*: the `<pop>` folder (POP, ZBF…) and the `<data>\<images>` folder
+      (IMA, IMASUM) are `ZplRunOptions.PopFolder` and `ImagesFolder`, the macro folder when not
+      set; a name with a folder is used as given (the help says no paths should be given).
+    - *IMAE's seed* changes nothing: the Geometric Image Analysis draws its rays from a Sobol
+      sequence (section 67), so the efficiency is the same on every call.
     Check: each conformance macro of `ZplConformanceTests` run in OpticStudio on the same singlet,
     the outputs compared.
 
@@ -1565,6 +1581,26 @@ single place in the code, so a correction is one line and its test.
       W0·√M². An M2 Factor of 0 is read as 1. GBPR fails at a waist (infinite radius).
     - *ZTHI* returns the spread when it exceeds the target, else the target (the help's example).
     Check: each operand evaluated in OpticStudio on one lens with the same columns.
+61. **Universal plot readings** (OP-45, section 65). The settings follow OpticStudio 2025 R2's
+    help pages "Universal Plot 1-D" and "Universal Plot 2-D" (saved under
+    `plans/sources/optics/op-45-help/`); no plot has been compared with OpticStudio's output.
+    - *Parameters by name.* The help lists the kinds of independent variable but not the order of
+      OpticStudio's options (UN1_PARAMETER is "0 for first option, 1 for second option"), so this
+      program names them (`UniversalPlotParameter`) and a numbered option cannot be translated.
+      Field data is read as X, Y, weight and the vignetting factors VDX, VDY, VCX, VCY, VAN of one
+      field; wavelength data as one wavelength and its weight.
+    - *Radius 0* is a plane, as a curvature of 0 is.
+    - *Failed points.* The help says that when the operand "cannot be computed, an error message
+      will be displayed and the plot will not be generated". This program shows such a point as a
+      gap instead (no value in the plot, "failed" in the table, the reason listed) and stops only
+      when no point can be computed.
+    - *Multi-configuration overrides.* The help says OpticStudio "automatically alters the
+      corresponding data on the Multi-Configuration operand" when the swept value is one a
+      configuration row sets. This program refuses such a variable instead, naming the row to sweep.
+    - *Steps* must be at least 2 in the 1D plot too (the help states the minimum for 2D only).
+    Check: a 1D and a 2D plot of EFFL against radii, and of a real-ray operand through a point
+    that misses, made in OpticStudio on the same lens.
+
 62. **Physical optics propagation readings** (OP-49, section 66). The pages read are OpticStudio
     2025 R2's "Physical Optics Propagation", "About Physical Optics Propagation" and the pages it
     links, "Physical Optics" (surface properties), "Beam File Viewer", the two ZBF format pages,
@@ -1609,26 +1645,6 @@ single place in the code, so a correction is one line and its test.
     - *Random values* of a multimode beam come from this program's generator.
     Check: a Gaussian and a top hat propagated in OpticStudio through free space and a lens,
     saved as ZBF, read here and compared sample by sample; the POPD values of the same run.
-
-61. **Universal plot readings** (OP-45, section 65). The settings follow OpticStudio 2025 R2's
-    help pages "Universal Plot 1-D" and "Universal Plot 2-D" (saved under
-    `plans/sources/optics/op-45-help/`); no plot has been compared with OpticStudio's output.
-    - *Parameters by name.* The help lists the kinds of independent variable but not the order of
-      OpticStudio's options (UN1_PARAMETER is "0 for first option, 1 for second option"), so this
-      program names them (`UniversalPlotParameter`) and a numbered option cannot be translated.
-      Field data is read as X, Y, weight and the vignetting factors VDX, VDY, VCX, VCY, VAN of one
-      field; wavelength data as one wavelength and its weight.
-    - *Radius 0* is a plane, as a curvature of 0 is.
-    - *Failed points.* The help says that when the operand "cannot be computed, an error message
-      will be displayed and the plot will not be generated". This program shows such a point as a
-      gap instead (no value in the plot, "failed" in the table, the reason listed) and stops only
-      when no point can be computed.
-    - *Multi-configuration overrides.* The help says OpticStudio "automatically alters the
-      corresponding data on the Multi-Configuration operand" when the swept value is one a
-      configuration row sets. This program refuses such a variable instead, naming the row to sweep.
-    - *Steps* must be at least 2 in the 1D plot too (the help states the minimum for 2D only).
-    Check: a 1D and a 2D plot of EFFL against radii, and of a real-ray operand through a point
-    that misses, made in OpticStudio on the same lens.
 
 63. **Image simulation readings** (OP-42, section 67). From the help pages under
     `plans/sources/optics/op-42-help/`; nothing has been compared with OpticStudio's output.
@@ -5342,6 +5358,20 @@ SOLVERETURN in lens units (a curvature in inverse lens units). A macro that call
 fails the solve. SOLVEBEFORESTOP is accepted and does nothing (no solve before the stop is
 refused).
 
+**Beam and image files.** POP runs the Physical Optics Propagation analysis (section 66) with the
+lens's saved settings (`OpticsAnalysesSettings.LastSettings`, else the defaults), the end surface
+replaced by the second argument, and writes the end beam (and, when the saved settings say so, the
+beam after every surface) to the named ZBF file. ZBFPROPERTIES and ZBFREAD return the help's 15
+beam values (a vector, or a 15-element array) and ZBFREAD the samples as stored, beam(i, j, k) with
+i along x and k = 1 … 4 the real and imaginary parts of Ex and Ey; ZBFWRITE writes such arrays.
+ZBFCLR, ZBFMULT and ZBFTILT change a file in place; ZBFSUM sums two files coherently when their
+sampling, spacing, polarization and pilot beam agree, and refuses otherwise. IMA runs the Geometric
+Image Analysis (section 67) with its saved settings and writes the BIM file; IMAE returns that
+analysis's efficiency; IMASUM adds two BIM files of the same size. File names without a folder are
+in `ZplRunOptions.PopFolder` (beam files) or `ImagesFolder` (IMA and BIM files), each the macro
+folder when not set; a ZBF name's extension is made .ZBF. Readings in §10 item 52
+(`ZplBeamLibrary.cs`).
+
 **Calling macros.** CALLMACRO runs a macro of the macro folder as a child with its own variables;
 the call buffers (51 numbers and 51 strings), the lens, the vectors, OPTRETURN and SOLVERETURN are
 shared; the child's screen output is copied into the parent's when it returns; a child's error
@@ -5349,7 +5379,7 @@ names the child and its line. Nesting is limited to 64 (a macro calling itself).
 
 **Not bound** (each fails by name and line when reached; the table gives the reason): graphics
 (GRAPHICS, PLOT, LINE …), analysis windows (OPENANALYSISWINDOW, GETT, WINL …), the non-sequential
-keywords and functions, physical optics (POP, ZBF…), image analysis files, RAYTRACEX, POLTRACE,
+keywords and functions, ZBFRESAMPLE, ZBFSHOW, IMASHOW, XDIFFIA, RAYTRACEX, POLTRACE,
 DEFAULTMERIT, HAMMER, TOLERANCE, QUICKSENSITIVITY, the multi-configuration and tolerance editor
 keywords, LOADMERIT/SAVEMERIT, GETSYSTEMDATA and the other GET… vector keywords, PARAXIAL ON, the
 global coordinate functions (GLC…, RAG…), OPDC, OPTH, the glass catalog functions (GIND, GABB,
@@ -6126,6 +6156,9 @@ string (contours are evenly spaced); the 1D min and max plot value (the line plo
 scale); the UPL and UP2 settings files; altering a multi-configuration row that overrides the swept
 value (refused instead). Readings in §10 item 61.
 
+**ZPL.** GETTEXTFILE's codes Uni and Un2 write the 1D and 2D plots' text with their default
+settings (section 56).
+
 ## 66. Physical optics propagation
 
 OP-49 propagates a sampled coherent beam through a sequential lens, after OpticStudio's Physical
@@ -6270,9 +6303,11 @@ with the same settings share one run.
 - POPI: pixel x + y·nx; 0 and 1 the irradiance, 3 and 4 the real and imaginary part, 7 the phase
   (printed sign); the Ey data are 0.
 
-**ZPL.** The keywords that would reach this item are POP, ZBFCLR, ZBFMULT, ZBFPROPERTIES, ZBFREAD,
-ZBFRESAMPLE, ZBFSHOW, ZBFSUM, ZBFTILT and ZBFWRITE (docs/Optics-ZPL-Library.md); this item does
-not bind them.
+**ZPL.** POP runs this analysis from a macro (saved settings, the end beam written to a ZBF file),
+and ZBFPROPERTIES, ZBFREAD, ZBFWRITE, ZBFCLR, ZBFMULT, ZBFTILT and the coherent ZBFSUM read and
+write beam files through `ZbfFile`; GETTEXTFILE's codes Pop and Bfv write the two analyses' text
+(section 56, docs/Optics-ZPL-Library.md). ZBFRESAMPLE (no resampler), ZBFSHOW (a window), the
+incoherent ZBFSUM and the sum of files that differ in sampling are refused by name.
 
 **Not built:** polarized propagation (Use Polarization); Separate X, Y (the bispherical
 reference); off-axis fields and tilted, decentered or folded systems; the per-surface physical
@@ -6395,6 +6430,12 @@ the grid's Nyquist frequency.
 
 **Viewers.** IMA/BIM: each map over the file's largest value. Bitmap: the stored values, a map per
 channel.
+
+**ZPL.** IMA runs the Geometric Image Analysis from a macro (saved settings, the detector image
+written to a BIM file), IMAE returns its efficiency, IMASUM adds two BIM files, and GETTEXTFILE's
+codes Sim, Ima, Ibm, Dim and Pci, Xdi, Imv and Jbv write the analyses' text (section 56,
+docs/Optics-ZPL-Library.md). IMASHOW (a window) and XDIFFIA (the ZBF output is not built) are
+refused by name.
 
 **Not built:** polarization (refused), ray scattering, JPG and palette bitmaps, ZBF input and output
 (physical optics, OP-49), Light Source Analysis (Premium; non-sequential DAT, SDF and TM25RAY source

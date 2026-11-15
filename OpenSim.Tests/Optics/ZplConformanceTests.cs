@@ -27,7 +27,7 @@ namespace OpenSim.Tests.Optics;
 /// source; no glass catalog is read.
 /// </para>
 /// </summary>
-public sealed class ZplConformanceTests : IDisposable
+public sealed partial class ZplConformanceTests : IDisposable
 {
     private readonly string _dir = Path.Combine(Path.GetTempPath(), "opensim-zpl-tests", Guid.NewGuid().ToString("N"));
 

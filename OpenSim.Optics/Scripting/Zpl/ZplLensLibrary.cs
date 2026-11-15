@@ -33,6 +33,7 @@ public static partial class ZplLibrary
         RegisterMerit();
         RegisterFilesAndAnalyses();
         RegisterLensNotBound();
+        RegisterBeamsAndImages();   // wire-13: after the not-bound notes, so its own notes stand
     }
 
     // ================================================================ Rays
@@ -1161,6 +1162,11 @@ public static partial class ZplLibrary
         ["Rtr"] = "SingleRayTrace", ["Sag"] = "SagTable", ["Sdi"] = "SeidelDiagram", ["Sei"] = "SeidelCoefficients",
         ["Ssg"] = "SystemSummaryGraphic", ["Sur"] = "SurfaceData", ["Sys"] = "SystemData", ["Tra"] = "PolarizationTransmission",
         ["Vig"] = "VignettingPlot", ["Yni"] = "YniContributions", ["Yyb"] = "YYbarDrawing",
+        // wire-13: Universal Plot (OP-45), physical optics (OP-49) and image simulation (OP-42).
+        ["Uni"] = "UniversalPlot1D", ["Un2"] = "UniversalPlot2D", ["Pop"] = "PhysicalOpticsPropagation", ["Bfv"] = "BeamFileViewer",
+        ["Sim"] = "ImageSimulation", ["Ima"] = "GeometricImageAnalysis", ["Ibm"] = "GeometricBitmapImageAnalysis",
+        ["Dim"] = "PartiallyCoherentImageAnalysis", ["Pci"] = "PartiallyCoherentImageAnalysis", ["Xdi"] = "ExtendedDiffractionImageAnalysis",
+        ["Imv"] = "ImaBimFileViewer", ["Jbv"] = "BitmapFileViewer",
     };
 
     /// <summary>GETTEXTFILE's analysis codes and the analysis each runs, for the documentation.</summary>
@@ -1222,10 +1228,7 @@ public static partial class ZplLibrary
         NotBound("COMPOSITEOFFAXISAPERTUREON", "Not bound: its OpticStudio 2025 R2 help page repeats COMPOSITEON's title, syntax and discussion, so what it does is not given (it may be the Composite page's \"Set Tilt/Decenter to follow Base surface aperture\", which is not built).");
         foreach (var k in new[] { "DELETEOBJECT", "INSERTOBJECT", "EXPORTCAD", "GETNSCMTF", "LOADDETECTOR", "SAVEDETECTOR", "MAKEFACETLIST", "NSLT", "NSTR", "NSTR2", "RELOADOBJECTS", "SETDETECTOR", "SETNSCPARAMETER", "SETNSCPOSITION", "SETNSCPROPERTY", "ZRDAPPEND", "ZRDFILTER", "ZRDPLAYBACK", "ZRDSAVERAYS", "ZRDSUM" })
             NotBound(k, "Not bound: the non-sequential model is not built.");
-        foreach (var k in new[] { "POP", "ZBFCLR", "ZBFMULT", "ZBFPROPERTIES", "ZBFREAD", "ZBFRESAMPLE", "ZBFSHOW", "ZBFSUM", "ZBFTILT", "ZBFWRITE" })
-            NotBound(k, "Not bound: physical optics propagation is not built.");
-        foreach (var k in new[] { "IMA", "IMASHOW", "IMASUM", "XDIFFIA" })
-            NotBound(k, "Not bound: image analysis files are not built.");
+        // wire-13: POP, the ZBF keywords, IMA, IMASHOW, IMASUM, XDIFFIA and IMAE are in ZplBeamLibrary.cs.
         NotBound("DEFAULTMERIT", "Not bound: its arguments map onto the Optimization Wizard (OpticsScripting.WithDefaultMerit), but \"any existing default merit function will be deleted\" needs the help's rule for which rows are the old default, which it does not give.");
         NotBound("HAMMER", "Not bound: the Hammer search (OP-58) runs by time, not by cycles.");
         NotBound("TOLERANCE", "Not bound.");
@@ -1269,7 +1272,6 @@ public static partial class ZplLibrary
         FunctionNotBound("ISMS", "Not bound.");
         FunctionNotBound("APOI", "Not bound.");
         FunctionNotBound("FICL", "Not bound: fiber coupling is not built.");
-        FunctionNotBound("IMAE", "Not bound.");
         FunctionNotBound("RELI", "Not bound.");
         FunctionNotBound("MCON", "Not bound.");
         FunctionNotBound("MCOP", "Not bound.");

@@ -1857,11 +1857,15 @@ PRINT and FORMAT, files, CALLMACRO), and the keywords and functions bound to the
 engines — ray tracing (RAYTRACE and RAYX … RAYO), the lens data (SETSURFACEPROPERTY and SPRO, the
 surface functions, INSERT, DELETE, STOPSURF, SOLVETYPE, SETVAR, COMPOSITEON, COMPOSITEOFF), the system data
 (SETSYSTEMPROPERTY and SYPR, the field and wavelength functions), the merit function (SETOPERAND,
-MFCN, OPER, OPEV), OPTIMIZE and QUICKFOCUS, analyses to text files (GETTEXTFILE), and lens files
-(LOADLENS, SAVELENS). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
+MFCN, OPER, OPEV), OPTIMIZE and QUICKFOCUS, analyses to text files (GETTEXTFILE), lens files
+(LOADLENS, SAVELENS), physical optics and beam files (POP, ZBFREAD, ZBFWRITE, ZBFPROPERTIES,
+ZBFCLR, ZBFMULT, ZBFTILT, the coherent ZBFSUM) and the geometric image analysis (IMA, IMAE,
+IMASUM). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
 with what each does here or why it is not bound. Lengths are in lens units; the lens-data
 functions show solved values, as the editor does; a change made by a keyword takes effect at once
-(UPDATE is accepted and checks the lens builds).
+(UPDATE is accepted and checks the lens builds). POP and IMA run their analysis with its
+last-used settings; beam files given without a folder are in the macro folder, as are IMA and BIM
+files.
 
 **In the merit function**, the ZPLM operand runs macro ZPLnn.ZPL (nn = Mac#, from the macro
 folder) on a copy of the lens and takes the value it returns with OPTRETURN in data field Int2;
@@ -1873,7 +1877,8 @@ From the command line: `opensim optics macro <macro.zpl> [--lens FILE] [--arg NA
 [--macro-folder DIR] [--lens-folder DIR] [--out FILE] [--save-lens FILE]`.
 
 Not built: macro graphics and plots, analysis windows driven from a macro (GETT, OPENANALYSISWINDOW),
-the non-sequential and physical optics keywords, RAYTRACEX and polarization traces, DEFAULTMERIT,
+the non-sequential keywords, ZBFRESAMPLE, the incoherent ZBFSUM, XDIFFIA, the viewer windows
+(ZBFSHOW, IMASHOW), RAYTRACEX and polarization traces, DEFAULTMERIT,
 HAMMER and the tolerancing keywords, the multi-configuration and tolerance editor keywords, the
 GET… vector keywords, paraxial ray tracing (PARAXIAL ON), the setters on a lens with a
 multi-configuration table, parameter macro solves, the macro solve in the Lens Data Editor, and a

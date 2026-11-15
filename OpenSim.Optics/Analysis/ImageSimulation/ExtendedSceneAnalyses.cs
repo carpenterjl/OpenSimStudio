@@ -390,6 +390,15 @@ public sealed class GeometricImageAnalysis : WavefrontAnalysisBase<GeometricImag
     public override string Category => ExtendedSceneSupport.Category;
 
     protected override OpticsAnalysisResult Compute(SequentialLens lens, OpticalSystemData system, List<string> notes,
+        GeometricImageSettings settings, CancellationToken cancellation) =>
+        Evaluate(lens, system, notes, settings, cancellation).Result;
+
+    // wire-13: the ZPL function IMAE ("Returns the geometric image analysis efficiency") reads the
+    // efficiency as computed here, not from the report's rounded text.
+    /// <summary>The analysis and its efficiency (a fraction: the rays counted over every ray
+    /// launched, by weight; every unvignetted ray for the spot diagram, the rays on the detector
+    /// otherwise).</summary>
+    internal (OpticsAnalysisResult Result, double Efficiency) Evaluate(SequentialLens lens, OpticalSystemData system, List<string> notes,
         GeometricImageSettings settings, CancellationToken cancellation)
     {
         Check(!settings.UsePolarization, $"{Name}: polarization is not built; turn \"Use polarization\" off.");
@@ -518,7 +527,7 @@ public sealed class GeometricImageAnalysis : WavefrontAnalysisBase<GeometricImag
         if (traced.Failures.Count > 0) assumptions.Add("Rays not counted: " + string.Join("; ", traced.Failures) + ".");
         if (setup.ReplacedVignetting) assumptions.Add("The fields' vignetting factors were replaced by surface apertures.");
         assumptions.AddRange(notes.Distinct());
-        return OpticsAnalysisResult.FromSections(Name, new[] { new ReportSection("Geometric image analysis") { Pairs = pairs } }, assumptions, new[] { plot });
+        return (OpticsAnalysisResult.FromSections(Name, new[] { new ReportSection("Geometric image analysis") { Pairs = pairs } }, assumptions, new[] { plot }), efficiency);
     }
 }
 

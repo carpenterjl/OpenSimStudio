@@ -157,7 +157,7 @@ public sealed class PrescriptionDataAnalysis : OpticsAnalysis<PrescriptionDataSe
             {
                 "Multi-Config Data: multi-configuration is a separate plan item (OP-30).",
                 "F/ Numbers (real working F/# for each field and wavelength): not built; the paraxial working F/# is in First-order data.",
-                "POP Settings: physical optics propagation is not built.",
+                "POP Settings: not listed here; the Physical Optics Propagation analysis (OP-49) shows its own settings.",
                 "Surface detail for non-sequential groups: not built.",
             }
         });

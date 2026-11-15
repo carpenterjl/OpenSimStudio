@@ -45,6 +45,17 @@ public sealed record ZplRunOptions
     /// without a name), or null.</summary>
     public string? LensPath { get; init; }
 
+    // wire-13
+    /// <summary>The folder of beam files, OpticStudio's &lt;pop&gt; folder: POP and the ZBF
+    /// keywords read and write a file name given without a path there. Null: the
+    /// <see cref="MacroFolder"/>.</summary>
+    public string? PopFolder { get; init; }
+
+    /// <summary>The folder of IMA and BIM files, OpticStudio's &lt;data&gt;\&lt;images&gt;
+    /// folder: IMA and IMASUM read and write a file name given without a path there. Null: the
+    /// <see cref="MacroFolder"/>.</summary>
+    public string? ImagesFolder { get; init; }
+
     /// <summary>INPUT and PAUSE; null fails at those keywords.</summary>
     public IZplHost? Host { get; init; }
 
@@ -179,6 +190,8 @@ internal sealed class ZplSession
     public IReadOnlyList<OpticalCatalog> Catalogs { get; }
     public string? MacroFolder => _options.MacroFolder;
     public string? LensFolder => _options.LensFolder;
+    public string? PopFolder => _options.PopFolder ?? _options.MacroFolder;          // wire-13
+    public string? ImagesFolder => _options.ImagesFolder ?? _options.MacroFolder;    // wire-13
     public string? LensPath { get; set; }
     public IZplHost? Host => _options.Host;
     public CancellationToken CancellationToken => _options.CancellationToken;
