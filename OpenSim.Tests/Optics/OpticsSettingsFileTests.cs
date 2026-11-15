@@ -48,6 +48,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
 
         Assert.NotNull(optics.MeritWizard!.AirEdge);                         // OP-56: the wizard's saved settings
         Assert.NotNull(optics.HighYield!.Weight);                            // OP-62: the High-Yield weight
+        Assert.Equal(2, optics.NonSequential!.Objects![0].Faces!.Count);     // OP-70: the non-sequential objects
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 

@@ -83,4 +83,9 @@ public sealed record OpticsSettings
     /// <summary>The High-Yield optimization settings of the Optimize window (OP-62). Null —
     /// every file written before OP-62 — is the defaults.</summary>
     public OpticsHighYieldSettings? HighYield { get; init; }
+
+    // OP-70
+    /// <summary>The non-sequential objects and controls (OP-70). Null — every file written
+    /// before OP-70 — is a system with no non-sequential objects.</summary>
+    public OpticsNonSequentialSettings? NonSequential { get; init; }
 }

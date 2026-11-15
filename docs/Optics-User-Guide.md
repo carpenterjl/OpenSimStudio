@@ -2330,6 +2330,49 @@ single-mode analysis (use POP), OpticStudio's automatic switch-off of the fast a
 multimode fiber modes, polarized POP coupling. The readings not yet checked against OpticStudio are
 listed in docs/Optics-Conventions.md §10 item 64.
 
+## Non-sequential ray tracing
+
+The second engine (docs/Optics-Conventions.md §69): rays that find their own path through objects
+placed in space, reflecting, refracting, splitting and being absorbed wherever they land. What is
+built is the core: the engine, three objects, a stand-in source and detector, the energy ledger,
+and one analysis.
+
+- **Objects.** Sphere (solid or a mirror/absorbing shell), Rectangle, and Standard Lens (two
+  conic faces with annular flats and a possibly tapered edge, OpticStudio's nine parameters).
+  Each has a position, tilts (about x, then the new y, then the new z, or about the fixed axes),
+  a reference object, an "Inside Of" object, a material (blank, a glass or an index, MIRROR or
+  ABSORB) and per-face "Face Is" and coating. Where objects overlap or touch, the later object
+  decides.
+- **Saved scene.** The project's optics record carries the objects and the non-sequential
+  controls (`NonSequential` in the project file, lengths in lens units). There is no editor yet
+  (OP-71): the objects are written in the file or built through the library API.
+- **Controls.** Maximum intersections and segments per ray, maximum nested/touching objects,
+  minimum relative and absolute intensity, glue distance, simple ray splitting.
+- **Energy.** With "Use polarization" on (the default) every face reflects, transmits and absorbs
+  by Fresnel's equations or its coating, uncoated mirrors are aluminium, and glasses absorb by
+  their internal transmittance; off, interfaces are lossless. Splitting traces both the reflected
+  and transmitted rays; simple splitting picks one at random; no splitting traces the transmitted
+  ray.
+- **Energy ledger.** Every run reports where the emitted energy went: detected, absorbed,
+  escaped, below the thresholds, reflected but not traced, stopped at a limit, lost to errors; the
+  lines add up to the emitted energy.
+- **NSC single ray trace** (analysis group "Non-sequential", also `optics analyse` with id
+  `NscSingleRayTrace`): one ray from a start point and direction (optionally in an object's
+  frame, optionally inside an object), with or without polarization and splitting, at one
+  wavelength; every segment with its parent, level, the object it runs through and hits, the
+  face, what happened (X, R, T, G, Z, I), position, direction, normal, intensity and path, then
+  the ray's energy ledger. Trace errors are listed, unless "Ignore trace errors" is set.
+- **Library API.** `NscTracer.Run` traces any list of rays as a Monte Carlo run, the same to the
+  bit at any thread count; `NscSourceStandIn` makes a point-into-a-cone or a collimated-disk
+  source; a surface object flagged as a detecting stand-in absorbs and counts what it receives.
+
+Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
+OP-75), sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
+physics (OP-81), diffraction, gradient index and coating plots in objects (OP-82), ray databases
+and filters (OP-83), Consider/Ignore Objects, mixed mode with ports, several wavelengths in one
+run, a layout of traced non-sequential rays. The readings not yet checked against OpticStudio are
+listed in docs/Optics-Conventions.md §10 item 65.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

@@ -1675,6 +1675,24 @@ single place in the code, so a correction is one line and its test.
       paraxial Jacobian at the chosen field.
     - *Byte order.* BIM and binary IMA are little-endian.
     Check: each analysis in OpticStudio and here on one lens and one file.
+65. **Non-sequential core readings** (OP-70, section 69). From the help pages under
+    `plans/sources/optics/op-70-help/`; nothing has been compared with OpticStudio's output.
+    - *Contact faces.* Hits on different objects within the glue distance of the nearest are one
+      contact, and the highest-numbered of them decides (the help's "last object listed" rule);
+      a surface object with a blank or glass material and no "Face Is" override never decides.
+    - *Coating direction.* A face's layers are applied in their written order when the ray enters
+      the deciding object and reversed when it leaves it (the sequential rule, air to glass
+      forward, carried over); the help states no rule for objects.
+    - *No splitting with energy accounted.* The help says only that the transmitted path is taken;
+      here that ray carries the transmitted power and the reflected power is listed as "not
+      traced".
+    - *Limits.* A ray that reaches the intersection limit is stopped after that intersection; the
+      segment limit counts traced segments of one launched ray, the source point not included.
+    - *Thresholds.* Applied to child rays when they are about to be traced, against the launched
+      ray's starting intensity.
+    - *Segment numbering.* Depth first, the transmitted child before the reflected one.
+    Check: the NSC Single Ray Trace of a glass sphere and a lens pair with splitting on, here and in
+    OpticStudio.
 
 64. **Fiber coupling readings** (OP-50, section 68). From the help pages under
     `plans/sources/optics/op-50-help/` and `op-49-help/`; nothing has been compared with
@@ -6538,3 +6556,118 @@ settings and fiber data; FICP 1–6 and POPD 60–63 are 0 (unpolarized).
 surface in the single-mode tool (the help itself points to POP), OpticStudio's fast-algorithm
 failure test, fiber modes from DLLs or multimode files, polarized POP coupling, non-sequential
 fiber coupling. Readings in §10 item 64.
+
+## 69. Non-sequential ray tracing core
+
+OP-70 builds the second engine: rays that find their own path through objects placed in space
+(`OpenSim.Optics/NonSequential/`). The tests are in `OpenSim.Tests/Optics/NonSequentialTests.cs`
+and `OpenSim.Tests/Core/BoundingVolumeHierarchyTests.cs`. OpticStudio's behaviour was read from its
+2025 R2 help pages saved under `plans/sources/optics/op-70-help/` ("Object Placement",
+"Refraction and Reflection From NSC Objects", "Polarization and Thin Film Coatings", "Ray
+Splitting", "Simple Ray Splitting", the non-sequential System Explorer pages, "Ray Trace", "NSC
+Single Ray Trace", "Ray Database Viewer", "Placing Sources Inside Objects", "Sphere", "Rectangle",
+"Standard Lens", "Coat/Scatter", "General Settings"); the robust-geometry rules from Pharr, Jakob
+and Humphreys, Physically Based Rendering, 4th edition (pbr-book.org), sections 6.8 and 7.3.
+
+**Scene.** `NscScene` is a list of `NscObject`, numbered from 1. Each has a shape
+(`NscGeometry`), a placement, a reference object, an "Inside Of" object, a material
+(`NscMaterial`: blank, a medium, MIRROR or ABSORB) and per-face properties (`NscFace`: "Face Is"
+and a coating name from the system coating catalog).
+
+- Placement: decenters x, y, z then tilts about the local x, the new y, the new z, so
+  G = O + Rx·Ry·Rz·L (section 4, order flag 0, with a z decenter); "Use Global XYZ Rotation Order"
+  gives Rz·Ry·Rx. With a reference object k the transform is composed with object k's:
+  G′ = O′ + R′(O + R·L). References and "Inside Of" are absolute (positive) or relative
+  (negative, added to the object's own number) and must name an earlier object.
+  `NscPlacement.ToTransform`, `NscScene.GlobalPlacements`.
+- Lengths are meters; tilts degrees; the saved form (`OpticsNonSequentialSettings` in
+  `OpenSim.Core/Model`, property `OpticsSettings.NonSequential`) is in lens units and
+  `ProjectNonSequential` converts it.
+
+**Objects** (OP-70 builds only these; the library is OP-72):
+
+| Object | Parameters | Faces |
+|---|---|---|
+| `NscSphere` | radius, "Is Volume?" (a shell must be MIRROR or ABSORB) | 0 |
+| `NscRectangle` | x and y half widths, in the local XY plane, normal +z; a surface | 0 |
+| `NscStandardLens` | front radius, conic, clear semi-diameter, edge; centre thickness; rear radius, conic, clear semi-diameter, edge (radius 0 is flat); reference point at the front vertex | 1 front, 2 back, 0 the annuli and the side |
+
+Each shape gives every intersection on a ray in its own frame, outward normals, a local box and
+an inside test. The Standard Lens faces are the sequential conic F = c(x² + y² + (1 + k)z²) − 2z
+on its vertex sheet, with the sequential normal and vertex-plane transfer (section 13); the
+second root comes from the same quadratic. The sphere uses PBR's accurate discriminant
+(section 6.8.3). The hyperhemispheric sag point is refused (OP-72).
+
+**First hit.** `OpenSim.Core/Geometry/BoundingVolumeHierarchy` is a public double-precision BVH
+over boxes (equal-counts median split, PBR 7.3.1; front-to-back traversal; the slab test widened
+by 1 + 2γ₃, PBR 6.8.2). Meshing's internal `SurfaceBvh` is unchanged and was the starting point.
+A ray leaving a face starts at `RobustRayOrigin.Offset` (PBR 6.8.6) with the error box
+γ₃₂·(|p|₁ + t), and intercepts nearer than the glue distance to the previous one are ignored
+("Glue Distance In Lens Units").
+
+**Media and nesting.** A ray carries the set of refractive volumes it is inside. Its medium is
+the highest-numbered of them, else the background (the system's air by default): "the last
+object listed in the NSC Editor determines the properties of the surface or volume at that
+point". All hits within the glue distance of the nearest are one contact (touching objects);
+each refractive volume among them is entered or left by the sign of direction·normal; the
+highest-numbered object of the contact decides the face's behaviour and coating. Entering an
+object already entered, leaving one not entered, or being inside more objects than the nesting
+limit is a trace error. A ray handed to the engine starts in the background unless its
+"Inside Of" names the object chain it starts in; a start point that contradicts its chain (inside
+an undeclared volume, or outside a declared one) is refused before tracing.
+
+**What a face does** (the deciding object):
+
+| Case | Result |
+|---|---|
+| Detecting stand-in (a surface flagged `IsDetectingStandIn`) | absorbed and counted as detected, per object |
+| ABSORB, or "Face Is" Absorbing | absorbed |
+| MIRROR, or "Face Is" Reflective | reflected back into the medium the ray came from; with energy accounted the reflectance is the coating's, or uncoated aluminium 0.7 − 7.0i (OpticStudio's convention) |
+| Surface object, blank or glass | ignored |
+| Same index on both sides, no coating | no interface |
+| Refractive interface | refracted (vector Snell, section 13); total internal reflection reflects |
+
+**Energy and polarization.** With `UsePolarization` (on by default; splitting forces it, as
+OpticStudio's Ray Trace control does) each ray carries its 3 × 3 coherency matrix Φ, power tr Φ.
+At a refractive or mirror face the coating evaluator (section 12) gives r and t for s and p at the
+angle of incidence; the reflected and transmitted matrices are `PolarizationMatrix.Interface`
+(section 21) with ŝ = k̂ × η̂ and p̂ = k̂ × ŝ on each side, and Φ → PΦPᴴ. An unpolarized ray
+starts as the mean of two orthogonal states, which is exact for incoherent light. What is
+neither reflected nor transmitted is absorbed. Bulk absorption exp(−α·L) uses section 21's α from
+the glass data. With energy off interfaces neither gain nor lose energy.
+
+**Splitting** (`NscSplitting`): None traces the transmitted ray (and lists the reflected power as
+"not traced" when energy is accounted); Split traces both; Simple chooses one with the reflected
+and transmitted powers as relative probabilities and gives it both powers, the absorbed part
+still lost, drawing from SplitMix64.ForStream(seed, ray number).
+
+**Limits and thresholds.** Maximum intersections per ray (at most 4000), segments per ray (at
+most 2,000,000), nested objects (at least 4), minimum relative intensity (of the launched ray's)
+and absolute intensity, glue distance (default 1e-9 m, this program's choice; OpticStudio's own
+default was not found in its help). `NscTraceSettings`.
+
+**Energy ledger** (`NscEnergyLedger`): emitted = detected + absorbed + escaped + below the
+thresholds + not traced + stopped at a limit + lost to errors, each a compensated sum, so the
+residual is a few rounding units. OpticStudio counts limit stops among its "errors"; here they
+have their own line.
+
+**Monte Carlo loop.** `NscTracer.Run` traces caller-supplied rays in fixed chunks of 64 in
+parallel and combines the chunks in order: the ledger is the same to the bit at any thread
+count. With Ignore Errors off the first trace error by ray number stops the run with an
+exception naming the ray, segment, object and cause; on, the ray's energy is lost to errors and
+the run goes on. `NscSourceStandIn` (a point into a cone, a collimated disk; Sobol or SplitMix64;
+power P/N per ray) stands in for OP-77's sources.
+
+**NSC Single Ray Trace** (`NscSingleRayTraceAnalysis`, id `NscSingleRayTrace`): one ray's tree in
+the ray database layout: segment, parent, level, in, hit, face, the letters X, R, T, G, Z, I, the
+global position, direction and normal, intensity, path, optical path, index and a sentence of
+what happened. Segment 0 is the source point; every other row is at the segment's end before the
+interaction there. "Ignore trace errors" leaves the error section out; the rows keep their Z.
+
+**Not built:** the object library (OP-72) and illumination, constructive and CAD objects
+(OP-73 to OP-75); sources (OP-77) and detectors (OP-79) beyond the stand-ins (transparent
+detectors, pixels, objects as detectors); scattering (OP-80); volume physics (OP-81);
+diffraction and gradient index in objects (OP-82); the ray database and filters (OP-83);
+Consider Objects, Ignore Objects and "Rays Ignore Object"; mixed mode (NSC groups in a
+sequential lens with ports); the Non-Sequential Component Editor (OP-71); polychromatic
+tracing (one wavelength per tracer); an absorbing background medium.

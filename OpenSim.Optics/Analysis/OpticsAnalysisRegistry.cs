@@ -190,6 +190,9 @@ public sealed class OpticsAnalysisRegistry
         // OP-50: single-mode and multimode fiber coupling (POP's fiber coupling is in its own analysis).
         registry.Register(new FiberCoupling.SingleModeFiberCouplingAnalysis());
         registry.Register(new FiberCoupling.MultimodeFiberCouplingAnalysis());
+
+        // OP-70: the non-sequential core's single-ray listing.
+        registry.Register(new NonSequential.NscSingleRayTraceAnalysis());
         return registry;
     }
 }
