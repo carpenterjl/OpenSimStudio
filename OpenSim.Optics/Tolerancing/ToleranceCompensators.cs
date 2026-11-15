@@ -12,7 +12,8 @@ namespace OpenSim.Optics.Tolerancing;
 // OP-64: the compensators of a tolerance run (docs/Optics-Conventions.md §42).
 
 /// <summary>A compensated lens: the record, its criterion and the compensators' changes.</summary>
-internal sealed record CompensatedLens(OpticsSettings Settings, double Criterion, IReadOnlyList<double> Compensators, IReadOnlyList<string> Notes);
+internal sealed record CompensatedLens(OpticsSettings Settings, double Criterion, IReadOnlyList<double> Compensators, IReadOnlyList<string> Notes,
+    ToleranceScriptOutput? Script = null);   // OP-67: what a tolerance script reported
 
 /// <summary>
 /// Evaluates the compensators of a tolerance run (help, "Tolerancing", "Comp"; "Evaluating
@@ -60,6 +61,7 @@ internal sealed class ToleranceCompensators
     private readonly double[] _defocus;
     private readonly int _configurations;
     private OpticsSettings? _start;
+    private readonly ToleranceScriptRunner? _script;   // OP-67
 
     public ToleranceCompensators(ToleranceRunOptions options, ToleranceTable table, OpticsSettings nominal, IReadOnlyList<OpticalCatalog> catalogs,
         ToleranceCriterionEvaluator evaluator, int configurations)
@@ -71,7 +73,12 @@ internal sealed class ToleranceCompensators
         _configurations = configurations;
         _defocus = new double[configurations];
         var rows = new List<ToleranceCompensatorRow>();
-        if (IsOptimize)
+        // OP-67: the user script criterion runs the script in place of the compensation.
+        if (options.Criterion == ToleranceCriterion.UserScript)
+            _script = new ToleranceScriptRunner(options.Script is { Text.Length: > 0 } sc ? sc
+                : throw new ArgumentException("The user script criterion needs a tolerance script: write one in the script block (or load a .tsc file)."),
+                options, table, nominal, catalogs);
+        if (IsOptimize && _script is null)
         {
             var all = table.Compensators();
             var chosen = all;
@@ -92,7 +99,7 @@ internal sealed class ToleranceCompensators
                 throw new ArgumentException("Optimize compensation needs at least one COMP, CPAR or CMCO row in the tolerance data (or choose Paraxial focus or None).");
         }
         _rows = rows;
-        Labels = _o.Compensation switch
+        Labels = _script is not null ? Array.Empty<string>() : _o.Compensation switch
         {
             ToleranceCompensation.ParaxialFocus => new[] { "Back focus shift (paraxial focus), lens units" },
             ToleranceCompensation.None => Array.Empty<string>(),
@@ -104,7 +111,11 @@ internal sealed class ToleranceCompensators
 
     public IReadOnlyList<string> Labels { get; }
 
-    public IReadOnlyList<string> Assumptions => _o.Compensation switch
+    // OP-67
+    /// <summary>The tolerance script that replaces the compensation, or null.</summary>
+    internal ToleranceScriptOptions? Script => _script is null ? null : _o.Script;
+
+    public IReadOnlyList<string> Assumptions => _script is not null ? _script.Assumptions : _o.Compensation switch
     {
         ToleranceCompensation.None => new[] { "Compensation: none; COMP and CPAR rows are ignored." },
         ToleranceCompensation.ParaxialFocus => new[]
@@ -125,6 +136,12 @@ internal sealed class ToleranceCompensators
     public CompensatedLens Nominal(CancellationToken token)
     {
         var notes = new List<string>();
+        if (_script is not null)   // OP-67
+        {
+            var (lens, criterion, output) = _script.Run(_nominal, s => s, null, ToleranceScriptTrialId.Nominal(_o.Mode != ToleranceMode.Sensitivity), token);
+            _start = _script.Start(lens);
+            return new CompensatedLens(_start, criterion, Array.Empty<double>(), notes, output);
+        }
         switch (_o.Compensation)
         {
             case ToleranceCompensation.ParaxialFocus:
@@ -149,8 +166,15 @@ internal sealed class ToleranceCompensators
     /// table's (nominal) surface numbers to the record's. TC-15: <paramref name="twin"/>, the trial
     /// with its decenters and tilts at zero, aims a trial lens that has no paraxial model of its own
     /// (<see cref="ToleranceAim"/>); null when the trial has no decenter or tilt.</summary>
-    public CompensatedLens Evaluate(OpticsSettings perturbed, Func<int, int> map, CancellationToken token, OpticsSettings? twin = null)
+    public CompensatedLens Evaluate(OpticsSettings perturbed, Func<int, int> map, CancellationToken token, OpticsSettings? twin = null,
+        ToleranceScriptTrialId? script = null)   // OP-67: which trial a tolerance script runs in
     {
+        if (_script is not null)   // OP-67
+        {
+            var (lens, criterion, output) = _script.Run(perturbed, map, twin,
+                script ?? ToleranceScriptTrialId.Sensitivity(0, ToleranceSide.Min, _o.Mode != ToleranceMode.Sensitivity), token);
+            return new CompensatedLens(lens, criterion, Array.Empty<double>(), Array.Empty<string>(), output);
+        }
         switch (_o.Compensation)
         {
             case ToleranceCompensation.ParaxialFocus:
@@ -222,7 +246,14 @@ internal sealed class ToleranceCompensators
     }
 
     /// <summary>The record with every variable flag removed and the compensator cells flagged Variable.</summary>
-    internal OpticsSettings WithCompensatorVariables(OpticsSettings settings, Func<int, int> map)
+    internal OpticsSettings WithCompensatorVariables(OpticsSettings settings, Func<int, int> map) =>
+        WithVariables(settings, _rows.Select(r => r.Definition), map, c => $"Tolerance row {c.Row} ({c.Code})");
+
+    // OP-67: shared with the tolerance scripts' COMP, CPAR and CMCO commands.
+    /// <summary>The record with every variable flag removed and the cells of <paramref name="compensators"/>
+    /// flagged Variable; <paramref name="who"/> names a compensator in a message.</summary>
+    internal static OpticsSettings WithVariables(OpticsSettings settings, IEnumerable<ToleranceCompensator> compensators, Func<int, int> map,
+        Func<ToleranceCompensator, string> who)
     {
         var surfaces = (settings.Surfaces ?? new List<OpticsSurfaceSettings>()).Select(s =>
             s?.Flags is { } f && f.Any(x => x is not null && string.Equals(x.Kind, SavedSurfaces.VariableFlag, StringComparison.Ordinal))
@@ -233,27 +264,26 @@ internal sealed class ToleranceCompensators
         {
             Values = o.Values?.Select(v => v is not null && string.Equals(v.Solve, "Variable", StringComparison.Ordinal) ? v with { Solve = null } : v!).ToList(),
         }).ToList();
-        foreach (var r in _rows)
+        foreach (var c in compensators)
         {
-            var c = r.Definition;
-            string who = $"Tolerance row {c.Row} ({c.Code})";
+            string name = who(c);
             if (c.Code == "CMCO")
             {
                 var values = operands is not null && c.Int1 >= 1 && c.Int1 <= operands.Count ? operands[c.Int1 - 1]?.Values : null;
                 if (values is null || c.Int2 < 1 || c.Int2 > values.Count)
-                    throw new ArgumentException($"{who}: the multi-configuration cell (operand {c.Int1}, configuration {c.Int2}) does not exist.");
+                    throw new ArgumentException($"{name}: the multi-configuration cell (operand {c.Int1}, configuration {c.Int2}) does not exist.");
                 var cell = values[c.Int2 - 1] ?? new OpticsConfigValueSettings();
                 if (cell.Solve is not null)
-                    throw new ArgumentException($"{who}: the multi-configuration cell (operand {c.Int1}, configuration {c.Int2}) has a {cell.Solve}; a compensator cannot vary it.");
+                    throw new ArgumentException($"{name}: the multi-configuration cell (operand {c.Int1}, configuration {c.Int2}) has a {cell.Solve}; a compensator cannot vary it.");
                 values[c.Int2 - 1] = cell with { Solve = "Variable" };
                 continue;
             }
             int j = map(c.Int1);
-            if (j < 0 || j >= surfaces.Count) throw new ArgumentException($"{who}: surface {c.Int1} is not a surface of the lens.");
+            if (j < 0 || j >= surfaces.Count) throw new ArgumentException($"{name}: surface {c.Int1} is not a surface of the lens.");
             string column = Column(c);
-            var s = surfaces[j] ?? throw new ArgumentException($"{who}: surface {c.Int1} is empty in the saved lens.");
+            var s = surfaces[j] ?? throw new ArgumentException($"{name}: surface {c.Int1} is empty in the saved lens.");
             if (s.Flags is { } flags && flags.Any(x => x is not null && string.Equals(x.Column, column, StringComparison.Ordinal)))
-                throw new ArgumentException($"{who}: surface {c.Int1}'s {column} has a solve or pickup, so a compensator cannot vary it; remove the solve or the compensator row.");
+                throw new ArgumentException($"{name}: surface {c.Int1}'s {column} has a solve or pickup, so a compensator cannot vary it; remove the solve or the compensator row.");
             surfaces[j] = s with { Flags = (s.Flags ?? new List<OpticsCellFlagSettings>()).Append(new OpticsCellFlagSettings { Column = column, Kind = SavedSurfaces.VariableFlag }).ToList() };
         }
         var result = settings with { Surfaces = surfaces };
@@ -261,7 +291,7 @@ internal sealed class ToleranceCompensators
         return result;
     }
 
-    private static string Column(ToleranceCompensator c) => c.Code == "CPAR"
+    internal static string Column(ToleranceCompensator c) => c.Code == "CPAR"
         ? SavedSurfaces.ParameterColumn(c.Int2)
         : c.Int2 switch { 0 => SavedSurfaces.ThicknessColumn, 1 => SavedSurfaces.RadiusColumn, _ => SavedSurfaces.ConicColumn };
 

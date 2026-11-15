@@ -170,7 +170,8 @@ internal static class SavedLensSurgery
         };
     }
 
-    private static OpticsMeritFunctionSettings? RenumberMerit(OpticsMeritFunctionSettings? merit, Func<int, int> map, int count)
+    // OP-67: internal for the tolerance scripts' LOADMERIT.
+    internal static OpticsMeritFunctionSettings? RenumberMerit(OpticsMeritFunctionSettings? merit, Func<int, int> map, int count)
     {
         if (merit?.Operands is not { Count: > 0 } rows) return merit;
         int M(int k) => k >= 0 && k < count ? map(k) : k;

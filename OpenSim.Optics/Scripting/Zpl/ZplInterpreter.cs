@@ -120,7 +120,7 @@ internal sealed class ZplInterpreter : IZplEvaluator
                 if (!_arrays.Remove(r.Name)) throw new ZplRuntimeException($"RELEASE {r.Name}: there is no array {r.Name} (declare it with DECLARE).");
                 return pc + 1;
             case ZplKeywordStatement k:
-                ZplLibrary.Keyword(k.Name)(this, k.Args);
+                (Session.Dialect?.Handler(k.Name) ?? ZplLibrary.Keyword(k.Name))(this, k.Args);   // OP-67: context keywords first
                 return pc + 1;
             default:
                 throw new InvalidOperationException(s.GetType().Name);

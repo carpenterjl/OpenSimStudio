@@ -407,6 +407,19 @@ public class ScriptingSurfaceTests
         HasMethod(T + "ToleranceDataSet", "YieldCurve", "String", "QuickYieldResult");
         HasMethod(T + "ToleranceDataSet", "ToCsv");
 
+        // OP-67: tolerance scripts (the User Script criterion).
+        HasSettableProperty(T + "ToleranceRunOptions", "Script", "ToleranceScriptOptions");
+        Assert.NotNull(Named(T + "ToleranceScriptOptions").GetConstructor(Type.EmptyTypes));
+        HasSettableProperty(T + "ToleranceScriptOptions", "Text", "String");
+        HasSettableProperty(T + "ToleranceScriptOptions", "Name", "String");
+        HasSettableProperty(T + "ToleranceScriptOptions", "MeritFolder", "String");
+        HasSettableProperty(T + "ToleranceScriptOptions", "OutputFolder", "String");
+        HasMethod(T + "ToleranceScript", "Check", "ToleranceScriptOptions");
+        HasReadableProperty(T + "ToleranceTrial", "Script", "ToleranceScriptOutput");
+        HasReadableProperty(T + "MonteCarloTrial", "Script", "ToleranceScriptOutput");
+        HasReadableProperty(T + "ToleranceScriptOutput", "Text", "String");
+        HasReadableProperty(T + "ToleranceScriptOutput", "Reports", "IReadOnlyList<ToleranceScriptReport>");
+
         // OP-16: stock lens catalogs, Insert Lens and design templates.
         const string LC = "OpenSim.Optics.Catalogs.";
         HasMethod(LC + "LensCatalog", "FromFolder", "String", "IReadOnlyList<OpticalCatalog>", "String", "ZemaxImportOptions");

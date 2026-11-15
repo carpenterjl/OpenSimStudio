@@ -1408,6 +1408,27 @@ single place in the code, so a correction is one line and its test.
     surface; a two-singlet design against a vendor catalog), the ranked surfaces, the converted
     coefficients and the matched parts compared.
 
+56. **Tolerance script readings** (OP-67, section 60). The commands follow OpticStudio 2025 R2's
+    "The Tolerance Script Commands" (saved under `plans/sources/optics/op-67-help/`); no script has
+    been run in OpticStudio to compare. Where the help leaves a point open this program reads it so:
+    - *The start of each trial* is the lens the nominal run of the script left (so NOMINAL OPT_OFF
+      starts the trials from the lens as entered), its variable flags removed and the lens's own
+      merit function back; the merit function a trial starts with is the lens's own, renumbered by
+      the tolerancing. The help says neither.
+    - *PERTURB's surface numbers* are the original lens's, mapped through the inserted surfaces, as
+      the help says for COMP, CPAR and LOADMERIT; its normal draw uses sigma = (max - min)/(2 nstd),
+      truncated at min and max ("the number of standard deviations from the center of the
+      distribution to either edge"); nstd need not be an integer.
+    - *REPORT to a TXT file* writes the number in the current FORMAT, one per line (CR LF), UTF-8;
+      BIN writes little-endian doubles. HEADER writes its text, a blank and "Nominal", the row
+      number or the Monte Carlo trial number.
+    - *Compensators to begin with*: the Tolerance Data Editor's COMP, CPAR and CMCO rows (or the
+      rows chosen); CLEARCOMP removes them.
+    - *REPORT's value* is the last evaluation (GETMERIT, LOADMERIT, OPTIMIZE), even when the lens
+      changed since, as the help's GETMERIT text implies.
+    Check: the help's Tolerance Script Example run in OpticStudio and here on one lens, the
+    criteria compared trial by trial.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -4233,6 +4254,10 @@ indexes and searches a stock lens catalog (§53); `opensim optics macro` (OP-99,
   (`<project>-optics-quickyield`) holds `quickyield.txt` (`QuickYieldResult.ReportLines`, the
   editor's text), `histogram.csv`, `yield.csv` (with a yield limit) and `log.txt`; a failed
   evaluation exits 2. `optics testplates` (OP-17) is not built on the command line.
+- **Tolerance scripts** (`CliRunner.OpticsScript.cs`, OP-67). `optics tolerance --script FILE`
+  sets the User script criterion and reads the script (§60) before the run is chosen;
+  `--merit-folder` and `--script-out` default to the saved folders, else the script's folder.
+  Either without `--script` is a usage error.
 - **Not built.** Multi-configuration cells as sweep targets, lens files (`.osslens`) as input,
   ranges for the global searches from the command line (the engines' default ranges are used,
   `--curvature-limit` aside), and CSV of the analyses' tables (their text is written) are not
@@ -5062,7 +5087,7 @@ GNUM …), the solve and tolerance readers (SOLV, SOLM, TOLV, MCOP, MCON), COMMA
 obsolete setter keywords, and the parameter, chip zone and mechanical semi-diameter macro solves.
 The Lens Data Editor does not offer the macro solve; SOLVETYPE sets it. Of the JGraph bridge, a
 macro can be run from JGraph (`ZplMacro.Run` is on the scripting surface); a JGraph script as a
-macro solve or operand is not built. Tolerance scripts are not built.
+macro solve or operand is not built. Tolerance scripts are section 60.
 
 **App and command line.** **ZPL Macros…** in the optics panel opens `MacroEditorWindow`: the macro
 folder and its macro list, the editor, Run (off the UI thread), Stop, Check, and the output; INPUT
@@ -5296,3 +5321,130 @@ report.txt, log.txt and the project with the result.
 wavelength-range limiting criterion as a test of its own; the coating check (COATING.DAT's stock
 coatings); Save Best Combination's `<lens>_SLM.zmx`; conversion to the Odd forms (Odd and Extended
 Odd sources are read, not offered as targets); multi-configuration caveats beyond the CRVT check.
+
+## 60. Tolerance scripts and nested assemblies
+
+Plan item OP-67. Sources: OpticStudio 2025 R2 help, "Using Tolerance Scripts", "The Tolerance
+Script Commands", "Tolerance Script Example", "Tolerance Scripts", "General Comments About Min &
+Max Values on Compensators", "Evaluating Compensators", "Nesting Rules for Monte Carlo Analysis"
+and "Tolerancing" (Criterion tab, "User Script", "Script"), saved under
+`plans/sources/optics/op-67-help/` and `op-63-help/`. Readings the help leaves open are §10 item 56.
+
+**The language.** Decided by the owner (OQ-3, 2026-11-12): a tolerance script is written in the
+macro language of section 56. The help's commands are **ZPL keywords that exist only in a
+tolerance script**, not a separate dialect: the whole of ZPL (variables, IF, FOR, GOSUB, PRINT,
+FORMAT, the lens and ray functions, CALLMACRO) is available, and the commands CLEARCOMP, COMP,
+CPAR, CMCO, CEDV, CNPA, CNPS, GETMERIT, LOADMERIT, OPTIMIZE, OPTIMIZE-OD, NOMINAL, PERTURB, QUIET,
+REPORT, REPORT_NB, HEADER, OPENFILE, CLOSEFILE, SAVE and UPDATE are added (`ZplDialect`,
+`ToleranceScript.CommandNames`). LOADMERIT, OPTIMIZE and UPDATE, which ZPL also has, take the
+script meaning in a script. A command's arguments are split at commas when the text has a comma
+outside strings and parentheses (ZPL's form), else at blanks (the help's form, `CPAR 3 1`,
+`REPORT "MTF = " 2`); in the blank form an argument has no blanks, so an expression with spaces is
+written in the comma form. "!" starts a comment, as in ZPL. FORMAT is ZPL's; its default in a
+script is the help's "16.8 EXP". The script is the `ToleranceScriptOptions` of
+`ToleranceRunOptions.Script` and runs with the criterion `ToleranceCriterion.UserScript` ("User
+Script", help, "Tolerancing").
+
+**Where it runs.** "The script is executed many times": once for the nominal, twice for each row
+in the sensitivity analysis, repeatedly in the inverse modes and once for each Monte Carlo trial
+(help). It runs in place of the compensation, on the perturbed lens of the trial (OP-63's
+perturber, TC-15's aim twin): it may perturb, set and clear compensators, load merit functions,
+optimize and report. Its criterion is "the entire merit function value resulting from the last
+LOADMERIT or OPTIMIZE command" (Tolerance Script Example), or GETMERIT (LOADMERIT: "unless a
+subsequent GETMERIT, LOADMERIT, OPTIMIZE, or OPTIMIZE-OD command is executed"). A script that runs
+none of these returns no criterion and the trial fails, saying so. The Comp setting is not used,
+and compensator bounds are not enforced ("This bounding of the compensators is ignored if "merit
+function" or "user script" is selected"). The trials start from the lens the nominal run left
+(§10 item 56). Quick Yield refuses the user script criterion (it fits a response model).
+
+**Commands.**
+- *COMP surf code* (0 thickness, 1 curvature, 2 conic), *CPAR surf param* and *CMCO operand
+  config* add a compensator; surface numbers are the original lens's, mapped through the surfaces
+  the tolerancing inserted. *CLEARCOMP* removes them all. The Tolerance Data Editor's COMP, CPAR and
+  CMCO rows are the compensators a run starts with; a script that names COMP, CPAR or CMCO anywhere
+  is refused with such rows in the table ("If any compensators are defined in the script, then no
+  compensators are allowed in the Tolerance Data Editor"). CEDV is refused ("deprecated and has
+  been replaced by CPAR"), CNPA and CNPS too (no non-sequential model).
+- *LOADMERIT name* replaces the lens's merit function and evaluates it. OpticStudio's .MF layout
+  is not published (section 56), so the file is this program's merit function as JSON (the record
+  the project file holds; the Tolerance Data Editor's **Save merit function** writes it), read from
+  the merit folder (`.json` is added when the name has no extension; .MF and .ZMX are refused,
+  saying why), or a merit function the caller names in `ToleranceScriptOptions.MeritFunctions`. Its
+  surface numbers are renumbered like the table's (OP-63's surgery). A merit function built in the
+  script with INSERTMFO and SETOPERAND (in the trial lens's numbering) works as well. *GETMERIT*
+  evaluates the current merit function. Both evaluate over every configuration, on one thread,
+  aimed by the trial's twin (below); a failed row fails the trial.
+- *OPTIMIZE n* runs OP-57's damped least squares and *OPTIMIZE-OD n* Orthogonal Descent on the
+  current compensators (every other variable flag removed, as for Optimize compensation), n cycles,
+  or automatic for 0 or none, on one thread. *NOMINAL OPT_OFF | OPT_ON* turns OPTIMIZE off or on
+  while the nominal is computed and does nothing in a trial (help).
+- *PERTURB type int1 int2 int3 stat nstd min max* adds a random value to surface data (type 0:
+  thickness, radius, conic, a fixed semi-diameter), a parameter (1) or a multi-configuration cell
+  (3: int1 the configuration, int2 the operand, as the help orders them); statistics 0 normal, 1
+  uniform, 2 parabolic (OP-65's uniform and parabolic draws). It is ignored on the nominal (help).
+  A cell set by a solve or pickup is refused. Types 2 (extra data), 4 and 5 (non-sequential) are
+  refused. *UPDATE* checks that the lens builds.
+- *REPORT "text" operand* writes the text and the value of row `operand` of the last evaluation
+  (0: the merit function) to the tolerance output unless *QUIET ON*; *REPORT "text" -1* writes the
+  text alone; *REPORT_NB* omits the line break. REPORT … SZERNIKE is refused: the Zernike Standard
+  Coefficients analysis is not built. Every REPORT is kept in `ToleranceScriptOutput.Reports`, and
+  the text (PRINT's too) in `ToleranceScriptOutput.Text`; the reports list it under "Script
+  output".
+- *OPENFILE "name" TXT|BIN*, *HEADER "text"*, *CLOSEFILE*: REPORT's number (never its text) goes to
+  the open file. The help appends from each call to the file; trials run in parallel, so each run's
+  data are kept with its trial and the files are written when the run is done, the nominal first
+  and then the trials in order (rows in order, min then max), the same at any thread count. A name
+  without a folder is in the output folder. OPENFILE is refused in the inverse modes, as the help
+  says it "should not be used during an inverse sensitivity run". *SAVE n* writes TSAVnnnn.ZMX
+  (OP-94's writer, unsupported items listed in the notes) in the output folder when the run is
+  done; with the same n in several trials the last in run order wins. The sensitivity run and the
+  Monte Carlo run are separate runs here, so each writes its own files (the help's single run
+  writes the nominal, sensitivity and Monte Carlo data into one file).
+- ZPL keywords that would make a trial depend on files, a person or other trials are refused in a
+  script, naming the line: OUTPUT to a file (OUTPUT SCREEN is allowed), DELETEFILE, COPYFILE,
+  RENAMEFILE, MAKEFOLDER, SAVELENS, SAVEARCHIVE, LOADLENS, LOADARCHIVE, TOLERANCE,
+  QUICKSENSITIVITY, INPUT and PAUSE.
+
+**Determinism.** Each run of the script parses it afresh and has its own ZPL session, variables,
+compensators, merit function, file buffers and random numbers: PERTURB draws from
+`SplitMix64.ForStream(seed, −k)` for Monte Carlo trial k (the rows draw from stream k) and from
+streams of seed 1 numbered by row and side in the sensitivity analysis; RAND() is seeded from the
+same stream. A trial therefore depends only on what it is, and a run is bitwise the same at any
+thread count. Functions of the clock (ETIM, GDATE, TIMER) are not deterministic and should not
+feed the criterion.
+
+**Aim.** Every evaluation and every optimizer step on a trial lens is aimed by TC-15's twin (§42):
+the trial with its tolerance decenters and tilts at zero (the trial's own lens when it has none),
+with the compensator cells the script has used copied in, except a coordinate break's decenters and
+tilts (parameters 1 to 5), which stay at their start. A lens with a paraxial model of its own keeps
+using it (`ToleranceAim.Attach`), so a decenter compensator can be optimized on an otherwise
+centred lens. `LocalOptimizationOptions.Configurations` (one defaulted member of the optimizer,
+added by OP-67; null keeps the settings-to-lens path) builds these aimed configurations. Lens
+changes made with ZPL's own keywords (SETSURFACEPROPERTY …) are not copied into the twin; they
+matter only on a lens without a paraxial model.
+
+**Nested assemblies ("NEST").** The plan names "NEST: Nested Elements and Systems Tolerancing".
+OpticStudio 2025 R2 has no NEST operand: its tolerance operand and control operand summary tables
+(`op-63-help/`) list none, and no help page of that name exists (fetched 2026-11-15, not found).
+What the help defines is nesting of element tolerances ("Nesting Rules for Monte Carlo Analysis":
+element tilt and decenter ranges must be nested, the outermost first; "This order would simulate
+the tilting of an assembly, composed of multiple elements, each of which may be tilted within the
+assembly itself"), which OP-63 already validates and applies (§36), and stage-by-stage
+compensation of sub-assemblies, which is what a script does: one compensator group and merit
+function per stage, as in the help's example. Nothing beyond that is built for NEST.
+
+**App and command line.** The Tolerance Data Editor has a **Tolerance script** block (its own
+expander, a FormGrid): the script's name, the merit and output folders, the merit file to save,
+the script text, **Check** (`ToleranceScript.Check`: syntax errors and refused or unbuilt
+commands, by line) and **Save merit function**. The script, its name and its folders are saved with
+the run settings (`OpticsToleranceRunSettings.ScriptName`, `ScriptText`, `ScriptMeritFolder`,
+`ScriptOutputFolder`, `ScriptMacroFolder`). The sensitivity and Monte Carlo runs use it when the
+criterion is User script. `opensim optics tolerance <project> --script FILE.TSC [--merit-folder
+DIR] [--script-out DIR]` sets the criterion and reads the script.
+
+**Not built:** REPORT … SZERNIKE (no Zernike Standard Coefficients analysis); PERTURB of extra data
+and non-sequential data; CNPA and CNPS; OpticStudio's .MF merit function files; the <data>\Tolerance
+folder convention (the script is text in the run settings, or a file named on the command line);
+Separate Fields/Configs with a script (OpticStudio does not offer it with this criterion either); a
+script in Quick Yield; a NEST operand (OpticStudio has none). No script has been compared with
+OpticStudio's own output (§10 item 56).

@@ -43,6 +43,10 @@ public sealed record ToleranceTrial
     public string? Failure { get; init; }
 
     public bool Succeeded => Failure is null;
+
+    // OP-67
+    /// <summary>What the tolerance script reported in this trial; null without a script.</summary>
+    public ToleranceScriptOutput? Script { get; init; }
 }
 
 /// <summary>One tolerance row's result: the trials at its two extremes and, in the inverse modes,
@@ -108,6 +112,13 @@ public sealed record ToleranceRunResult
 
     public int Trials { get; init; }
 
+    // OP-67
+    /// <summary>What the tolerance script reported on the nominal lens; null without a script.</summary>
+    public ToleranceScriptOutput? NominalScript { get; init; }
+
+    /// <summary>The files the tolerance script's OPENFILE and SAVE wrote, in the order written.</summary>
+    public IReadOnlyList<string> ScriptFiles { get; init; } = Array.Empty<string>();
+
     /// <summary>The report, one line each: nominal, every row, the worst offenders, the estimate, the assumptions.</summary>
     public IReadOnlyList<string> ReportLines()
     {
@@ -132,6 +143,25 @@ public sealed record ToleranceRunResult
         lines.Add(EstimatedChange is double c ? $"Estimated change (RSS): {V(c)}{U}." : "Estimated change (RSS): not available (see the notes).");
         lines.Add(EstimatedPerformance is double f ? $"Estimated performance: {V(f)}{U}." : "Estimated performance: not available (see the notes).");
         if (Notes.Count > 0) { lines.Add(""); lines.Add("Notes:"); lines.AddRange(Notes.Select(n => "  " + n)); }
+        // OP-67: the script's output (REPORT unless QUIET ON, and PRINT), the nominal first.
+        var script = new List<(string Who, ToleranceScriptOutput Output)>();
+        if (NominalScript is { } ns) script.Add(("Nominal", ns));
+        foreach (var r in Rows)
+        {
+            if (r.AtMin.Script is { } a) script.Add(($"Row {r.Row} {r.Code} min", a));
+            if (r.AtMax.Script is { } b) script.Add(($"Row {r.Row} {r.Code} max", b));
+        }
+        if (script.Any(s => s.Output.Text.Length > 0))
+        {
+            lines.Add("");
+            lines.Add("Script output:");
+            foreach (var (who, output) in script.Where(s => s.Output.Text.Length > 0))
+            {
+                lines.Add("  " + who + ":");
+                lines.AddRange(output.Text.TrimEnd('\r', '\n').Replace("\r\n", "\n").Split('\n').Select(l => "    " + l));
+            }
+        }
+        if (ScriptFiles.Count > 0) lines.Add("Script files written: " + string.Join(", ", ScriptFiles) + ".");
         lines.Add("");
         lines.Add("Assumptions:");
         lines.AddRange(Assumptions.Select(a => "  " + a));
@@ -271,12 +301,18 @@ public static class ToleranceAnalysis
         var newRows = table.Rows.ToArray();
         foreach (var r in slots) newRows[r.Row - 1] = newRows[r.Row - 1] with { Min = r.Min, Max = r.Max };
 
+        // OP-67: the script's files, the nominal first and then the rows in order (min, then max).
+        IReadOnlyList<string> scriptFiles = compensator.Script is { } script
+            ? ToleranceScriptFiles.Write(new[] { start.Script }.Concat(slots.SelectMany(r => new[] { r.AtMin.Script, r.AtMax.Script })), script, notes)
+            : Array.Empty<string>();
+
         return new ToleranceRunResult
         {
             Options = options, Nominal = n, Unit = unit, Compensators = compensator.Labels, Rows = slots, WorstOffenders = worst,
             EstimatedChange = c, EstimatedPerformance = f, Table = new ToleranceTable(newRows, table.IrregularityModel),
             Assumptions = Assumptions(options, evaluator, compensator, nominalLens, system, configuration, configurations),
             Notes = notes, Trials = trials + 1,
+            NominalScript = start.Script, ScriptFiles = scriptFiles,   // OP-67
         };
     }
 
@@ -303,7 +339,7 @@ public static class ToleranceAnalysis
         int configuration = MultiConfiguration.CurrentConfiguration(nominal);
         int configurations = MultiConfiguration.ConfigurationCount(nominal);
         var (nominalLens, system) = ToleranceCriterionEvaluator.Build(nominal, configuration, catalogs);
-        var fields = options.Criterion is ToleranceCriterion.MeritFunction or ToleranceCriterion.BoresightError
+        var fields = options.Criterion is ToleranceCriterion.MeritFunction or ToleranceCriterion.BoresightError or ToleranceCriterion.UserScript   // OP-67
             ? Array.Empty<ToleranceField>() : ToleranceCriterionEvaluator.FieldsOf(system, options.Fields, notes);
         MeritFunction? merit = null;
         if (options.Criterion == ToleranceCriterion.MeritFunction)
@@ -376,8 +412,9 @@ public static class ToleranceAnalysis
             {
                 // TC-15: with the aim twin (the row at zero) when the row decenters or tilts.
                 var trial = ToleranceAim.Apply(perturber, start, table, new[] { new ToleranceStep(i, value) });
-                var e = compensator.Evaluate(trial.Perturbed, trial.Map, token, trial.Twin);
-                return t with { Criterion = e.Criterion, Change = ChangeOf(e.Criterion, n, o.Change), Compensators = e.Compensators };
+                var e = compensator.Evaluate(trial.Perturbed, trial.Map, token, trial.Twin,
+                    ToleranceScriptTrialId.Sensitivity(i + 1, side, o.Mode != ToleranceMode.Sensitivity));   // OP-67
+                return t with { Criterion = e.Criterion, Change = ChangeOf(e.Criterion, n, o.Change), Compensators = e.Compensators, Script = e.Script };
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException)
             {
@@ -455,6 +492,8 @@ public static class ToleranceAnalysis
             case ToleranceCriterion.MeritFunction:
                 lines.Add("The lens's own merit function, over every configuration (help: \"Uses whatever merit function has been defined for the lens\"); compensator bounds are not added (help).");
                 break;
+            case ToleranceCriterion.UserScript:   // OP-67: the script's lines follow with the compensators'
+                break;
             case ToleranceCriterion.BoresightError:
                 lines.Add($"Boresight error: the radial image coordinate of the on-axis chief ray at the primary wavelength over the magnitude of the paraxial effective focal length, radians (help, \"Tolerancing\"), configuration {configuration}.");
                 break;
@@ -492,7 +531,7 @@ public static class ToleranceAnalysis
             lines.Add($"Inverse: each limit is searched by Brent's method to {ToleranceRunSettings.F(o.InverseTolerance)} of its starting value, assuming the criterion changes monotonically with the tolerance (help); limits are only ever tightened.");
         lines.Add("Radial operands (TSDR, TEDR, TARR, TRLR) are applied along +y, TIRR's astigmatism along y (OP-63's defaults).");
         lines.Add("A trial its decenters and tilts make non-axial is traced as it is, with the entrance pupil, fields, paraxial focus and focal length of the same trial with its decenters and tilts at zero (TC-15, docs/Optics-Conventions.md §42).");
-        lines.Add("Not built: Separate Fields/Configs, the polynomial fit and the cache, Force Ray Aiming, the Config \"All\" choice (the current configuration is toleranced), the RMS angular and user script criteria, Skip Sensitivity (Monte Carlo runs on its own: MonteCarloAnalysis, OP-65).");
+        lines.Add("Not built: Separate Fields/Configs, the polynomial fit and the cache, Force Ray Aiming, the Config \"All\" choice (the current configuration is toleranced), the RMS angular criteria, Skip Sensitivity (Monte Carlo runs on its own: MonteCarloAnalysis, OP-65).");
         return lines;
     }
 }

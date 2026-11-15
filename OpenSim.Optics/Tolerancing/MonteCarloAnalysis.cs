@@ -110,6 +110,10 @@ public sealed record MonteCarloTrial
     public string? MtfFailure { get; init; }
 
     public bool Succeeded => Failure is null;
+
+    // OP-67
+    /// <summary>What the tolerance script reported in this trial; null without a script.</summary>
+    public ToleranceScriptOutput? Script { get; init; }
 }
 
 /// <summary>A percentile: the value <see cref="Percent"/> % of the evaluated trials lie at or below.</summary>
@@ -198,6 +202,13 @@ public sealed record MonteCarloResult
 
     public required IReadOnlyList<string> Assumptions { get; init; }
     public required IReadOnlyList<string> Notes { get; init; }
+
+    // OP-67
+    /// <summary>What the tolerance script reported on the nominal lens; null without a script.</summary>
+    public ToleranceScriptOutput? NominalScript { get; init; }
+
+    /// <summary>The files the tolerance script's OPENFILE and SAVE wrote, in the order written.</summary>
+    public IReadOnlyList<string> ScriptFiles { get; init; } = Array.Empty<string>();
 
     public int Failed => Trials.Count(t => !t.Succeeded);
     public int Evaluated => Trials.Count(t => t.Succeeded);
@@ -298,6 +309,7 @@ public sealed record MonteCarloResult
             lines.Add($"Yield: {y.Passed} of {y.Evaluated} evaluated trials ({StudyReport.Number(100 * y.Fraction, "g4")} %) have the criterion {(HigherIsBetter ? "at or above" : "at or below")} {V(y.Limit)}{u}"
                 + (Failed > 0 ? $"; {Failed} failed trial{(Failed == 1 ? " is" : "s are")} not counted." : "."));
         if (Notes.Count > 0) { lines.Add(""); lines.Add("Notes:"); lines.AddRange(Notes.Select(n => "  " + n)); }
+        ToleranceScriptFiles.AppendOutput(lines, new[] { ("Nominal", NominalScript) }.Concat(Trials.Select(t => ($"Trial {t.Index}", t.Script))), ScriptFiles);   // OP-67
         lines.Add("");
         lines.Add("Assumptions:");
         lines.AddRange(Assumptions.Select(a => "  " + a));
@@ -391,7 +403,7 @@ public static class MonteCarloAnalysis
         var plan = new Plan(nominal, table, catalogs, run, options with { Overlay = null });
         var t = plan.Trial(k, out var lens);
         if (!t.Succeeded || lens is null) throw new ArgumentException($"Monte Carlo trial {k} failed, so it has no lens: {t.Failure}");
-        if (plan.Run.Compensation != ToleranceCompensation.ParaxialFocus) return lens.Settings;
+        if (plan.Run.Compensation != ToleranceCompensation.ParaxialFocus || plan.Run.Criterion == ToleranceCriterion.UserScript) return lens.Settings;   // OP-67: a script's lens is as it left it
         return WithFocusShift(lens.Settings, t.Compensators[0], plan.Configurations, k);
     }
 
@@ -610,7 +622,7 @@ public static class MonteCarloAnalysis
             CompensatedLens evaluated;
             try
             {
-                evaluated = _setup.Compensator.Evaluate(applied.Perturbed, applied.Map, token, applied.Twin);
+                evaluated = _setup.Compensator.Evaluate(applied.Perturbed, applied.Map, token, applied.Twin, ToleranceScriptTrialId.OfMonteCarlo(k, Seed));   // OP-67
             }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException or NotSupportedException)
             {
@@ -622,6 +634,7 @@ public static class MonteCarloAnalysis
                 Criterion = evaluated.Criterion,
                 Change = ToleranceAnalysis.ChangeOf(evaluated.Criterion, _n, Run.Change),
                 Compensators = evaluated.Compensators,
+                Script = evaluated.Script,   // OP-67
             };
             if (_mtf is not null && k <= Options.Overlay!.Trials)
             {
@@ -696,6 +709,11 @@ public static class MonteCarloAnalysis
                 .ToList();
             assumptions.AddRange(MonteCarloAssumptions());
 
+            // OP-67: the script's files, the nominal first and then the trials in order.
+            IReadOnlyList<string> scriptFiles = _setup.Compensator.Script is { } script
+                ? ToleranceScriptFiles.Write(new[] { _start.Script }.Concat(trials.Select(t => t.Script)), script, notes)
+                : Array.Empty<string>();
+
             return new MonteCarloResult
             {
                 RunOptions = Run, Options = Options, Seed = Seed, Nominal = _n,
@@ -703,6 +721,7 @@ public static class MonteCarloAnalysis
                 Rows = _rows.Select(r => r.Index + 1).ToArray(), Distributions = _rows.Select(r => r.Distribution).ToArray(),
                 Trials = trials, Statistics = stats, CompensatorStatistics = compStats, Yield = yield, Best = best, Worst = worst,
                 NominalMtf = NominalMtf, MtfUnit = MtfUnit, Assumptions = assumptions, Notes = notes,
+                NominalScript = _start.Script, ScriptFiles = scriptFiles,   // OP-67
             };
         }
 
@@ -716,7 +735,7 @@ public static class MonteCarloAnalysis
             yield return $"Statistics over the evaluated trials only: the sample standard deviation (n − 1); percentiles by linear interpolation between order statistics.";
             if (Options.Overlay is { } ov)
                 yield return $"MTF overlay: OP-39's FFT MTF of the compensated lens at field {ov.Field}, every wavelength by its weight, {Run.PsfSampling} × {Run.PsfSampling} pupil grid, {ov.Points} frequencies to {StudyReport.Number(ov.MaxFrequency, "g6")} {MtfUnit}, the first {ov.Trials} trials.";
-            yield return "Not built: TEZI's random per-term coefficients (each trial applies the drawn RMS equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst files by name, tolerance scripts (OP-67), the Tolerance Data Viewer and Yield curve (OP-66).";
+            yield return "Not built: TEZI's random per-term coefficients (each trial applies the drawn RMS equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst files by name, the Tolerance Data Viewer and Yield curve (OP-66).";
         }
     }
 }

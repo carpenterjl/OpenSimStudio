@@ -136,6 +136,7 @@ public sealed partial class OpticsToleranceEditorViewModel
             CompensatorRows = rows.Count == 0 ? null : rows,
             Limit = Limit, Increment = Increment, ShowWorst = ShowWorst,
             MaxDegreeOfParallelism = Math.Max(1, Threads),
+            Script = ScriptOptions(),   // OP-67 (OpticsToleranceEditorViewModel.Script.cs)
         };
     }
 
@@ -159,6 +160,7 @@ public sealed partial class OpticsToleranceEditorViewModel
             Limit = o.Limit;
             Increment = o.Increment;
             ShowWorst = o.ShowWorst;
+            LoadScript(o.Script);   // OP-67
         }
         finally { _applying = was; }
     }
@@ -180,7 +182,7 @@ public sealed partial class OpticsToleranceEditorViewModel
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.PropertyName is { } name && (RunSettingNames.Contains(name) || MonteCarloSettingNames.Contains(name)) && !_applying) _publish();   // OP-65: Monte Carlo settings too
+        if (e.PropertyName is { } name && (RunSettingNames.Contains(name) || MonteCarloSettingNames.Contains(name) || ScriptSettingNames.Contains(name)) && !_applying) _publish();   // OP-65: Monte Carlo settings too; OP-67: the script
         OnYieldPropertyChanged(e.PropertyName);   // OP-66
     }
 

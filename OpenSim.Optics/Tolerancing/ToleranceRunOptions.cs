@@ -57,6 +57,11 @@ public enum ToleranceCriterion
     /// <summary>The fraction of the ray energy within <see cref="ToleranceRunOptions.EncircledRadius"/>
     /// of the centroid (OP-41's <see cref="Analysis.EnclosedEnergy.GeometricEnclosedEnergy"/>).</summary>
     GeometricEncircledEnergy = 14,
+    // OP-67: help, "Tolerancing", Criterion tab: "User Script: A user script is a macro-like
+    // command file which defines the procedure to be used for alignment and evaluation of the
+    // lens during tolerancing."
+    /// <summary>The merit function value a tolerance script returns (<see cref="ToleranceRunOptions.Script"/>).</summary>
+    UserScript = 15,
 }
 
 /// <summary>How the change due to a tolerance is computed (help, "Tolerancing", "Change").</summary>
@@ -163,6 +168,11 @@ public sealed record ToleranceRunOptions
 
     /// <summary>Called after every tolerance row, on a worker thread.</summary>
     public Action<ToleranceRunProgress>? Progress { get; init; }
+
+    // OP-67
+    /// <summary>The tolerance script of the <see cref="ToleranceCriterion.UserScript"/> criterion;
+    /// ignored for the other criteria.</summary>
+    public ToleranceScriptOptions? Script { get; init; }
 }
 
 /// <summary>What a criterion is: its name, whether larger is better, and whether Quick
@@ -187,7 +197,6 @@ public static class ToleranceCriteria
     public static IReadOnlyList<string> NotBuilt { get; } = new[]
     {
         "RMS angular radial, x and y (afocal systems): not built.",
-        "User script: tolerance scripts are OP-67.",
     };
 
     public static ToleranceCriterionInfo Info(ToleranceCriterion c) => c switch
@@ -207,6 +216,7 @@ public static class ToleranceCriteria
         ToleranceCriterion.DiffractionMtfSagittal => new(c, "Diffraction MTF sagittal", true, false),
         ToleranceCriterion.DiffractionEncircledEnergy => new(c, "Diffraction encircled energy", true, false),
         ToleranceCriterion.GeometricEncircledEnergy => new(c, "Geometric encircled energy", true, false),
+        ToleranceCriterion.UserScript => new(c, "User script", false, false),   // OP-67
         _ => throw new ArgumentOutOfRangeException(nameof(c), c, "Unknown tolerance criterion."),
     };
 
@@ -246,6 +256,12 @@ public static class ToleranceRunSettings
             ShowWorst = o.ShowWorst == d.ShowWorst ? null : o.ShowWorst,
             MtfFrequency = o.MtfFrequency == 0 ? null : o.MtfFrequency,
             EncircledRadiusMicrometers = o.EncircledRadius == 0 ? null : o.EncircledRadius,
+            // OP-67
+            ScriptName = o.Script is { } sc && sc.Name != new ToleranceScriptOptions().Name ? sc.Name : null,
+            ScriptText = o.Script is { Text.Length: > 0 } st ? st.Text : null,
+            ScriptMeritFolder = o.Script?.MeritFolder,
+            ScriptOutputFolder = o.Script?.OutputFolder,
+            ScriptMacroFolder = o.Script?.MacroFolder,
         };
         return s == new OpticsToleranceRunSettings() ? null : s;
     }
@@ -280,6 +296,14 @@ public static class ToleranceRunSettings
             ShowWorst = saved.ShowWorst ?? o.ShowWorst,
             MtfFrequency = saved.MtfFrequency ?? 0,
             EncircledRadius = saved.EncircledRadiusMicrometers ?? 0,
+            // OP-67
+            Script = saved.ScriptName is null && saved.ScriptText is null && saved.ScriptMeritFolder is null && saved.ScriptOutputFolder is null && saved.ScriptMacroFolder is null
+                ? null
+                : new ToleranceScriptOptions
+                {
+                    Name = saved.ScriptName ?? new ToleranceScriptOptions().Name, Text = saved.ScriptText ?? "",
+                    MeritFolder = saved.ScriptMeritFolder, OutputFolder = saved.ScriptOutputFolder, MacroFolder = saved.ScriptMacroFolder,
+                },
         };
     }
 

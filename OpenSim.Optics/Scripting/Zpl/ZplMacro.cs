@@ -234,6 +234,10 @@ internal sealed class ZplSession
     public long Steps { get; private set; }
     public void CountStep() => Steps++;
 
+    // OP-67
+    /// <summary>The context keywords this run binds (a tolerance script's commands); null for a plain macro.</summary>
+    public ZplDialect? Dialect { get; set; }
+
     /// <summary>The lens as entered (settings), changed by the keywords.</summary>
     public OpticsSettings System
     {

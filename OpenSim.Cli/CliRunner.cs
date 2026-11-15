@@ -180,6 +180,10 @@ public static partial class CliRunner
             --compensation none|paraxial|dls|od      --change linear|rss   --fields y|xy|user
             --sampling N --limit V --increment V --mtf-frequency V --radius UM --cycles N
             --worst N --threads N
+            --script FILE.TSC   the User Script criterion (OP-67): the tolerance script runs in
+                                every trial instead of the compensation; --merit-folder DIR
+                                (LOADMERIT's .json files) and --script-out DIR (OPENFILE, SAVE)
+                                default to the saved folders, else the script's folder
             --montecarlo        (or --mode montecarlo) Monte Carlo tolerancing instead (OP-65),
                                 with the saved Monte Carlo settings as defaults:
                                 --trials N --seed N (0: from the clock) --yield-limit V

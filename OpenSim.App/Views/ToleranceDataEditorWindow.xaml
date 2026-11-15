@@ -265,6 +265,43 @@
             </ScrollViewer>
         </Expander>
 
+        <!-- OP-67: the tolerance script of the User Script criterion (OpticStudio's Tolerance Scripts):
+             ZPL with the tolerance-script commands, run in every trial instead of the compensation. -->
+        <Expander DockPanel.Dock="Bottom" Header="Tolerance script (User script criterion)" Margin="0,4,0,0"
+                  AutomationProperties.AutomationId="ToleranceScriptExpander">
+            <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto">
+                <DockPanel Margin="4">
+                    <controls:FormGrid DockPanel.Dock="Left" Width="380" VerticalAlignment="Top" IsEnabled="{Binding IsRunIdle}">
+                        <Label Content="Script name"/>
+                        <TextBox Text="{Binding ScriptName, UpdateSourceTrigger=LostFocus}" AutomationProperties.AutomationId="ToleranceScriptName"
+                                 ToolTip="The name messages give the script, as ALIGN.TSC."/>
+                        <Label Content="Merit folder"/>
+                        <TextBox Text="{Binding ScriptMeritFolder, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="LOADMERIT reads its merit function files (.json, this program's form) from this folder."/>
+                        <Label Content="Output folder"/>
+                        <TextBox Text="{Binding ScriptOutputFolder, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="OPENFILE names without a folder and SAVE's TSAVnnnn.ZMX files go here, written when the run is done."/>
+                        <Label Content="Merit file to save"/>
+                        <TextBox Text="{Binding ScriptMeritName, UpdateSourceTrigger=LostFocus}"
+                                 ToolTip="Save merit function writes the lens's merit function under this name in the merit folder."/>
+                    </controls:FormGrid>
+                    <StackPanel Margin="8,0,0,0">
+                        <WrapPanel Margin="0,0,0,4">
+                            <Button Content="Check" Command="{Binding CheckScriptCommand}" MinWidth="70" Margin="0,0,4,4"
+                                    AutomationProperties.AutomationId="ToleranceScriptCheckButton"/>
+                            <Button Content="Save merit function" Command="{Binding SaveMeritForScriptCommand}" Margin="0,0,4,4"
+                                    ToolTip="Write the lens's merit function as a file LOADMERIT reads."/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding ScriptStatus}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding ScriptText, UpdateSourceTrigger=LostFocus}" AcceptsReturn="True" AcceptsTab="True"
+                                 FontFamily="Consolas" MinHeight="160" MaxHeight="300" VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" IsEnabled="{Binding IsRunIdle}"
+                                 AutomationProperties.AutomationId="ToleranceScriptText"/>
+                    </StackPanel>
+                </DockPanel>
+            </ScrollViewer>
+        </Expander>
+
         <!-- OP-64: the tolerance run (OpticStudio's Tolerancing dialog, Set-Up and Criterion tabs, as far
              as built; Quick Sensitivity). Run works on the project's lens and the rows above. -->
         <Expander DockPanel.Dock="Bottom" Header="Tolerance run (sensitivity, inverse limit, inverse increment)" Margin="0,4,0,0"

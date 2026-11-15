@@ -419,6 +419,7 @@ public static partial class CliRunner
             Progress = p => stdout.WriteLine($"  {p.RowsDone} of {p.RowCount} rows, {p.Trials} trials{(p.Last is null ? "" : $" (last {p.Last})")}"),
         };
 
+        options = WithScriptOption(o, options);   // OP-67: --script (CliRunner.OpticsScript.cs)
         if (o.ContainsKey("quick-yield"))   // OP-66: Quick Yield (CliRunner.OpticsYield.cs)
         {
             if (monteCarlo || mode is not null)

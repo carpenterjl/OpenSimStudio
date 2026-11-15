@@ -175,7 +175,8 @@ public sealed record OpticsToleranceRunSettings
     /// <summary>"RmsSpotRadius", "RmsSpotX", "RmsSpotY", "RmsWavefront", "MeritFunction",
     /// "BoresightError", "StrehlRatio", "GeometricMtfAverage", "GeometricMtfTangential",
     /// "GeometricMtfSagittal", "DiffractionMtfAverage", "DiffractionMtfTangential",
-    /// "DiffractionMtfSagittal", "DiffractionEncircledEnergy" or "GeometricEncircledEnergy".</summary>
+    /// "DiffractionMtfSagittal", "DiffractionEncircledEnergy", "GeometricEncircledEnergy" or
+    /// "UserScript" (OP-67).</summary>
     public string? Criterion { get; init; }
 
     /// <summary>"LinearDifference" or "RssDifference".</summary>
@@ -213,6 +214,22 @@ public sealed record OpticsToleranceRunSettings
 
     /// <summary>The encircled-energy criteria's radius, micrometers.</summary>
     public double? EncircledRadiusMicrometers { get; init; }
+
+    // OP-67: the tolerance script of the "UserScript" criterion.
+    /// <summary>The script's name (as "ALIGN.TSC"); null is the default name.</summary>
+    public string? ScriptName { get; init; }
+
+    /// <summary>The script's text (ZPL with the tolerance-script commands).</summary>
+    public string? ScriptText { get; init; }
+
+    /// <summary>The folder LOADMERIT reads merit function files from.</summary>
+    public string? ScriptMeritFolder { get; init; }
+
+    /// <summary>The folder of OPENFILE's files and SAVE's lenses.</summary>
+    public string? ScriptOutputFolder { get; init; }
+
+    /// <summary>The folder of the macros CALLMACRO runs.</summary>
+    public string? ScriptMacroFolder { get; init; }
 }
 
 /// <summary>

@@ -171,6 +171,8 @@ public sealed class ToleranceSensitivityTests
             Compensation = ToleranceCompensation.OptimizeOd, Fields = ToleranceFieldSet.XYSymmetric, Sampling = 5, PsfSampling = 128,
             OptimizerCycles = 3, CompensatorRows = new[] { 2, 4 }, Limit = 0.6, Increment = 0.1, ShowWorst = 7,
             MtfFrequency = 25, EncircledRadius = 7.5,
+            // OP-67: the tolerance script's saved fields.
+            Script = new ToleranceScriptOptions { Name = "ALIGN.TSC", Text = "GETMERIT", MeritFolder = "m", OutputFolder = "o", MacroFolder = "z" },
         };
         var saved = ToleranceRunSettings.ToSettings(o)!;
         var notes = new List<string>();

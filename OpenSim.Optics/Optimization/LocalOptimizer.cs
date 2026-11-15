@@ -102,6 +102,12 @@ public sealed class LocalOptimizationOptions
 
     /// <summary>Called on the optimizer's thread after every cycle that improved the design; null for none.</summary>
     public Action<LocalOptimizationProgress>? Progress { get; init; }
+
+    // OP-67
+    /// <summary>Builds the configurations an evaluation traces from the record with the variables
+    /// applied; null (the default) is <see cref="ProjectMeritConfigurations"/>. Tolerance scripts
+    /// use it to aim a trial lens its decenters make non-axial (TC-15's aim twin).</summary>
+    public Func<OpticsSettings, IMeritConfigurations>? Configurations { get; init; }
 }
 
 /// <summary>The outcome of <see cref="LocalOptimizer.Run"/>.</summary>
@@ -248,8 +254,10 @@ public static class LocalOptimizer
                 throw new ArgumentException($"The derivative increment of {variables[i].Kind} variables must be positive and finite, not {h.ToString(CultureInfo.InvariantCulture)}.");
         }
 
+        // OP-67: the caller's configurations, else the settings-to-lens path.
+        IMeritConfigurations Configurations(OpticsSettings x) => options.Configurations?.Invoke(x) ?? new ProjectMeritConfigurations(x, catalogs);
         MeritEvaluation Evaluate(double[] values) =>
-            MeritEvaluator.Evaluate(function, new ProjectMeritConfigurations(LensVariables.Apply(optics, variables, values), catalogs), registry, meritOptions);
+            MeritEvaluator.Evaluate(function, Configurations(LensVariables.Apply(optics, variables, values)), registry, meritOptions);
         double[] ToValues(double[] z) { var v = new double[n]; for (int i = 0; i < n; i++) v[i] = z[i] * scale[i]; return v; }
 
         var startValues = LensVariables.Values(optics, variables);

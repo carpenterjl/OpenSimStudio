@@ -102,6 +102,10 @@ public sealed class ZplProgram
     internal IReadOnlyDictionary<string, int> Labels { get; }
     internal IReadOnlyDictionary<string, int> Subs { get; }
 
+    // OP-67
+    /// <summary>The context keywords the macro was parsed with (a tolerance script's commands); null for a plain macro.</summary>
+    internal ZplDialect? Dialect { get; private set; }
+
     /// <summary>The keywords and functions the macro names that this version does not bind
     /// (<see cref="ZplLibrary"/>), each with the first line naming it, for an editor to warn
     /// before a run. A run fails only when it reaches one.</summary>
@@ -114,7 +118,7 @@ public sealed class ZplProgram
         {
             switch (s)
             {
-                case ZplKeywordStatement k when !ZplLibrary.IsKeywordBound(k.Name): Add(k.Name, k.Line); break;
+                case ZplKeywordStatement k when !ZplLibrary.IsKeywordBound(k.Name) && Dialect?.Binds(k.Name) != true: Add(k.Name, k.Line); break;   // OP-67: context keywords are bound
                 case ZplIfThen t: Walk(t.Then); break;
             }
             foreach (var e in Expressions(s)) Calls(e, s.Line);
@@ -152,7 +156,11 @@ public sealed class ZplProgram
 
     /// <summary>Parses macro text; throws <see cref="ZplException"/> naming the line of the first
     /// error.</summary>
-    public static ZplProgram Parse(string text, string name = "macro")
+    public static ZplProgram Parse(string text, string name = "macro") => Parse(text, name, null);
+
+    // OP-67
+    /// <summary>Parses macro text with the keywords of a context added (<see cref="ZplDialect"/>).</summary>
+    internal static ZplProgram Parse(string text, string name, ZplDialect? dialect)
     {
         ArgumentNullException.ThrowIfNull(text);
         var statements = new List<ZplStatement>();
@@ -161,10 +169,12 @@ public sealed class ZplProgram
         {
             string line = ZplLexer.StripComment(lines[n]);
             if (line.Trim().Length == 0) continue;
-            try { statements.Add(ParseStatement(line, n + 1, allowBlock: true)); }
+            try { statements.Add(ParseStatement(line, n + 1, allowBlock: true, dialect)); }
             catch (ZplRuntimeException e) { throw new ZplException(name, n + 1, e.Message, e); }
         }
-        return Resolve(name, statements);
+        var program = Resolve(name, statements);
+        program.Dialect = dialect;   // OP-67
+        return program;
     }
 
     private static ZplProgram Resolve(string name, List<ZplStatement> st)
@@ -238,8 +248,11 @@ public sealed class ZplProgram
         "IF", "ELSE", "ENDIF", "FOR", "NEXT", "LABEL", "SUB", "DECLARE",
     };
 
-    internal static ZplStatement ParseStatement(string line, int number, bool allowBlock)
+    internal static ZplStatement ParseStatement(string line, int number, bool allowBlock, ZplDialect? dialect = null)
     {
+        // OP-67: a context keyword takes the rest of the line as its arguments.
+        if (dialect?.Match(line) is { } d) return new ZplKeywordStatement(d.Name, new ZplArgs(d.Tail, d.Offset)) { Line = number };
+
         var tokens = ZplLexer.Tokenize(line);
         var first = tokens[0];
         if (first.Kind != ZplTokenKind.Identifier)
@@ -281,7 +294,7 @@ public sealed class ZplProgram
                 var thenToken = p.Next();
                 string after = line[thenToken.End..];
                 if (after.Trim().Length == 0) throw new ZplRuntimeException("THEN needs a command after it.");
-                return new ZplIfThen(condition, ParseStatement(after, number, allowBlock: false)) { Line = number };
+                return new ZplIfThen(condition, ParseStatement(after, number, allowBlock: false, dialect)) { Line = number };
             }
             case "ELSE":
                 NoArguments(tokens, "ELSE", "put the commands of the ELSE branch on the following lines");

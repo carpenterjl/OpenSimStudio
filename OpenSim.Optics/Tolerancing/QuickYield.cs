@@ -273,6 +273,9 @@ public static class QuickYield
         var mc = monteCarlo ?? new MonteCarloOptions();
         var q = options ?? new QuickYieldOptions();
         if (q.Samples < 1) throw new ArgumentException($"Quick Yield: at least one sample, not {q.Samples}.");
+        // OP-67: a script's PERTURB and per-trial files have no place in a fitted response model.
+        if (r.Criterion == ToleranceCriterion.UserScript)
+            throw new ArgumentException("Quick Yield fits a response model to the criterion over a few lens evaluations; the user script criterion is not offered there. Run Monte Carlo with the script instead.");
         CheckMonteCarlo(mc);
         var token = r.CancellationToken;
         int seed = mc.Seed != 0 ? mc.Seed : ClockSeed();

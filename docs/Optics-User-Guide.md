@@ -1485,6 +1485,10 @@ a part not built), 2 the run failed or was cancelled.
   `quickyield.txt` (the editor's report text), `histogram.csv` and `yield.csv`; a failed
   evaluation gives exit 2. `--wizard` (with any tolerance run) first writes the Tolerance Wizard's
   rows from its saved settings and runs them; the project is not changed.
+- `opensim optics tolerance <project> --script FILE.TSC` runs the sensitivity (or, with
+  `--montecarlo`, the Monte Carlo) analysis with the User script criterion and the tolerance script
+  read from FILE.TSC (see Tolerance scripts); `--merit-folder DIR` and `--script-out DIR` set where
+  LOADMERIT reads and OPENFILE and SAVE write (default: the saved folders, else the script's).
 - `opensim optics optimise <project> --high-yield W` adds the High-Yield rows at weight W to the
   merit function (from the saved Optimization Wizard options) before optimizing; the written
   project carries them.
@@ -1865,8 +1869,8 @@ Not built: macro graphics and plots, analysis windows driven from a macro (GETT,
 the non-sequential and physical optics keywords, RAYTRACEX and polarization traces, DEFAULTMERIT,
 HAMMER and the tolerancing keywords, the multi-configuration and tolerance editor keywords, the
 GET… vector keywords, paraxial ray tracing (PARAXIAL ON), the setters on a lens with a
-multi-configuration table, parameter macro solves, the macro solve in the Lens Data Editor, a
-JGraph script as a macro solve or operand, and tolerance scripts. No macro has been compared with
+multi-configuration table, parameter macro solves, the macro solve in the Lens Data Editor, and a
+JGraph script as a macro solve or operand (tolerance scripts are under Tolerance scripts). No macro has been compared with
 OpticStudio's own output. The rules are in docs/Optics-Conventions.md §56.
 
 ## Diffractive, grating and holographic surfaces
@@ -1948,6 +1952,81 @@ The trials use the optimization settings at the bottom of the window. From the c
 `opensim optics convert <project> --tool asphere|best-asphere|stock` (options in `opensim help`).
 Not built: writing `<lens>_SLM.zmx`, the coating check, conversion to the Odd forms.
 
+## Tolerance scripts
+
+A tolerance script describes how each toleranced lens is aligned and judged, as OpticStudio's
+tolerance scripts do: adjust this, measure that, then compensate. It is written in the ZPL macro
+language (see ZPL macros) with the tolerance-script commands added, and runs in every trial of a
+sensitivity or Monte Carlo run instead of the compensation.
+
+In the Tolerance Data Editor, open **Tolerance script**, write the script, and choose **User
+script** as the criterion in the tolerance run. **Check** lists syntax errors and commands this
+version does not run, with their lines. The script, its name and its folders are saved with the
+project.
+
+The commands (OpticStudio's list):
+
+- `CLEARCOMP` removes the compensators; `COMP surf code` (0 thickness, 1 curvature, 2 conic),
+  `CPAR surf param` and `CMCO operand config` add one. Surface numbers are those of your lens; the
+  surfaces the tolerancing inserts are accounted for. With no COMP, CPAR or CMCO in the script,
+  the table's COMP, CPAR and CMCO rows are the compensators; with them, the table may not have any.
+- `LOADMERIT name` loads a merit function and evaluates it; `GETMERIT` evaluates the current one.
+  The merit function files are this program's: build the merit function in the Merit Function
+  Editor, set the **Merit folder** and the **Merit file to save**, and press **Save merit function**
+  (OpticStudio's .MF files cannot be read). A script can also build one with INSERTMFO and
+  SETOPERAND.
+- `OPTIMIZE n` (damped least squares) and `OPTIMIZE-OD n` (orthogonal descent) adjust the current
+  compensators to minimise the current merit function; n = 0 or nothing runs until converged.
+  `NOMINAL OPT_OFF` skips them while the nominal performance is computed.
+- `PERTURB type int1 int2 int3 stat nstd min max` adds a random change to a thickness, radius,
+  conic, fixed semi-diameter (type 0), parameter (1) or multi-configuration value (3); it does
+  nothing on the nominal lens. `UPDATE` checks that the lens still builds.
+- `REPORT "text" row` prints the text and the value of a merit function row (0: the whole merit
+  function; -1: the text alone); `REPORT_NB` leaves out the line break; `QUIET ON` stops the
+  printing. `OPENFILE "name" TXT|BIN`, `HEADER "text"` and `CLOSEFILE` send the numbers to a file
+  in the **Output folder**; `SAVE n` saves the lens as TSAVnnnn.ZMX there. Files are written when
+  the run is done, in trial order.
+- `FORMAT m.n [EXP]` sets REPORT's number format (default 16.8 EXP).
+
+The criterion of each trial is the value of the merit function after the last LOADMERIT, GETMERIT,
+OPTIMIZE or OPTIMIZE-OD. The report shows each trial's printed text under "Script output". A script
+that fails stops that trial only, and the trial's note names the script, the line and the problem;
+a syntax error stops the run before it starts. Arguments may be separated by blanks, as in
+OpticStudio (`CPAR 3 1`), or by commas, as in ZPL (`CPAR 3, n + 1`).
+
+An example, after OpticStudio's: centre element 2 with the decenters of the coordinate break at
+surface 3, then refocus with the thickness of surface 7, then evaluate:
+
+```
+NOMINAL OPT_OFF
+CLEARCOMP
+LOADMERIT CENTER
+CPAR 3 1
+CPAR 3 2
+OPTIMIZE
+CLEARCOMP
+LOADMERIT FOCUS
+COMP 7 0
+OPTIMIZE
+CLEARCOMP
+LOADMERIT EVALUATION
+REPORT "chief ray y = " 1
+```
+
+Nested assemblies: a group toleranced inside a larger toleranced group (element tilts and decenters
+nested, the outermost first) is set up in the tolerance table as before; a script then aligns each
+stage with its own compensators and merit function. OpticStudio has no separate NEST operand, and
+neither does this program.
+
+From the command line: `opensim optics tolerance <project> --script FILE.TSC [--merit-folder DIR]
+[--script-out DIR]`.
+
+Not built: REPORT … SZERNIKE (Zernike coefficients), PERTURB of extra data and non-sequential
+data, CNPA and CNPS, OpticStudio's .MF merit function files, a script in Quick Yield. Keywords that
+would make trials depend on each other or on a person (OUTPUT to a file, SAVELENS, LOADLENS, file
+operations, INPUT, PAUSE, TOLERANCE) are refused in a script. No script has been compared with
+OpticStudio's own output. The rules are in docs/Optics-Conventions.md §60.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1964,7 +2043,7 @@ Not built yet, and not to be relied on until they appear in this guide:
   the local optimizer, glass substitution, the Global and Hammer searches, the tolerance data editor with
   its operands, sensitivity and inverse sensitivity with compensators and the MTF and encircled
   energy criteria, Monte Carlo tolerancing, the tolerance wizard, summary, data viewer and Quick
-  Yield and the contrast (MTF) wizard criterion are built; the full operand catalogue and the
+  Yield, tolerance scripts and the contrast (MTF) wizard criterion are built; the full operand catalogue and the
   encircled-energy merit operands are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
