@@ -1268,6 +1268,11 @@ single place in the code, so a correction is one line and its test.
       DGRATING (with PARM 1 and 2) is also named by a reader (RayOptics). Their extra data are
       XDAT n = parameter n + 12, which the Binary 2 and Toroidal Hologram help pages' extra-data
       numbering supports; no file with any of these types was seen.
+    - *OP-53's TYPE codes* (BIRE__IN, BIRE_OUT) are read the same way from the same table; no
+      reader names them. XDAT 1 as the gradient mode (parameter 13) follows the help's "Extra Data
+      Value 1". That the GLAS line holds the ordinary glass's name, with the extraordinary glass
+      found by the "-E" suffix and not written, is read from the help's description of the glass
+      name column; no file with a birefringent surface was seen.
     - *Written lines.* Files are written in the forms read; whether OpticStudio reads them back
       unchanged (in particular the fields this program writes as zeros) was not tried.
     Check: a lens with each solve, pickup, variable and surface type saved by OpticStudio, read
@@ -1456,6 +1461,33 @@ single place in the code, so a correction is one line and its test.
     Check: a volume hologram's Diffraction Efficiency, Efficiency vs. Angle and Efficiency vs.
     Wavelength in OpticStudio and here.
 
+58. **Birefringent media readings** (OP-53, section 62). The surfaces follow OpticStudio 2025 R2's
+    "Birefringent In and Birefringent Out" and "Birefringent Types" (saved under
+    `plans/sources/optics/op-53-help/`); no birefringent lens has been traced in OpticStudio to
+    compare. Where the help leaves a point open this program reads it so:
+    - *Sequence.* A crystal begins at a Birefringent In and ends at the next Birefringent In
+      (crystal to crystal, as the help's Wollaston prism needs) or Birefringent Out; only
+      coordinate breaks and ignored surfaces may stand between. The help describes the pair but
+      states no rule.
+    - *Optical path in a crystal* is the phase, N·Δr along the wave normal (n(θ_w)·cos α per unit
+      ray length). The help says rays follow ŝ and the index is n(θ_w); it does not say which path
+      length OpticStudio reports.
+    - *Phase of the other mode in modes 2 and 3* is the plane-wave retardance
+      k₀(N_other − N_traced)·Δr, both wave vectors sharing the tangential wave vector of the last
+      interface; the help says only that the effective index "properly referenced to the ordinary
+      ray direction" is used.
+    - *Amplitude coefficients* at a birefringent interface come from the boundary conditions (the
+      help gives none), so transmission through a birefringent surface has not been compared.
+    - *Along the optic axis* the ordinary field is the interface's s and the extraordinary its p
+      ("ZOS chooses the ordinary ray to be s-polarized and the extraordinary ray to be
+      p-polarized"); the help's further dependence of that choice on the input polarization is not
+      reproduced.
+    - *Parax Ignore 0* with an extraordinary mode is refused for paraxial data (the help does not
+      say which extraordinary index paraxial rays would use). A zero crystal axis is refused (the
+      non-sequential page takes (0, 0, 1); the sequential page says nothing).
+    Check: the help's Wollaston prism sample and a calcite plate traced in OpticStudio in modes 0–3,
+    ray positions, optical path and Polarization Ray Trace transmission compared.
+
 59. **Imaging and ray operand readings** (OP-55A, section 63). The operand definitions are
     OpticStudio 2025 R2's "Optimization Operands (Alphabetically)" and category pages (saved under
     `plans/sources/optics/op-54-help/`); no operand has been evaluated in OpticStudio to compare.
@@ -1493,33 +1525,6 @@ single place in the code, so a correction is one line and its test.
       fraction; where the sampling's window cannot reach Frac the row fails (the help returns
       1e+10).
     Check: each operand in OpticStudio and here on one lens with the same columns.
-
-58. **Birefringent media readings** (OP-53, section 62). The surfaces follow OpticStudio 2025 R2's
-    "Birefringent In and Birefringent Out" and "Birefringent Types" (saved under
-    `plans/sources/optics/op-53-help/`); no birefringent lens has been traced in OpticStudio to
-    compare. Where the help leaves a point open this program reads it so:
-    - *Sequence.* A crystal begins at a Birefringent In and ends at the next Birefringent In
-      (crystal to crystal, as the help's Wollaston prism needs) or Birefringent Out; only
-      coordinate breaks and ignored surfaces may stand between. The help describes the pair but
-      states no rule.
-    - *Optical path in a crystal* is the phase, N·Δr along the wave normal (n(θ_w)·cos α per unit
-      ray length). The help says rays follow ŝ and the index is n(θ_w); it does not say which path
-      length OpticStudio reports.
-    - *Phase of the other mode in modes 2 and 3* is the plane-wave retardance
-      k₀(N_other − N_traced)·Δr, both wave vectors sharing the tangential wave vector of the last
-      interface; the help says only that the effective index "properly referenced to the ordinary
-      ray direction" is used.
-    - *Amplitude coefficients* at a birefringent interface come from the boundary conditions (the
-      help gives none), so transmission through a birefringent surface has not been compared.
-    - *Along the optic axis* the ordinary field is the interface's s and the extraordinary its p
-      ("ZOS chooses the ordinary ray to be s-polarized and the extraordinary ray to be
-      p-polarized"); the help's further dependence of that choice on the input polarization is not
-      reproduced.
-    - *Parax Ignore 0* with an extraordinary mode is refused for paraxial data (the help does not
-      say which extraordinary index paraxial rays would use). A zero crystal axis is refused (the
-      non-sequential page takes (0, 0, 1); the sequential page says nothing).
-    Check: the help's Wollaston prism sample and a calcite plate traced in OpticStudio in modes 0–3,
-    ray positions, optical path and Polarization Ray Trace transmission compared.
 
 60. **Constraint and system operand readings** (OP-55B, section 64). The definitions follow the
     category pages of OpticStudio 2025 R2's help (saved under `plans/sources/optics/op-54-help/` and
@@ -4748,6 +4753,8 @@ against the type's layout (§20); a number the type does not have is a problem.
 | HOLOGRM1 | Hologram 1 | help, SURP (§10 item 48) |
 | HOLOGRM2 | Hologram 2 | help, SURP (§10 item 48) |
 | TOROHOLO | Toroidal Hologram | help, SURP (§10 item 48) |
+| BIRE__IN | Birefringent In | help, SURP (§10 item 48) |
+| BIRE_OUT | Birefringent Out | help, SURP (§10 item 48) |
 
 POLYNOMI to RADNURBS are OP-25's types (§55). No lens-file reader names them; their codes are the
 surface-type names of the SURP help page's table (the ZPL TYPE names, which the page says the
@@ -4765,6 +4772,15 @@ construction points, the construction wavelength, the order and the converge/div
 (parameters 13–21). The Hologram 1 and 2 volume flag (parameter 13, "Par 13" in the help) is
 always 0 here and so never written. OP-26's unbuilt types (§57) have SURP codes too but no type
 here to read them into, so they are refused as unknown TYPEs.
+
+BIRE__IN and BIRE_OUT are OP-53's types (§62), mapped the same way (wave 12); no reader names
+them. PARM 0–12 and XDAT 1 (parameter 13, the gradient mode) map through the layouts; the help
+page "Birefringent In and Birefringent Out" says "the Gradient Mode is defined by Extra Data Value
+1". The GLAS line carries the Birefringent In's glass name, which the help makes the ordinary
+glass; the extraordinary glass is that name with "-E" appended and has no line of its own. The
+reader checks that the "-E" glass is in the catalogs (when catalogs are given), and a Birefringent
+In without a glass name (air, a mirror, a model glass or a constant index) is refused by name on
+import and export.
 
 **Media.** `GLAS name 0 …` is a catalog glass, looked up in the GCAT catalogs in order (all
 loaded catalogs when there is no GCAT line; an archive's own catalogs first); `GLAS name 1 0 nd
@@ -5200,7 +5216,7 @@ lens as entered. The lens is rebuilt for every trace and analysis, so a change t
 once; UPDATE checks that the lens builds. On a lens with a multi-configuration table the setters
 are refused (the help also changes the current configuration's table entry, which is not built).
 SETSURFACEPROPERTY's TYPE takes the help's surface-type names and accepts any type `SurfaceTypes`
-registers, OP-25's freeform types among them (§55); PARM n (and PARM(n, s), SPRX code 10) is
+registers, OP-25's freeform types and OP-53's BIRE__IN and BIRE_OUT among them (§55, §62); PARM n (and PARM(n, s), SPRX code 10) is
 column n of the type's layout, so a Zernike Standard Sag's terms, normalization radius and
 coefficients (columns 13, 14, 15 …) are set and read as any other parameter. A Grid Sag set by
 TYPE has no grid, and the next trace or UPDATE refuses it by name. RAYTRACE is `OpticsScripting.TraceRay` (§47), its intercepts converted to lens units; RAYE and
@@ -5211,7 +5227,10 @@ reach is an error rather than invalid data.
 evaluates the merit function over every configuration (a failed row is an error) and keeps the
 evaluation for OPER's value and contribution columns, which are refused once the lens has changed;
 OPEV and OPEW evaluate one operand alone in the current configuration (an operand that reads other
-rows is refused). OPTIMIZE is `LocalOptimizer.Run` (§35) with the cycles and algorithm given;
+rows is refused). They find operands through `MeritOperandRegistry`, so every registered
+operand, OP-55A's and OP-55B's catalogue among them (§63, §64), is reached; SETOPERAND's column 11
+refuses an unknown code with `MeritOperandCatalogue.Unknown`'s message, which names a not-built
+OpticStudio operand and its reason. OPTIMIZE is `LocalOptimizer.Run` (§35) with the cycles and algorithm given;
 QUICKFOCUS is Quick Focus (§44).
 
 **ZPLM.** Int1 is Mac# (the macro ZPLnn.ZPL in the macro folder, `ZplMacroFolder.Current`), Int2
@@ -5644,187 +5663,6 @@ the Irregular surface, are refused on a composite base by name ("the Add-on surf
 one with the Base", help, "Composite Surface"; use the element operands); TIRR adds sag and is
 kept.
 
-## 63. Operand catalogue: imaging and ray operands
-
-OP-55A adds 92 of OpticStudio's imaging and ray operands to the merit operand registry
-(`OpenSim.Optics/Merit/Catalogue/Imaging*.cs`, `ImagingOperands.Definitions()`, registered under
-`// OP-55A` in `MeritOperandRegistry.CreateDefault`). Each is a thin adapter over the engine on main
-that computes the quantity; none computes it a second way. Definitions are read from OpticStudio
-2025 R2's "Optimization Operands (Alphabetically)" and category pages (copies in
-`plans/sources/optics/op-54-help/`). Each definition's `Description` names its columns; readings the
-help leaves open are §10 item 59. Lengths are lens units unless a row says micrometers (the
-enclosed-energy distances, as the help says); angles are degrees where the help says degrees.
-
-| Family | Codes | Engine |
-|---|---|---|
-| First order | AMAG, ENPP, EPDI, EXPD, EXPP, ISFN, ISNA, LINV, OBSN, PIMH, PMAG, POWR | `ParaxialSystem` (§11); real image height read as paraxial, as the evaluator does |
-| | EFLX, EFLY, CARD | `CardinalPlanes.Compute` over Surf1 to Surf2 (§29); rotationally symmetric lenses only |
-| | WFNO | `RealWorkingFNumber` on axis, primary wavelength (§25) |
-| Seidel | SPHA, COMA, ASTI, FCUR, DIST, PETZ, PETC | `SeidelEngine` (§32): S1 to S5 over the wavelength; Surf 0 the sum; DIST Surf 0 the real distortion of `FieldCurvatureDistortion` at H = 1, +y, F-tan(θ) |
-| Chromatic and focus | LACL, AXCL, LONA | paraxial chief-ray heights; `LongitudinalAberrationAnalysis.Crossings` (Zone 0 paraxial, else the real ray Py = Zone; vignetting factors cleared) |
-| Field curvature | FCGS, FCGT | `FieldCurvatureDistortion` (Coddington along the real chief ray); fields on the x or y axis only |
-| RMS | RSCE, RSCH, RSRE, RSRH, RWCE, RWCH, RWRE, RWRH | `RmsCore.Evaluate` (§34): Gaussian quadrature Ring × 4·Ring arms, or the rectangular array 2·Samp across; Wave 0 polychromatic |
-| Zernike | ZERN | `FieldZernike.Fit` at the field row, pupil grid 32·2^(Samp−1), Fringe or Standard, max(11, Term) terms |
-| Boresight | BSER | on-axis chief ray's radial image coordinate over the paraxial EFL |
-| MTF | MTFN, MTFX, GMTN, GMTX | the min/max of `MtfOperands`' cached value (same columns as MTFA, GMTA) |
-| | MSWT, MSWS, MSWA, MSWN, MSWX | `MtfEngine.Evaluate`, FFT, square wave |
-| | MTHT, MTHS, MTHA, MTHN, MTHX | `MtfEngine.Evaluate`, Huygens, pupil and image grids 32·2^(Samp−1), Ima Delta µm |
-| Strehl | STRH | `PsfRuns.Huygens` at half the default Huygens image delta |
-| Enclosed energy | DENC, DENF | `DiffractionEnclosedEnergy` (FFT kernel; Refp 0 to 2) |
-| | GENC, GENF | `GeometricEnclosedEnergy.Trace`; No Diff Lim 0 multiplies by the Airy curve at the reference field's real working F/# (encircled only) |
-| Illumination | RELI, EFNO | `RelativeIllumination.Compute` (§27), vignetting factors replaced by apertures; fields on an axis only |
-| Best-fit sphere | BFSD | `BestFitSphere.Fit`, minimum volume (§43's Sag Table) |
-| Paraxial rays | PARX, PARY, PARR, PATX, PATY | Px·(marginal ray) + chief ray of (Hx, Hy), each plane of `ParaxialSystem` |
-| Real rays | REAA, REAB, REAC, RENA, RENB, RENC, RAID, RAED, RAIN, RAEN, RANG, RETX, RETY, RAGX, RAGY, RAGZ, RAGA, RAGB, RAGC, OPTH, HHCN, TRAI | the row's own traced ray (`SurfaceHit`); TRAI and OPTH (object at infinity) also trace the chief ray; RAGA–RAGC rotate by `SurfacePlacement.Global` |
-| | PLEN, MNRI, MXRI, MNRE, MXRE | a ray traced the evaluator's way (`ImagingOperands.Store`); the bounds follow Understanding Boundary Operands |
-
-**Caches.** The analysis-backed operands keep their result per lens and system instance
-(`ImagingOperands.Store`, a `ConditionalWeakTable` as in `MtfOperands` and
-`RayAberrationOperands`), keyed on the family and its columns, so rows that read the same result
-compute it once per evaluation; a new lens starts a new entry. Pass 3 of the evaluator is
-sequential, so the values do not depend on threads.
-
-**Refused by name.** Pol? and All Conf? set to 1; the Huygens enclosed energy (Refp 3 to 5); ZERN's
-Term ≤ 0 extras, annular type, Epsilon and Vertex?; the afocal forms (angles, diopters, afocal
-units) of LACL, AXCL, LONA, the RMS and enclosed-energy rows; fields off both axes for FCGS, FCGT,
-RELI and EFNO; non-Standard surfaces for POWR; a non-rotationally-symmetric lens for EFLX, EFLY and
-CARD.
-
-**Not built** (41 codes; `ImagingOperands.NotBuilt` gives each reason): EFLA, POWF, POWP, SFNO,
-TFNO, ABCD, DISA, DISC, DISG, DIMX, SMIA, BIOC, BIOD, OSCD, SPCH, TRAE, CEHX, CEHY, CENX, CENY,
-CNAX, CNAY, CNPX, CNPY, DXDX, DXDY, DYDX, DYDY, IMAE, XENC, XENF, ERFP, FOUC, TOLR, PARZ, PARA,
-PARB, PARC, PANA, PANB, PANC. They are not registered, so a saved row with one of these codes loads
-as OOFF and is named.
-
-## 62. Birefringent media
-
-OP-53 adds OpticStudio's **Birefringent In** and **Birefringent Out** sequential surfaces
-(`OpenSim.Optics/Sequential/Birefringent/`), registered by `SurfaceTypes`
-(`BirefringentLayouts.cs`) with the parameter columns of the help page "Birefringent In and
-Birefringent Out" (OpticStudio 2025 R2, saved under `plans/sources/optics/op-53-help/`): In
-0 draw length, 1 mode, 2–4 the crystal axis direction cosines in the In surface's local frame,
-5 Parax Ignore, 6 shape, 7 radius of rotation, 8–12 aspheric coefficients, 13 gradient mode; Out
-6–12. Both are traced on the Standard substrate (shape 0, radius and conic).
-
-**Crystal.** Homogeneous uniaxial: the In surface's medium gives the ordinary index n_o, and its
-extraordinary index n_e is the glass named as the ordinary glass with "-E" appended, looked up in
-the active catalogs when a saved lens is converted (`SavedSurfaces.ToLens`; a constant index or a
-model glass is refused there, and a missing "-E" glass is a problem naming the surface). Both are
-relative to the system's air like every index of the trace. Paraxial data use n_o ("Most
-OpticStudio calculations, such as EFL, EPD, F/#, etc. use the ordinary index").
-
-**Physics** (`UniaxialCrystal`, `UniaxialOptics`). The extraordinary index along a wave normal k̂
-at angle θ_w to the axis â is the help's (1/n)² = (cos θ_w/n_o)² + (sin θ_w/n_e)²; written for the
-wave vector N = n k̂ (units of the vacuum wavenumber) it is the normal surface
-(N·â)²/n_o² + (N·N − (N·â)²)/n_e² = 1. The ray (energy) direction is the normal to that surface,
-ŝ ∝ N/n_e² + Δ(N·â)â, Δ = 1/n_o² − 1/n_e², which reproduces the help's walk-off
-tan α = (n_e² − n_o²) tan θ_w/(n_e² + (n_o tan θ_w)²) and keeps k̂, ŝ and â coplanar. At an
-interface the tangential part κ of N is kept (Snell's law in vector form); the transmitted wave
-vector is N = κ + qη̂ with q from n² − κ·κ (ordinary, isotropic) or the quadratic
-αq² + βq + γ = 0 of the normal surface (extraordinary), taking the root whose ray goes on through
-the surface. A mode with no real root is totally internally reflected
-(`RayStatus.TotalInternalReflection`).
-
-**Trace** (`SequentialTrace`, under `// OP-53`). The trace holds `BirefringentSpaces` only for a
-lens with a birefringent surface; for any other lens it is null, every new branch is skipped and
-the loop computes exactly what it computed before (the segment is still `nBefore * length`, the
-refraction the same calls), which the existing trace tests pin. Inside a crystal the trace
-carries the wave vector N beside the ray: the ray moves along ŝ, the optical path gains N·Δr (the
-phase along the wave normal, n(θ_w)·cos α per unit ray length), and `SurfaceHit.WaveNormal`
-records N after each surface (null in isotropic spaces). Sequential tracing follows one mode per
-trace, as OpticStudio does ("In sequential mode, OpticStudio cannot trace both rays at once";
-the help suggests two configurations with modes 0 and 1): modes 0 and 2 trace the ordinary ray,
-1 and 3 the extraordinary one. Along the optic axis both modes give the same wave and ray.
-
-**Rules.** A crystal ends at the next Birefringent In (crystal to crystal) or at a Birefringent
-Out; only coordinate breaks and ignored surfaces may stand between; it must end before the image;
-an Out needs a crystal before it; neither type may be a mirror, ignored, carry composite add-ons,
-or be the object or image surface; the axis must not be zero. Each broken rule is refused when the
-trace is built, naming the surface.
-
-**Polarization ray trace** (`Polarization/BirefringentPolarization.cs`). In a crystal the field
-is carried transverse to the traced ray on the help's basis: P̂ in the plane of the ray and the
-axis, at right angles to the ray; Ŝ at right angles to both. At a birefringent interface the
-incident field is split into the incident modes and carried through `AnisotropicInterface`, which
-solves the continuity of tangential E and H (H = N × E) for the two reflected and two transmitted
-waves and returns power-normalised amplitudes (|ã|² the power fraction; derived, the help gives
-no coefficients; it reduces to Fresnel's for n_o = n_e and conserves power). Modes 0 and 1 keep
-only the traced mode ("the fraction of ray energy in the part of the ray that is not traced is
-discarded"); modes 2 and 3 also keep the other mode's part on its basis vector and multiply it,
-on each segment, by e^(i k₀ (N_other − N_traced)·Δr), the plane-wave retardance between modes that
-share the last interface's tangential wave vector (exact for a plane-parallel plate). Through an
-Out both parts leave as one field. Bulk absorption uses the ordinary glass's data (as the help
-says; no dichroism). A coating on a birefringent surface is refused. In the Polarization Ray Trace
-table the s and p amplitudes of a birefringent surface are the diagonal of its 2 × 2 transmission
-(ordinary or s first, extraordinary or p second).
-
-**Approximations** (modes 2 and 3). The other mode's part travels with the traced ray (no walk-off
-between them; the help: "Modes 2 and 3 assume that the angular deviation between the ordinary and
-extraordinary beam is so small that the region of interest can be approximated by a single
-beam"), and at the next interface it is taken at the traced wave's tangential wave vector there.
-
-**Sources.** The help pages above. McClain, Hillman and Chipman, JOSA A 10 (1993) 2371 and 2383,
-Born and Wolf ch. XV, Yariv and Yeh, Lam's dissertation and Chipman, Lam and Young were not opened
-for this item; the normal surface, the ray direction and the boundary solution are derived in the
-code comments from the help's equation 3 and Maxwell's boundary conditions, and checked against
-the help's equations 4 and 5 and Fresnel's coefficients.
-
-**Not built:** shape 1 (the toroidal substrate, parameters 7–12; a non-zero shape is refused), the
-gradient modes 1–9 (crystal axis varying with position, and the user-defined birefringence DLL;
-refused), paraxial rays with the extraordinary index (Parax Ignore 0 with mode 1 or 3 is refused
-for paraxial data), drawing the crystal axis (parameter 0 is saved), optical activity, coatings on
-birefringent surfaces, biaxial crystals, stress birefringence (OpticStudio models it in STAR from
-FEA stress data and the stress-optical coefficients K11 and K12 of the material catalog, help
-"About Stress Birefringence" and "Defining Stress Optical Coefficients"; neither the FEA data path
-nor those coefficients exist here), NSC birefringent media (no non-sequential mode), and these
-types in .zmx, CODE V and OSLO files and in ZPL. Readings not checked against OpticStudio: §10
-item 58.
-
-## 64. Operand catalogue: constraint and system operands
-
-OP-55B adds the constraint and system-data half of OpticStudio's operand catalogue
-(`OpenSim.Optics/Merit/Catalogue/Constraint*.cs`, registered by one line in
-`MeritOperandRegistry.CreateDefault`). Each operand adapts an engine already built:
-
-- **Lens data** (`ConstraintLensData.cs`): COGT, COLT, DMGT, DMLT, DMVA, ETGT, ETLT, ETVA, FTGT,
-  FTLT, BLTH, MNCV, MXCV, MNET, MXET, MXEA, MXEG, XNET, XNEA, XNEG, XXET, XXEA, XXEG, MNSD, MXSD,
-  OMMI, OMMX, OMSD, TGTH, TTGT, TTLT, TTVA, ZTHI. They read the surface placement (§13, OP-21),
-  the clear semi-diameters as the report analyses size them (`LensGeometry`) and the sags of
-  `ElementVolume.Sag` (composite add-ons included).
-- **Lens properties** (`ConstraintLensProperties.cs`): CVOL, MNDT, MXDT, SAGX, SAGY, SSAG, SSLP,
-  SCRV, SPHS, PSLP, STHI, TMAS, VOLU, NORX, NORY, NORZ, NORD, SCUR, SDRV, over `SurfaceProbe` and
-  `BestFitSphere` (§28), `ElementVolume` (§29) and `DiffractiveShape.TryPhase` (§57).
-- **Parameter, glass, positions, system, multi-configuration, Gaussian beam, TCE**
-  (`ConstraintSystemData.cs`): PMGT, PMLT, PMVA (the parameter as the solves read it, shown in lens
-  units by its layout's length power); GTCE, INDX, MNAB, MXAB, MNIN, MXIN, MNPD, MXPD (the glass
-  map of `GlassDistance`, the paraxial indices); GLCA, GLCB, GLCC, GLCR, GLCX, GLCY, GLCZ (the
-  placement relative to surface 1); WLEN; MCOG, MCOL, MCOV (the multi-configuration table through
-  `IMeritConfigurations.MultiConfigValue`); GBPD, GBPP, GBPR, GBPS, GBPW, GBPZ (OP-48's
-  `GaussianBeamTrace`); TCGT, TCLT, TCVA (the surface's TCE column).
-
-Two additive members carry the context these need: `MeritRowContext.Configurations` (set by the
-evaluator; read by ZTHI and MCOG/L/V) and `IMeritConfigurations.MultiConfigValue` (a default that
-refuses; `ProjectMeritConfigurations` reads its table with pickups evaluated).
-
-Units: lengths in lens units, curvatures in 1/lens unit, VOLU in cm³, CVOL in cubic lens units,
-TMAS in grams, slopes dimensionless, phase in waves, phase slope in periods of 2π per lens unit,
-beam divergence in radians, WLEN in micrometers, TCE in 10⁻⁶/K as entered or printed. A row that
-cannot be computed fails naming the surface and the reason.
-
-**Not-built table.** `NotBuiltOperands` lists every summary-table code this build does not
-register, with the help's description, the reason and the plan item it waits for: DCRV, DSAG,
-DSLP, DPHS, QSLP, TSAG, GOPT, IMSF, PRIM, SVIG, CVIG, FDMO, FDRE, EQUA, the skew Gaussian beam
-operands, the gradient-index operands, fiber coupling and POP, UDOC, the non-sequential operands,
-CMFV, the coating operands and CODA, and the obsolete PnGT, PnLT, PnVA. OP-55A's not-built codes
-join through its `Imaging` hook. `MeritOperandCatalogue.Describe` and `Unknown` turn a code into
-"NSDD (OpticStudio: …) is not built yet: needs OP-79: …"; the merit function editor's operand
-column, `MeritEvaluator.Validate` and `MeritFunctionSettings.FromSettings` (and so the command line
-and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
-
-**Not built:** off-axis coordinates and the Base/Composite sag removal of SSAG, SSLP and SCRV; the
-fitted-term removals of SPHS and PSLP; OpticStudio's global reference surface. Readings in §10
-item 60.
-
 ## 61. Diffraction efficiency
 
 OP-47 adds `OpenSim.Optics/Diffraction/`: thin-element (scalar) efficiencies, rigorous coupled-wave
@@ -5956,3 +5794,186 @@ multiple-order ray splitting; the non-sequential analyses and their RCWA DLL; mu
 holograms (the help: "There can only be one set of fringes"). The Kogelnik validity checks the
 help states as rules of thumb (dn/n < 0.06 or 0.16, thickness) are not enforced; the Q-parameter
 equation is an image in the help and not read.
+
+## 62. Birefringent media
+
+OP-53 adds OpticStudio's **Birefringent In** and **Birefringent Out** sequential surfaces
+(`OpenSim.Optics/Sequential/Birefringent/`), registered by `SurfaceTypes`
+(`BirefringentLayouts.cs`) with the parameter columns of the help page "Birefringent In and
+Birefringent Out" (OpticStudio 2025 R2, saved under `plans/sources/optics/op-53-help/`): In
+0 draw length, 1 mode, 2–4 the crystal axis direction cosines in the In surface's local frame,
+5 Parax Ignore, 6 shape, 7 radius of rotation, 8–12 aspheric coefficients, 13 gradient mode; Out
+6–12. Both are traced on the Standard substrate (shape 0, radius and conic).
+
+**Crystal.** Homogeneous uniaxial: the In surface's medium gives the ordinary index n_o, and its
+extraordinary index n_e is the glass named as the ordinary glass with "-E" appended, looked up in
+the active catalogs when a saved lens is converted (`SavedSurfaces.ToLens`; a constant index or a
+model glass is refused there, and a missing "-E" glass is a problem naming the surface). Both are
+relative to the system's air like every index of the trace. Paraxial data use n_o ("Most
+OpticStudio calculations, such as EFL, EPD, F/#, etc. use the ordinary index").
+
+**Physics** (`UniaxialCrystal`, `UniaxialOptics`). The extraordinary index along a wave normal k̂
+at angle θ_w to the axis â is the help's (1/n)² = (cos θ_w/n_o)² + (sin θ_w/n_e)²; written for the
+wave vector N = n k̂ (units of the vacuum wavenumber) it is the normal surface
+(N·â)²/n_o² + (N·N − (N·â)²)/n_e² = 1. The ray (energy) direction is the normal to that surface,
+ŝ ∝ N/n_e² + Δ(N·â)â, Δ = 1/n_o² − 1/n_e², which reproduces the help's walk-off
+tan α = (n_e² − n_o²) tan θ_w/(n_e² + (n_o tan θ_w)²) and keeps k̂, ŝ and â coplanar. At an
+interface the tangential part κ of N is kept (Snell's law in vector form); the transmitted wave
+vector is N = κ + qη̂ with q from n² − κ·κ (ordinary, isotropic) or the quadratic
+αq² + βq + γ = 0 of the normal surface (extraordinary), taking the root whose ray goes on through
+the surface. A mode with no real root is totally internally reflected
+(`RayStatus.TotalInternalReflection`).
+
+**Trace** (`SequentialTrace`, under `// OP-53`). The trace holds `BirefringentSpaces` only for a
+lens with a birefringent surface; for any other lens it is null, every new branch is skipped and
+the loop computes exactly what it computed before (the segment is still `nBefore * length`, the
+refraction the same calls), which the existing trace tests pin. Inside a crystal the trace
+carries the wave vector N beside the ray: the ray moves along ŝ, the optical path gains N·Δr (the
+phase along the wave normal, n(θ_w)·cos α per unit ray length), and `SurfaceHit.WaveNormal`
+records N after each surface (null in isotropic spaces). Sequential tracing follows one mode per
+trace, as OpticStudio does ("In sequential mode, OpticStudio cannot trace both rays at once";
+the help suggests two configurations with modes 0 and 1): modes 0 and 2 trace the ordinary ray,
+1 and 3 the extraordinary one. Along the optic axis both modes give the same wave and ray.
+
+**Rules.** A crystal ends at the next Birefringent In (crystal to crystal) or at a Birefringent
+Out; only coordinate breaks and ignored surfaces may stand between; it must end before the image;
+an Out needs a crystal before it; neither type may be a mirror, ignored, carry composite add-ons,
+or be the object or image surface; the axis must not be zero. Each broken rule is refused when the
+trace is built, naming the surface.
+
+**Polarization ray trace** (`Polarization/BirefringentPolarization.cs`). In a crystal the field
+is carried transverse to the traced ray on the help's basis: P̂ in the plane of the ray and the
+axis, at right angles to the ray; Ŝ at right angles to both. At a birefringent interface the
+incident field is split into the incident modes and carried through `AnisotropicInterface`, which
+solves the continuity of tangential E and H (H = N × E) for the two reflected and two transmitted
+waves and returns power-normalised amplitudes (|ã|² the power fraction; derived, the help gives
+no coefficients; it reduces to Fresnel's for n_o = n_e and conserves power). Modes 0 and 1 keep
+only the traced mode ("the fraction of ray energy in the part of the ray that is not traced is
+discarded"); modes 2 and 3 also keep the other mode's part on its basis vector and multiply it,
+on each segment, by e^(i k₀ (N_other − N_traced)·Δr), the plane-wave retardance between modes that
+share the last interface's tangential wave vector (exact for a plane-parallel plate). Through an
+Out both parts leave as one field. Bulk absorption uses the ordinary glass's data (as the help
+says; no dichroism). A coating on a birefringent surface is refused. In the Polarization Ray Trace
+table the s and p amplitudes of a birefringent surface are the diagonal of its 2 × 2 transmission
+(ordinary or s first, extraordinary or p second).
+
+**Approximations** (modes 2 and 3). The other mode's part travels with the traced ray (no walk-off
+between them; the help: "Modes 2 and 3 assume that the angular deviation between the ordinary and
+extraordinary beam is so small that the region of interest can be approximated by a single
+beam"), and at the next interface it is taken at the traced wave's tangential wave vector there.
+
+**Sources.** The help pages above. McClain, Hillman and Chipman, JOSA A 10 (1993) 2371 and 2383,
+Born and Wolf ch. XV, Yariv and Yeh, Lam's dissertation and Chipman, Lam and Young were not opened
+for this item; the normal surface, the ray direction and the boundary solution are derived in the
+code comments from the help's equation 3 and Maxwell's boundary conditions, and checked against
+the help's equations 4 and 5 and Fresnel's coefficients.
+
+**Not built:** shape 1 (the toroidal substrate, parameters 7–12; a non-zero shape is refused), the
+gradient modes 1–9 (crystal axis varying with position, and the user-defined birefringence DLL;
+refused), paraxial rays with the extraordinary index (Parax Ignore 0 with mode 1 or 3 is refused
+for paraxial data), drawing the crystal axis (parameter 0 is saved), optical activity, coatings on
+birefringent surfaces, biaxial crystals, stress birefringence (OpticStudio models it in STAR from
+FEA stress data and the stress-optical coefficients K11 and K12 of the material catalog, help
+"About Stress Birefringence" and "Defining Stress Optical Coefficients"; neither the FEA data path
+nor those coefficients exist here), NSC birefringent media (no non-sequential mode), and these
+types in CODE V and OSLO files. The .zmx reader and writer (BIRE__IN, BIRE_OUT, §52) and ZPL's
+SURP TYPE and PARM (§56) carry them. Readings not checked against OpticStudio: §10
+item 58.
+
+## 63. Operand catalogue: imaging and ray operands
+
+OP-55A adds 92 of OpticStudio's imaging and ray operands to the merit operand registry
+(`OpenSim.Optics/Merit/Catalogue/Imaging*.cs`, `ImagingOperands.Definitions()`, registered under
+`// OP-55A` in `MeritOperandRegistry.CreateDefault`). Each is a thin adapter over the engine on main
+that computes the quantity; none computes it a second way. Definitions are read from OpticStudio
+2025 R2's "Optimization Operands (Alphabetically)" and category pages (copies in
+`plans/sources/optics/op-54-help/`). Each definition's `Description` names its columns; readings the
+help leaves open are §10 item 59. Lengths are lens units unless a row says micrometers (the
+enclosed-energy distances, as the help says); angles are degrees where the help says degrees.
+
+| Family | Codes | Engine |
+|---|---|---|
+| First order | AMAG, ENPP, EPDI, EXPD, EXPP, ISFN, ISNA, LINV, OBSN, PIMH, PMAG, POWR | `ParaxialSystem` (§11); real image height read as paraxial, as the evaluator does |
+| | EFLX, EFLY, CARD | `CardinalPlanes.Compute` over Surf1 to Surf2 (§29); rotationally symmetric lenses only |
+| | WFNO | `RealWorkingFNumber` on axis, primary wavelength (§25) |
+| Seidel | SPHA, COMA, ASTI, FCUR, DIST, PETZ, PETC | `SeidelEngine` (§32): S1 to S5 over the wavelength; Surf 0 the sum; DIST Surf 0 the real distortion of `FieldCurvatureDistortion` at H = 1, +y, F-tan(θ) |
+| Chromatic and focus | LACL, AXCL, LONA | paraxial chief-ray heights; `LongitudinalAberrationAnalysis.Crossings` (Zone 0 paraxial, else the real ray Py = Zone; vignetting factors cleared) |
+| Field curvature | FCGS, FCGT | `FieldCurvatureDistortion` (Coddington along the real chief ray); fields on the x or y axis only |
+| RMS | RSCE, RSCH, RSRE, RSRH, RWCE, RWCH, RWRE, RWRH | `RmsCore.Evaluate` (§34): Gaussian quadrature Ring × 4·Ring arms, or the rectangular array 2·Samp across; Wave 0 polychromatic |
+| Zernike | ZERN | `FieldZernike.Fit` at the field row, pupil grid 32·2^(Samp−1), Fringe or Standard, max(11, Term) terms |
+| Boresight | BSER | on-axis chief ray's radial image coordinate over the paraxial EFL |
+| MTF | MTFN, MTFX, GMTN, GMTX | the min/max of `MtfOperands`' cached value (same columns as MTFA, GMTA) |
+| | MSWT, MSWS, MSWA, MSWN, MSWX | `MtfEngine.Evaluate`, FFT, square wave |
+| | MTHT, MTHS, MTHA, MTHN, MTHX | `MtfEngine.Evaluate`, Huygens, pupil and image grids 32·2^(Samp−1), Ima Delta µm |
+| Strehl | STRH | `PsfRuns.Huygens` at half the default Huygens image delta |
+| Enclosed energy | DENC, DENF | `DiffractionEnclosedEnergy` (FFT kernel; Refp 0 to 2) |
+| | GENC, GENF | `GeometricEnclosedEnergy.Trace`; No Diff Lim 0 multiplies by the Airy curve at the reference field's real working F/# (encircled only) |
+| Illumination | RELI, EFNO | `RelativeIllumination.Compute` (§27), vignetting factors replaced by apertures; fields on an axis only |
+| Best-fit sphere | BFSD | `BestFitSphere.Fit`, minimum volume (§43's Sag Table) |
+| Paraxial rays | PARX, PARY, PARR, PATX, PATY | Px·(marginal ray) + chief ray of (Hx, Hy), each plane of `ParaxialSystem` |
+| Real rays | REAA, REAB, REAC, RENA, RENB, RENC, RAID, RAED, RAIN, RAEN, RANG, RETX, RETY, RAGX, RAGY, RAGZ, RAGA, RAGB, RAGC, OPTH, HHCN, TRAI | the row's own traced ray (`SurfaceHit`); TRAI and OPTH (object at infinity) also trace the chief ray; RAGA–RAGC rotate by `SurfacePlacement.Global` |
+| | PLEN, MNRI, MXRI, MNRE, MXRE | a ray traced the evaluator's way (`ImagingOperands.Store`); the bounds follow Understanding Boundary Operands |
+
+**Caches.** The analysis-backed operands keep their result per lens and system instance
+(`ImagingOperands.Store`, a `ConditionalWeakTable` as in `MtfOperands` and
+`RayAberrationOperands`), keyed on the family and its columns, so rows that read the same result
+compute it once per evaluation; a new lens starts a new entry. Pass 3 of the evaluator is
+sequential, so the values do not depend on threads.
+
+**Refused by name.** Pol? and All Conf? set to 1; the Huygens enclosed energy (Refp 3 to 5); ZERN's
+Term ≤ 0 extras, annular type, Epsilon and Vertex?; the afocal forms (angles, diopters, afocal
+units) of LACL, AXCL, LONA, the RMS and enclosed-energy rows; fields off both axes for FCGS, FCGT,
+RELI and EFNO; non-Standard surfaces for POWR; a non-rotationally-symmetric lens for EFLX, EFLY and
+CARD.
+
+**Not built** (42 codes; `ImagingOperands.NotBuilt` gives each reason): EFLA, POWF, POWP, SFNO,
+TFNO, ABCD, DISA, DISC, DISG, DIMX, SMIA, BIOC, BIOD, OSCD, SPCH, TRAD, TRAE, CEHX, CEHY, CENX, CENY,
+CNAX, CNAY, CNPX, CNPY, DXDX, DXDY, DYDX, DYDY, IMAE, XENC, XENF, ERFP, FOUC, TOLR, PARZ, PARA,
+PARB, PARC, PANA, PANB, PANC. They are not registered, so a saved row with one of these codes
+loads as OOFF and is named; they join §64's not-built table through `NotBuiltOperands`' `Imaging`
+hook, so `MeritOperandCatalogue.Unknown` gives each one's reason.
+
+## 64. Operand catalogue: constraint and system operands
+
+OP-55B adds the constraint and system-data half of OpticStudio's operand catalogue
+(`OpenSim.Optics/Merit/Catalogue/Constraint*.cs`, registered by one line in
+`MeritOperandRegistry.CreateDefault`). Each operand adapts an engine already built:
+
+- **Lens data** (`ConstraintLensData.cs`): COGT, COLT, DMGT, DMLT, DMVA, ETGT, ETLT, ETVA, FTGT,
+  FTLT, BLTH, MNCV, MXCV, MNET, MXET, MXEA, MXEG, XNET, XNEA, XNEG, XXET, XXEA, XXEG, MNSD, MXSD,
+  OMMI, OMMX, OMSD, TGTH, TTGT, TTLT, TTVA, ZTHI. They read the surface placement (§13, OP-21),
+  the clear semi-diameters as the report analyses size them (`LensGeometry`) and the sags of
+  `ElementVolume.Sag` (composite add-ons included).
+- **Lens properties** (`ConstraintLensProperties.cs`): CVOL, MNDT, MXDT, SAGX, SAGY, SSAG, SSLP,
+  SCRV, SPHS, PSLP, STHI, TMAS, VOLU, NORX, NORY, NORZ, NORD, SCUR, SDRV, over `SurfaceProbe` and
+  `BestFitSphere` (§28), `ElementVolume` (§29) and `DiffractiveShape.TryPhase` (§57).
+- **Parameter, glass, positions, system, multi-configuration, Gaussian beam, TCE**
+  (`ConstraintSystemData.cs`): PMGT, PMLT, PMVA (the parameter as the solves read it, shown in lens
+  units by its layout's length power); GTCE, INDX, MNAB, MXAB, MNIN, MXIN, MNPD, MXPD (the glass
+  map of `GlassDistance`, the paraxial indices); GLCA, GLCB, GLCC, GLCR, GLCX, GLCY, GLCZ (the
+  placement relative to surface 1); WLEN; MCOG, MCOL, MCOV (the multi-configuration table through
+  `IMeritConfigurations.MultiConfigValue`); GBPD, GBPP, GBPR, GBPS, GBPW, GBPZ (OP-48's
+  `GaussianBeamTrace`); TCGT, TCLT, TCVA (the surface's TCE column).
+
+Two additive members carry the context these need: `MeritRowContext.Configurations` (set by the
+evaluator; read by ZTHI and MCOG/L/V) and `IMeritConfigurations.MultiConfigValue` (a default that
+refuses; `ProjectMeritConfigurations` reads its table with pickups evaluated).
+
+Units: lengths in lens units, curvatures in 1/lens unit, VOLU in cm³, CVOL in cubic lens units,
+TMAS in grams, slopes dimensionless, phase in waves, phase slope in periods of 2π per lens unit,
+beam divergence in radians, WLEN in micrometers, TCE in 10⁻⁶/K as entered or printed. A row that
+cannot be computed fails naming the surface and the reason.
+
+**Not-built table.** `NotBuiltOperands` lists every summary-table code this build does not
+register, with the help's description, the reason and the plan item it waits for: DCRV, DSAG,
+DSLP, DPHS, QSLP, TSAG, GOPT, IMSF, PRIM, SVIG, CVIG, FDMO, FDRE, EQUA, the skew Gaussian beam
+operands, the gradient-index operands, fiber coupling and POP, UDOC, the non-sequential operands,
+CMFV, the coating operands and CODA, and the obsolete PnGT, PnLT, PnVA. OP-55A's not-built codes
+join through its `Imaging` hook. `MeritOperandCatalogue.Describe` and `Unknown` turn a code into
+"NSDD (OpticStudio: …) is not built yet: needs OP-79: …"; the merit function editor's operand
+column, `MeritEvaluator.Validate` and `MeritFunctionSettings.FromSettings` (and so the command line
+and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
+
+**Not built:** off-axis coordinates and the Base/Composite sag removal of SSAG, SSLP and SCRV; the
+fitted-term removals of SPHS and PSLP; OpticStudio's global reference surface. Readings in §10
+item 60.

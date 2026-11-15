@@ -1685,9 +1685,11 @@ Extended Odd and Q-Type aspheres, Toroidal, Paraxial and Coordinate Break, and t
 Polynomial, Extended Polynomial, Zernike Fringe, Standard and Annular Standard Sag, Off-Axis Conic
 Freeform and Radial NURBS, and the diffractive types Diffraction Grating, Toroidal Grating,
 Variable Line Space Grating, Binary Optic 1 and 2, Zernike Fringe, Standard and Annular Phase,
-Hologram 1 and 2 and Toroidal Hologram (the freeform and diffractive codes are taken from
-OpticStudio's macro help and have not been checked against a file OpticStudio wrote; a Grid Sag is
-refused, as its grid is a separate file).
+Hologram 1 and 2 and Toroidal Hologram, and the crystal types Birefringent In and Out (the
+freeform, diffractive and crystal codes are taken from OpticStudio's macro help and have not been
+checked against a file OpticStudio wrote; a Grid Sag is refused, as its grid is a separate file).
+A Birefringent In's GLAS line holds its crystal glass, such as CALCITE; the extraordinary glass
+CALCITE-E is not written and must be in a loaded catalog when the file is read.
 Solves: curvature,
 thickness, material, semi-diameter and parameter pickups (scale only, same column), and curvature,
 thickness and parameter variables. Glass names are checked against your loaded catalogs, in the
@@ -2045,6 +2047,59 @@ would make trials depend on each other or on a person (OUTPUT to a file, SAVELEN
 operations, INPUT, PAUSE, TOLERANCE) are refused in a script. No script has been compared with
 OpticStudio's own output. The rules are in docs/Optics-Conventions.md §60.
 
+## Diffraction efficiency
+
+How much light a grating or hologram sends into each order (docs/Optics-Conventions.md §61). Four
+analyses, in the Polarization group of the analysis menu:
+
+- **Diffraction efficiency**, **Efficiency vs. angle** and **Efficiency vs. wavelength** are
+  OpticStudio's analyses for volume holograms, by Kogelnik's coupled-wave theory. Set a Hologram 1,
+  Hologram 2 or Toroidal Hologram surface's "Volume hologram?" parameter to 1 and fill in the
+  thickness, the construction indices n1 and n2, the emulsion index n, the modulation dn, the
+  shrinkage and the index shift (the ray trace does not use them). The field type must be Angle:
+  the analyses scan the chosen field's Y angle (default 99% to 101% of it) and the wavelength
+  (default 99% to 101% of the selected one), trace the chief ray to the hologram and plot the
+  diffracted and undiffracted efficiency, or a map of both scans. The order must be +1 or −1.
+- **Grating efficiency (RCWA / scalar)** is this program's own: a lamellar, blazed, multilevel or
+  sinusoidal relief of given period (or a Diffraction Grating surface's lines/µm), depth and
+  indices, by rigorous coupled-wave analysis (TE, TM or unpolarized, reflected and transmitted
+  orders, absorption for lossy media) or by the thin-element theory (transmitted orders only, normal
+  incidence). It lists every propagating order and can plot one order against angle or wavelength.
+
+The command line gives the grating efficiency without a project:
+`opensim optics efficiency --period 1.5 --wavelength 1 --depth 0.5 --angle 10 --polarization tm`
+(`opensim help` lists the options).
+
+Not built: the conical mounting and two-dimensional gratings in RCWA, anisotropic media, the
+Optically Fabricated Hologram, "Consider Fresnel?", efficiency in the ray trace of the other
+diffractive surfaces, and the non-sequential analyses. The volume-hologram readings not yet checked
+against OpticStudio are listed in docs/Optics-Conventions.md §10 item 57.
+
+## Birefringent crystals
+
+The type column of the Lens Data Editor offers **Birefringent In** and **Birefringent Out**
+(docs/Optics-Conventions.md §62). Put a crystal glass on the Birefringent In surface, for example
+CALCITE: its index is the ordinary index, and the extraordinary index is read from the glass of
+the same name with "-E" appended (CALCITE-E), which must be in an active catalog. Give the crystal
+axis as direction cosines in parameters 2–4 (in the In surface's own coordinates) and choose the
+mode in parameter 1: 0 traces the ordinary ray, 1 the extraordinary ray, and 2 and 3 trace the
+ordinary or extraordinary ray while the polarization ray trace also keeps the other part of the
+field with its phase, which is what a wave plate needs. End the crystal with a Birefringent Out,
+or start another crystal with a second Birefringent In (a Wollaston prism); coordinate breaks may
+stand between. One trace follows one ray; use two configurations with modes 0 and 1 to see both.
+
+Inside the crystal the ray follows the energy direction, which walks off the wave normal for the
+extraordinary ray, and the optical path is the phase along the wave normal, so OPD, PSF and MTF
+are those of the traced mode. Paraxial data use the ordinary index; with mode 1 or 3 set Parax
+Ignore (parameter 5) to 1, or paraxial data are refused for the lens. Surface coatings are not
+allowed on these two types.
+
+Not built: the toroidal substrate (shape 1), crystals whose axis varies with position (gradient
+modes), drawing the crystal axis, optical activity, stress birefringence, non-sequential
+birefringent objects, and these types in CODE V and OSLO files (Zemax lens files and ZPL macros
+carry them). The readings not yet checked against OpticStudio are listed in
+docs/Optics-Conventions.md §10 item 58.
+
 ## Operand catalogue
 
 ### Imaging and ray operands
@@ -2079,36 +2134,10 @@ A row that cannot be computed fails alone and says why (a ray that misses, a fie
 for an operand that scans along an axis, a setting that is not built).
 
 **Not built:** EFLA, POWF, POWP, SFNO, TFNO, ABCD, DISA, DISC, DISG, DIMX, SMIA, BIOC, BIOD, OSCD,
-SPCH, TRAE, CEHX, CEHY, CENX, CENY, CNAX, CNAY, CNPX, CNPY, DXDX, DXDY, DYDX, DYDY, IMAE, XENC,
+SPCH, TRAD, TRAE, CEHX, CEHY, CENX, CENY, CNAX, CNAY, CNPX, CNPY, DXDX, DXDY, DYDX, DYDY, IMAE, XENC,
 XENF, ERFP, FOUC, TOLR, PARZ, PARA, PARB, PARC, PANA, PANB, PANC; polarization and all-configuration
 options; the Huygens enclosed energy; the afocal forms. No operand has been compared with
 OpticStudio's own output. Details: Optics-Conventions.md section 63.
-
-## Birefringent crystals
-
-The type column of the Lens Data Editor offers **Birefringent In** and **Birefringent Out**
-(docs/Optics-Conventions.md §62). Put a crystal glass on the Birefringent In surface, for example
-CALCITE: its index is the ordinary index, and the extraordinary index is read from the glass of
-the same name with "-E" appended (CALCITE-E), which must be in an active catalog. Give the crystal
-axis as direction cosines in parameters 2–4 (in the In surface's own coordinates) and choose the
-mode in parameter 1: 0 traces the ordinary ray, 1 the extraordinary ray, and 2 and 3 trace the
-ordinary or extraordinary ray while the polarization ray trace also keeps the other part of the
-field with its phase, which is what a wave plate needs. End the crystal with a Birefringent Out,
-or start another crystal with a second Birefringent In (a Wollaston prism); coordinate breaks may
-stand between. One trace follows one ray; use two configurations with modes 0 and 1 to see both.
-
-Inside the crystal the ray follows the energy direction, which walks off the wave normal for the
-extraordinary ray, and the optical path is the phase along the wave normal, so OPD, PSF and MTF
-are those of the traced mode. Paraxial data use the ordinary index; with mode 1 or 3 set Parax
-Ignore (parameter 5) to 1, or paraxial data are refused for the lens. Surface coatings are not
-allowed on these two types.
-
-Not built: the toroidal substrate (shape 1), crystals whose axis varies with position (gradient
-modes), drawing the crystal axis, optical activity, stress birefringence, non-sequential
-birefringent objects, and these types in .zmx, CODE V and OSLO files and macros. The readings not
-yet checked against OpticStudio are listed in docs/Optics-Conventions.md §10 item 58.
-
-## Operand catalogue (constraints and system data)
 
 ### Constraint and system operands
 
@@ -2134,43 +2163,18 @@ four-letter codes: type the code or the name in the Operand column, or search fo
 The editor names each operand's parameter columns in its header when the row is selected. Global
 coordinates are relative to surface 1. Lengths are in lens units, VOLU in cm³ and TMAS in grams.
 
-When you type, load or import an OpticStudio operand this version does not have, the message says
-what it computes and what it waits for, for example "NSDD (OpticStudio: Non-sequential incoherent
-detector data…) is not built yet: needs OP-79". A loaded row with such a code becomes OOFF.
-
 **Not built:** DCRV, DSAG, DSLP, DPHS, QSLP, TSAG; IMSF, PRIM, SVIG, CVIG, FDMO, FDRE (operands
 that change the system data for later rows); EQUA; the skew Gaussian beam operands (GBSD, GBSP,
 GBSR, GBSS, GBSW); the gradient-index, fiber-coupling, POP, non-sequential, hologram-construction
 and coating operands (CMGT to CIVA, CODA); UDOC; off-axis coordinates and the Base/Composite sag
 removal in SSAG, SSLP and SCRV; the removal of fitted terms in SPHS and PSLP.
 
-## Diffraction efficiency
-
-How much light a grating or hologram sends into each order (docs/Optics-Conventions.md §61). Four
-analyses, in the Polarization group of the analysis menu:
-
-- **Diffraction efficiency**, **Efficiency vs. angle** and **Efficiency vs. wavelength** are
-  OpticStudio's analyses for volume holograms, by Kogelnik's coupled-wave theory. Set a Hologram 1,
-  Hologram 2 or Toroidal Hologram surface's "Volume hologram?" parameter to 1 and fill in the
-  thickness, the construction indices n1 and n2, the emulsion index n, the modulation dn, the
-  shrinkage and the index shift (the ray trace does not use them). The field type must be Angle:
-  the analyses scan the chosen field's Y angle (default 99% to 101% of it) and the wavelength
-  (default 99% to 101% of the selected one), trace the chief ray to the hologram and plot the
-  diffracted and undiffracted efficiency, or a map of both scans. The order must be +1 or −1.
-- **Grating efficiency (RCWA / scalar)** is this program's own: a lamellar, blazed, multilevel or
-  sinusoidal relief of given period (or a Diffraction Grating surface's lines/µm), depth and
-  indices, by rigorous coupled-wave analysis (TE, TM or unpolarized, reflected and transmitted
-  orders, absorption for lossy media) or by the thin-element theory (transmitted orders only, normal
-  incidence). It lists every propagating order and can plot one order against angle or wavelength.
-
-The command line gives the grating efficiency without a project:
-`opensim optics efficiency --period 1.5 --wavelength 1 --depth 0.5 --angle 10 --polarization tm`
-(`opensim help` lists the options).
-
-Not built: the conical mounting and two-dimensional gratings in RCWA, anisotropic media, the
-Optically Fabricated Hologram, "Consider Fresnel?", efficiency in the ray trace of the other
-diffractive surfaces, and the non-sequential analyses. The volume-hologram readings not yet checked
-against OpticStudio are listed in docs/Optics-Conventions.md §10 item 57.
+When you type or load an OpticStudio operand this version does not have, whether from the imaging
+or the constraint half, the message says what it computes and why it is not built, for example
+"NSDD (OpticStudio: Non-sequential incoherent detector data…) is not built yet: needs OP-79". A
+loaded row with such a code becomes OOFF. The same message answers SETOPERAND in a ZPL macro, and
+OPEV evaluates any operand listed here by its OCOD number. (The Zemax lens file import reads no
+merit rows: it refuses them all, so it never meets an operand code.)
 
 ## Coming
 
@@ -2188,11 +2192,8 @@ Not built yet, and not to be relied on until they appear in this guide:
   the local optimizer, glass substitution, the Global and Hammer searches, the tolerance data editor with
   its operands, sensitivity and inverse sensitivity with compensators and the MTF and encircled
   energy criteria, Monte Carlo tolerancing, the tolerance wizard, summary, data viewer and Quick
-  Yield, tolerance scripts and the contrast (MTF) wizard criterion are built; the rest of the
-  operand catalogue is not, see Operand catalogue);
-
-  Yield, tolerance scripts and the contrast (MTF) wizard criterion are built; the constraint and system operands are built; the rest of the operand catalogue and the
-  encircled-energy merit operands are not);
+  Yield, tolerance scripts, the contrast (MTF) wizard criterion and the imaging, ray, constraint
+  and system operands are built; the operands listed as not built under Operand catalogue are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration
