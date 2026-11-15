@@ -965,6 +965,36 @@ single place in the code, so a correction is one line and its test.
     Check: a lens toleranced by OpticStudio in each mode with each compensator choice, its report's
     nominal, per-tolerance changes, RSS estimate and inverse limits compared with this program's.
 
+34. **MTF readings** (OP-39, section 38). Read from the help pages' wording; no OpticStudio
+    number was compared:
+    - *FFT MTF* is the pupil autocorrelation on OP-38's pupil grid, interpolated linearly between
+      whole-node shifts. The help's "faster version" for FFT Through Focus MTF (the MTFA
+      operand's Grid = 0 sparse method) is not described and not built; through focus uses the
+      same autocorrelation.
+    - *Polychromatic weights*: each wavelength's OTF weighted by its weight × (λ_min/λ)² × its
+      PSF's energy, so the polychromatic OTF is the transform of OP-38's polychromatic PSF; the
+      help does not say how OpticStudio weights them. The geometric MTF weights by the
+      wavelength weight.
+    - *Geometric MTF* is the exact transform of the ray set (no binning into a line spread
+      function); OpticStudio's grid algorithm and its sparse operand method are not described.
+      Multiply by diffraction limit uses the same field's unaberrated pupil; the help does not
+      say which diffraction limit.
+    - *Huygens MTF* transforms the Huygens PSF directly at each frequency; the help says "an FFT
+      of the Huygens PSF".
+    - *Diffraction limit* curves are the reference field's (help, "Diffraction Limited"), also on
+      the Huygens and geometric plots and as an option on the through-focus plots, where the help
+      lists no such setting.
+    - *Contrast Loss Map*: the help's δ is stated two ways that disagree ("ξ(Δ) = Δ/(D/2)·ξ_c"
+      with "Δ = D/2" at the cutoff, and an example where δ = 0.1 puts the pair at 1 ± 0.1);
+      here the pair is separated by the autocorrelation shift λν/(n|a|), 2ν/ν_c for a circular
+      pupil, as the MTF needs. The default frequency, "5% of the cutoff", uses the cutoff
+      2n√|a_x·a_y|/λ. Drawn as maps, not circles.
+    - *Defaults* the help does not give (frequencies, steps, pixels, 101 plotted frequencies,
+      129 × 129 surface points) are this program's.
+    Check: FFT, Huygens and geometric MTF of a singlet at two fields, polychromatic and
+    monochromatic, against OpticStudio's text output; the contrast loss map's δ against its
+    plot.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3274,3 +3304,88 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
   Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
   .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
   CEDV (deprecated) compensators.
+
+## 38. Modulation transfer function
+
+`OpenSim.Optics/Analysis/Mtf` (OP-39): `MtfEngine.cs` (public: `MtfPupil`, `MtfEngine`,
+`MtfValue`, `MtfOptions`, `GeometricRay`, `GeometricSpot`), `MtfCore.cs`, `MtfRuns.cs`,
+`MtfAnalyses.cs` and `ContrastLossMapAnalysis.cs`. Tests: `OpenSim.Tests/Optics/MtfAnalysisTests.cs`
+and the gate `OpenSim.Tests/Optics/Gates/MtfGateTests.cs`. OpticStudio's behaviour is read from
+its 2025 R2 help ("MTF", the thirteen FFT, Huygens and geometric MTF pages, "MTF Data",
+"ZemaxMTFUnits MTFUnits", "Contrast Loss Map (MTF)", with the square-wave equation image), saved
+under `plans/sources/optics/op-39-help/`; "Contrast Loss Map", "Optimizing for MTF" and
+"Diffraction Limited" from earlier items' folders. Goodman, Hopkins' defocus series and O'Neill's
+annular closed form were not on hand; the closed forms are derived in the gate's comments.
+
+- **OTF.** OTF(ν) = ∫ I(x)·e^{−2πiνx} dx / ∫ I dx, the PSF's x as section 33 defines it.
+  Modulation |OTF|; real and imaginary parts; phase in degrees, its origin the chief ray.
+  Tangential: frequency along y; sagittal: along x. For the FFT engine these are pupil axes
+  (help, "FFT MTF"); for the Huygens and geometric engines the image plane's (help).
+- **FFT engine** (`MtfPupil`). The pupil function of section 33 (`PsfEngine.BuildPupil`, the same
+  n × n nodes, OPD reference and fitted pupil scale a). OTF(ν) = Σ f(P)·f*(P + ν/c) / Σ |f|²,
+  c = n·a/λ (derived in `MtfPupil`), computed at every whole-node shift by the FFT of the pupil
+  zero-padded to 2n (|F|² transformed back; the circular correlation is the linear one) and
+  interpolated linearly in real and imaginary parts between shifts. A shift of one node is the
+  frequency c·ΔP; the cutoff of each axis is 2c = 2n|a|/λ = 1/(λF) (help: the working F/# "for
+  the sagittal and tangential response separately"). At whole-node shifts the OTF equals the
+  transform of OP-38's FFT PSF exactly. The sampling warnings are section 33's.
+- **Afocal** (`MtfEngine.BuildAfocal`). The OPD against the afocal reference plane (section 26),
+  the beam's half-width b per unit pupil coordinate fitted to where the rays cross that plane;
+  c = n·b/λ cycles per radian, cutoff 2n·b/λ, the exit pupil diameter over λ in air (help).
+  Shown in cycles per milliradian, the help's default afocal unit; other afocal angle units are
+  not built. Huygens and through-focus MTF refuse afocal image space (diopters not built).
+- **Huygens engine.** OP-38's Huygens PSF (pupil sampling, image sampling, image delta; the
+  primary wavelength's chief ray as centre when polychromatic) transformed directly at each
+  frequency, Σ I·e^{−2πiν·y} / Σ I. Frequencies above the grid's Nyquist 1/(2Δ) and a PSF whose
+  edge samples exceed 10⁻³ of its peak are warned about. Cutoffs from the fitted pupil scale.
+- **Geometric engine** (`MtfEngine.BuildGeometric`, `GeometricOtf`). The same n × n pupil nodes
+  traced to the image surface (OPD limitations allowed; only rays are used), each ray weighted by
+  its apodization squared; OTF = Σ w·e^{−2πiν·y} / Σ w over the rays' image-surface coordinates
+  relative to the chief ray (afocal: direction cosines read as radians), the exact transform of
+  the rays' line spread function. *Multiply by diffraction limit* (default on) multiplies each
+  wavelength's OTF by the modulation of the same field's unaberrated pupil (the same amplitudes,
+  zero OPD, the scale fitted to the same rays).
+- **Polychromatic.** FFT and Huygens: every wavelength's OPD against the primary wavelength's
+  chief ray (lateral colour is phase); FFT OTFs weighted by w·(λ_min/λ)²·Σ A²/((Σ A)²|step_x·
+  step_y|), the energy of that wavelength's term in section 33's polychromatic PSF, so the sum is
+  that PSF's transform; Huygens transforms section 33's combined PSF. Geometric: weighted by w,
+  every wavelength's rays measured from the first wavelength's chief ray.
+- **Square wave** (help, "FFT MTF", equation image): S(ν) = (4/π)[M(ν) − M(3ν)/3 + M(5ν)/5 − …]
+  over the odd harmonics below the cutoff, M the modulation; S(0) = 1. Derived from the square
+  wave's Fourier series (Coltman's series); FFT only, as the help offers it.
+- **Diffraction limit** (help, "Diffraction Limited"). The FFT MTF of the reference field — the
+  first field at (0, 0), else field 1 — with the OPD set to zero (apodization, vignetting, F/#s
+  kept), drawn dashed; on modulation and square-wave plots only.
+- **Analyses.** Against frequency: 101 frequencies from 0 to the max frequency (0: the largest
+  cutoff), T and S per field (0: every field). Through focus: 2 to 100 planes from −Δ to +Δ (lens
+  units, added to the thickness before the image surface, as section 34). Surface: 129 × 129
+  frequencies over ±the largest cutoff (FFT bilinear on the shift plane). Vs field: up to six
+  frequencies, 2 to 100 fields along +y, +x, −y or −x to the largest defined field in that
+  direction. Map: x × y pixels (2 to 101), each computed at its centre, total widths in field
+  units (0: twice the largest radial field), centred on a field row or (0, 0); data T, S,
+  average, minimum, maximum (geometric: T, S, average). Fields between the table's are appended
+  to the field table (section 34's rule); Remove vignetting factors (default on, as the help)
+  replaces them with apertures first. A point that fails is blank and its reason listed.
+- **Contrast loss map** (help, "Contrast Loss Map"). For each node of an n × n pupil grid, the
+  pair (Px ± δ_x/2, Py) (sagittal) and (Px, Py ± δ_y/2) (tangential) with δ = λν/(n|a|) on each
+  axis, and loss 0.5(1 − cos 2π(W₁ − W₂)); blank where a ray of the pair is outside the unit
+  circle or has no OPD. Frequency 0 is 5 % of 2n√|a_x·a_y|/λ. The MTF and diffraction-limited MTF
+  at the frequency are the FFT engine's at 128 × 128 (help), or "Cannot compute MTF" when that
+  pupil is aliased.
+- **Units.** Settings frequencies are in cycles per millimeter (afocal: per milliradian); the
+  engine works per meter (per radian), × 1000. A focal system whose MTF unit is cycles per
+  milliradian is refused (object-space frequency not built).
+- **One point for criteria.** `MtfEngine.Evaluate(lens, system, field, wavelengths, frequency,
+  options)` returns the tangential and sagittal modulation (or square wave) of one field row and
+  wavelength set at one frequency by any engine, on the lens and system given (a configuration's
+  own). Nothing calls it yet; OP-56's contrast criterion and OP-64's MTF criterion are to.
+- **Determinism.** Through-focus planes, vs-field points and map pixels are one `ParallelSlots`
+  slot each, every FFT on one thread, so results are bitwise the same at any degree of
+  parallelism.
+
+**Not built.** Polarization; intermediate surfaces (the Surface setting); scattered rays; Use
+Dashes; the Huygens sum over configurations; the coherent transfer function; the 3-D surface plot
+with its Rotation and Scale; the through-focus spline and 101-point listing; the MTF operands'
+sparse methods (Grid = 0); object-space cycles per milliradian for focal systems; afocal angle
+units other than milliradians; afocal Huygens and through-focus MTF; the contrast loss map's
+circles and Show OPD indicator; O'Neill's annular closed form and Hopkins' series as gates.

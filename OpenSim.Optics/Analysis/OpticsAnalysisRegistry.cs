@@ -125,7 +125,7 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new HuygensPsfCrossSectionAnalysis());
         registry.Register(new StrehlRatioAnalysis());
 
-        // OP-36: third-order and full-field aberrations (Contrast Loss Map not built: it needs the MTF's cutoff).
+        // OP-36: third-order and full-field aberrations (the Contrast Loss Map is registered with OP-39).
         registry.Register(new SeidelCoefficientsAnalysis());
         registry.Register(new SeidelDiagramAnalysis());
         registry.Register(new FullFieldAberrationAnalysis());
@@ -141,6 +141,22 @@ public sealed class OpticsAnalysisRegistry
         registry.Register(new GeometricEnclosedEnergyAnalysis());
         registry.Register(new GeometricLineEdgeSpreadAnalysis());
         registry.Register(new ExtendedSourceEnclosedEnergyAnalysis());
+
+        // OP-39: the MTF family (FFT, Huygens, geometric) and the Contrast Loss Map OP-36 left out.
+        registry.Register(new FftMtfAnalysis());
+        registry.Register(new FftThroughFocusMtfAnalysis());
+        registry.Register(new FftSurfaceMtfAnalysis());
+        registry.Register(new FftMtfVsFieldAnalysis());
+        registry.Register(new FftMtfMapAnalysis());
+        registry.Register(new HuygensMtfAnalysis());
+        registry.Register(new HuygensThroughFocusMtfAnalysis());
+        registry.Register(new HuygensSurfaceMtfAnalysis());
+        registry.Register(new HuygensMtfVsFieldAnalysis());
+        registry.Register(new GeometricMtfAnalysis());
+        registry.Register(new GeometricThroughFocusMtfAnalysis());
+        registry.Register(new GeometricMtfVsFieldAnalysis());
+        registry.Register(new GeometricMtfMapAnalysis());
+        registry.Register(new ContrastLossMapAnalysis());
         return registry;
     }
 }

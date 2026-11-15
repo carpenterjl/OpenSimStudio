@@ -1233,13 +1233,52 @@ configurations choice; the tolerance data file and viewer. Element decenter and 
 (TEDX … TETZ and the rolls) cannot be evaluated yet: the ray launcher refuses the decentered lens
 they make, and the report names those rows.
 
+## Modulation transfer function
+
+The MTF group holds fourteen analyses over three ways of computing the optical transfer function
+(OTF), tangential (T, frequency along y) and sagittal (S, along x):
+
+- **FFT** (FFT MTF, FFT through focus MTF, FFT surface MTF, FFT MTF vs field, FFT MTF map): the
+  autocorrelation of the same pupil function the FFT PSF uses, so it is the transform of that
+  PSF. The cutoff of each axis is 1/(λF) with the working F/# the traced rays give (for afocal
+  systems the exit pupil diameter over λ, in cycles per milliradian). Type: modulation, real
+  part, imaginary part, phase (degrees) or square-wave response.
+- **Huygens** (Huygens MTF, through focus, surface, vs field): the transform of the Huygens PSF,
+  with its pupil sampling, image sampling and image delta. Frequencies above the image grid's
+  Nyquist frequency, or a PSF that reaches the grid's edge, are warned about.
+- **Geometric** (Geometric MTF, through focus, vs field, map): the transform of the rays' spot,
+  optionally multiplied by the diffraction-limited MTF of the same pupil (on by default, as the
+  help advises). Good for strongly aberrated lenses; it does not know about diffraction
+  otherwise.
+- **Contrast loss map**: for each pupil point, how much a pair of rays one MTF-frequency shift
+  apart lose contrast, 0.5(1 − cos 2πΔW), as two false-colour maps (T and S), with the MTF and
+  its diffraction limit at that frequency (frequency 0: 5 % of the cutoff).
+
+Wavelength 0 is polychromatic: every wavelength referred to the primary wavelength's chief ray,
+weighted as the polychromatic PSF weights it. Field 0 plots every field. Show diffraction limit
+draws the FFT MTF of the on-axis field (or field 1 if none is on axis) with the OPD set to zero.
+Through focus adds the shift (lens units) to the thickness before the image surface. MTF vs field
+and the maps sample fields between the table's, as the RMS analyses do; Remove vignetting factors
+(on by default) replaces vignetting factors with apertures first. Map pixels are computed at their
+centres; a width of 0 is twice the largest radial field. The MTF unit is cycles per millimeter
+(cycles per milliradian in afocal mode); a focal system set to cycles per milliradian is refused.
+Definitions are in docs/Optics-Conventions.md §38. Merit-function criteria can call the same
+engine (`MtfEngine.Evaluate`), but no operand or criterion uses it yet.
+
+Not built: polarization, intermediate surfaces, scattered rays, the Huygens sum over
+configurations, the coherent transfer function, the 3-D surface plot, the through-focus spline,
+the contrast loss map's circles and OPD indicator, afocal through-focus and Huygens MTF, and
+the object-space cycles-per-milliradian unit of focal systems.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
 
 - the non-sequential object editor;
-- layouts with traced rays, and the analysis windows not described above (MTF, the Contrast
-  Loss Map and the rest; the Configuration Matrix Spot);
+- layouts with traced rays, and the analysis windows not described above (the Configuration
+  Matrix Spot and the rest);
+- the MTF in object-space cycles per milliradian for focal systems, afocal through-focus MTF
+  (diopters) and the afocal Huygens MTF;
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);
