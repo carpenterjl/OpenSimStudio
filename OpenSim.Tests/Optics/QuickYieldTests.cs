@@ -73,17 +73,17 @@ public sealed class QuickYieldTests
         Assert.Contains(quick.ReportLines(), l => l.StartsWith("Predicted yield:", StringComparison.Ordinal));
     }
 
-    /// <summary>An element tilt makes the lens non-axial, which the ray launcher refuses (§15): the evaluation
-    /// fails by row and value, and no model or yield is given.</summary>
+    /// <summary>An element decentered so far that the rays miss its front sphere (radius 100 mm, TEDX ±150 mm):
+    /// the evaluation fails by row and value, and no model or yield is given.</summary>
     [Fact]
     public void AFailedEvaluation_IsNamed_AndNoEstimateIsGiven()
     {
-        var table = X.Table(X.Row("TRAD", 1, 0, -0.5, 0.5), X.Row("TETX", 1, 2, -0.01, 0.01));
+        var table = X.Table(X.Row("TRAD", 1, 0, -0.5, 0.5), X.Row("TEDX", 1, 2, -150, 150));
         var r = QuickYield.Run(X.Singlet(), table, X.NoCatalogs, X.Wavefront, new MonteCarloOptions { YieldLimit = 1 }, new QuickYieldOptions { Samples = 10 });
         Assert.False(r.Succeeded);
         Assert.Null(r.Yield);
         Assert.Empty(r.Samples);
-        Assert.Contains(r.Failures, f => f.Contains("row 2 (TETX)"));
+        Assert.Contains(r.Failures, f => f.Contains("row 2 (TEDX)"));
         Assert.Contains(r.ReportLines(), l => l.StartsWith("Failed evaluations", StringComparison.Ordinal));
     }
 

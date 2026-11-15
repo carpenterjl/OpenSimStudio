@@ -18,6 +18,16 @@ public sealed record SequentialLens
 {
     public required IReadOnlyList<SequentialSurface> Surfaces { get; init; }
 
+    /// <summary>
+    /// TC-15: an axial lens, surface for surface the same as this one, whose paraxial model the
+    /// <see cref="RayLauncher"/> takes for this lens's pupil, fields and paraxial aim, for a lens
+    /// that has no paraxial model of its own. The tolerancing sets it on a trial lens that its
+    /// decenters and tilts make non-axial: the same trial with those drawn as zero
+    /// (docs/Optics-Conventions.md §42). Null (the default) for every other lens, which then uses
+    /// its own paraxial model.
+    /// </summary>
+    public SequentialLens? AimReference { get; init; }
+
     /// <summary>The image surface's index.</summary>
     public int ImageIndex => Surfaces.Count - 1;
 

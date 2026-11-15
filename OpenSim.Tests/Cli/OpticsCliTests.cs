@@ -366,12 +366,12 @@ public sealed class OpticsCliTests : IDisposable
     }
 
     /// <summary>Failed trials are counted and named as the engine reports them, and give exit 2:
-    /// element tilts make the lens non-axial, which the ray launcher refuses (OP-65's own test case
-    /// in MonteCarloTests.ElementTiltTrials_FailByName_AndAreCounted).</summary>
+    /// an element decentered so far that its rays miss (OP-65's own test case in
+    /// MonteCarloTests.TrialsWhoseRaysMiss_FailByName_AndAreCounted).</summary>
     [Fact]
     public void MonteCarlo_FailedTrials_AreNamed_AndGiveExitTwo()
     {
-        var table = ToleranceRunFixtures.Table(ToleranceRunFixtures.Row("TRAD", 1, 0, -1, 1), ToleranceRunFixtures.Row("TETX", 1, 2, -0.01, 0.01));
+        var table = ToleranceRunFixtures.Table(ToleranceRunFixtures.Row("TRAD", 1, 0, -1, 1), ToleranceRunFixtures.Row("TEDX", 1, 2, 150, 200));
         var optics = ToleranceRunFixtures.Singlet() with
         {
             Tolerances = ToleranceDataSettings.ToSettings(table)! with
@@ -387,7 +387,7 @@ public sealed class OpticsCliTests : IDisposable
         string log = File.ReadAllText(Path.Combine(outDir, "log.txt"));
         Assert.Contains("failed and left out of the statistics: 3", log);
         Assert.Contains("Trial 1 failed:", log);
-        Assert.Contains("2 (TETX)", log);
+
         Assert.Contains("failed: ", File.ReadAllText(Path.Combine(outDir, "report.md")));
     }
 

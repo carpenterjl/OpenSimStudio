@@ -347,18 +347,12 @@ public static class QuickYield
         (double Criterion, string? Failure) Evaluate(int[] rows, double[] values)
         {
             token.ThrowIfCancellationRequested();
-            var current = start.Settings;
-            Func<int, int> map = s => s;
             try
             {
-                for (int m = 0; m < rows.Length; m++)
-                {
-                    var before = map;
-                    var change = perturber.Apply(current, table, plans[rows[m]].Index, values[m], new ToleranceApplyOptions { SurfaceMap = before });
-                    current = change.Perturbed;
-                    map = s => change.MapSurface(before(s));
-                }
-                return (setup.Compensator.Evaluate(current, map, token).Criterion, null);
+                // TC-15: with the aim twin when a row decenters or tilts.
+                var steps = Enumerable.Range(0, rows.Length).Select(m => new ToleranceStep(plans[rows[m]].Index, values[m])).ToArray();
+                var trial = ToleranceAim.Apply(perturber, start.Settings, table, steps);
+                return (setup.Compensator.Evaluate(trial.Perturbed, trial.Map, token, trial.Twin).Criterion, null);
             }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException or NotSupportedException)
             {

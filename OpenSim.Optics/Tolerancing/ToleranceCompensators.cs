@@ -146,8 +146,10 @@ internal sealed class ToleranceCompensators
     }
 
     /// <summary>The compensated criterion of a perturbed record; <paramref name="map"/> takes the
-    /// table's (nominal) surface numbers to the record's.</summary>
-    public CompensatedLens Evaluate(OpticsSettings perturbed, Func<int, int> map, CancellationToken token)
+    /// table's (nominal) surface numbers to the record's. TC-15: <paramref name="twin"/>, the trial
+    /// with its decenters and tilts at zero, aims a trial lens that has no paraxial model of its own
+    /// (<see cref="ToleranceAim"/>); null when the trial has no decenter or tilt.</summary>
+    public CompensatedLens Evaluate(OpticsSettings perturbed, Func<int, int> map, CancellationToken token, OpticsSettings? twin = null)
     {
         switch (_o.Compensation)
         {
@@ -157,19 +159,20 @@ internal sealed class ToleranceCompensators
                 foreach (int k in FocusConfigurations())
                 {
                     var (lens, system) = ToleranceCriterionEvaluator.Build(perturbed, k, _catalogs);
+                    if (twin is not null) lens = ToleranceAim.Attach(lens, ToleranceCriterionEvaluator.Build(twin, k, _catalogs).Lens, $"configuration {k}");   // TC-15
                     shifts[k - 1] = _defocus[k - 1] - ToleranceCriterionEvaluator.Defocus(lens, system, $"configuration {k}");
                 }
-                double criterion = _e.Evaluate(perturbed, shifts, token);
+                double criterion = _e.Evaluate(perturbed, shifts, token, twin);
                 var unit = ProjectLens.LensUnitOf(perturbed.SystemData);
                 return new CompensatedLens(perturbed, criterion, new[] { OpticsConventions.FromMeters(shifts[_e.Configuration - 1], unit) }, Array.Empty<string>());
             }
             case ToleranceCompensation.None:
-                return new CompensatedLens(perturbed, _e.Evaluate(perturbed, null, token), Array.Empty<double>(), Array.Empty<string>());
+                return new CompensatedLens(perturbed, _e.Evaluate(perturbed, null, token, twin), Array.Empty<double>(), Array.Empty<string>());
             default:
             {
-                var optimized = Optimize(perturbed, map, token, null);
+                var optimized = Optimize(perturbed, map, token, null, twin);
                 var changes = _rows.Select(r => Value(optimized, r.Definition, map) - Value(_start!, r.Definition, s => s)).ToArray();
-                return new CompensatedLens(optimized, _e.Evaluate(optimized, null, token), changes, Array.Empty<string>());
+                return new CompensatedLens(optimized, _e.Evaluate(optimized, null, token, twin), changes, Array.Empty<string>());
             }
         }
     }
@@ -180,7 +183,7 @@ internal sealed class ToleranceCompensators
 
     // ------------------------------------------------------------------ optimize
 
-    private OpticsSettings Optimize(OpticsSettings settings, Func<int, int> map, CancellationToken token, List<string>? notes)
+    private OpticsSettings Optimize(OpticsSettings settings, Func<int, int> map, CancellationToken token, List<string>? notes, OpticsSettings? twin = null)
     {
         var withVariables = WithCompensatorVariables(settings, map);
         MeritFunction function;
@@ -192,7 +195,9 @@ internal sealed class ToleranceCompensators
         }
         else
         {
-            registry = Registry(token);
+            // TC-15: the criterion rows aim a non-axial trial lens by the twin of the toleranced configuration.
+            var twinLens = twin is null ? null : ToleranceCriterionEvaluator.Build(twin, _e.Configuration, _catalogs).Lens;
+            registry = Registry(token, twinLens);
             function = Function(map);
         }
         LocalOptimizationOptions Options(LocalOptimizationAlgorithm a, LocalOptimizationCycles c, int count) => new()
@@ -289,8 +294,11 @@ internal sealed class ToleranceCompensators
         return new MeritFunction(rows);
     }
 
-    private MeritOperandRegistry Registry(CancellationToken token)
+    private MeritOperandRegistry Registry(CancellationToken token, SequentialLens? twin = null)
     {
+        var aimed = new System.Runtime.CompilerServices.ConditionalWeakTable<SequentialLens, SequentialLens>();
+        SequentialLens Aimed(SequentialLens lens) => twin is null ? lens
+            : aimed.GetValue(lens, l => ToleranceAim.Attach(l, twin, $"configuration {_e.Configuration}"));
         var r = new MeritOperandRegistry();
         r.Register(MeritOperandRegistry.CreateDefault().Get("CONF"));
         r.Register(new MeritOperandDefinition
@@ -301,7 +309,8 @@ internal sealed class ToleranceCompensators
             {
                 try
                 {
-                    return c.Row.Int1 < 0 ? ToleranceCriterionEvaluator.Boresight(c.Lens, c.System) : _e.FieldValue(c.Lens, c.System, c.Row.Int1, token);
+                    var lens = Aimed(c.Lens);
+                    return c.Row.Int1 < 0 ? ToleranceCriterionEvaluator.Boresight(lens, c.System) : _e.FieldValue(lens, c.System, c.Row.Int1, token);
                 }
                 catch (Exception e) when (e is ArgumentException or InvalidOperationException) { throw new MeritOperandException(e.Message); }
             },

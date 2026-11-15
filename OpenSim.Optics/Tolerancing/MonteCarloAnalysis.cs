@@ -335,9 +335,9 @@ public sealed record MonteCarloResult
 /// </para>
 /// <para>
 /// <b>Failures.</b> A trial whose perturbation or evaluation fails is kept with its reason and
-/// left out of the statistics and the yield, with its count shown. Element decenters and tilts
-/// make the lens non-axial, which the ray launcher refuses (§15, OP-22), so trials carrying them
-/// fail by name.
+/// left out of the statistics and the yield, with its count shown. A trial its decenters and
+/// tilts make non-axial is traced as it is, aimed by its twin with those at zero (TC-15,
+/// <see cref="ToleranceAim"/>).
 /// </para>
 /// </summary>
 public static class MonteCarloAnalysis
@@ -489,7 +489,7 @@ public static class MonteCarloAnalysis
                 _overlayRows = Enumerable.Range(0, system.Wavelengths.Wavelengths.Count).ToArray();
                 _mtf = new MtfOptions { Method = MtfMethod.Fft, Sampling = Run.PsfSampling }.ToMethod();
                 _frequencies = MtfCore.Frequencies(ov.Points, ov.MaxFrequency);
-                NominalMtf = Mtf(_start, out string? failure);
+                NominalMtf = Mtf(_start, null, out string? failure);
                 if (failure is not null) _notes.Add($"MTF overlay: the nominal lens's MTF could not be computed: {failure}");
             }
         }
@@ -591,20 +591,13 @@ public static class MonteCarloAnalysis
             }
             var trial = new MonteCarloTrial { Index = k, Draws = draws };
 
-            var current = _start.Settings;
-            Func<int, int> map = n => n;
+            // TC-15: the draws applied in row order, with the aim twin (decenters and tilts at zero)
+            // when any of them decenters or tilts.
+            ToleranceTrialSettings applied;
             try
             {
-                foreach (var d in draws)
-                {
-                    var before = map;
-                    var change = _perturber.Apply(current, _table, d.Row - 1, d.Value, new ToleranceApplyOptions
-                    {
-                        SurfaceMap = before, DirectionDegrees = d.DirectionDegrees ?? 90, AstigmatismAngleDegrees = d.AngleDegrees ?? 0,
-                    });
-                    current = change.Perturbed;
-                    map = n => change.MapSurface(before(n));
-                }
+                applied = ToleranceAim.Apply(_perturber, _start.Settings, _table,
+                    draws.Select(d => new ToleranceStep(d.Row - 1, d.Value, d.DirectionDegrees ?? 90, d.AngleDegrees ?? 0)).ToArray());
             }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException or NotSupportedException)
             {
@@ -614,14 +607,11 @@ public static class MonteCarloAnalysis
             CompensatedLens evaluated;
             try
             {
-                evaluated = _setup.Compensator.Evaluate(current, map, token);
+                evaluated = _setup.Compensator.Evaluate(applied.Perturbed, applied.Map, token, applied.Twin);
             }
             catch (Exception e) when (e is ArgumentException or InvalidOperationException or NotSupportedException)
             {
-                var element = _rows.Where(r => r.Element).Select(r => $"{r.Index + 1} ({r.Code})").ToArray();
-                string why = element.Length == 0 ? e.Message
-                    : $"{e.Message} (The trial carries element tolerance row{(element.Length == 1 ? "" : "s")} {string.Join(", ", element)}, which make the lens non-axial; the ray launcher refuses such lenses, §15, OP-22.)";
-                return trial with { Failure = why };
+                return trial with { Failure = e.Message };
             }
             lens = evaluated;
             trial = trial with
@@ -632,19 +622,21 @@ public static class MonteCarloAnalysis
             };
             if (_mtf is not null && k <= Options.Overlay!.Trials)
             {
-                var curve = Mtf(evaluated, out string? failure);
+                var curve = Mtf(evaluated, applied.Twin, out string? failure);
                 trial = trial with { Mtf = curve, MtfFailure = failure };
             }
             return trial;
         }
 
         /// <summary>The MTF of a compensated lens at the overlay's field, every wavelength.</summary>
-        private MonteCarloMtfCurve? Mtf(CompensatedLens c, out string? failure)
+        private MonteCarloMtfCurve? Mtf(CompensatedLens c, OpticsSettings? twin, out string? failure)
         {
             failure = null;
             try
             {
                 var (lens, system) = ToleranceCriterionEvaluator.Build(c.Settings, _setup.Configuration, _catalogs);
+                if (twin is not null)   // TC-15
+                    lens = ToleranceAim.Attach(lens, ToleranceCriterionEvaluator.Build(twin, _setup.Configuration, _catalogs).Lens, $"configuration {_setup.Configuration}");
                 if (Run.Compensation == ToleranceCompensation.ParaxialFocus && c.Compensators.Count > 0)
                     lens = RmsCore.Focused(lens, OpticsConventions.ToMeters(c.Compensators[0], ProjectLens.LensUnitOf(c.Settings.SystemData)));
                 var point = MtfCore.Evaluate(_mtf!, lens, system, Options.Overlay!.Field - 1, _overlayRows, _overlayRows.Length > 1, Run.CancellationToken);
@@ -721,7 +713,7 @@ public static class MonteCarloAnalysis
             yield return $"Statistics over the evaluated trials only: the sample standard deviation (n − 1); percentiles by linear interpolation between order statistics.";
             if (Options.Overlay is { } ov)
                 yield return $"MTF overlay: OP-39's FFT MTF of the compensated lens at field {ov.Field}, every wavelength by its weight, {Run.PsfSampling} × {Run.PsfSampling} pupil grid, {ov.Points} frequencies to {StudyReport.Number(ov.MaxFrequency, "g6")} {MtfUnit}, the first {ov.Trials} trials.";
-            yield return "Not built: TEZI's random per-term coefficients (each trial applies the drawn RMS equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst files by name, tolerance scripts (OP-67), the Tolerance Data Viewer and Yield curve (OP-66); element decenter and tilt trials fail while the ray launcher refuses non-axial lenses.";
+            yield return "Not built: TEZI's random per-term coefficients (each trial applies the drawn RMS equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst files by name, tolerance scripts (OP-67), the Tolerance Data Viewer and Yield curve (OP-66).";
         }
     }
 }

@@ -162,16 +162,17 @@ public sealed class MonteCarloTests
         Assert.Contains(r.ReportLines(), l => l.StartsWith("Yield:", StringComparison.Ordinal));
     }
 
-    /// <summary>Element tilts make the lens non-axial, which the ray launcher refuses: the trials fail by name and
-    /// are left out of the statistics with their count shown.</summary>
+    /// <summary>An element decentered so far that the rays miss its front sphere (radius 100 mm; TEDX drawn between
+    /// 150 and 200 mm, the normal draw truncated at the row's limits) fails every trial by name; the trials are left
+    /// out of the statistics with their count shown. (Small element tilts and decenters are traced, TC-15.)</summary>
     [Fact]
-    public void ElementTiltTrials_FailByName_AndAreCounted()
+    public void TrialsWhoseRaysMiss_FailByName_AndAreCounted()
     {
-        var table = X.Table(X.Row("TRAD", 1, 0, -1, 1), X.Row("TETX", 1, 2, -0.01, 0.01));
+        var table = X.Table(X.Row("TRAD", 1, 0, -1, 1), X.Row("TEDX", 1, 2, 150, 200));
         var r = MonteCarloAnalysis.Run(X.Singlet(), table, X.NoCatalogs, X.Wavefront, new MonteCarloOptions { Trials = 3, YieldLimit = 1 });
         Assert.Equal(3, r.Failed);
         Assert.Null(r.Statistics);
-        Assert.All(r.Trials, t => Assert.Contains("2 (TETX)", t.Failure));
+        Assert.All(r.Trials, t => Assert.False(string.IsNullOrEmpty(t.Failure)));
         Assert.Equal(0, r.Yield!.Evaluated);
         Assert.Contains(r.Notes, n => n.Contains("3 of 3 trials failed"));
         Assert.Contains(r.ReportLines(), l => l.Contains("failed and left out of the statistics: 3"));

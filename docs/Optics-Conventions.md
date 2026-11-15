@@ -1036,6 +1036,13 @@ single place in the code, so a correction is one line and its test.
       they "may be violated if doing so would provide better performance"; their weight is not
       published); a COMP with Min = Max = 0 is held at its nominal by that row. CPAR and CMCO
       bounds are not built.
+    - *Trials made non-axial* (TC-15). The help does not say how OpticStudio's paraxial engine
+      treats a tilted or decentered lens; here such a trial takes its pupil, fields, paraxial focus
+      and focal length from its twin with the decenters and tilts at zero (§42). The on-axis
+      paraxial quantities (focus, pupil position and size) of a lens with a decenter or tilt δ
+      differ from the twin's by O(δ²): the lens with −δ is the mirror image of the lens with +δ,
+      so they are even in δ (this program's derivation). TIRR's astigmatism at an angle not a
+      multiple of 90° enters the twin at 0°. Nothing is compared with OpticStudio's output.
     - *Worst offenders* are the individual min and max trials sorted by degradation (the help:
       "sorts the tolerances by contribution to the criterion"); Show Worst's default 10 is this
       program's.
@@ -3761,9 +3768,30 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
   Sensitivity with the paraxial focus compensator, for the spot, wavefront and boresight criteria.
 - **Determinism.** Rows run in parallel, one slot each; everything inside a slot (perturbation,
   optimizer, criterion) runs on one thread, so the result is bitwise the same at any thread count.
-- **Lenses the ray launcher refuses.** The launcher needs an axial paraxial model (§15): element
-  decenters and tilts (TEDX … TETZ, the rolls), which wrap the group in coordinate breaks, make
-  the lens non-axial, so their trials fail by name until the launcher handles such lenses (OP-22).
+- **Trials made non-axial** (TC-15, `ToleranceAim.cs`). The launcher needs a paraxial model for
+  the entrance pupil, the fields and the paraxial aim (§7, §13), and the paraxial focus
+  compensator one for the defocus; surface decenters and tilts (TSDX … TIRY, which make the
+  surface Irregular and place it), element decenters, tilts and rolls (TEDX … TRLR, which wrap the
+  group in coordinate breaks) and user break tolerances (TUDX … TUTZ) can leave a trial lens with
+  none (§15). Such a trial is traced as it is, with the pupil, fields and paraxial data of its
+  *aim twin*: the same trial with every decenter, tilt and roll drawn as zero (a zero row inserts
+  the same breaks, so the twin has the trial's surfaces one for one), and a TIRR astigmatism at an
+  angle that is not a multiple of 90° (which the paraxial engine has no model of, §23) taken at 0°,
+  the angle the sensitivity analysis applies TIRR at. `SequentialLens.AimReference` carries the
+  trial lens with the twin's breaks, tilts and Irregular placements (its own thicknesses,
+  curvatures and compensator values), and `RayLauncher` builds its paraxial model from it. So with
+  ray aiming off the rays leave through the twin's paraxial entrance pupil ("the paraxial entrance
+  pupil size and location ... calculated at the primary wavelength on axis", help "Ray Aiming",
+  `plans/sources/optics/ansys-op22/Ray_Aiming.html`), with it on they are aimed at the trial
+  lens's own stop; the decenters and tilts show as aberration and boresight. The paraxial focus
+  compensator holds the twin's defocus, which carries the trial's radius, thickness, index and
+  irregularity changes; the boresight error divides by the twin's focal length. A trial lens that
+  has a paraxial model of its own uses it as before, so every result that was computed before is
+  bitwise unchanged. A ray that misses still fails the trial by name. Not covered: a lens whose
+  solves need first-order data (marginal- and chief-ray solves, F-number solves) still fails when a
+  trial makes it non-axial, since its solves are resolved before the twin is attached; merit
+  operands that read paraxial data, and the Optimize compensator with the merit function
+  criterion (the optimizer builds those lenses itself), still fail on such a trial.
 - **Settings.** The MTF Frequency (`MtfFrequency`) and the encircled radius
   (`EncircledRadiusMicrometers`) are saved on `OpticsToleranceRunSettings` with the rest; neither
   has a default (0 is refused for its criteria).
@@ -3935,8 +3963,9 @@ dialog's Monte Carlo tab (`op-64-help/Tolerancing.txt`).
   thread each, and the statistics are reduced in trial order: the result is bitwise identical at
   any thread count.
 - **Failures.** A trial whose perturbation or evaluation fails keeps its draws and reason and is
-  left out of the statistics and the yield, with the count reported. Element decenters and tilts
-  make the lens non-axial, which the ray launcher refuses (§15), so such trials fail by name.
+  left out of the statistics and the yield, with the count reported. Trials that decenters and
+  tilts make non-axial are traced with their aim twin (§42, "Trials made non-axial"); the MTF
+  overlay of such a trial too.
 - **Results.** Mean, sample standard deviation, min, max, percentiles (linear interpolation
   between order statistics, as `ParameterSweep`'s statistics), best and worst trial, each
   compensator's statistics, the yield (criterion ≤ limit, or ≥ where larger is better) over the
@@ -3956,8 +3985,7 @@ dialog's Monte Carlo tab (`op-64-help/Tolerancing.txt`).
 coefficient randomly chosen between -1.0 and 1.0 ... normalized"; a trial applies the drawn RMS
 equally over the terms, as the sensitivity analysis does), correlated draws, Save Best and Worst
 Monte Carlo files by name and the File Prefix, the ZTD data file (the Tolerance Data Viewer and
-Yield curve are §51), tolerance scripts (OP-67), overlay of analyses other than the MTF, and
-evaluation of element decenter and tilt trials (the launcher, OP-22).
+Yield curve are §51), tolerance scripts (OP-67), and overlay of analyses other than the MTF.
 
 ## 46. Command-line optics
 

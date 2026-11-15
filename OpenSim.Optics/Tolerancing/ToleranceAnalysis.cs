@@ -374,8 +374,9 @@ public static class ToleranceAnalysis
             var t = new ToleranceTrial { Row = i + 1, Code = code, Side = side, Value = value };
             try
             {
-                var change = perturber.Apply(start, table, i, value);
-                var e = compensator.Evaluate(change.Perturbed, change.MapSurface, token);
+                // TC-15: with the aim twin (the row at zero) when the row decenters or tilts.
+                var trial = ToleranceAim.Apply(perturber, start, table, new[] { new ToleranceStep(i, value) });
+                var e = compensator.Evaluate(trial.Perturbed, trial.Map, token, trial.Twin);
                 return t with { Criterion = e.Criterion, Change = ChangeOf(e.Criterion, n, o.Change), Compensators = e.Compensators };
             }
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or NotSupportedException)
@@ -490,6 +491,7 @@ public static class ToleranceAnalysis
         if (o.Mode != ToleranceMode.Sensitivity)
             lines.Add($"Inverse: each limit is searched by Brent's method to {ToleranceRunSettings.F(o.InverseTolerance)} of its starting value, assuming the criterion changes monotonically with the tolerance (help); limits are only ever tightened.");
         lines.Add("Radial operands (TSDR, TEDR, TARR, TRLR) are applied along +y, TIRR's astigmatism along y (OP-63's defaults).");
+        lines.Add("A trial its decenters and tilts make non-axial is traced as it is, with the entrance pupil, fields, paraxial focus and focal length of the same trial with its decenters and tilts at zero (TC-15, docs/Optics-Conventions.md §42).");
         lines.Add("Not built: Separate Fields/Configs, the polynomial fit and the cache, Force Ray Aiming, the Config \"All\" choice (the current configuration is toleranced), the RMS angular and user script criteria, Skip Sensitivity (Monte Carlo runs on its own: MonteCarloAnalysis, OP-65).");
         return lines;
     }

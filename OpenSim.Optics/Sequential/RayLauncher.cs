@@ -41,6 +41,11 @@ public readonly record struct AimedRay(Ray Ray, bool Converged, double StopMiss,
 /// returned failed, <see cref="RayStatus.NoConvergence"/> at the stop.
 /// </para>
 /// <para>
+/// <b>Aim reference</b> (TC-15). A lens with a <see cref="SequentialLens.AimReference"/> (a
+/// toleranced trial made non-axial) takes <see cref="Paraxial"/> from the reference instead of
+/// itself; everything else is traced on the lens.
+/// </para>
+/// <para>
 /// Every solve is a pure function of its inputs, so the chief-ray cache is order independent and
 /// a batch traced in parallel is bitwise the sequential one. Safe to share between threads.
 /// </para>
@@ -101,7 +106,9 @@ public sealed class RayLauncher
         var paraxialSystem = _realImageHeight
             ? system with { Fields = system.Fields with { Type = FieldType.ParaxialImageHeight } }
             : system;
-        Paraxial = ParaxialSystem.Create(lens.ToParaxialLens(), paraxialSystem);
+        // TC-15: a lens with an aim reference (a toleranced trial made non-axial by its decenters
+        // and tilts) takes its pupil, fields and paraxial aim from the reference's paraxial model.
+        Paraxial = ParaxialSystem.Create(AimSource(lens).ToParaxialLens(), paraxialSystem);
         _parameterScale = Paraxial.EntrancePupilAtInfinity
             ? Math.Abs(Paraxial.MarginalRay.Slopes[0])
             : Paraxial.EntrancePupilDiameter!.Value / 2;
@@ -118,6 +125,20 @@ public sealed class RayLauncher
 
         if (_aiming.IsOn || _realImageHeight) _primary = SequentialTrace.Create(lens, system);
         if (_aiming.IsOn) StopRadius = FindStopRadius();
+    }
+
+    /// <summary>TC-15: the lens whose paraxial model defines the pupil and fields of
+    /// <paramref name="lens"/>: its <see cref="SequentialLens.AimReference"/> when it has one (checked
+    /// to have the same surfaces, stop and object distance), else the lens itself.</summary>
+    internal static SequentialLens AimSource(SequentialLens lens)
+    {
+        if (lens.AimReference is not { } r) return lens;
+        if (r.Surfaces.Count != lens.Surfaces.Count || r.StopIndex != lens.StopIndex
+            || BitConverter.DoubleToInt64Bits(r.Surfaces[0].Thickness) != BitConverter.DoubleToInt64Bits(lens.Surfaces[0].Thickness))
+            throw new ArgumentException(
+                $"Real ray trace: the lens's aim reference has {r.Surfaces.Count} surfaces, stop {r.StopIndex} and object distance {r.Surfaces[0].Thickness:R} m, "
+                + $"but the lens has {lens.Surfaces.Count}, stop {lens.StopIndex} and {lens.Surfaces[0].Thickness:R} m; the reference must be the same lens surface for surface.");
+        return r;
     }
 
     /// <summary>The ray of normalised field (hx, hy) and pupil (px, py), in surface 1's frame,

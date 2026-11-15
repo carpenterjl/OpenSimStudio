@@ -1351,9 +1351,14 @@ is short in §10 item 38.
 Not built: ensquared, x-only and y-only enclosed energy as criteria, RMS angular and user
 scripts;
 Separate Fields/Configs, the polynomial fit and cache, Force Ray Aiming and the "All"
-configurations choice; the tolerance data file and viewer. Element decenter and tilt tolerances
-(TEDX … TETZ and the rolls) cannot be evaluated yet: the ray launcher refuses the decentered lens
-they make, and the report names those rows.
+configurations choice; the tolerance data file and viewer.
+
+Decenter and tilt tolerances (TSDX … TIRY, TEDX … TETZ, the rolls, TUDX … TUTZ) are evaluated: a
+trial lens they make non-axial is traced as it is, with the entrance pupil, fields, paraxial
+focus and focal length of the same trial with its decenters and tilts at zero, so they show as
+aberration and boresight. A lens whose solves need paraxial data (marginal- or chief-ray solves)
+still fails such trials, as do merit operands that read paraxial data and the Optimize
+compensator with the merit function criterion (Conventions §42).
 
 ## Monte Carlo tolerancing
 
@@ -1391,8 +1396,8 @@ settings of the Tolerance run section.
   lens. With paraxial focus the focus shift is written into the thickness before the image; that
   is refused for a multi-configuration lens or a thickness set by a solve or pickup.
 - Failed trials are listed with their reason and left out of the statistics and the yield, with
-  their count shown. Trials carrying element decenters and tilts fail for now: the ray launcher
-  refuses the decentered lens they make.
+  their count shown. Trials carrying decenters and tilts are traced as the sensitivity analysis
+  traces them (see above); a ray that misses fails the trial.
 - The settings are saved with the tolerance data.
 
 The definitions are in docs/Optics-Conventions.md §45, and the readings where OpticStudio's help

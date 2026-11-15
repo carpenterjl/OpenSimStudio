@@ -43,6 +43,8 @@ internal sealed record ToleranceField(double X, double Y, double Weight, string 
 /// does, so the symmetric field sets need not be among the system's fields. Boresight error:
 /// "the radial chief ray coordinate traced for the on axis field divided by the effective focal
 /// length", at the primary wavelength, radians. Merit function: the lens's own merit function.
+/// A trial lens made non-axial by its decenters and tilts is aimed by its twin (TC-15,
+/// <see cref="ToleranceAim"/>).
 /// </summary>
 internal sealed class ToleranceCriterionEvaluator
 {
@@ -82,13 +84,16 @@ internal sealed class ToleranceCriterionEvaluator
     public PupilQuadratureRule Rule => _rule;
 
     /// <summary>The criterion of <paramref name="settings"/>, with each configuration's lens moved
-    /// by <paramref name="focusShifts"/> meters at the image (index 0 = configuration 1; null for none).</summary>
-    public double Evaluate(OpticsSettings settings, IReadOnlyList<double>? focusShifts, CancellationToken cancellation)
+    /// by <paramref name="focusShifts"/> meters at the image (index 0 = configuration 1; null for none).
+    /// TC-15: <paramref name="twin"/>, the trial with its decenters and tilts at zero, aims a lens
+    /// that has no paraxial model of its own (<see cref="ToleranceAim"/>).</summary>
+    public double Evaluate(OpticsSettings settings, IReadOnlyList<double>? focusShifts, CancellationToken cancellation, OpticsSettings? twin = null)
     {
         cancellation.ThrowIfCancellationRequested();
         if (_o.Criterion == ToleranceCriterion.MeritFunction)
         {
             IMeritConfigurations configurations = new ProjectMeritConfigurations(settings, _catalogs);
+            if (twin is not null) configurations = new AimedConfigurations(configurations, new ProjectMeritConfigurations(twin, _catalogs));   // TC-15
             if (focusShifts is not null) configurations = new FocusedConfigurations(configurations, focusShifts);
             var e = MeritEvaluator.Evaluate(Merit!, configurations, null, new MeritEvaluationOptions { MaxDegreeOfParallelism = 1 }, cancellation);
             if (e.HasFailures)
@@ -96,6 +101,7 @@ internal sealed class ToleranceCriterionEvaluator
             return e.Value;
         }
         var (lens, system) = Build(settings, Configuration, _catalogs);
+        if (twin is not null) lens = ToleranceAim.Attach(lens, Build(twin, Configuration, _catalogs).Lens, $"configuration {Configuration}");   // TC-15
         if (focusShifts is not null) lens = RmsCore.Focused(lens, focusShifts[Configuration - 1]);
         return OfLens(lens, system, cancellation);
     }
@@ -211,7 +217,7 @@ internal sealed class ToleranceCriterionEvaluator
         var ray = trace.Trace(aimed.Ray);
         if (!ray.IsOk)
             throw new ToleranceEvaluationException($"Boresight error: the on-axis chief ray fails ({RayStatuses.Label(ray.Status)} at surface {ray.FailedAtSurface}).");
-        var p = ParaxialSystem.Create(lens.ToParaxialLens(), system, primary);
+        var p = ParaxialSystem.Create(RayLauncher.AimSource(lens).ToParaxialLens(), system, primary);   // TC-15: the aim reference's EFL
         if (p.EffectiveFocalLength is not double efl || efl == 0)
             throw new ToleranceEvaluationException("Boresight error: the system is afocal, so there is no effective focal length to divide by.");
         return Math.Sqrt(ray.Position.X * ray.Position.X + ray.Position.Y * ray.Position.Y) / Math.Abs(efl);
@@ -220,11 +226,12 @@ internal sealed class ToleranceCriterionEvaluator
     /// <summary>
     /// The lens's defocus, meters: the thickness before the image minus the paraxial image distance
     /// −y/u of the marginal ray leaving the last surface (primary wavelength). The paraxial focus
-    /// compensator keeps it at the nominal lens's value.
+    /// compensator keeps it at the nominal lens's value. TC-15: a lens with an aim reference (a
+    /// trial made non-axial) takes y and u from the reference, whose thicknesses are the lens's own.
     /// </summary>
     public static double Defocus(SequentialLens lens, OpticalSystemData system, string where)
     {
-        var p = ParaxialSystem.Create(lens.ToParaxialLens(), system);
+        var p = ParaxialSystem.Create(RayLauncher.AimSource(lens).ToParaxialLens(), system);   // TC-15: the aim reference's focus
         int last = lens.LastSurfaceIndex;
         double y = p.MarginalRay.Heights[last], u = p.MarginalRay.Slopes[last];
         if (p.ImageAtInfinity || u == 0)
