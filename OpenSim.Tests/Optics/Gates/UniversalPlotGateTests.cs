@@ -72,7 +72,11 @@ public sealed class UniversalPlotGateTests
             Close(ThickLensFocalLength(curve.X[i], R2), curve.Y[i], $"EFFL at R1 = {curve.X[i]}");
         }
         Assert.Contains("Surface 1 radius (mm)", result.Text);
-        Assert.DoesNotContain("failed", result.Text);
+        // The analysis always carries a note explaining how failed points are shown, so check the
+        // failed-points section and the table, not the whole text.
+        Assert.DoesNotContain(result.Sections, s => s.Heading == "Failed points");
+        var values = Assert.Single(result.Sections, s => s.Heading == "Values");
+        Assert.DoesNotContain(values.TableRows!, r => r.Contains("failed"));
     }
 
     /// <summary>EFFL over both radii, x = R₁ rising and y = R₂ swept downwards (so the map must
