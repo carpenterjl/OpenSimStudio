@@ -291,6 +291,26 @@ public sealed class ZplConformanceTests : IDisposable
         Assert.Equal(new[] { (13, 4.0), (14, 10.0), (18, 0.001) }, s.ExtraData!.Select(p => (p.Number, p.Value)));
     }
 
+    // Wave 12 wiring: SURP's TYPE and PARM reach OP-53's types through the generic SurfaceTypes
+    // layouts (OpticStudio 2025 R2 help, "Birefringent In and Birefringent Out", parameter
+    // tables; BirefringentLayouts): 1 mode, 2–4 the crystal axis cosines, 13 the gradient mode
+    // (extra data value 1). The values are inputs.
+    private const string BirefringentMacro =
+        "SURP 1, TYPE, \"BIRE__IN\"\nSURP 1, PARM, 1, 1\nSURP 1, PARM, 1, 4\nSURP 2, TYPE, \"BIRE_OUT\"\n"
+        + "OPTRETURN 0, PARM(1, 1)\nOPTRETURN 1, SPRX(1, 10, 4)\nOPTRETURN 2, PARM(13, 1)\nd = SPRO(1, 0)\nT$ = $BUFFER()\nPRINT T$\nd = SPRO(2, 0)\nU$ = $BUFFER()\nPRINT U$";
+
+    [Fact]
+    public void SetSurfaceProperty_MakesABirefringentCrystal()
+    {
+        var result = Run(BirefringentMacro);
+        Assert.Equal(new double?[] { 1, 1, 0 }, result.OptReturn.Take(3));
+        Assert.Equal(Lines("BIRE__IN", "BIRE_OUT"), result.Output);
+        var s = result.System.Surfaces!;
+        Assert.Equal("Birefringent In", s[1].Type);
+        Assert.Equal("Birefringent Out", s[2].Type);
+        Assert.Equal(new[] { (1, 1.0), (4, 1.0) }, s[1].Parameters!.Select(p => (p.Number, p.Value)));
+    }
+
     private const string StopInsertDeleteMacro =
         "STOPSURF 2\nINSERT 2\nOPTRETURN 0, NSUR()\nOPTRETURN 1, THIC(2)\nOPTRETURN 2, THIC(3)\nDELETE 2\nOPTRETURN 3, NSUR()\nOPTRETURN 4, THIC(2)";
 
@@ -484,6 +504,24 @@ public sealed class ZplConformanceTests : IDisposable
         Assert.Equal("track", rows[1].Comment);
         Assert.Empty(Run("INSERTMFO 1\nINSERTMFO 1\nDELETEMFO ALL").System.MeritFunction!.Operands!);
         Assert.Contains("MFCN() was not called", Assert.Throws<ZplException>(() => Run("INSERTMFO 1\nx = OPER(1, 10)")).Message);
+    }
+
+    // Wave 12 wiring: OPEV finds operands through MeritOperandRegistry, so OP-55A's EPDI and
+    // OP-55B's WLEN are reached with no binding of their own. EPDI of the singlet: the stop is
+    // surface 1 with nothing before it, so the entrance pupil is the 10 mm aperture itself
+    // (derived); WLEN of wave 1 is the 0.55 µm the singlet's table holds.
+    private const string CatalogueOperandsMacro =
+        "OPTRETURN 0, OPEV(OCOD(\"EPDI\"), 0, 0, 0, 0, 0, 0)\nOPTRETURN 1, OPEV(OCOD(\"WLEN\"), 0, 1, 0, 0, 0, 0)";
+
+    [Fact]
+    public void Opev_ReadsTheCatalogueOperands_AndSetoperandNamesAnUnknownCode()
+    {
+        var r = Run(CatalogueOperandsMacro).OptReturn;
+        Near(10, r[0], 1e-12);
+        Near(0.55, r[1], 1e-15);
+        // An unknown code: the catalogue's message, which names a not-built OpticStudio operand.
+        Assert.Contains("there is no operand 'NOPE'", Assert.Throws<ZplException>(() => Run("INSERTMFO 1\nSETOPERAND 1, 11, \"NOPE\"")).Message);
+        Assert.Contains("TRAD (", Assert.Throws<ZplException>(() => Run("INSERTMFO 1\nSETOPERAND 1, 11, \"TRAD\"")).Message);
     }
 
     private const string OptimizeMacro =

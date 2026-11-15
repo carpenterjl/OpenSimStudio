@@ -244,6 +244,11 @@ public static class ZemaxLensWriter
     private static void WriteGlass(OpticsSurfaceSettings s, string where, Dictionary<string, OpticsCellFlagSettings> flags, Action<string> L, List<string> problems)
     {
         bool pickup = flags.TryGetValue(SavedSurfaces.MaterialColumn, out var gf);
+        // OP-53: the GLAS line names a Birefringent In's ordinary glass; its extraordinary glass
+        // is that name with "-E" appended (help, "Birefringent In and Birefringent Out").
+        if (s.Type == Sequential.Birefringent.BirefringentInShape.Name
+            && (SavedSurfaces.IsMirror(s) || s.ModelGlass is not null || s.Index is not null || string.IsNullOrWhiteSpace(s.Material)))
+            problems.Add($"{where}: a {Sequential.Birefringent.BirefringentInShape.Name} is written with its glass name only (the extraordinary glass is that name with \"-E\" appended), so it needs a catalog glass; this one has {(SavedSurfaces.IsMirror(s) ? "a mirror" : s.ModelGlass is not null ? "a model glass" : s.Index is not null ? "a constant index" : "no glass")}.");
         if (SavedSurfaces.IsMirror(s)) { L("  GLAS MIRROR 0 0 0 0 0 0 0 0 0 0"); return; }
         if (s.ModelGlass is { } m)
         {

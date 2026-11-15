@@ -1009,7 +1009,7 @@ public static partial class ZplLibrary
                 8 => r with { Target = Number() },
                 9 => r with { Weight = Number() },
                 10 => r with { Comment = Text() },
-                11 => r with { Type = Registry.Value.Find(Text())?.Code ?? throw new ZplRuntimeException($"'{Text()}' is not a merit operand of this program.") },
+                11 => r with { Type = Registry.Value.Find(Text())?.Code ?? throw new ZplRuntimeException("SETOPERAND: " + Merit.Catalogue.MeritOperandCatalogue.Unknown(Text())) },
                 12 or 13 => r with { Data = Data(col - 8, Number()) },
                 _ => throw new ZplRuntimeException($"SETOPERAND: column {col} cannot be set (1 to 13; the value and contribution are computed)."),
             };

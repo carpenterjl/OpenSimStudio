@@ -674,6 +674,15 @@ public static class ZemaxLensReader
             else
                 st.Problem(b.MaterialLine, $"surface {b.Number}, GLAS {material}: the glass is not in the catalogs {string.Join(", ", search.Select(c => c.Name))}.");
         }
+        // OP-53: a Birefringent In names its ordinary glass on the GLAS line; the extraordinary
+        // one is that name with "-E" appended (help, "Birefringent In and Birefringent Out").
+        if (b.Type == Sequential.Birefringent.BirefringentInShape.Name)
+        {
+            if (material is null || material == SavedSurfaces.Mirror)
+                st.Problems.Add($"{where}: a BIRE__IN surface needs a GLAS line with a glass name (its ordinary glass; the extraordinary glass is that name with \"-E\" appended); a model glass, a constant index, air or a mirror is not read.");
+            else if (search is not null && !Found(search, material + "-E"))
+                st.Problem(b.MaterialLine, $"surface {b.Number}, GLAS {material}: a BIRE__IN surface takes its extraordinary index from the glass '{material}-E', which is not in the catalogs {string.Join(", ", search.Select(c => c.Name))}.");
+        }
 
         var aperture = b.Aperture;
         if (b.ApertureDecenter is { } d)

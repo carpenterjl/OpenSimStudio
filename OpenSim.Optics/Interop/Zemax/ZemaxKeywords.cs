@@ -51,6 +51,18 @@ public static class ZemaxKeywords
     /// to 20). The Hologram 1 and 2 volume flag (parameter 13, which the help calls "Par 13") is
     /// always 0 here and so never written.
     /// </para>
+    /// <para>
+    /// OP-53's types (BIRE__IN, BIRE_OUT): the same table and the same reading (section 10 item
+    /// 48); no lens-file reader names them. Their parameters 0–12 are PARM n and the Birefringent
+    /// In's gradient mode, parameter 13, is XDAT 1, which agrees with the help page "Birefringent
+    /// In and Birefringent Out": "the Gradient Mode is defined by Extra Data Value 1". The GLAS
+    /// line carries the glass name as for any surface, which the help names as the ordinary
+    /// glass: "OpticStudio uses this name to compute the ordinary index ... OpticStudio appends
+    /// "-E" to the glass name, and then looks for this material in the glass catalog". The
+    /// extraordinary glass therefore has no line of its own; the reader checks that the "-E" glass
+    /// is in the catalogs, and a Birefringent In without a glass name (air, a mirror, a model
+    /// glass or a constant index) is refused by name both ways.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<(string Code, string? TypeName)> SurfaceTypes { get; } = new (string, string?)[]
     {
@@ -84,6 +96,9 @@ public static class ZemaxKeywords
         ("HOLOGRM1", "Hologram 1"),
         ("HOLOGRM2", "Hologram 2"),
         ("TOROHOLO", "Toroidal Hologram"),
+        // OP-53: codes from the same SURP surface-type name table.
+        ("BIRE__IN", Sequential.Birefringent.BirefringentInShape.Name),
+        ("BIRE_OUT", Sequential.Birefringent.BirefringentOutShape.Name),
     };
 
     /// <summary>
