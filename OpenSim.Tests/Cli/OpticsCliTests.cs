@@ -9,6 +9,7 @@ using OpenSim.Optics.Analysis.Sampling;
 using OpenSim.Optics.Materials;
 using OpenSim.Optics.Merit;
 using OpenSim.Optics.Optimization;
+using OpenSim.Optics.Optimization.Global;
 using OpenSim.Optics.Tolerancing;
 using OpenSim.Tests.Optics;
 using OpenSim.Tests.Optics.Gates;
@@ -225,18 +226,169 @@ public sealed class OpticsCliTests : IDisposable
         Assert.Equal(direct.Values[0], double.Parse(variables.Rows[0][2], CultureInfo.InvariantCulture));
     }
 
+    // ------------------------------------------------------------------ optimise --global / --hammer (OP-58)
+
+    /// <summary>The Global search from the command line is the engine's run with the same options
+    /// (a run is a fixed function of the seed and the settings, at any thread count): the report,
+    /// the best-designs table and the project written with the best design all equal the direct
+    /// call's. A tiny population and evaluation limit keep it short; the lens is OP-57's doublet
+    /// fixture (arbitrary inputs).</summary>
     [Fact]
-    public void GlobalOptimisationAndMonteCarlo_AreNotBuiltYet_AndSaySo()
+    public void GlobalSearch_FromTheCommandLine_IsTheEnginesRun()
     {
-        string path = Save(LocalOptimizationFixtures.Singlet());
-        var (code, _, err) = Run("optics", "optimise", path, "--global");
-        Assert.Equal(1, code);
-        Assert.Contains("not built yet", err);
-        Assert.Contains("OP-58", err);
-        (code, _, err) = Run("optics", "tolerance", path, "--montecarlo");
-        Assert.Equal(1, code);
-        Assert.Contains("not built yet", err);
-        Assert.Contains("OP-65", err);
+        string path = Save(LocalOptimizationFixtures.Doublet());
+        string outDir = Path.Combine(_dir, "global");
+        var (code, _, _) = Run("optics", "optimise", path, "--global", "--population", "4", "--generations", "1", "--max-evaluations", "60",
+            "--curvature-limit", "0.05", "--seed", "7", "--builtin-catalogs", "--out", outDir);
+        Assert.Equal(0, code);
+
+        var loaded = new ProjectSerializer().Load(path).Optics!;
+        var direct = GlobalSearch.Run(loaded, GlassLookup.ActiveCatalogs(BuiltIn, loaded.Materials?.ActiveCatalogs), new GlobalSearchOptions
+        {
+            PopulationSize = 4, Generations = 1, MaxEvaluationsPerTrial = 60, CurvatureLimit = 0.05, Seed = 7,
+        });
+        Assert.NotEmpty(direct.Best);
+        Assert.Equal(CliRunner.SearchReport("Lens lens", direct).ToMarkdown(), File.ReadAllText(Path.Combine(outDir, "report.md")));
+        var designs = PlotCsv.ReadTable(File.ReadAllText(Path.Combine(outDir, "designs.csv")));
+        Assert.Equal(direct.Best.Count, designs.Rows.Count);
+        Assert.Equal(direct.Best[0].Merit, double.Parse(designs.Rows[0][3], CultureInfo.InvariantCulture));
+        var expected = direct.ApplyTo(loaded, direct.Best[0]);
+        var written = new ProjectSerializer().Load(Path.Combine(outDir, "lens-optimised.ossproj")).Optics!;
+        Assert.Equal(expected.Surfaces![2].Radius, written.Surfaces![2].Radius);
+        Assert.Equal(expected.Surfaces![3].Radius, written.Surfaces![3].Radius);
+        Assert.Equal(-45, new ProjectSerializer().Load(path).Optics!.Surfaces![2].Radius);    // the input is unchanged
+        string log = File.ReadAllText(Path.Combine(outDir, "log.txt"));
+        Assert.All(direct.Log, line => Assert.Contains(line, log));
+
+        // Usage and refusals: both searches at once; a bad number; the engine's refusal of a population below 4 (exit 2, named).
+        Assert.Equal(1, Run("optics", "optimise", path, "--global", "--hammer").Code);
+        Assert.Equal(1, Run("optics", "optimise", path, "--global", "--generations", "two").Code);
+        var (bad, _, err) = Run("optics", "optimise", path, "--global", "--population", "3", "--builtin-catalogs", "--out", Path.Combine(_dir, "bad"));
+        Assert.Equal(2, bad);
+        Assert.Contains("population", err);
+
+        // Stopped before any trial: no design to write, exit 2.
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var (stopped, output, _) = RunWith(cts.Token, "optics", "optimise", path, "--global", "--population", "4", "--curvature-limit", "0.05",
+            "--builtin-catalogs", "--out", Path.Combine(_dir, "stopped"));
+        Assert.Equal(2, stopped);
+        Assert.Contains("Cancelled", output);
+        Assert.False(File.Exists(Path.Combine(_dir, "stopped", "lens-optimised.ossproj")));
+    }
+
+    /// <summary>The Hammer search from the command line is the engine's run with the same options.</summary>
+    [Fact]
+    public void HammerSearch_FromTheCommandLine_IsTheEnginesRun()
+    {
+        string path = Save(LocalOptimizationFixtures.Doublet(r2: -30, r3: -400));
+        string outDir = Path.Combine(_dir, "hammer");
+        var (code, _, _) = Run("optics", "optimise", path, "--hammer", "--rounds", "1", "--trials", "2", "--max-evaluations", "60",
+            "--curvature-limit", "0.05", "--step", "0.2", "--seed", "11", "--builtin-catalogs", "--out", outDir);
+        Assert.Equal(0, code);
+
+        var loaded = new ProjectSerializer().Load(path).Optics!;
+        var direct = HammerSearch.Run(loaded, GlassLookup.ActiveCatalogs(BuiltIn, loaded.Materials?.ActiveCatalogs), new HammerSearchOptions
+        {
+            Rounds = 1, TrialsPerRound = 2, MaxEvaluationsPerTrial = 60, CurvatureLimit = 0.05, StepFraction = 0.2, Seed = 11,
+        });
+        Assert.NotEmpty(direct.Best);
+        Assert.Equal(CliRunner.SearchReport("Lens lens", direct).ToMarkdown(), File.ReadAllText(Path.Combine(outDir, "report.md")));
+        Assert.Equal(direct.Best.Count, PlotCsv.ReadTable(File.ReadAllText(Path.Combine(outDir, "designs.csv"))).Rows.Count);
+        var expected = direct.ApplyTo(loaded, direct.Best[0]);
+        var written = new ProjectSerializer().Load(Path.Combine(outDir, "lens-optimised.ossproj")).Optics!;
+        Assert.Equal(expected.Surfaces![2].Radius, written.Surfaces![2].Radius);
+        Assert.Equal(expected.Surfaces![3].Radius, written.Surfaces![3].Radius);
+    }
+
+    // ------------------------------------------------------------------ tolerance --montecarlo (OP-65)
+
+    /// <summary>OP-65's gate lens (TFRN read by a one-row CVVA merit function, compensation none)
+    /// with its rows, run settings and Monte Carlo settings saved in the project.</summary>
+    private string SaveMonteCarloLens(MonteCarloOptions saved)
+    {
+        var optics = MonteCarloGateTests.Lens() with
+        {
+            Tolerances = ToleranceDataSettings.ToSettings(MonteCarloGateTests.Table(1, 0))! with
+            {
+                Run = ToleranceRunSettings.ToSettings(MonteCarloGateTests.Linear),
+                MonteCarlo = MonteCarloSettings.ToSettings(saved),
+            },
+        };
+        return Save(optics);
+    }
+
+    /// <summary>Monte Carlo from the command line is the engine's run with the saved settings and
+    /// the command line's overrides (trial k depends only on the seed and k): the editor's report
+    /// text, the report, the per-trial table and the saved trial lens equal the direct call's;
+    /// --mode montecarlo is the same run.</summary>
+    [Fact]
+    public void MonteCarlo_FromTheCommandLine_IsTheEnginesRun_WithTheSavedSettingsAsDefaults()
+    {
+        string path = SaveMonteCarloLens(new MonteCarloOptions { Trials = 7, Seed = 3 });
+        string outDir = Path.Combine(_dir, "mc");
+        // The yield limit: the nominal curvature c0, so trials can fall on both sides (from the gate's set-up).
+        string limit = MonteCarloGateTests.C0.ToString("R", CultureInfo.InvariantCulture);
+        var (code, _, _) = Run("optics", "tolerance", path, "--montecarlo", "--trials", "5", "--yield-limit", limit, "--save-trial", "2",
+            "--builtin-catalogs", "--out", outDir);
+        Assert.Equal(0, code);
+
+        var loaded = new ProjectSerializer().Load(path).Optics!;
+        var table = ToleranceDataSettings.FromSettings(loaded.Tolerances, new List<string>());
+        var run = ToleranceRunSettings.FromSettings(loaded.Tolerances!.Run, new List<string>());
+        var mc = MonteCarloSettings.FromSettings(loaded.Tolerances.MonteCarlo, new List<string>(), out _, out _) with
+        {
+            Trials = 5, YieldLimit = double.Parse(limit, CultureInfo.InvariantCulture),
+        };
+        Assert.Equal(3, mc.Seed);                                                           // the saved seed is the default
+        var catalogs = GlassLookup.ActiveCatalogs(BuiltIn, loaded.Materials?.ActiveCatalogs);
+        var direct = MonteCarloAnalysis.Run(loaded, table, catalogs, run, mc);
+        Assert.Equal(0, direct.Failed);
+        Assert.Equal(string.Join(Environment.NewLine, direct.ReportLines()), File.ReadAllText(Path.Combine(outDir, "montecarlo.txt")));
+        Assert.Equal(CliRunner.MonteCarloReport("Lens lens", direct).ToMarkdown(), File.ReadAllText(Path.Combine(outDir, "report.md")));
+        var trials = PlotCsv.ReadTable(File.ReadAllText(Path.Combine(outDir, "trials.csv")));
+        Assert.Equal(5, trials.Rows.Count);
+        int criterion = trials.Header.ToList().IndexOf("criterion");
+        for (int i = 0; i < 5; i++)
+            Assert.Equal(direct.Trials[i].Criterion, double.Parse(trials.Rows[i][criterion], CultureInfo.InvariantCulture));
+        Assert.True(File.Exists(Path.Combine(outDir, "histogram.csv")));
+        var lens = new OpticsFileSerializer().Load(Path.Combine(outDir, "MC_T0002" + OpticsFileSerializer.FileExtension)).Optics!;
+        var expectedLens = MonteCarloAnalysis.TrialLens(loaded, table, catalogs, run, mc, 2);
+        Assert.Equal(expectedLens.Surfaces![1].Radius, lens.Surfaces![1].Radius);
+
+        string viaMode = Path.Combine(_dir, "mc-mode");
+        Assert.Equal(0, Run("optics", "tolerance", path, "--mode", "montecarlo", "--trials", "5", "--yield-limit", limit, "--builtin-catalogs", "--out", viaMode).Code);
+        Assert.Equal(File.ReadAllText(Path.Combine(outDir, "montecarlo.txt")), File.ReadAllText(Path.Combine(viaMode, "montecarlo.txt")));
+
+        // Usage: Monte Carlo against another mode; a trial the run does not have.
+        Assert.Equal(1, Run("optics", "tolerance", path, "--montecarlo", "--mode", "sensitivity").Code);
+        Assert.Equal(1, Run("optics", "tolerance", path, "--montecarlo", "--trials", "5", "--save-trial", "6").Code);
+    }
+
+    /// <summary>Failed trials are counted and named as the engine reports them, and give exit 2:
+    /// element tilts make the lens non-axial, which the ray launcher refuses (OP-65's own test case
+    /// in MonteCarloTests.ElementTiltTrials_FailByName_AndAreCounted).</summary>
+    [Fact]
+    public void MonteCarlo_FailedTrials_AreNamed_AndGiveExitTwo()
+    {
+        var table = ToleranceRunFixtures.Table(ToleranceRunFixtures.Row("TRAD", 1, 0, -1, 1), ToleranceRunFixtures.Row("TETX", 1, 2, -0.01, 0.01));
+        var optics = ToleranceRunFixtures.Singlet() with
+        {
+            Tolerances = ToleranceDataSettings.ToSettings(table)! with
+            {
+                Run = ToleranceRunSettings.ToSettings(ToleranceRunFixtures.Wavefront),
+                MonteCarlo = MonteCarloSettings.ToSettings(new MonteCarloOptions { Trials = 3 }),
+            },
+        };
+        string path = Save(optics);
+        string outDir = Path.Combine(_dir, "mc-fail");
+        var (code, _, _) = Run("optics", "tolerance", path, "--montecarlo", "--builtin-catalogs", "--out", outDir);
+        Assert.Equal(2, code);
+        string log = File.ReadAllText(Path.Combine(outDir, "log.txt"));
+        Assert.Contains("failed and left out of the statistics: 3", log);
+        Assert.Contains("Trial 1 failed:", log);
+        Assert.Contains("2 (TETX)", log);
+        Assert.Contains("failed: ", File.ReadAllText(Path.Combine(outDir, "report.md")));
     }
 
     // ------------------------------------------------------------------ tolerance

@@ -73,7 +73,8 @@ stackup — each run re-meshes the net and reports the pad-to-pad resistance and
 Z0/RLGC over the board's own reference planes — plus the `impedance` calculator, `spacing`
 checks, `emi` estimates and planar `magnetics`. `opensim optics` runs a saved lens: any
 registered analysis by id with its settings (the report is byte for byte the app's Save report),
-a real ray trace, the local optimizer and tolerance sensitivity or inverse sensitivity; optics
+a real ray trace, the local optimizer, the Global and Hammer searches, tolerance sensitivity or
+inverse sensitivity and Monte Carlo tolerancing; optics
 cells (radius, thickness, conic, index, aperture, wavelengths, fields) are sweep targets
 (docs/Optics-User-Guide.md, "Command line"). Every command writes a report (Markdown and
 HTML) with its assumptions, CSV tables and the log, so a study is reproducible from a script.

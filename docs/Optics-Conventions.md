@@ -3700,10 +3700,40 @@ command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics
   (`CliRunner.Run(args, out, err, token)`); the analyses, the optimizer, the tolerance run and the
   optics sweep poll it. A cancelled optimization writes its best design and exits 2; the others
   exit 2 with "Cancelled.". The other commands do not take the token.
-- **Not built.** `optics optimise --global|--hammer` (OP-58) and `optics tolerance --montecarlo`
-  (OP-65) exit 1 saying so; each has a one-arm hook (`// OP-58 hook`, `// OP-65 hook`) in
-  `CliRunner.Optics.cs`. Multi-configuration cells as sweep targets, lens files (`.osslens`) as
-  input, and CSV of the analyses' tables (their text is written) are not built.
+- **Global and Hammer searches** (`CliRunner.OpticsSearch.cs`). `optics optimise --global` calls
+  `GlobalSearch.Run` and `--hammer` calls `HammerSearch.Run` (§43) on the saved record with its
+  active catalogs. An option not given keeps the engine's own default (`GlobalSearchOptions`,
+  `HammerSearchOptions`); `--algorithm` and `--cycles` set each trial's local optimization
+  (infinite cycles run as automatic, as the engine requires), `--max-evaluations` is the limit
+  per trial, `--time-limit` is in seconds. A refusal by the engine (a population below 4, no
+  variables, an afocal start without `--curvature-limit`) exits 2 with its message. The folder
+  (`<project>-optics-global` or `-optics-hammer`) holds `report.md`/`.html` (`SearchReport`),
+  `designs.csv` (the best list, best first, values in saved units, a radius as its curvature),
+  `log.txt` (the engine's log) and `<project>-optimised.ossproj`, the best design written with
+  `GlobalSearchResult.ApplyTo` into a copy of the project. A cancelled run writes the designs
+  found so far and exits 2; with no design (stopped before the first trial, or every trial
+  failed) no project is written and the exit is 2. Failed trials alone do not change the exit
+  code (random starts that cannot be traced are expected); they are counted in the report.
+- **Monte Carlo** (`CliRunner.OpticsSearch.cs`). `optics tolerance --montecarlo` (or
+  `--mode montecarlo`) calls `MonteCarloAnalysis.Run` (§45) with the run options the sensitivity
+  run would use (the saved run settings and the command line's criterion, compensation, fields,
+  sampling and threads) and the project's saved Monte Carlo settings
+  (`MonteCarloSettings.FromSettings`), overridden by `--trials`, `--seed` (0 draws from the
+  clock, as the engine does) and `--yield-limit`. `--montecarlo` with another `--mode` is a usage
+  error. The folder (`<project>-optics-montecarlo`) holds `report.md`/`.html`
+  (`MonteCarloReport`), `montecarlo.txt` (`MonteCarloResult.ReportLines`, the editor's report
+  text), `trials.csv` (each trial's criterion, change, compensators, failure and drawn values,
+  with the direction or angle of radial and TIRR rows), `histogram.csv` and, with an MTF overlay
+  saved, `mtf-overlay.csv` (`AnalysisPlotCsv`), and `log.txt`, which names each failed trial with
+  the engine's reason. `--save-trial k` writes `MonteCarloAnalysis.TrialLens` of trial k (with the
+  seed the result names) as `MC_T000k.osslens`, the app's file name; a trial that failed or whose
+  focus shift cannot be saved is logged and gives exit 2. A failed trial gives exit 2, as a row
+  that could not be evaluated does in sensitivity. Cancellation stops the run with "Cancelled."
+  (exit 2); the engine returns no partial result.
+- **Not built.** Multi-configuration cells as sweep targets, lens files (`.osslens`) as input,
+  ranges for the global searches from the command line (the engines' default ranges are used,
+  `--curvature-limit` aside), and CSV of the analyses' tables (their text is written) are not
+  built.
 
 ## 47. Scripting surface
 
@@ -3737,16 +3767,22 @@ build the lens from them through `ProjectLens` as the application does.
   aimer fails; RAYV = n for vignetting at n, else 0. No convergence and evanescent orders give
   +n (§10 item 43). The path stays in meters (§1).
 - **Optimization and tolerancing** are called directly: `LocalOptimizer.Run` (§35),
-  `ToleranceAnalysis.Run` and `QuickSensitivity` (§42) on a `ToleranceTable`
-  (`ToleranceDataSettings.FromSettings` reads the saved one).
+  `GlobalSearch.Run` and `HammerSearch.Run` (§43), `ToleranceAnalysis.Run` and
+  `QuickSensitivity` (§42) and `MonteCarloAnalysis.Run` and `TrialLens` (§45) on a
+  `ToleranceTable` (`ToleranceDataSettings.FromSettings` reads the saved one).
+- **MonteCarlo** runs `MonteCarloAnalysis.Run` on the saved table with the saved run settings
+  and the given `MonteCarloOptions`, or the saved Monte Carlo settings when none are given (their
+  reader has two out parameters, which a script may not be able to call). Like
+  `WithDefaultMerit`, it refuses saved entries this version cannot read (an unknown operand,
+  model, criterion or statistics name) instead of using the editor's fallback, and refuses a
+  record with no tolerance rows.
 - **Records from a script.** The settings records have init-only setters. JGraph's interop and
   pythonnet set properties by reflection, which writes init-only setters, so a script builds a
   record with `r = Type(); r.Property = value` (checked under JGraph on 2026-11-14; pythonnet not
   run). A record is then changed in place, which C# code never does; a script should build a
   record before handing it to an engine and not change it while one holds it.
-- **Not on the surface yet.** Global optimization (OP-58) and Monte Carlo tolerancing (OP-65); the
-  reflection test marks where their entry points go. The non-sequential model, macro language
-  (OP-99) and plug-ins (OP-100) are not built.
+- **Not built.** The non-sequential model, macro language (OP-99) and plug-ins (OP-100). The
+  global searches and Monte Carlo were pinned by reflection but not run under JGraph.
 
 ## 43. Global optimization
 

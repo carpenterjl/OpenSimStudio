@@ -6,6 +6,7 @@ using OpenSim.Optics.Materials;
 using OpenSim.Optics.Merit;
 using OpenSim.Optics.Scripting;
 using OpenSim.Optics.Sequential;
+using OpenSim.Optics.Tolerancing;
 
 namespace OpenSim.Tests.Optics;
 
@@ -154,5 +155,30 @@ public sealed class OpticsScriptingTests
             Assert.Contains("no optics system", Assert.Throws<InvalidOperationException>(() => OpticsScripting.Load(without)).Message);
         }
         finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    /// <summary>The Monte Carlo facade (wave 8) is <see cref="MonteCarloAnalysis.Run"/> of the saved
+    /// rows, run settings and Monte Carlo settings; given options replace the saved ones. The lens is
+    /// OP-65's gate lens (TFRN read by a one-row CVVA merit function, compensation none, a few trials).</summary>
+    [Fact]
+    public void MonteCarlo_RunsTheSavedTable_WithTheSavedSettings()
+    {
+        var table = Gates.MonteCarloGateTests.Table(1, 0);
+        var saved = new MonteCarloOptions { Trials = 4, Seed = 5 };
+        var optics = Gates.MonteCarloGateTests.Lens() with
+        {
+            Tolerances = ToleranceDataSettings.ToSettings(table)! with
+            {
+                Run = ToleranceRunSettings.ToSettings(Gates.MonteCarloGateTests.Linear),
+                MonteCarlo = MonteCarloSettings.ToSettings(saved),
+            },
+        };
+        var run = ToleranceRunSettings.FromSettings(optics.Tolerances!.Run, new List<string>());
+        table = ToleranceDataSettings.FromSettings(optics.Tolerances, new List<string>());   // as the facade reads it
+        var direct = MonteCarloAnalysis.Run(optics, table, NoCatalogs, run, saved);
+        Assert.Equal(direct.ReportLines(), OpticsScripting.MonteCarlo(optics, NoCatalogs).ReportLines());
+        var given = new MonteCarloOptions { Trials = 2, Seed = 9 };
+        Assert.Equal(MonteCarloAnalysis.Run(optics, table, NoCatalogs, run, given).ReportLines(), OpticsScripting.MonteCarlo(optics, NoCatalogs, given).ReportLines());
+        Assert.Contains("no tolerance rows", Assert.Throws<ArgumentException>(() => OpticsScripting.MonteCarlo(optics with { Tolerances = null }, NoCatalogs)).Message);
     }
 }

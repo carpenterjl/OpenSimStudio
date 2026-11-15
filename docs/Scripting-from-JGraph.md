@@ -139,10 +139,14 @@ would otherwise repeat; everything else is the library's own public types.
 | One ray | `S.TraceRay(optics, catalogs, hx, hy, px, py, wavelength)` — `.Path` (surface by surface, meters), `.Error` (OpticStudio's RAYE: 0, +n missed surface n, −n total internal reflection at n, −9999 not launched), `.Vignetted` (RAYV) |
 | Tolerance data | `OpenSim.Optics.Tolerancing.ToleranceOperandRow()` (`Code`, `Int1`, `Int2`, `Min`, `Max`) into `ToleranceTable(rows)`; the saved table: `ToleranceDataSettings.FromSettings(optics.Tolerances, notes)` |
 | Tolerancer (OP-64) | `ToleranceAnalysis.QuickSensitivity(optics, table, catalogs)` or `.Run(optics, table, catalogs, options)` (`ToleranceRunOptions`: `Mode`, `Criterion`, …) — `.Nominal`, `.Unit`, `.Rows` (each `.Row`, `.Code`, `.AtMin.Change`, `.AtMax.Change`), `.ReportLines()` |
+| Global search (OP-58) | `g = OpenSim.Optics.Optimization.Global.GlobalSearch.Run(optics, catalogs, o)` (`o` a `GlobalSearchOptions`, or `[]`: `PopulationSize`, `Generations`, `Seed`, `MaxEvaluationsPerTrial`, `CurvatureLimit`, `TimeLimit`, `MaxDegreeOfParallelism`, `Local`) — `g.StartMerit`, `g.Best` (best first; each `.Merit`, `.ConstraintsMet`, `.Values`, `.Design`, `.Trial`), `g.Stop`, `g.Trials`, `g.FailedTrials`, `g.Log`; `g.ApplyTo(optics, g.Best(1))` writes a design into the record |
+| Hammer search (OP-58) | `HammerSearch.Run(optics, catalogs, o)` (`o` a `HammerSearchOptions`: `Rounds`, `TrialsPerRound`, `StepFraction`, `GlassChangeProbability`, `Seed`, …) — the same result type; `.Best` designs also carry `.Glasses` for the Substitute surfaces |
+| Monte Carlo (OP-65) | `mc = S.MonteCarlo(optics, catalogs)` runs the saved tolerance rows with the saved run and Monte Carlo settings (or pass a `OpenSim.Optics.Tolerancing.MonteCarloOptions`: `Trials`, `Seed`, `Statistics`, `StandardDeviations`, `YieldLimit`, `Percentiles`); or `MonteCarloAnalysis.Run(optics, table, catalogs, runOptions, mcOptions)` — `mc.Nominal`, `mc.Unit`, `mc.Trials` (each `.Index`, `.Criterion`, `.Change`, `.Failure`, `.Draws`), `mc.Statistics` (`.Mean`, `.StandardDeviation`, `.Percentiles`), `mc.Yield.Fraction`, `mc.Evaluated`, `mc.Failed`, `mc.ReportLines()`, `mc.HistogramPlot([], [], [])`; `MonteCarloAnalysis.TrialLens(optics, table, catalogs, runOptions, mcOptions, k)` is trial k's lens (pass the seed `mc.Seed` names) |
 
-Not on the surface yet: **global optimization** (OP-58, Global Search and Hammer) and **Monte Carlo
-tolerancing** (OP-65), being built; the reflection test marks where their entry points will be
-pinned. docs/Optics-Conventions.md §47 gives the facade's rules.
+`S.MonteCarlo` exists because the saved Monte Carlo settings are read by a method with two out
+parameters (`MonteCarloSettings.FromSettings`), which the interop was not tried with.
+The global searches and Monte Carlo were not run under JGraph; the reflection test pins their
+signatures. docs/Optics-Conventions.md §47 gives the facade's rules.
 
 ### What the interop needs (found 2026-11-14)
 

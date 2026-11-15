@@ -1343,10 +1343,25 @@ a part not built), 2 the run failed or was cancelled.
   `--max-evaluations`, `--threads`. It writes the report, `variables.csv`, `merit.csv` and the
   optimised project as `<project>-optimised.ossproj` in the results folder; the input file is not
   changed.
+- `opensim optics optimise <project> --global` or `--hammer` runs the Global or Hammer search
+  (Global and Hammer optimization below) instead: `--seed`, `--population`, `--generations`
+  (Global), `--rounds`, `--trials` per round, `--step`, `--glass-probability` (Hammer),
+  `--curvature-limit`, `--max-evaluations` per trial, `--save`, `--time-limit` in seconds and
+  `--threads`; what you leave out takes the search's own default, as the Optimize window has
+  it. The same seed and settings give the same designs. The folder holds the report,
+  `designs.csv` (the best designs, best first) and the best design as
+  `<project>-optimised.ossproj`. Ctrl+C keeps the designs found so far (exit 2).
 - `opensim optics tolerance <project>` runs the saved tolerance rows with the saved run settings
   (Sensitivity and inverse sensitivity above); `--mode sensitivity|inverse-limit|inverse-increment|quick`,
   `--criterion`, `--compensation`, `--limit`, `--increment` and the others override them.
   `tolerance.txt` is the editor's report text. A row that could not be evaluated gives exit 2.
+- `opensim optics tolerance <project> --montecarlo` (or `--mode montecarlo`) runs Monte Carlo
+  tolerancing (Monte Carlo tolerancing below) with the Monte Carlo settings saved in the Tolerance
+  Data Editor; `--trials`, `--seed` (0 draws one from the clock) and `--yield-limit` override
+  them, and the criterion and compensation options apply as above. `montecarlo.txt` is the
+  editor's report text; `trials.csv` lists every trial with its drawn values; `histogram.csv`
+  holds the histogram. `--save-trial K` also writes trial K's lens as `MC_T000K.osslens`. A
+  failed trial is named in the log and the report and gives exit 2.
 - Optics sweeps: an `opensim sweep` job whose targets are all `optics:...` sets cells of the saved
   lens at each point and tabulates the saved merit function and each row's value. Targets:
   `optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|par<k>|modelNd|modelVd|modelDeltaPgF`
@@ -1357,9 +1372,9 @@ a part not built), 2 the run failed or was cancelled.
   the built-in set alone, for a run that does not depend on the machine.
 - Ctrl+C stops a run between steps. A stopped optimization still writes the best design so far.
 
-Not built: global optimization and Hammer (`--global`, `--hammer`) and Monte Carlo tolerancing
-(`--montecarlo`), which say so; multi-configuration cells as sweep targets; lens files
-(`.osslens`) as input. The definitions are in docs/Optics-Conventions.md §46.
+Not built: variable ranges for the Global and Hammer searches from the command line;
+multi-configuration cells as sweep targets; lens files (`.osslens`) as input. The definitions
+are in docs/Optics-Conventions.md §46.
 
 ## Scripting
 
@@ -1367,13 +1382,14 @@ The optics model can be driven from a script outside the program: JGraph (MATLAB
 Python through pythonnet load OpenSim's libraries and call them directly. A script can load a
 saved project's lens or build one, write the default merit function, run the local optimizer,
 run any analysis by its id and read its plots and text, trace one ray (with OpticStudio's RAYE and
-RAYV error codes), and run the tolerancer. docs/Scripting-from-JGraph.md lists the calls and how
+RAYV error codes), run the Global and Hammer searches, and run the tolerancer and Monte Carlo
+tolerancing. docs/Scripting-from-JGraph.md lists the calls and how
 the interop wants them; `examples/jgraph/optics_from_jgraph.m` builds a singlet, optimises it and
 plots its MTF. A script works on its own copy of the lens: to see the result in the program, save
 it into a project (`project.Optics = …`, then the project serializer's Save) and open that.
 
-Not built: global optimization and Monte Carlo tolerancing from a script; the macro language
-(ZPL); plug-ins.
+Not built: the macro language (ZPL); plug-ins. The global searches and Monte Carlo were not
+tried under JGraph itself; their calls are checked by the test suite.
 
 ## Global and Hammer optimization
 

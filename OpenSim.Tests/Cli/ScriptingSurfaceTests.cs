@@ -242,7 +242,44 @@ public class ScriptingSurfaceTests
         HasReadableProperty("OpenSim.Optics.Optimization.LocalOptimizationResult", "Cycles", "Int32");
         HasReadableProperty("OpenSim.Optics.Optimization.LocalOptimizationResult", "Stop", "LocalOptimizationStop");
         HasReadableProperty("OpenSim.Optics.Optimization.LocalOptimizationResult", "Optimized", "OpticsSettings");
-        // OP-58 hook: the global optimizer's entry points (Global Search, Hammer) are pinned here when they land.
+        // The Global and Hammer searches (OP-58).
+        const string GO = "OpenSim.Optics.Optimization.Global.";
+        HasMethod(GO + "GlobalSearch", "Run", "OpticsSettings", "IReadOnlyList<OpticalCatalog>", "GlobalSearchOptions", "MeritFunction", "MeritOperandRegistry");
+        HasMethod(GO + "HammerSearch", "Run", "OpticsSettings", "IReadOnlyList<OpticalCatalog>", "HammerSearchOptions", "MeritFunction", "MeritOperandRegistry");
+        Assert.NotNull(Named(GO + "GlobalSearchOptions").GetConstructor(Type.EmptyTypes));
+        HasSettableProperty(GO + "GlobalSearchOptions", "Local", "LocalOptimizationOptions");
+        HasSettableProperty(GO + "GlobalSearchOptions", "PopulationSize", "Int32?");
+        HasSettableProperty(GO + "GlobalSearchOptions", "Generations", "Int32");
+        HasSettableProperty(GO + "GlobalSearchOptions", "MaxEvaluationsPerTrial", "Int32");
+        HasSettableProperty(GO + "GlobalSearchOptions", "CurvatureLimit", "Double?");
+        HasSettableProperty(GO + "GlobalSearchOptions", "Seed", "Int64");
+        HasSettableProperty(GO + "GlobalSearchOptions", "SaveCount", "Int32");
+        HasSettableProperty(GO + "GlobalSearchOptions", "TimeLimit", "TimeSpan?");
+        HasSettableProperty(GO + "GlobalSearchOptions", "MaxDegreeOfParallelism", "Int32?");
+        Assert.NotNull(Named(GO + "HammerSearchOptions").GetConstructor(Type.EmptyTypes));
+        HasSettableProperty(GO + "HammerSearchOptions", "Local", "LocalOptimizationOptions");
+        HasSettableProperty(GO + "HammerSearchOptions", "Rounds", "Int32");
+        HasSettableProperty(GO + "HammerSearchOptions", "TrialsPerRound", "Int32");
+        HasSettableProperty(GO + "HammerSearchOptions", "StepFraction", "Double");
+        HasSettableProperty(GO + "HammerSearchOptions", "GlassChangeProbability", "Double");
+        HasSettableProperty(GO + "HammerSearchOptions", "MaxEvaluationsPerTrial", "Int32");
+        HasSettableProperty(GO + "HammerSearchOptions", "CurvatureLimit", "Double?");
+        HasSettableProperty(GO + "HammerSearchOptions", "Seed", "Int64");
+        HasSettableProperty(GO + "HammerSearchOptions", "TimeLimit", "TimeSpan?");
+        HasReadableProperty(GO + "GlobalSearchResult", "StartMerit", "Double");
+        HasReadableProperty(GO + "GlobalSearchResult", "Best", "IReadOnlyList<GlobalDesign>");
+        HasReadableProperty(GO + "GlobalSearchResult", "Variables", "IReadOnlyList<LensVariable>");
+        HasReadableProperty(GO + "GlobalSearchResult", "Stop", "GlobalSearchStop");
+        HasReadableProperty(GO + "GlobalSearchResult", "Trials", "Int32");
+        HasReadableProperty(GO + "GlobalSearchResult", "FailedTrials", "Int32");
+        HasReadableProperty(GO + "GlobalSearchResult", "Log", "IReadOnlyList<String>");
+        HasMethod(GO + "GlobalSearchResult", "ApplyTo", "OpticsSettings", "GlobalDesign");
+        HasReadableProperty(GO + "GlobalDesign", "Design", "OpticsSettings");
+        HasReadableProperty(GO + "GlobalDesign", "Merit", "Double");
+        HasReadableProperty(GO + "GlobalDesign", "ConstraintsMet", "Boolean");
+        HasReadableProperty(GO + "GlobalDesign", "Values", "IReadOnlyList<Double>");
+        HasReadableProperty(GO + "GlobalDesign", "Glasses", "IReadOnlyList<String>");
+        HasReadableProperty(GO + "GlobalDesign", "Trial", "Int32");
 
         // Every analysis by id (the registry), and its result.
         HasMethod("OpenSim.Optics.Scripting.OpticsScripting", "AnalysisIds");
@@ -294,7 +331,37 @@ public class ScriptingSurfaceTests
         HasReadableProperty("OpenSim.Optics.Tolerancing.ToleranceRowResult", "AtMin", "ToleranceTrial");
         HasReadableProperty("OpenSim.Optics.Tolerancing.ToleranceRowResult", "AtMax", "ToleranceTrial");
         HasReadableProperty("OpenSim.Optics.Tolerancing.ToleranceTrial", "Change", "Double");
-        // OP-65 hook: the Monte Carlo tolerancer's entry points are pinned here when they land.
+        // Monte Carlo tolerancing (OP-65).
+        const string T = "OpenSim.Optics.Tolerancing.";
+        HasMethod(T + "MonteCarloAnalysis", "Run", "OpticsSettings", "ToleranceTable", "IReadOnlyList<OpticalCatalog>", "ToleranceRunOptions", "MonteCarloOptions");
+        HasMethod(T + "MonteCarloAnalysis", "TrialLens", "OpticsSettings", "ToleranceTable", "IReadOnlyList<OpticalCatalog>", "ToleranceRunOptions", "MonteCarloOptions", "Int32");
+        HasMethod("OpenSim.Optics.Scripting.OpticsScripting", "MonteCarlo", "OpticsSettings", "IReadOnlyList<OpticalCatalog>", "MonteCarloOptions");
+        Assert.NotNull(Named(T + "MonteCarloOptions").GetConstructor(Type.EmptyTypes));
+        HasSettableProperty(T + "MonteCarloOptions", "Trials", "Int32");
+        HasSettableProperty(T + "MonteCarloOptions", "Seed", "Int32");
+        HasSettableProperty(T + "MonteCarloOptions", "Statistics", "ToleranceStatistics");
+        HasSettableProperty(T + "MonteCarloOptions", "StandardDeviations", "Int32");
+        HasSettableProperty(T + "MonteCarloOptions", "YieldLimit", "Double?");
+        HasSettableProperty(T + "MonteCarloOptions", "Percentiles", "IReadOnlyList<Double>");
+        HasReadableProperty(T + "MonteCarloResult", "Seed", "Int32");
+        HasReadableProperty(T + "MonteCarloResult", "Nominal", "Double");
+        HasReadableProperty(T + "MonteCarloResult", "Unit", "String");
+        HasReadableProperty(T + "MonteCarloResult", "Trials", "IReadOnlyList<MonteCarloTrial>");
+        HasReadableProperty(T + "MonteCarloResult", "Statistics", "MonteCarloStatistics");
+        HasReadableProperty(T + "MonteCarloResult", "Yield", "MonteCarloYield");
+        HasReadableProperty(T + "MonteCarloResult", "Evaluated", "Int32");
+        HasReadableProperty(T + "MonteCarloResult", "Failed", "Int32");
+        HasMethod(T + "MonteCarloResult", "ReportLines");
+        HasMethod(T + "MonteCarloResult", "HistogramPlot", "Int32?", "Double?", "Double?");
+        HasReadableProperty(T + "MonteCarloTrial", "Index", "Int32");
+        HasReadableProperty(T + "MonteCarloTrial", "Criterion", "Double");
+        HasReadableProperty(T + "MonteCarloTrial", "Change", "Double");
+        HasReadableProperty(T + "MonteCarloTrial", "Failure", "String");
+        HasReadableProperty(T + "MonteCarloTrial", "Draws", "IReadOnlyList<MonteCarloDraw>");
+        HasReadableProperty(T + "MonteCarloStatistics", "Mean", "Double");
+        HasReadableProperty(T + "MonteCarloStatistics", "StandardDeviation", "Double");
+        HasReadableProperty(T + "MonteCarloStatistics", "Percentiles", "IReadOnlyList<MonteCarloPercentile>");
+        HasReadableProperty(T + "MonteCarloYield", "Fraction", "Double");
     }
 
     /// <summary>The lens of <c>examples/jgraph/optics_from_jgraph.m</c>, built with the same

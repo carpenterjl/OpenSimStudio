@@ -23,12 +23,9 @@ public static partial class CliRunner
     /// <summary>The optics subcommands, in the order Usage lists them.</summary>
     public static readonly IReadOnlyList<string> OpticsSubcommands = new[] { "list", "analyse", "trace", "optimise", "tolerance" };
 
-    /// <summary>Subcommands planned but not built; each fails with a message naming its item.</summary>
-    public static readonly IReadOnlyList<string> OpticsNotBuilt = new[]
-    {
-        "optics optimise --global (global search and Hammer, OP-58)",
-        "optics tolerance --montecarlo (Monte Carlo tolerancing, OP-65)",
-    };
+    /// <summary>Subcommands planned but not built; each fails with a message naming its item.
+    /// Empty since wave 8 wired the Global and Hammer searches (OP-58) and Monte Carlo (OP-65).</summary>
+    public static readonly IReadOnlyList<string> OpticsNotBuilt = Array.Empty<string>();
 
     private static int Optics(string[] args, Dictionary<string, string> o, TextWriter stdout, CancellationToken cancellation)
     {
@@ -231,10 +228,6 @@ public static partial class CliRunner
 
     private static int OpticsOptimise(string projectPath, Dictionary<string, string> o, TextWriter stdout, CancellationToken cancellation)
     {
-        if (o.ContainsKey("global") || o.ContainsKey("hammer"))
-            // OP-58 hook: global search and Hammer optimization go here, one arm calling the OP-58 engine.
-            throw new UsageException("'optics optimise --global' and '--hammer' are not built yet (global optimization, OP-58); run the local optimizer without them.");
-
         var log = new List<string>();
         void Log(string line) { log.Add(line); stdout.WriteLine(line); }
         var (project, optics, catalogs) = LoadOptics(projectPath, o, Log, needSurfaces: true);
@@ -261,6 +254,8 @@ public static partial class CliRunner
             CancellationToken = cancellation,
             Progress = p => stdout.WriteLine($"  cycle {p.Cycle}: merit {StudyReport.Number(p.Merit, "g8")} (start {StudyReport.Number(p.StartMerit, "g8")}), {p.Evaluations} evaluations"),
         };
+        if (o.ContainsKey("global") || o.ContainsKey("hammer"))   // OP-58: the Global and Hammer searches (CliRunner.OpticsSearch.cs)
+            return OpticsSearch(projectPath, o, stdout, cancellation, project, optics, active, options, log, Log);
         if (cycles == LocalOptimizationCycles.Infinite) Log("Cycles: infinite; press Ctrl+C to stop and keep the best design so far.");
 
         LocalOptimizationResult result;
@@ -362,10 +357,6 @@ public static partial class CliRunner
 
     private static int OpticsTolerance(string projectPath, Dictionary<string, string> o, TextWriter stdout, CancellationToken cancellation)
     {
-        if (o.ContainsKey("montecarlo"))
-            // OP-65 hook: Monte Carlo tolerancing goes here, one arm calling the OP-65 engine after (or instead of) the sensitivity run.
-            throw new UsageException("'optics tolerance --montecarlo' is not built yet (Monte Carlo tolerancing, OP-65); run sensitivity or an inverse mode.");
-
         var log = new List<string>();
         void Log(string line) { log.Add(line); stdout.WriteLine(line); }
         var (project, optics, catalogs) = LoadOptics(projectPath, o, Log, needSurfaces: true);
@@ -377,6 +368,7 @@ public static partial class CliRunner
         var options = ToleranceRunSettings.FromSettings(optics.Tolerances?.Run, notes);
         foreach (var n in notes) Log(n);
         bool quick = false;
+        bool monteCarlo = o.ContainsKey("montecarlo");   // OP-65
         if (o.TryGetValue("mode", out var mode))
         {
             switch (mode.ToLowerInvariant())
@@ -385,11 +377,11 @@ public static partial class CliRunner
                 case "inverse-limit": options = options with { Mode = ToleranceMode.InverseLimit }; break;
                 case "inverse-increment": options = options with { Mode = ToleranceMode.InverseIncrement }; break;
                 case "quick": quick = true; break;
-                case "montecarlo":
-                    // OP-65 hook (see --montecarlo above).
-                    throw new UsageException("'optics tolerance --mode montecarlo' is not built yet (Monte Carlo tolerancing, OP-65).");
-                default: throw new UsageException($"--mode takes sensitivity, inverse-limit, inverse-increment or quick, not '{mode}'.");
+                case "montecarlo": monteCarlo = true; break;
+                default: throw new UsageException($"--mode takes sensitivity, inverse-limit, inverse-increment, quick or montecarlo, not '{mode}'.");
             }
+            if (o.ContainsKey("montecarlo") && !mode.Equals("montecarlo", StringComparison.OrdinalIgnoreCase))
+                throw new UsageException($"--montecarlo runs Monte Carlo instead of --mode {mode}; give one of the two.");
         }
         if (o.TryGetValue("criterion", out var criterion))
             options = options with
@@ -417,6 +409,9 @@ public static partial class CliRunner
             CancellationToken = cancellation,
             Progress = p => stdout.WriteLine($"  {p.RowsDone} of {p.RowCount} rows, {p.Trials} trials{(p.Last is null ? "" : $" (last {p.Last})")}"),
         };
+
+        if (monteCarlo)   // OP-65: Monte Carlo tolerancing (CliRunner.OpticsSearch.cs)
+            return OpticsMonteCarlo(projectPath, o, stdout, project, optics, table, active, options, log, Log);
 
         ToleranceRunResult result;
         try

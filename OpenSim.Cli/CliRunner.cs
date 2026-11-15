@@ -157,7 +157,16 @@ public static partial class CliRunner
             (the input is not changed). Ctrl+C stops and keeps the best design so far (exit 2).
             --algorithm dls|od  damped least squares (default) or orthogonal descent
             --cycles auto|N|infinite                 --max-evaluations N   --threads N
-            --global, --hammer  not built yet (global optimization, OP-58)
+            --global            the Global search instead (OP-58): differential evolution of
+                                locally optimized designs; --population N --generations N
+            --hammer            the Hammer search instead (OP-58): perturb and re-optimize,
+                                replacing Substitute glasses; --rounds N --trials N (per round)
+                                --step F (of each range) --glass-probability P
+              both: --seed N --curvature-limit C --max-evaluations N (per trial) --save N
+                    --time-limit SECONDS --threads N; defaults are the engines' own. Writes
+                    report.md/.html, designs.csv (the best designs), log.txt and the best
+                    design as <project>-optimised.ossproj (default folder
+                    <project>-optics-global or -optics-hammer); exit 2 when cancelled.
 
         opensim optics tolerance <project.ossproj> [options]
             Sensitivity or inverse sensitivity of the saved tolerance rows, with the saved run
@@ -168,7 +177,12 @@ public static partial class CliRunner
             --compensation none|paraxial|dls|od      --change linear|rss   --fields y|xy|user
             --sampling N --limit V --increment V --mtf-frequency V --radius UM --cycles N
             --worst N --threads N
-            --montecarlo        not built yet (Monte Carlo tolerancing, OP-65)
+            --montecarlo        (or --mode montecarlo) Monte Carlo tolerancing instead (OP-65),
+                                with the saved Monte Carlo settings as defaults:
+                                --trials N --seed N (0: from the clock) --yield-limit V
+                                --save-trial K (writes MC_T000K.osslens). Writes report.md/.html,
+                                montecarlo.txt, trials.csv, histogram.csv, log.txt (default
+                                folder <project>-optics-montecarlo); exit 2 when a trial failed.
 
         Optics sweeps: a sweep job whose targets are all optics:... sets the lens instead of
         solving a body, and tabulates the saved merit function and each row's value.

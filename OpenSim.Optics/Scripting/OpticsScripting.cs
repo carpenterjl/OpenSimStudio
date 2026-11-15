@@ -5,6 +5,7 @@ using OpenSim.Optics.Materials;
 using OpenSim.Optics.Merit;
 using OpenSim.Optics.MultiConfig;
 using OpenSim.Optics.Sequential;
+using OpenSim.Optics.Tolerancing;
 
 namespace OpenSim.Optics.Scripting;
 
@@ -189,6 +190,31 @@ public static class OpticsScripting
             RayStatus.TotalInternalReflection => new ScriptRay { Path = path, Error = -at, Vignetted = 0 },
             _ => new ScriptRay { Path = path, Error = at, Vignetted = 0 },   // missed; no convergence and evanescent: §47
         };
+    }
+
+    /// <summary>
+    /// Monte Carlo tolerancing (OP-65, <see cref="MonteCarloAnalysis.Run"/>) of
+    /// <paramref name="system"/>'s saved tolerance rows with its saved run settings (criterion,
+    /// compensation) and <paramref name="options"/> (null: the saved Monte Carlo settings, which
+    /// otherwise come through a reader with two out parameters). The steps the Tolerance Data
+    /// Editor takes before its Run Monte Carlo, in one call. Throws <see cref="ArgumentException"/>
+    /// when there are no tolerance rows or a saved operand, model, criterion or statistics name
+    /// this version does not know (rather than reading it as the editor's load does, TOFF or the
+    /// default), and what <see cref="MonteCarloAnalysis.Run"/> throws.
+    /// </summary>
+    public static MonteCarloResult MonteCarlo(OpticsSettings system, IReadOnlyList<OpticalCatalog> catalogs, MonteCarloOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(system);
+        ArgumentNullException.ThrowIfNull(catalogs);
+        var notes = new List<string>();
+        var table = ToleranceDataSettings.FromSettings(system.Tolerances, notes);
+        var run = ToleranceRunSettings.FromSettings(system.Tolerances?.Run, notes);
+        var mc = options ?? MonteCarloSettings.FromSettings(system.Tolerances?.MonteCarlo, notes, out _, out _);
+        if (notes.Count > 0)
+            throw new ArgumentException("The saved tolerance data has entries this version cannot read:" + Environment.NewLine + string.Join(Environment.NewLine, notes));
+        if (table.Rows.Count == 0)
+            throw new ArgumentException("The system has no tolerance rows: save some (ToleranceDataSettings.ToSettings into OpticsSettings.Tolerances) first.");
+        return MonteCarloAnalysis.Run(system, table, catalogs, run, mc);
     }
 
     private static IOpticsAnalysis Find(string id)
