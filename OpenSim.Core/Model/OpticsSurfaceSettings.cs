@@ -110,6 +110,11 @@ public sealed record OpticsSurfaceSettings
     /// <summary>A coordinate break's Coordinate Return, or null for none (TC-6); read only on a
     /// surface of type "Coordinate Break".</summary>
     public OpticsCoordinateReturnSettings? CoordinateReturn { get; init; }
+
+    // OP-25
+    /// <summary>A Grid Sag surface's imported grid, or null; read only on a surface of type
+    /// "Grid Sag".</summary>
+    public OpticsGridSagSettings? GridSag { get; init; }
 }
 
 /// <summary>

@@ -257,6 +257,15 @@ public static class SavedSurfaces
             coordinateBreak = new CoordinateBreak { Values = values, Return = mode, ReturnToSurface = mode == CoordinateReturnMode.None ? 0 : to };
             return problems.Count == before;
         }
+        // OP-25: a Grid Sag is built from its parameters and its saved grid.
+        if (s.GridSag is not null && layout.Name != Freeform.FreeformLayouts.GridSag)
+            problems.Add($"{where}: only a {Freeform.FreeformLayouts.GridSag} surface has grid data, but this {layout.Name} has some; remove it or make the surface a {Freeform.FreeformLayouts.GridSag}.");
+        if (layout.Name == Freeform.FreeformLayouts.GridSag && s.GridSag is { } grid)
+        {
+            try { shape = Freeform.FreeformLayouts.BuildGridSag(layout, Si, Freeform.GridSagSaved.ToData(grid)); }
+            catch (ArgumentException ex) { problems.Add($"{where}: {ex.Message}"); }
+            return problems.Count == before;
+        }
         try { shape = layout.Build(Si); }
         catch (ArgumentException ex) { problems.Add($"{where}: {ex.Message}"); }
         return problems.Count == before;
@@ -390,6 +399,7 @@ public static class SavedSurfaces
                 Parameters = parameters,
                 ExtraData = extra,
                 CoordinateReturn = coordinateReturn,
+                GridSag = s.Shape is Freeform.GridSagSurface gridSag ? Freeform.GridSagSaved.FromData(gridSag.Data) : null, // OP-25
                 TiltBefore = s.TiltBefore is { } tb ? FromTiltDecenter(tb, perUnit) : null,
                 TiltAfter = s.TiltAfter is { } ta ? FromTiltAfter(ta, perUnit) : null,
                 Comment = s.Comment.Length > 0 ? s.Comment : null,

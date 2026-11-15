@@ -39,7 +39,7 @@ public static class ScaleLens
         return Scaled(surfaces, factor, a, b, out _);
     }
 
-    private static LensEditResult Scaled(IReadOnlyList<OpticsSurfaceSettings> surfaces, double factor, int a, int b, out int[] unregistered)
+    private static LensEditResult Scaled(IReadOnlyList<OpticsSurfaceSettings> surfaces, double factor, int a, int b, out int[] unregistered, bool scaleGrids = true)
     {
         var result = surfaces.ToList();
         var skipped = new List<int>();
@@ -68,6 +68,16 @@ public static class ScaleLens
                 ExtraData = Each(s.ExtraData),
                 Flags = s.Flags?.Select(f => SurfaceFlags.IsKind(f, SavedSurfaces.PickupFlag) && OffsetFactor(f.Column) != 1
                     ? f with { PickupOffset = f.PickupOffset * OffsetFactor(f.Column) } : f).ToList(),
+                // OP-25: a Grid Sag's grid scales as its lengths do: spacings, decenters and sags
+                // by the factor, slopes unchanged, the cross derivative (inverse length) by 1/factor.
+                // A lens-unit change leaves it: the grid is held in its own file's unit.
+                GridSag = s.GridSag is { } g && scaleGrids ? g with
+                {
+                    DeltaX = g.DeltaX * factor, DeltaY = g.DeltaY * factor,
+                    DecenterX = g.DecenterX * factor, DecenterY = g.DecenterY * factor,
+                    Sag = g.Sag?.Select(v => v * factor).ToList(),
+                    Cross = g.Cross?.Select(v => v / factor).ToList(),
+                } : s.GridSag,
             };
             solves += s.Flags?.Count(f => SurfaceFlags.IsKind(f, SavedSurfaces.SolveFlag) && f.SolveParameters is { Count: > 0 }) ?? 0;
         }
@@ -93,7 +103,7 @@ public static class ScaleLens
         if (!double.IsFinite(factor) || !(factor > 0))
             throw new ArgumentException($"Lens unit change: the factor must be a positive number (it is {factor}).");
         if (surfaces.Count < 3) throw new ArgumentException("Lens unit change: the lens needs the object, at least one surface and the image.");
-        var scaled = Scaled(surfaces, factor, 0, surfaces.Count - 1, out int[] others);
+        var scaled = Scaled(surfaces, factor, 0, surfaces.Count - 1, out int[] others, scaleGrids: false); // OP-25: a grid is in its file's unit
         var notes = new List<string>();
         if (others.Length > 0)
             notes.Add($"The parameters of surface{(others.Length == 1 ? "" : "s")} {string.Join(", ", others)} were not converted to the new lens unit (the type is not registered); check them.");

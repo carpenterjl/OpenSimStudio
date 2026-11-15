@@ -251,6 +251,9 @@ public static class SurfaceTypes
         }
         var values = layout.Read(shape).ToDictionary(k => k.Key, k => k.Value);
         values[number] = value;
+        // OP-25: a Grid Sag keeps its grid, which is not a parameter.
+        if (shape is Freeform.GridSagSurface grid)
+            return surface with { Shape = Freeform.FreeformLayouts.BuildGridSag(layout, n => values.TryGetValue(n, out double x) ? x : 0, grid.Data) };
         return surface with { Shape = layout.Build(n => values.TryGetValue(n, out double x) ? x : 0) };
     }
 
@@ -682,6 +685,11 @@ public static class SurfaceTypes
             v => new Polarization.MuellerMatrixShape(Range(v, 1, 16)),
             s => Numbered(((Polarization.MuellerMatrixShape)s).Matrix, 1))
         { UsesRadiusAndConic = false });
+
+        // OP-25: Polynomial, Extended Polynomial, Zernike Fringe / Standard / Annular Standard Sag,
+        // Off-Axis Conic Freeform, Grid Sag and Radial NURBS (docs/Optics-Conventions.md §55),
+        // from their OpticStudio 2025 R2 help pages (saved under plans/sources/optics/op-25-help/).
+        list.AddRange(Freeform.FreeformLayouts.Build());
 
         return list.ToArray();
     }

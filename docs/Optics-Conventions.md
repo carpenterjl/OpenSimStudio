@@ -1278,6 +1278,19 @@ single place in the code, so a correction is one line and its test.
     Check: OpticStudio's Lens Catalogs search results and Catalog Report on a vendor .ZMF, and
     Insert Lens with and without Ignore Object, compared with this program's on the same files.
 
+51. **Freeform surface readings** (OP-25, section 55). Where a help page leaves the surface open:
+    - *Off-Axis Conic Freeform sign.* The printed sag is the parent conic of radius −R for R > 0
+      and does not pass through the vertex for R < 0 or q < 0; this program takes the branch
+      through the vertex whose Y₀ = 0 case is the Standard conic of the surface's own radius.
+    - *Radial NURBS degree and knots.* Not given; cubic on a clamped uniform knot vector, weight 1
+      at the origin point.
+    - *Grid Sag.* Grid points centred on the grid decenter; the finite-difference derivative
+      estimate (second-order central, one-sided at edges) is this program's; Zernike terms used
+      everywhere (the type has no extrapolate flag); a non-numeric entry is refused, not zeroed.
+    - *Zernike decenter* (parameters 9, 10) read as ρ measured from (x_d, y_d).
+    Check: each type's sag at a few points against OpticStudio's Sag analysis, and a Grid Sag
+    file with all derivatives zero against OpticStudio's interpolated sag.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -4604,3 +4617,78 @@ tool's Prescription and Layout buttons (Load the lens and use the analyses inste
 (no gradient-index surface type is read); OpticStudio's hundreds of design templates (six of this
 program's own are built) and template filtering beyond text, element count and kind. Nothing is
 compared with OpticStudio's output (§10 item 49).
+
+## 55. Freeform and data-defined surfaces
+
+OP-25 adds eight sequential surface types in `OpenSim.Optics/Sequential/Freeform/`, registered
+by `SurfaceTypes` (layouts in `FreeformLayouts.cs`) so the Lens Data Editor, saved lenses, solves
+and Scale Lens handle them like the other types. Each sag equation and parameter table is copied
+from the type's OpticStudio 2025 R2 help page (saved under `plans/sources/optics/op-25-help/`).
+All are sag surfaces (section 17): the shared damped-Newton intersection starts at the base
+conic's root, and a point where the sag is not defined is a ray miss.
+
+| Type | Sag | Parameters |
+|---|---|---|
+| Polynomial | γ1x² + γ2x⁴ + γ3x⁶ + γ4x⁸ + γ5y² + … + γ8y⁸; no radius or conic | 1–8 γ1–γ8 |
+| Extended Polynomial | conic + Σ Aᵢ Eᵢ(x/R_n, y/R_n), terms x, y, x², xy, y², … to order 20 | 13 max term (230), 14 R_n, 15–244 Aᵢ |
+| Zernike Fringe Sag | Even Asphere + Σ Aᵢ Zᵢ(ρ, φ), Fringe order, 37 terms | 0 extrapolate, 1–8 α, 9–10 Zernike decenter, 13 N, 14 R_n, 15–51 |
+| Zernike Standard Sag | the same with Standard (Noll) terms, 231 | 0, 1–8, 9–10, 13, 14, 15–245 |
+| Zernike Annular Standard Sag | the same with annular terms, 80; obscuration ε | 0 extrapolate, 1–8 α, 13 ε, 14 N, 15 R_n, 16–95 |
+| Off-Axis Conic Freeform | the parent conic at Y₀ in its tangent frame + Σ A_{j,k}(x/R_n)^j(y/R_n)^k | 13 Y₀, 14 max term, 15 R_n, 16–245 |
+| Grid Sag | Even Asphere + Zernike Standard + a grid interpolated bicubically or linearly | 0 interpolation, 1–8 α, 9–10 Zernike decenter, 13 N, 14 R_n, 15–245; the grid from its file |
+| Radial NURBS | a rational B-spline profile (y, z) from the vertex, turned about z; no radius or conic | 13 points (4–60), 3n + 11/12/13 the y, z, w of point n |
+
+**Zernike terms** (`FreeformZernikeTerms`): the basis of section 30's Zernike fits
+(`ZernikeBasis`, Fringe, Standard or Annular), on ρ = |(x − x_d, y − y_d)|/R_n, φ from +x.
+Extrapolate 0 ignores the terms outside ρ = 1; the annular form also ignores them inside ε always.
+
+**Off-Axis Conic Freeform.** p = R² − κY₀², q = (κ + 1)p − κY₀², L = κY₀√(p − Y₀²),
+S = p³ − 2p^{3/2}Ly − (κ + 1)p²y² − pqx², and z = sgn(R)·(R²y² + px²)/(p^{3/2} − Ly + √S). This
+is the printed equation multiplied through by its conjugate (q cancels, so the paraboloid at
+Y₀ = 0, where q = 0, is regular) on the branch through the vertex; the printed sign gives the
+parent of radius −R (section 10 item 51). At Y₀ = 0 the surface is the Standard conic; for any Y₀
+it is the parent conic translated to (Y₀, sag(Y₀)) and turned by atan(sag′(Y₀)) about x. The
+freeform terms follow the help's table, which is the Extended Polynomial's order. A plane
+(R infinite) contributes no conic, only the terms.
+
+**Grid Sag.** The data file ("nx ny delx dely unitflag xdec ydec", then nx·ny lines "z dz/dx
+dz/dy d2z/dxdy [nodata]" from the (−x, +y) corner, rows left to right; "!" comments; unit flag 0
+mm, 1 cm, 2 in, 3 m; nx, ny ≥ 5) is read by `GridSagFile` and kept in its own unit
+(`GridSagData`, saved as `OpticsSurfaceSettings.GridSag`), so a lens-unit change leaves it and
+Scale Lens scales its spacings, decenters and sags (the cross derivative inversely). Points sit
+at x_dec + (i − (nx − 1)/2)·delx. Bicubic interpolation is the tensor cubic Hermite patch on the
+four corners' z, z_x, z_y, z_xy: exact at the points, C¹, and in error h⁴/384·(max|∂ₓ⁴z| +
+max|∂_y⁴z|) to leading order, so 1/16 per halving of the spacing (the gate). With every
+derivative zero the derivatives are estimated by second-order finite differences. Linear is
+bilinear. Outside the grid there is no sag (a ray miss). A nodata line is zero in all four values.
+The Grid Sag layout cannot build the shape alone: a saved Grid Sag with no grid is refused by
+name, and grid data on another type is refused.
+
+**Radial NURBS.** Control point 0 is the origin (weight 1), points 1 … N the user's. The curve
+is cubic on the clamped uniform knot vector (section 10 item 51); evaluation uses
+`OpenSim.Geometry/Step/Tessellate/Nurbs.cs`. y must increase strictly and the weights be
+positive; the sag at radius r solves y(t) = r by Newton inside a bisection bracket; beyond the
+last point is a ray miss.
+
+**Paraxial model.** Each type gives the paraxial engine its y–z vertex curvature by section 23's
+rule (a vertex sag, a vertex slope or a twist is refused, naming the cause): Polynomial 2γ5;
+Extended Polynomial c + 2A₅/R_n²; Zernike sags c + 2α1 + the Zernike expansion (a decentered
+non-zero set is refused); Off-Axis Conic Freeform sgn(R)R²/p^{3/2} (1/R at Y₀ = 0) plus its
+terms; Grid Sag c + 2α1 + the interpolant's ∂²z/∂y² at the vertex (the mean over the cells that
+meet there, the bicubic being only C¹) and the Zernike expansion; Radial NURBS the profile's
+curvature at t = 0 from the first three control points (a first point off z = 0 is a cone point
+and is refused).
+
+**Built but not registered.** `ChebyshevPolynomialSurface` (OpticStudio's Chebyshev Polynomial:
+z = c r²/(1 + √(1 − c²r²)) + x₀y₀ΣΣ c(i, j)Tᵢ(x/x₀)Tⱼ(y/y₀), N, M ≤ 14, undefined outside
+x₀, y₀) is built in code only: its help page gives parameters 13–236 for the c(i, j) without
+their order, and 224 values cannot hold the 225 coefficients of N = M = 14. Its base has no conic
+term; a conic is refused.
+
+**Not built.** Toroidal NURBS (the help page does not say whether its "Min X or angle" is in
+degrees or how the limits bound the surface); Q-Type Freeform (Forbes, Opt. Express 20 (2012)
+is not on this machine, and the equations are not taken from memory); TrueFreeForm (its basis is
+not published) and a local-support stand-in for it; Make TrueFreeForm; Grid Point Selector;
+Export Point Cloud; a Grid Sag import button in the app (a grid enters a lens from code or a
+saved lens); the .zmx, CODE V and OSLO mappings of the new types; optimization variables on grid
+points ("No optimization or tolerancing of grid data is possible", help).

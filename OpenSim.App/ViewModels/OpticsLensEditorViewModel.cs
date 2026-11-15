@@ -320,6 +320,7 @@ public sealed partial class OpticsLensEditorViewModel : ObservableObject
             DoNotDraw = YesProp(S.DoNotDrawProperty),
             RowColor = row.Tint,
             Aperture = ReadAperture(row, b.Aperture),
+            GridSag = sameType ? b.GridSag : null, // OP-25: a Grid Sag's grid goes with its type
         };
 
         // The material: kept exactly as the file had it while its text is unchanged.

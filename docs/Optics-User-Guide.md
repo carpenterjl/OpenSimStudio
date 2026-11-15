@@ -1736,6 +1736,42 @@ non-sequential insertion; the dialog's Prescription and Layout buttons; GRIN len
 hundreds of design templates. Nothing has been compared with OpticStudio's own Lens Catalogs. The
 details are in docs/Optics-Conventions.md §53.
 
+## Freeform and data-defined surfaces
+
+The type column of the Lens Data Editor offers eight more surface types, each with its
+OpticStudio parameter columns (docs/Optics-Conventions.md §55 lists them):
+
+- **Polynomial:** z = γ1x² + γ2x⁴ + … + γ5y² + … + γ8y⁸ in parameters 1–8; the radius and conic
+  are not used and must stay plane and zero.
+- **Extended Polynomial:** the surface's conic plus up to 230 terms x, y, x², xy, y², … on x/R_n,
+  y/R_n (maximum term number, normalization radius, then the coefficients in lens units).
+- **Zernike Fringe Sag, Zernike Standard Sag, Zernike Annular Standard Sag:** the Even Asphere
+  plus 37, 231 or 80 Zernike terms (coefficients in lens units), with the extrapolate flag; the
+  Fringe and Standard forms take a Zernike decenter, the annular form an obscuration inside which
+  the terms are ignored.
+- **Off-Axis Conic Freeform:** the off-axis part of the surface's conic at the offset Y0, in a
+  frame tangent to it, plus up to 230 freeform terms. With Y0 = 0 it is the Standard surface.
+- **Grid Sag:** the Even Asphere plus Zernike Standard terms plus a sag interpolated from a grid
+  file (OpticStudio's .DAT layout), bicubic (parameter 0 = 0) or linear (1). A ray outside the
+  grid is a ray miss. The grid is saved with the lens in its file's unit; Scale Lens scales it.
+  There is no import button yet: a grid enters a lens from a saved lens or from code
+  (`GridSagFile.Read`), and a Grid Sag surface without a grid is refused by name.
+- **Radial NURBS:** a rational B-spline curve from the vertex through 4 to 60 control points
+  (y, z, weight each), turned about the axis; no radius or conic. Beyond the last point's y is a
+  ray miss. The degree (cubic) and knots (clamped, uniform) are this program's reading.
+
+Each gives the paraxial engine its y–z curvature at the vertex; a surface whose vertex is off
+z = 0, sloped or twisted (a Zernike piston or tilt, a linear polynomial term, a decentered
+Zernike set, a NURBS curve starting off z = 0) has no paraxial model and paraxial data are
+refused with the cause named.
+
+Not built: Chebyshev Polynomial in the editor (the shape is built in code; its coefficient
+columns are not given by its help page), Toroidal NURBS, Q-Type Freeform (its source paper is
+not on this machine), TrueFreeForm and Make TrueFreeForm, Grid Point Selector, Export Point
+Cloud, a Grid Sag import button, optimizing grid points, and reading or writing these types in
+.zmx files. The Off-Axis Conic Freeform sign and the NURBS degree are readings not checked against
+OpticStudio (docs/Optics-Conventions.md §10 item 51).
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
