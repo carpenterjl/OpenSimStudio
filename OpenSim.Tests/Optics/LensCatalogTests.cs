@@ -433,7 +433,9 @@ public sealed class LensCatalogTests : IDisposable
         string seq = Path.Combine(dir, "CDV-1 codev.seq");
         File.WriteAllText(seq, "RDM\nEPD 10\nWL 587.5618\nYAN 0\nSO 0 1e20\nS 50 4 1.5:60\nSTO\nS 0 96\nSI 0 0\n");
 
-        var catalog = LensCatalog.FromFolder(dir, NoGlass);
+        // The CODE V glass 1.5:60 is a model glass, which is trained on the catalogs (section 54).
+        var glass = OpenSim.Tests.Optics.Gates.CodeVOsloImportGateTests.Catalogs();
+        var catalog = LensCatalog.FromFolder(dir, glass);
         foreach (var p in catalog.Problems) _out.WriteLine(p);
         Assert.Empty(catalog.Problems);
         Assert.Equal(new[] { "CDV-1", "OSL-100", "PCX-100" }, catalog.Lenses.Select(l => l.PartName));
@@ -442,12 +444,12 @@ public sealed class LensCatalogTests : IDisposable
         var oslo = catalog.Lenses.Single(l => l.PartName == "OSL-100");
         Close(100, oslo.EffectiveFocalLengthMm, 1e-12, "OSL-100 EFL");
         var codeV = catalog.Lenses.Single(l => l.PartName == "CDV-1");
-        var direct = StockLensProperties.Of(LensFileImport.Import(seq, NoGlass).Optics, NoGlass);
+        var direct = StockLensProperties.Of(LensFileImport.Import(seq, glass).Optics, glass);
         Assert.Equal(direct.EffectiveFocalLengthMm, codeV.EffectiveFocalLengthMm);
         Assert.True(codeV.EffectiveFocalLengthMm > 0);
 
         // Read again from the catalog (the Insert Lens path) by the same extension dispatch.
-        Assert.Equal(1.5, catalog.Import(oslo, NoGlass).Optics.Surfaces![1].Index);
-        Assert.Equal(1.5, catalog.Import(codeV, NoGlass).Optics.Surfaces![1].ModelGlass!.Nd);
+        Assert.Equal(1.5, catalog.Import(oslo, glass).Optics.Surfaces![1].Index);
+        Assert.Equal(1.5, catalog.Import(codeV, glass).Optics.Surfaces![1].ModelGlass!.Nd);
     }
 }
