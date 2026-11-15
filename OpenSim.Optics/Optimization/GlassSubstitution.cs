@@ -15,6 +15,8 @@ namespace OpenSim.Optics.Optimization;
 /// <param name="Merit">The merit function after re-optimizing with it; null when it failed.</param>
 /// <param name="Error">Why the trial failed (the lens could not be built or the merit function
 /// not evaluated with this glass); null when it worked.</param>
+/// <remarks>Error is the reason a trial failed (Merit null), or a note on a trial that ran but
+/// whose exact constraints are not met (Merit set).</remarks>
 public sealed record GlassSubstitutionTrial(int Round, int Surface, string Glass, double? Merit, string? Error);
 
 /// <summary>Progress after each trial.</summary>
@@ -134,11 +136,12 @@ public static class GlassSubstitution
         var log = new List<string>();
         var localOptions = options.Optimization ?? new LocalOptimizationOptions();
         double startMerit = Evaluate(optics, catalogs, function, registry, localOptions).Value;
-        var (best, bestMerit) = Optimize(optics, catalogs, function, registry, localOptions, token)
+        var (best, bestMerit, bestMet) = Optimize(optics, catalogs, function, registry, localOptions, token)
             ?? throw new InvalidOperationException("The start was cancelled before it was re-optimized.");
         double reoptimizedStart = bestMerit;
         log.Add($"Glass substitution on {string.Join(", ", which.Select(j => SavedSurfaces.Where(j, surfaces.Count).ToLowerInvariant()))}: "
-            + $"{pool.Count} candidate glass{(pool.Count == 1 ? "" : "es")}; merit {F(startMerit)}, {F(reoptimizedStart)} re-optimized with the starting glasses.");
+            + $"{pool.Count} candidate glass{(pool.Count == 1 ? "" : "es")}; merit {F(startMerit)}, {F(reoptimizedStart)} re-optimized with the starting glasses"
+            + (bestMet ? "." : " (its constraints are not met)."));
 
         int rounds = 0;
         bool cancelled = false;
@@ -149,24 +152,36 @@ public static class GlassSubstitution
             foreach (int j in which)
             {
                 string current = MaterialText(best.Surfaces![j]);
-                (OpticsSettings Design, double Merit, string Glass)? winner = null;
+                (OpticsSettings Design, double Merit, bool Met, string Glass)? winner = null;
                 foreach (var candidate in pool)
                 {
                     if (token.IsCancellationRequested) { cancelled = true; break; }
                     string text = candidate.MaterialText;
                     if (SameGlass(current, candidate, catalogs)) continue;
-                    var list = best.Surfaces!.ToList();
+                    // While the best design does not meet its exact constraints its variables may
+                    // sit somewhere degenerate (a curvature driven to ~1e-31 by an unreachable
+                    // colour constraint, whose relative derivative step then freezes it), so the
+                    // trial starts from the user's own design with the current glasses instead.
+                    var baseDesign = bestMet ? best : WithGlassesOf(optics, best, which);
+                    var list = baseDesign.Surfaces!.ToList();
                     list[j] = list[j] with { Material = text, ModelGlass = null, Index = null };
                     foreach (string column in GlassVariables.ModelColumns) list[j] = GlassVariables.WithFlag(list[j], column, false);
-                    var trial = best with { Surfaces = list };
+                    var trial = baseDesign with { Surfaces = list };
                     try
                     {
                         var outcome = Optimize(trial, catalogs, function, registry, localOptions, token);
                         if (outcome is null) { cancelled = true; break; }
-                        trials.Add(new GlassSubstitutionTrial(round, j, text, outcome.Value.Merit, null));
+                        trials.Add(new GlassSubstitutionTrial(round, j, text, outcome.Value.Merit,
+                            outcome.Value.Met ? null : "the exact (negative-weight) constraints are not met with this glass"));
                         double reference = winner?.Merit ?? bestMerit;
-                        if (outcome.Value.Merit < reference * (1 - options.RelativeImprovement))
-                            winner = (outcome.Value.Design, outcome.Value.Merit, text);
+                        bool referenceMet = winner?.Met ?? bestMet;
+                        // A design that meets the exact constraints always beats one that does not;
+                        // the merit value excludes the constraint rows, so it only ranks designs of
+                        // equal standing.
+                        bool better = outcome.Value.Met != referenceMet
+                            ? outcome.Value.Met
+                            : outcome.Value.Merit < reference * (1 - options.RelativeImprovement);
+                        if (better) winner = (outcome.Value.Design, outcome.Value.Merit, outcome.Value.Met, text);
                     }
                     catch (Exception e) when (e is ArgumentException or InvalidOperationException)
                     {
@@ -179,13 +194,15 @@ public static class GlassSubstitution
                     log.Add($"Round {round}, {SavedSurfaces.Where(j, surfaces.Count).ToLowerInvariant()}: {current} → {w.Glass}, merit {F(bestMerit)} → {F(w.Merit)}.");
                     best = w.Design;
                     bestMerit = w.Merit;
+                    bestMet = w.Met;
                     changed = true;
                 }
                 if (cancelled) break;
             }
             if (!changed && !cancelled) { log.Add($"Round {round} changed no glass: done."); break; }
         }
-        int failed = trials.Count(t => t.Error is not null);
+        int failed = trials.Count(t => t.Merit is null);
+        if (!bestMet) log.Add("No design tried meets the exact (negative-weight) constraints; the best by merit is kept.");
         if (failed > 0) log.Add($"{failed} trial{(failed == 1 ? "" : "s")} failed (the lens or the merit function could not be evaluated with that glass); each is listed with its reason.");
         if (cancelled) log.Add("Stopped: the best design so far is kept.");
         log.Add($"Merit {F(startMerit)} → {F(bestMerit)}.");
@@ -199,7 +216,7 @@ public static class GlassSubstitution
 
     /// <summary>The design re-optimized (or only evaluated when it has no variables) and its
     /// merit; null when cancelled. Throws when the merit function cannot be evaluated.</summary>
-    private static (OpticsSettings Design, double Merit)? Optimize(OpticsSettings optics, IReadOnlyList<OpticalCatalog> catalogs,
+    private static (OpticsSettings Design, double Merit, bool Met)? Optimize(OpticsSettings optics, IReadOnlyList<OpticalCatalog> catalogs,
         MeritFunction? function, MeritOperandRegistry registry, LocalOptimizationOptions local, CancellationToken token)
     {
         if (token.IsCancellationRequested) return null;
@@ -207,7 +224,7 @@ public static class GlassSubstitution
         {
             var e = Evaluate(optics, catalogs, function, registry, local);
             if (e.HasFailures) throw new InvalidOperationException(string.Join(Environment.NewLine, e.Errors));
-            return (optics, e.Value);
+            return (optics, e.Value, true);
         }
         var result = LocalOptimizer.Run(optics, catalogs, new LocalOptimizationOptions
         {
@@ -218,7 +235,7 @@ public static class GlassSubstitution
         }, function, registry);
         if (result.Cancelled) return null;
         if (result.Evaluation.HasFailures) throw new InvalidOperationException(string.Join(Environment.NewLine, result.Evaluation.Errors));
-        return (result.Optimized, result.Merit);
+        return (result.Optimized, result.Merit, result.Stop != LocalOptimizationStop.ConstraintsNotMet);
     }
 
     private static MeritEvaluation Evaluate(OpticsSettings optics, IReadOnlyList<OpticalCatalog> catalogs, MeritFunction? function,
@@ -229,6 +246,19 @@ public static class GlassSubstitution
             throw new ArgumentException("The merit function has no rows: build one in the Merit Function Editor before substituting glasses.");
         return MeritEvaluator.Evaluate(function, new ProjectMeritConfigurations(optics, catalogs), registry,
             (local.Merit ?? new MeritEvaluationOptions()) with { MaxDegreeOfParallelism = local.MaxDegreeOfParallelism });
+    }
+
+    /// <summary><paramref name="design"/> with the glasses (material, model glass, index and the
+    /// model-glass flags) of <paramref name="source"/> on the surfaces <paramref name="which"/>.</summary>
+    private static OpticsSettings WithGlassesOf(OpticsSettings design, OpticsSettings source, IReadOnlyList<int> which)
+    {
+        var list = design.Surfaces!.ToList();
+        foreach (int j in which)
+        {
+            var from = source.Surfaces![j];
+            list[j] = list[j] with { Material = from.Material, ModelGlass = from.ModelGlass, Index = from.Index };
+        }
+        return design with { Surfaces = list };
     }
 
     private static bool SameGlass(string current, SubstitutionCandidate candidate, IReadOnlyList<OpticalCatalog> catalogs) =>

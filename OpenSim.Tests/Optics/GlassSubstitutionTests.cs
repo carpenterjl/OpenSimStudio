@@ -57,7 +57,7 @@ public sealed class GlassSubstitutionTests
         Assert.Equal(Math.Sqrt(0.03), GlassDistance.Distance(a, b, wn, wa, wp)!.Value, 15);
         Assert.Equal(Math.Sqrt(0.02), GlassDistance.Distance(a, b, wn, wa, 0)!.Value, 15);
         Assert.Null(GlassDistance.Distance(a with { DeltaPgF = null }, b, wn, wa, wp));
-        Assert.Equal(Math.Sqrt(0.01 + 2 * 0.01), GlassDistance.Distance(a, b, 1, 2e-4, 100)!.Value, 15);
+        Assert.Equal(Math.Sqrt(0.01 + 2 * 0.01 + 0.01), GlassDistance.Distance(a, b, 1, 2e-4, 100)!.Value, 15);
     }
 
     /// <summary>A glass's point is its printed nd and Vd (NM line) where the catalog prints them.</summary>
