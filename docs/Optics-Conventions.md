@@ -1440,6 +1440,44 @@ single place in the code, so a correction is one line and its test.
     Check: the help's Tolerance Script Example run in OpticStudio and here on one lens, the
     criteria compared trial by trial.
 
+59. **Imaging and ray operand readings** (OP-55A, section 63). The operand definitions are
+    OpticStudio 2025 R2's "Optimization Operands (Alphabetically)" and category pages (saved under
+    `plans/sources/optics/op-54-help/`); no operand has been evaluated in OpticStudio to compare.
+    Where the help leaves a point open this program reads it so:
+    - *Columns.* The help names parameters but not columns; OP-54's reading (item 27) is followed:
+      integers in the help's order in Int1 then Int2, Hx, Hy, Px, Py in Data1 to Data4, other reals
+      after them; a third integer takes the next data column (CARD's Wave, Orientation and Data in
+      Data1 to Data3; MNRI/MXRI/MNRE/MXRE's Wave in Data5; ZERN's Samp, Field, Type, Epsilon,
+      Vertex? in Data1 to Data5; the MTF, Strehl, enclosed-energy and illumination Field in Data1).
+    - *Seidel operands* SPHA, COMA, ASTI, FCUR and DIST are the Seidel coefficients S1 to S5 (the
+      Seidel Coefficients page names them "(SPHA, S1) … (DIST, S5)") divided by the wavelength, so
+      "in waves". DIST with Surf 0 is the real F-tan(θ) distortion at the largest +y field.
+    - *Signs.* AXCL is z(Wave1) − z(Wave2) and LACL y(Minw) − y(Maxw); RANG is acos of the leaving
+      ray's z cosine (0 to π); RENA/RENB/RENC use the normal that is +z at the vertex; RAIN and
+      RAEN are |d·n|.
+    - *WFNO* is the real working F/# on axis at the primary wavelength (the help's "See Working
+      F/#"); ISFN, ISNA, EXPP and the other first-order operands are paraxial.
+    - *ZERN* fits max(11, Term) terms for Fringe as well as Standard (the help states the rule for
+      Standard and annular only; the "adjacent ZERN rows" rule is not built, a row sees only
+      itself).
+    - *Sampling.* Every Samp of 1 to 6 is a 32·2^(Samp−1) grid, as MtfOperands reads the help;
+      RSRE's Samp n is 2n rays across ("n x n per pupil quadrant"); RSCE's rings use the RMS
+      analyses' 4 × rings arms; RELI's and EFNO's Samp is the relative illumination's ray density.
+    - *STRH* uses half the help's default Huygens image delta, the wavelength the longest of the
+      set when polychromatic, as the Huygens PSF analysis does.
+    - *HHCN* calls the intercept off the sag when |z − sag(x, y)| exceeds 10⁻⁹ m + 10⁻⁹·|z| (the
+      help gives no tolerance), or when the sag is undefined there.
+    - *OPTH* with the object at infinity starts at the plane normal to the field's direction
+      through the chief ray's surface-1 intercept (the help's "reference phase plane tangent to the
+      chief ray intercept at the first surface").
+    - *Global coordinates* (RAGX … RAGC) are this program's global frame (surface 1's vertex,
+      object-space axes): OpticStudio's default global reference surface 1; a different reference
+      surface is not built.
+    - *DENC/GENC* return the smallest distance reaching Frac by bisection on the engine's
+      fraction; where the sampling's window cannot reach Frac the row fails (the help returns
+      1e+10).
+    Check: each operand in OpticStudio and here on one lens with the same columns.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -5519,3 +5557,55 @@ them. TSDX, TSDY, TSDR, TSTX, TSTY, TIRX and TIRY, which decenter or tilt the ba
 the Irregular surface, are refused on a composite base by name ("the Add-on surfaces are physically
 one with the Base", help, "Composite Surface"; use the element operands); TIRR adds sag and is
 kept.
+
+## 63. Operand catalogue: imaging and ray operands
+
+OP-55A adds 92 of OpticStudio's imaging and ray operands to the merit operand registry
+(`OpenSim.Optics/Merit/Catalogue/Imaging*.cs`, `ImagingOperands.Definitions()`, registered under
+`// OP-55A` in `MeritOperandRegistry.CreateDefault`). Each is a thin adapter over the engine on main
+that computes the quantity; none computes it a second way. Definitions are read from OpticStudio
+2025 R2's "Optimization Operands (Alphabetically)" and category pages (copies in
+`plans/sources/optics/op-54-help/`). Each definition's `Description` names its columns; readings the
+help leaves open are §10 item 59. Lengths are lens units unless a row says micrometers (the
+enclosed-energy distances, as the help says); angles are degrees where the help says degrees.
+
+| Family | Codes | Engine |
+|---|---|---|
+| First order | AMAG, ENPP, EPDI, EXPD, EXPP, ISFN, ISNA, LINV, OBSN, PIMH, PMAG, POWR | `ParaxialSystem` (§11); real image height read as paraxial, as the evaluator does |
+| | EFLX, EFLY, CARD | `CardinalPlanes.Compute` over Surf1 to Surf2 (§29); rotationally symmetric lenses only |
+| | WFNO | `RealWorkingFNumber` on axis, primary wavelength (§25) |
+| Seidel | SPHA, COMA, ASTI, FCUR, DIST, PETZ, PETC | `SeidelEngine` (§32): S1 to S5 over the wavelength; Surf 0 the sum; DIST Surf 0 the real distortion of `FieldCurvatureDistortion` at H = 1, +y, F-tan(θ) |
+| Chromatic and focus | LACL, AXCL, LONA | paraxial chief-ray heights; `LongitudinalAberrationAnalysis.Crossings` (Zone 0 paraxial, else the real ray Py = Zone; vignetting factors cleared) |
+| Field curvature | FCGS, FCGT | `FieldCurvatureDistortion` (Coddington along the real chief ray); fields on the x or y axis only |
+| RMS | RSCE, RSCH, RSRE, RSRH, RWCE, RWCH, RWRE, RWRH | `RmsCore.Evaluate` (§34): Gaussian quadrature Ring × 4·Ring arms, or the rectangular array 2·Samp across; Wave 0 polychromatic |
+| Zernike | ZERN | `FieldZernike.Fit` at the field row, pupil grid 32·2^(Samp−1), Fringe or Standard, max(11, Term) terms |
+| Boresight | BSER | on-axis chief ray's radial image coordinate over the paraxial EFL |
+| MTF | MTFN, MTFX, GMTN, GMTX | the min/max of `MtfOperands`' cached value (same columns as MTFA, GMTA) |
+| | MSWT, MSWS, MSWA, MSWN, MSWX | `MtfEngine.Evaluate`, FFT, square wave |
+| | MTHT, MTHS, MTHA, MTHN, MTHX | `MtfEngine.Evaluate`, Huygens, pupil and image grids 32·2^(Samp−1), Ima Delta µm |
+| Strehl | STRH | `PsfRuns.Huygens` at half the default Huygens image delta |
+| Enclosed energy | DENC, DENF | `DiffractionEnclosedEnergy` (FFT kernel; Refp 0 to 2) |
+| | GENC, GENF | `GeometricEnclosedEnergy.Trace`; No Diff Lim 0 multiplies by the Airy curve at the reference field's real working F/# (encircled only) |
+| Illumination | RELI, EFNO | `RelativeIllumination.Compute` (§27), vignetting factors replaced by apertures; fields on an axis only |
+| Best-fit sphere | BFSD | `BestFitSphere.Fit`, minimum volume (§43's Sag Table) |
+| Paraxial rays | PARX, PARY, PARR, PATX, PATY | Px·(marginal ray) + chief ray of (Hx, Hy), each plane of `ParaxialSystem` |
+| Real rays | REAA, REAB, REAC, RENA, RENB, RENC, RAID, RAED, RAIN, RAEN, RANG, RETX, RETY, RAGX, RAGY, RAGZ, RAGA, RAGB, RAGC, OPTH, HHCN, TRAI | the row's own traced ray (`SurfaceHit`); TRAI and OPTH (object at infinity) also trace the chief ray; RAGA–RAGC rotate by `SurfacePlacement.Global` |
+| | PLEN, MNRI, MXRI, MNRE, MXRE | a ray traced the evaluator's way (`ImagingOperands.Store`); the bounds follow Understanding Boundary Operands |
+
+**Caches.** The analysis-backed operands keep their result per lens and system instance
+(`ImagingOperands.Store`, a `ConditionalWeakTable` as in `MtfOperands` and
+`RayAberrationOperands`), keyed on the family and its columns, so rows that read the same result
+compute it once per evaluation; a new lens starts a new entry. Pass 3 of the evaluator is
+sequential, so the values do not depend on threads.
+
+**Refused by name.** Pol? and All Conf? set to 1; the Huygens enclosed energy (Refp 3 to 5); ZERN's
+Term ≤ 0 extras, annular type, Epsilon and Vertex?; the afocal forms (angles, diopters, afocal
+units) of LACL, AXCL, LONA, the RMS and enclosed-energy rows; fields off both axes for FCGS, FCGT,
+RELI and EFNO; non-Standard surfaces for POWR; a non-rotationally-symmetric lens for EFLX, EFLY and
+CARD.
+
+**Not built** (41 codes; `ImagingOperands.NotBuilt` gives each reason): EFLA, POWF, POWP, SFNO,
+TFNO, ABCD, DISA, DISC, DISG, DIMX, SMIA, BIOC, BIOD, OSCD, SPCH, TRAE, CEHX, CEHY, CENX, CENY,
+CNAX, CNAY, CNPX, CNPY, DXDX, DXDY, DYDX, DYDY, IMAE, XENC, XENF, ERFP, FOUC, TOLR, PARZ, PARA,
+PARB, PARC, PANA, PANB, PANC. They are not registered, so a saved row with one of these codes loads
+as OOFF and is named.

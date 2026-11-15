@@ -2044,6 +2044,45 @@ would make trials depend on each other or on a person (OUTPUT to a file, SAVELEN
 operations, INPUT, PAUSE, TOLERANCE) are refused in a script. No script has been compared with
 OpticStudio's own output. The rules are in docs/Optics-Conventions.md §60.
 
+## Operand catalogue
+
+### Imaging and ray operands
+
+The merit function editor knows 92 more of OpticStudio's operands: first-order properties,
+aberrations, MTF, Strehl ratio, encircled energy, paraxial and real ray data, relative illumination
+and the best-fit sphere. Type the four-letter code in the Type column, or search the operand list
+by code or by name ("Petzval", "Huygens", "encircled"); each operand shows OpenSim's name with the
+code, e.g. "Spherical aberration (Seidel) (SPHA)". The editor names each column after the
+operand's parameter (Surf, Wave, Hx …), and the row type's description says which column holds what.
+
+What they compute is what the matching analysis computes, at the same settings:
+
+- **First order** (AMAG, CARD, ENPP, EFLX, EFLY, EPDI, EXPD, EXPP, ISFN, ISNA, LINV, OBSN, PIMH,
+  PMAG, POWR, WFNO): the paraxial data of the Paraxial and Cardinal Points reports; WFNO is the
+  real working F/# on axis.
+- **Aberrations**: SPHA, COMA, ASTI, FCUR, DIST in waves from the Seidel Coefficients (DIST with
+  Surf 0: the Field Curvature and Distortion percentage at the edge of the field), PETZ, PETC,
+  LACL, AXCL, LONA (Longitudinal Aberration), FCGS, FCGT (Field Curvature), the RMS spot and
+  wavefront rows RSCE, RSCH, RSRE, RSRH, RWCE, RWCH, RWRE, RWRH (as the RMS analyses), ZERN
+  (Zernike Fringe or Standard coefficient of a field), BSER.
+- **MTF**: MTFN, MTFX, GMTN, GMTX (smaller and larger of tangential and sagittal), MSWT, MSWS,
+  MSWA, MSWN, MSWX (square wave), MTHT, MTHS, MTHA, MTHN, MTHX (Huygens MTF).
+- **Strehl and enclosed energy**: STRH (Huygens PSF), DENC, DENF (diffraction), GENC, GENF
+  (geometric); distances in micrometers.
+- **Relative illumination**: RELI, EFNO. **Best fit sphere**: BFSD.
+- **Paraxial rays**: PARX, PARY, PARR, PATX, PATY. **Real rays**: REAA, REAB, REAC, RENA, RENB,
+  RENC, RAID, RAED, RAIN, RAEN, RANG, RETX, RETY, RAGX, RAGY, RAGZ, RAGA, RAGB, RAGC, OPTH, PLEN,
+  HHCN, TRAI, MNRI, MXRI, MNRE, MXRE.
+
+A row that cannot be computed fails alone and says why (a ray that misses, a field off the axis
+for an operand that scans along an axis, a setting that is not built).
+
+**Not built:** EFLA, POWF, POWP, SFNO, TFNO, ABCD, DISA, DISC, DISG, DIMX, SMIA, BIOC, BIOD, OSCD,
+SPCH, TRAE, CEHX, CEHY, CENX, CENY, CNAX, CNAY, CNPX, CNPY, DXDX, DXDY, DYDX, DYDY, IMAE, XENC,
+XENF, ERFP, FOUC, TOLR, PARZ, PARA, PARB, PARC, PANA, PANB, PANC; polarization and all-configuration
+options; the Huygens enclosed energy; the afocal forms. No operand has been compared with
+OpticStudio's own output. Details: Optics-Conventions.md section 63.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -2060,8 +2099,8 @@ Not built yet, and not to be relied on until they appear in this guide:
   the local optimizer, glass substitution, the Global and Hammer searches, the tolerance data editor with
   its operands, sensitivity and inverse sensitivity with compensators and the MTF and encircled
   energy criteria, Monte Carlo tolerancing, the tolerance wizard, summary, data viewer and Quick
-  Yield, tolerance scripts and the contrast (MTF) wizard criterion are built; the full operand catalogue and the
-  encircled-energy merit operands are not);
+  Yield, tolerance scripts and the contrast (MTF) wizard criterion are built; the rest of the
+  operand catalogue is not, see Operand catalogue);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

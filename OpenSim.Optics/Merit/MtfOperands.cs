@@ -107,7 +107,8 @@ public static class MtfOperands
 
     private static readonly ConditionalWeakTable<SequentialLens, ConditionalWeakTable<OpticalSystemData, ConcurrentDictionary<MtfKey, MtfValue>>> Cache = new();
 
-    private static MtfValue MtfOf(MeritRowContext c, bool geometric)
+    // OP-55A: internal so MTFN/MTFX/GMTN/GMTX (ImagingOperands) read the same cached value.
+    internal static MtfValue MtfOf(MeritRowContext c, bool geometric)
     {
         var row = c.Row;
         int grid = GridOf(row.Int1);

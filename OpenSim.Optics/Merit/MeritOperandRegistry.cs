@@ -213,6 +213,9 @@ public sealed class MeritOperandRegistry
 
         // OP-99: the ZPL macro operand (help: Optimizing with ZPL Macros; Scripting/Zpl/ZplMacroOperand).
         r.Register(Scripting.Zpl.ZplMacroOperand.Definition());
+
+        // OP-55A: imaging and ray operands (ImagingOperands).
+        foreach (var definition in ImagingOperands.Definitions()) r.Register(definition);
         return r;
     }
 
