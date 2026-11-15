@@ -10,7 +10,7 @@ namespace OpenSim.Core.Model;
 /// </summary>
 public sealed record OpticsMeritWizardSettings
 {
-    /// <summary>"Wavefront", "SpotRadius", "SpotX", "SpotY", "SpotXY" or "Angular".</summary>
+    /// <summary>"Wavefront", "SpotRadius", "SpotX", "SpotY", "SpotXY", "Angular" or "Contrast".</summary>
     public string? Criterion { get; init; }
 
     /// <summary>"Centroid", "ChiefRay" or "Unreferenced".</summary>
@@ -40,6 +40,14 @@ public sealed record OpticsMeritWizardSettings
     public double? RelativeXWeight { get; init; }
 
     public double? RelativeYWeight { get; init; }
+
+    /// <summary>Contrast: the weights of the sagittal and tangential phase differences.</summary>
+    public double? RelativeSWeight { get; init; }
+
+    public double? RelativeTWeight { get; init; }
+
+    /// <summary>Contrast: the spatial frequency, cycles/mm.</summary>
+    public double? SpatialFrequency { get; init; }
 
     /// <summary>"Current" or "All".</summary>
     public string? Configurations { get; init; }

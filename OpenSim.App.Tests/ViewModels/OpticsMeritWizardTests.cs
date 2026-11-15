@@ -56,6 +56,26 @@ public sealed class OpticsMeritWizardTests : IDisposable
         Assert.Equal(new[] { "EFFL", "DMFS", "TOTR" }, editor.ToFunction().Rows.Select(r => r.Code));
     }
 
+    /// <summary>The Contrast (MTF) criterion is offered; its spatial frequency and relative S and T
+    /// weights reach the options, and Apply writes the Moore–Elliott rows (wave 7 wiring).</summary>
+    [Fact]
+    public void Contrast_IsOffered_AndWritesTheMooreElliottRows()
+    {
+        var editor = WithSinglet();
+        var wizard = editor.CreateWizard();
+        Assert.Contains(wizard.Criteria, c => c.Value == MeritWizardCriterion.Contrast);
+        wizard.Criterion = MeritWizardCriterion.Contrast;
+        Assert.False(wizard.TryApply());                         // no spatial frequency yet
+        Assert.Contains("spatial frequency", wizard.Status);
+        wizard.SpatialFrequency = 50;
+        wizard.RelativeSWeight = 0;
+        var o = wizard.ToOptions();
+        Assert.Equal((50.0, 0.0, 1.0), (o.SpatialFrequency, o.RelativeSWeight, o.RelativeTWeight));
+        Assert.True(wizard.TryApply(), wizard.Status);
+        var codes = editor.ToFunction().Rows.Select(r => r.Code).Where(c => c != "BLNK").Distinct().ToArray();
+        Assert.Equal(new[] { "MECT" }, codes);
+    }
+
     [Fact]
     public void Ok_ClosesOnlyWhenTheRowsWentIn()
     {

@@ -65,6 +65,36 @@ public sealed class OpticsToleranceRunTests : IDisposable
         Assert.Equal(new[] { 2, 5 }, o.CompensatorRows);
     }
 
+    /// <summary>The MTF frequency and the encircled-energy radius are saved with the run settings
+    /// and come back (wave 7 wiring of OP-39 and OP-41 into OP-64).</summary>
+    [Fact]
+    public void MtfFrequency_AndEncircledRadius_AreSavedAndLoaded()
+    {
+        var t = WithSinglet(Trad(0.5));
+        Assert.Contains(t.Criteria, c => c.Value == ToleranceCriterion.DiffractionMtfAverage);
+        Assert.Contains(t.Criteria, c => c.Value == ToleranceCriterion.GeometricEncircledEnergy);
+        t.SelectedCriterion = t.Criteria.Single(c => c.Value == ToleranceCriterion.DiffractionMtfTangential);
+        t.MtfFrequency = 30;
+        t.EncircledRadius = 12.5;
+        t.PsfSampling = 32;
+        var saved = t.ToSettings();
+        Assert.Equal("DiffractionMtfTangential", saved!.Run!.Criterion);
+        Assert.Equal(30, saved.Run.MtfFrequency);
+        Assert.Equal(12.5, saved.Run.EncircledRadiusMicrometers);
+
+        t.Reset();
+        Assert.Equal(0, t.MtfFrequency);
+        var notes = new List<string>();
+        t.LoadSettings(saved, notes);
+        Assert.Empty(notes);
+        var o = t.RunOptions();
+        Assert.Equal(ToleranceCriterion.DiffractionMtfTangential, o.Criterion);
+        Assert.Equal(30, o.MtfFrequency);
+        Assert.Equal(12.5, o.EncircledRadius);
+        Assert.Equal(32, o.PsfSampling);
+        Assert.DoesNotContain("MTF", t.CriteriaNotBuilt);
+    }
+
     [Fact]
     public void ABadCompensatorList_IsNamed_AndNothingRuns()
     {

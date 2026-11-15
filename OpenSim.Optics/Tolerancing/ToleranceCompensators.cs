@@ -37,7 +37,7 @@ internal sealed record CompensatedLens(OpticsSettings Settings, double Criterion
 /// (all, or the rows chosen) are flagged Variable ("OpticStudio then removes all of the variables
 /// ... the compensating parameters defined by COMP and CPAR specified are set as variables"); OP-57's
 /// <see cref="LocalOptimizer"/> then minimises a merit function built from the criterion: one row
-/// per field (weight the field's weight, target 0, or 1 for the Strehl ratio) and, for each COMP
+/// per field (weight the field's weight, target 0, or 1 for a criterion where larger is better) and, for each COMP
 /// row, a boundary row holding the cell within nominal + Min and nominal + Max (weight 1). Bounds
 /// are soft, as the help says ("these boundaries may be violated if doing so would provide better
 /// performance"). CPAR and CMCO bounds are not built (their values are not readable from the traced
@@ -116,7 +116,7 @@ internal sealed class ToleranceCompensators
             $"Compensation: {(_o.Compensation == ToleranceCompensation.OptimizeDls ? "one Orthogonal Descent cycle, then damped least squares" : "Orthogonal Descent")}, {(_o.OptimizerCycles is int k && k > 0 ? $"{k} cycles" : "automatic cycles")} (OP-57's local optimizer), over: {string.Join("; ", _rows.Select(r => r.Label))}.",
             _o.Criterion == ToleranceCriterion.MeritFunction
                 ? "The optimizer minimises the lens's merit function; no compensator bounds are added (help)."
-                : "The optimizer minimises √(Σ w r² / Σ w) of the criterion's field values (target 0, or 1 for the Strehl ratio) and soft bounds holding each COMP within nominal + Min to nominal + Max (weight 1, this program's choice); CPAR and CMCO bounds are not built.",
+                : "The optimizer minimises √(Σ w r² / Σ w) of the criterion's field values (target 0, or 1 where larger is better) and soft bounds holding each COMP within nominal + Min to nominal + Max (weight 1, this program's choice); CPAR and CMCO bounds are not built.",
             "The nominal lens is compensated first and its criterion is the nominal; every other variable flag of the lens is ignored.",
         },
     };

@@ -71,6 +71,12 @@ public sealed partial class OpticsToleranceEditorViewModel
     [ObservableProperty] private int _sampling = 3;
     [ObservableProperty] private int _psfSampling = 64;
 
+    /// <summary>The MTF criteria's frequency, cycles/mm.</summary>
+    [ObservableProperty] private double _mtfFrequency;
+
+    /// <summary>The encircled-energy criteria's radius, micrometers.</summary>
+    [ObservableProperty] private double _encircledRadius;
+
     /// <summary>The compensator optimizer's cycles; 0 is automatic.</summary>
     [ObservableProperty] private int _optimizerCycles;
 
@@ -123,7 +129,7 @@ public sealed partial class OpticsToleranceEditorViewModel
             Change = SelectedChange?.Value ?? ToleranceChangeMode.LinearDifference,
             Compensation = SelectedCompensation?.Value ?? ToleranceCompensation.ParaxialFocus,
             Fields = SelectedFieldSet?.Value ?? ToleranceFieldSet.YSymmetric,
-            Sampling = Sampling, PsfSampling = PsfSampling,
+            Sampling = Sampling, PsfSampling = PsfSampling, MtfFrequency = MtfFrequency, EncircledRadius = EncircledRadius,
             OptimizerCycles = OptimizerCycles > 0 ? OptimizerCycles : null,
             CompensatorRows = rows.Count == 0 ? null : rows,
             Limit = Limit, Increment = Increment, ShowWorst = ShowWorst,
@@ -144,6 +150,8 @@ public sealed partial class OpticsToleranceEditorViewModel
             SelectedFieldSet = FieldSets.First(c => c.Value == o.Fields);
             Sampling = o.Sampling;
             PsfSampling = o.PsfSampling;
+            MtfFrequency = o.MtfFrequency;
+            EncircledRadius = o.EncircledRadius;
             OptimizerCycles = o.OptimizerCycles ?? 0;
             CompensatorRowsText = o.CompensatorRows is { } r ? string.Join(", ", r) : "";
             Limit = o.Limit;
@@ -163,7 +171,7 @@ public sealed partial class OpticsToleranceEditorViewModel
     private static readonly HashSet<string> RunSettingNames = new(StringComparer.Ordinal)
     {
         nameof(SelectedMode), nameof(SelectedCriterion), nameof(SelectedChange), nameof(SelectedCompensation), nameof(SelectedFieldSet),
-        nameof(Sampling), nameof(PsfSampling), nameof(OptimizerCycles), nameof(CompensatorRowsText), nameof(Limit), nameof(Increment), nameof(ShowWorst),
+        nameof(Sampling), nameof(PsfSampling), nameof(MtfFrequency), nameof(EncircledRadius), nameof(OptimizerCycles), nameof(CompensatorRowsText), nameof(Limit), nameof(Increment), nameof(ShowWorst),
     };
 
     /// <summary>A change of a saved run setting publishes the system, so it is saved with the project.</summary>

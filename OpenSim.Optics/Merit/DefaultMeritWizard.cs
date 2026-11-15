@@ -5,9 +5,7 @@ using OpenSim.Optics.Sequential;
 namespace OpenSim.Optics.Merit;
 
 /// <summary>What the default merit function measures (OpticStudio 2025 R2 help, Optimization
-/// Wizard, "Optimization Function Criteria"). Contrast (the Moore–Elliott MTF criterion) is not
-/// built: it needs OP-39's MTF engine, and is added as one more member and one arm in
-/// <see cref="DefaultMeritWizard"/>.</summary>
+/// Wizard, "Optimization Function Criteria").</summary>
 public enum MeritWizardCriterion
 {
     /// <summary>The OPD in waves (OPDX, OPDM or OPDC by the reference).</summary>
@@ -23,6 +21,10 @@ public enum MeritWizardCriterion
     /// <summary>The angular aberration in x and y (ANCX/ANCY, ANAX/ANAY), weighted by the relative X
     /// and Y weights; radial (ANAC, ANAR) when both are 0. For afocal systems.</summary>
     Angular = 5,
+    /// <summary>"Optimizes the MTF of the system using the Moore-Elliott Contrast method" (help):
+    /// the pupil phase differences across the shift of the Spatial Frequency (MECT, MECS;
+    /// <see cref="MtfOperands"/>), weighted by the relative T and S weights.</summary>
+    Contrast = 6,
 }
 
 /// <summary>What the aberrations are measured from (help, "Optimization Function Reference Points").</summary>
@@ -88,6 +90,16 @@ public sealed record DefaultMeritOptions
     /// <summary>The help's "Relative X Weight" and "Relative Y Weight" (spot X+Y and angular).</summary>
     public double RelativeXWeight { get; init; } = 1;
     public double RelativeYWeight { get; init; } = 1;
+
+    /// <summary>Contrast: "The relative S weight is the additional weighting to be placed on the
+    /// sagittal component of the phase differences" and the T weight on the tangential (help,
+    /// "Other Settings"); 1 is this program's default, as for X and Y.</summary>
+    public double RelativeSWeight { get; init; } = 1;
+    public double RelativeTWeight { get; init; } = 1;
+
+    /// <summary>Contrast: "The spatial frequency at which to optimize" (help, "Other Settings"),
+    /// cycles/mm. The help gives no default; 0 is unset, and Contrast refuses it.</summary>
+    public double SpatialFrequency { get; init; }
 
     public MeritWizardConfigurations Configurations { get; init; } = MeritWizardConfigurations.Current;
 
@@ -179,6 +191,13 @@ public static class DefaultMeritWizard
         if (!(o.OverallWeight > 0) || !double.IsFinite(o.OverallWeight)) p.Add($"The overall weight must be positive and finite (it is {F(o.OverallWeight)}).");
         if (!(o.RelativeXWeight >= 0) || !double.IsFinite(o.RelativeXWeight)) p.Add($"The relative X weight must be zero or positive (it is {F(o.RelativeXWeight)}).");
         if (!(o.RelativeYWeight >= 0) || !double.IsFinite(o.RelativeYWeight)) p.Add($"The relative Y weight must be zero or positive (it is {F(o.RelativeYWeight)}).");
+        if (o.Criterion == MeritWizardCriterion.Contrast)
+        {
+            if (!(o.SpatialFrequency > 0) || !double.IsFinite(o.SpatialFrequency)) p.Add($"Contrast needs a spatial frequency above zero, cycles/mm (it is {F(o.SpatialFrequency)}).");
+            if (!(o.RelativeSWeight >= 0) || !double.IsFinite(o.RelativeSWeight)) p.Add($"The relative S weight must be zero or positive (it is {F(o.RelativeSWeight)}).");
+            if (!(o.RelativeTWeight >= 0) || !double.IsFinite(o.RelativeTWeight)) p.Add($"The relative T weight must be zero or positive (it is {F(o.RelativeTWeight)}).");
+            if (o.RelativeSWeight == 0 && o.RelativeTWeight == 0) p.Add("Contrast needs a relative S or T weight above zero.");
+        }
         void Bounds(bool on, string what, double min, double max, double edge)
         {
             if (!on) return;
@@ -282,7 +301,8 @@ public static class DefaultMeritWizard
             }
         }
 
-        int omitted = 0;
+        int omitted = 0, unpaired = 0;
+        bool contrast = options.Criterion == MeritWizardCriterion.Contrast;
         foreach (var c in built)
         {
             if (configurations.Count > 1)
@@ -292,8 +312,11 @@ public static class DefaultMeritWizard
             {
                 cancellation.ThrowIfCancellationRequested();
                 rows.Add(MeritOperandRow.Of("BLNK") with { Comment = $"Operands for field {field + 1} (Hx {F(hx)}, Hy {F(hy)})." });
-                var points = Points(pupilRule, hx, hy, c.Symmetric, Radial(options));
+                var points = Points(pupilRule, hx, hy, c.Symmetric && !contrast, Radial(options));
                 foreach (var (wave, waveWeight) in Waves(c.System))
+                {
+                    double shift = contrast ? Shift(c.Lens, c.System, c.Number, wave, options.SpatialFrequency) : 0;
+                    int written = 0;
                     foreach (var (px, py, pupilWeight) in points)
                     {
                         if (integration == PupilIntegration.RectangularArray && options.DeleteVignetted
@@ -304,10 +327,26 @@ public static class DefaultMeritWizard
                         }
                         double weight = options.OverallWeight * fieldWeight * waveWeight * pupilWeight;
                         foreach (var (code, factor) in Codes(options))
+                        {
+                            if (contrast)
+                            {
+                                // The partner point of the phase difference (MtfOperands): inside the pupil, and its ray passes.
+                                double qx = code == "MECS" ? px - shift : px, qy = code == "MECT" ? py - shift : py;
+                                if (qx * qx + qy * qy > 1 || Fails(tracer, c.Number, wave, hx, hy, qx, qy)) { unpaired++; continue; }
+                                rows.Add(new MeritOperandRow { Code = code, Int2 = wave, Data = new[] { hx, hy, px, py, options.SpatialFrequency }, Weight = weight * factor });
+                                written++;
+                                continue;
+                            }
                             rows.Add(Row(code, wave, hx, hy, px, py, weight * factor, pupilRule, options.IgnoreLateralColor));
+                        }
                     }
+                    if (contrast && written == 0)
+                        throw new ArgumentException($"Optimization Wizard: at {F(options.SpatialFrequency)} cycles/mm the pupil shift is {F(shift)} of the pupil radius ({(built.Count > 1 ? $"configuration {c.Number}, " : "")}field {field + 1}, wavelength {wave}), so no pupil point has its partner inside the pupil: the frequency is at or beyond the cutoff.");
+                }
             }
         }
+        if (unpaired > 0)
+            notes.Add($"Contrast: {unpaired} phase difference{(unpaired == 1 ? "" : "s")} left out because the shifted pupil point lies outside the pupil or its ray fails; the remaining rows keep their quadrature weights.");
         if (omitted > 0)
             notes.Add($"Delete Vignetted: {omitted} pupil point{(omitted == 1 ? "" : "s")} whose ray fails {(omitted == 1 ? "was" : "were")} left out (help, \"Rectangular Array\"); regenerate the rows if the vignetting changes.");
         return new DefaultMeritResult { Rows = rows, Integration = integration, Summary = summary, Notes = notes };
@@ -366,6 +405,16 @@ public static class DefaultMeritWizard
         }
         if (at == count + 1) rows.AddRange(block);
         return new MeritFunction(rows);
+    }
+
+    /// <summary>The Moore–Elliott pupil shift (<see cref="MtfOperands.ContrastShift"/>); an error names the configuration.</summary>
+    private static double Shift(SequentialLens lens, OpticalSystemData system, int configuration, int wave, double frequency)
+    {
+        try { return MtfOperands.ContrastShift(lens, system, wave, frequency); }
+        catch (MeritOperandException e)
+        {
+            throw new ArgumentException($"Optimization Wizard: configuration {configuration}, wavelength {wave}: {e.Message}", e);
+        }
     }
 
     /// <summary>Whether the ray fails; a lens that cannot be traced at all is an error naming the configuration.</summary>
@@ -467,6 +516,10 @@ public static class DefaultMeritWizard
                 if (o.RelativeXWeight > 0) yield return (spot ? (centroid ? "TRCX" : "TRAX") : (centroid ? "ANCX" : "ANAX"), o.RelativeXWeight);
                 if (o.RelativeYWeight > 0) yield return (spot ? (centroid ? "TRCY" : "TRAY") : (centroid ? "ANCY" : "ANAY"), o.RelativeYWeight);
                 break;
+            case MeritWizardCriterion.Contrast:
+                if (o.RelativeTWeight > 0) yield return ("MECT", o.RelativeTWeight);
+                if (o.RelativeSWeight > 0) yield return ("MECS", o.RelativeSWeight);
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(o), o.Criterion, "Unknown criterion.");
         }
@@ -497,9 +550,10 @@ public static class DefaultMeritWizard
             MeritWizardCriterion.SpotX => "RMS spot x",
             MeritWizardCriterion.SpotY => "RMS spot y",
             MeritWizardCriterion.SpotXY => "RMS spot x + y",
+            MeritWizardCriterion.Contrast => $"Moore–Elliott contrast at {F(o.SpatialFrequency)} cycles/mm",
             _ => "RMS angular",
         };
-        string reference = o.Reference switch
+        string reference = o.Criterion == MeritWizardCriterion.Contrast ? "phase differences of the chief-ray-referenced OPD" : o.Reference switch
         {
             MeritWizardReference.Centroid => "centroid",
             MeritWizardReference.ChiefRay => "chief ray",

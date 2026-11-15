@@ -72,8 +72,14 @@
                         <ComboBox ItemsSource="{Binding FieldSets}" SelectedItem="{Binding SelectedFieldSet}" DisplayMemberPath="Label"/>
                         <Label Content="Sampling"/>
                         <TextBox Text="{Binding Sampling}" ToolTip="Rays along each radial arm of the Gaussian quadrature, 1 to 20; twice as many arms."/>
-                        <Label Content="PSF sampling"/>
-                        <TextBox Text="{Binding PsfSampling}" ToolTip="Strehl ratio only: the pupil grid, 16 to 1024."/>
+                        <Label Content="Pupil grid"/>
+                        <TextBox Text="{Binding PsfSampling}" ToolTip="Strehl ratio, MTF and encircled energy: the pupil grid, 16 to 1024 nodes per side."/>
+                        <Label Content="MTF frequency (cycles/mm)"/>
+                        <TextBox Text="{Binding MtfFrequency}" AutomationProperties.AutomationId="ToleranceMtfFrequency"
+                                 ToolTip="MTF criteria: the spatial frequency, MTF units (cycles per millimeter)."/>
+                        <Label Content="Encircled radius (µm)"/>
+                        <TextBox Text="{Binding EncircledRadius}" AutomationProperties.AutomationId="ToleranceEncircledRadius"
+                                 ToolTip="Encircled-energy criteria: the radius about the centroid, micrometers."/>
                         <Label Content="Limit"/>
                         <TextBox Text="{Binding Limit}" ToolTip="Inverse Limit: the criterion each tolerance may reach (worse than the nominal)."/>
                         <Label Content="Increment"/>

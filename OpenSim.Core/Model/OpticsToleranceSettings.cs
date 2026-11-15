@@ -36,7 +36,9 @@ public sealed record OpticsToleranceRunSettings
     public string? Mode { get; init; }
 
     /// <summary>"RmsSpotRadius", "RmsSpotX", "RmsSpotY", "RmsWavefront", "MeritFunction",
-    /// "BoresightError" or "StrehlRatio".</summary>
+    /// "BoresightError", "StrehlRatio", "GeometricMtfAverage", "GeometricMtfTangential",
+    /// "GeometricMtfSagittal", "DiffractionMtfAverage", "DiffractionMtfTangential",
+    /// "DiffractionMtfSagittal", "DiffractionEncircledEnergy" or "GeometricEncircledEnergy".</summary>
     public string? Criterion { get; init; }
 
     /// <summary>"LinearDifference" or "RssDifference".</summary>
@@ -51,7 +53,7 @@ public sealed record OpticsToleranceRunSettings
     /// <summary>Rays along a radial arm of the Gaussian quadrature (spot and wavefront criteria).</summary>
     public int? Sampling { get; init; }
 
-    /// <summary>The pupil grid of the Strehl ratio criterion.</summary>
+    /// <summary>The pupil grid of the Strehl ratio, MTF and encircled-energy criteria.</summary>
     public int? PsfSampling { get; init; }
 
     /// <summary>The optimizer's cycles for the compensators; null or 0 is automatic.</summary>
@@ -68,6 +70,12 @@ public sealed record OpticsToleranceRunSettings
 
     /// <summary>How many worst offenders to list.</summary>
     public int? ShowWorst { get; init; }
+
+    /// <summary>The MTF criteria's frequency, MTF units (cycles per millimeter).</summary>
+    public double? MtfFrequency { get; init; }
+
+    /// <summary>The encircled-energy criteria's radius, micrometers.</summary>
+    public double? EncircledRadiusMicrometers { get; init; }
 }
 
 /// <summary>

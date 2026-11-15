@@ -939,8 +939,8 @@ single place in the code, so a correction is one line and its test.
     program's readings where the help is short:
     - *Combining fields.* The help says the criterion is "computed as an average over all field
       positions" through a merit function OpticStudio builds; here the field values are combined
-      as √(Σ w v² / Σ w), the merit function's form (the Strehl ratio, which is not one of
-      OpticStudio's criteria, as the weighted mean).
+      as √(Σ w v² / Σ w), the merit function's form (the Strehl ratio, the MTF and the encircled
+      energy, where larger is better, as the weighted mean).
     - *The largest field coordinate* of the Y- and XY-Symmetric sets is the largest radial distance
       of the system's field points; with every field on the axis the set is the one on-axis point.
     - *Paraxial focus.* "How OpticStudio Computes the Tolerance Analysis" says that without
@@ -949,7 +949,7 @@ single place in the code, so a correction is one line and its test.
       program keeps the nominal lens as entered and holds its defocus (thickness before the image
       minus the paraxial image distance), so a nominal lens not at its paraxial focus keeps its
       own defocus.
-    - *Larger-is-better criteria* (the Strehl ratio; MTF when built): the degradation is −Δ, the
+    - *Larger-is-better criteria* (the Strehl ratio, the MTF, the encircled energy): the degradation is −Δ, the
       inverse Increment a decrease (as the help says for MTF), and the estimated performance
       N − C with the linear difference; with the RSS difference it is not given, since the help's
       √(N² + C²) is written for a criterion that grows worse upward.
@@ -962,6 +962,16 @@ single place in the code, so a correction is one line and its test.
       program's.
     - *Inverse search.* Brent's method on t in (0, 1) with the limit t·L; an operand whose Min must
       be −Max keeps the tighter of the two adjusted limits.
+    - *MTF criteria.* The help's Sampling for MTF is a grid ("a sampling of 1 yielding a 32 x 32
+      grid, sampling of 2 yielding a 64 x 64 grid, etc."); here the grid is given directly (the
+      pupil grid, 16 to 1024, shared with the Strehl ratio). The diffraction MTF is OP-39's FFT
+      engine and the geometric MTF its geometric engine times the diffraction-limited MTF of the
+      same pupil (the help's GMTA recommends that scaling; the tolerancing page does not say).
+      The MTF Frequency has no default in the help; the run refuses 0.
+    - *Encircled energy* is not one of OpticStudio's tolerancing criteria (the plan adds it, as
+      the Strehl ratio): OP-41's diffraction or geometric fraction within a radius (µm) of the
+      centroid (the reference OpticStudio "always uses ... for tolerancing" for spot and
+      wavefront), encircled only, on the pupil grid.
     Check: a lens toleranced by OpticStudio in each mode with each compensator choice, its report's
     nominal, per-tolerance changes, RSS estimate and inverse limits compared with this program's.
 
@@ -1022,6 +1032,23 @@ single place in the code, so a correction is one line and its test.
     - *Start At and DMFS.* The generated rows are inserted, not written over earlier ones (help,
       "Button Functions": "adds the generated merit function to the existing merit function");
       the wizard writes no DMFS row.
+    - *Contrast (Moore–Elliott).* The help ("Optimizing for MTF") gives the method, the shift
+      equation and φ(x_j, y_k) − φ(x_j − Δ, y_k) = 0, but not MECA/MECS/MECT's values or columns
+      nor the rows the wizard writes. Here: a MEC row is OPD(P) − OPD(P − Δ) in waves of its
+      wavelength, OPDC's OPD (chief-ray sphere); the shift is 2ξ·λ·F/# pupil radii (the cutoff
+      where the pupils just touch, the reading of item 34's Contrast Loss Map, since the help's
+      text puts the cutoff at Δ = D/2), along y for MECT and x for MECS, F/# the paraxial working
+      F/# at the row's wavelength; MECA = (MECT + MECS)/2. Columns: Int2 Wave, Data1–4 Hx, Hy, Px,
+      Py, Data5 Freq (the help's Field is taken from Hx and Hy). The wizard writes, per field,
+      wavelength and pupil point of the rule, a MECT row (weight × relative T weight) and a MECS
+      row (× relative S weight) whose partner point is inside the pupil and traces, without
+      symmetry halving; pairs left out are counted in the notes, and the kept rows keep their
+      quadrature weights. The relative weights default to 1 and the frequency has no default
+      (the help gives none).
+    - *MTF operands.* MTFT/MTFS/MTFA and GMTT/GMTS/GMTA take their columns in the order the help
+      lists the parameters (Int1 Samp, Int2 Wave, Data1 Field, Data2 Freq, then Grid and Data
+      Type, or !Scl and Grid); Samp n is a 32·2ⁿ⁻¹ grid; the sparse method (Grid = 0) is not
+      described, so both Grid values use the grid method; Data Type 1–3 and Field 0 are refused.
     Check: OpticStudio's default merit function for a test lens, its rows and merit value
     compared with this program's.
 
@@ -2761,8 +2788,7 @@ sphere centred on the chief ray, section 26) on an n × n pupil grid, and Zernik
 √(Z5² + Z6²) with angle ½·atan2(−Z5, −Z6), √(Z7² + Z8²) with angle atan2(−Z7, −Z8), or one
 term; absolute, less the average over the computed points, or the average.
 
-**Not built.** The Contrast Loss Map (its pupil shift comes from the MTF's cutoff frequency for
-the field, and it reports the MTF; it waits for the MTF, OP-39); the Seidel Diagram's plot scale;
+**Not built here.** The Contrast Loss Map is built with the MTF (§38); not built: the Seidel Diagram's plot scale;
 Full-Field Aberration's icon display and grey-scale styles (the map is a false-colour image or
 contours); fifth- and higher-order (Sasian) coefficients; the afocal forms of the transverse and
 longitudinal coefficients.
@@ -3259,7 +3285,9 @@ Line/Edge Spread", "Extended Source", "Geometric Image Analysis"), saved under
   weight in 100 strips across ±the maximum distance) with the geometric FWHM between the
   half-maximum crossings.
 - **Criterion form.** `DiffractionEnclosedEnergy.Fraction` and `GeometricEnclosedEnergy.Fraction`
-  return the fraction at one size for one field of one configuration's lens and system.
+  return the fraction at one size for one field of one configuration's lens and system; OP-64's
+  encircled-energy tolerance criteria (§42) call them. The encircled-energy merit operands (DENC,
+  DENF, GENC, GENF, XENC, XENF) are not built.
 - **Determinism.** The kernel's FFT and each size's sum are bitwise the same at any degree of
   parallelism; the extended source runs one slot per wavelength and pixel row with a fixed
   Sobol index each.
@@ -3302,8 +3330,16 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
   weight 4) or user-defined field points, combined as √(Σ w v² / Σ w). Merit function: the lens's
   own merit function over every configuration. Boresight error: the radial image coordinate of
   the on-axis chief ray at the primary wavelength over |EFL|, radians. Strehl ratio (the plan's
-  addition): OP-38's ratio through the RMS core, weighted mean over the fields. A criterion is
-  added with one enum value, one arm in `ToleranceCriteria.Info` and one in the evaluator.
+  addition): OP-38's ratio through the RMS core, weighted mean over the fields. Geometric and
+  diffraction MTF, tangential, sagittal or average ("the average of the tangential and sagittal
+  responses is used"): OP-39's `MtfEngine.Evaluate` at the MTF Frequency (cycles/mm), the FFT
+  engine or the geometric engine times the diffraction-limited MTF, on the pupil grid (16 to
+  1024), polychromatic, weighted mean over the fields. Diffraction and geometric encircled energy
+  (the plan's addition): OP-41's fraction within the radius (µm) of the centroid on the pupil grid,
+  weighted mean over the fields. Each field point is appended to the system as its own field, as
+  the RMS core does. The MTF and the encircled energy are larger-is-better, like the Strehl ratio,
+  and take no part in Quick Sensitivity. A criterion is added with one enum value, one arm in
+  `ToleranceCriteria.Info` and one in the evaluator.
 - **Compensators** (help, "Evaluating Compensators"). None. Paraxial focus: each perturbed lens is
   moved at the image so that its defocus (the thickness before the image minus the paraxial image
   distance −y/u of the marginal ray) equals the nominal's, in every configuration the criterion
@@ -3311,7 +3347,7 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
   least squares; OD: Orthogonal Descent only): every variable flag is removed, the COMP
   (thickness, curvature, conic), CPAR and CMCO cells (all, or the rows chosen) are flagged
   Variable, and OP-57's `LocalOptimizer` (§35) minimises the criterion's rows (weight the field
-  weight, target 0, or 1 for the Strehl ratio) plus a soft bound row per COMP (nominal + Min to
+  weight, target 0, or 1 for a larger-is-better criterion) plus a soft bound row per COMP (nominal + Min to
   nominal + Max, weight 1); with the merit function criterion, the lens's merit function without
   bounds (help). A compensator cell that carries a solve or pickup is refused. The trial reports
   each compensator's change from the compensated nominal.
@@ -3329,8 +3365,11 @@ Tolerance Analysis", "Evaluating Compensators", "Sensitivity Analysis", "The RSS
 - **Lenses the ray launcher refuses.** The launcher needs an axial paraxial model (§15): element
   decenters and tilts (TEDX … TETZ, the rolls), which wrap the group in coordinate breaks, make
   the lens non-axial, so their trials fail by name until the launcher handles such lenses (OP-22).
-- **Not built.** The geometric and diffraction MTF criteria (OP-39) and encircled energy (OP-41),
-  RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity and Monte Carlo (OP-65);
+- **Settings.** The MTF Frequency (`MtfFrequency`) and the encircled radius
+  (`EncircledRadiusMicrometers`) are saved on `OpticsToleranceRunSettings` with the rest; neither
+  has a default (0 is refused for its criteria).
+- **Not built.** Ensquared, x-only and y-only enclosed energy as criteria; MTF warnings (aliasing)
+  are not reported per trial; RMS angular radial, x and y, the user script (OP-67); Skip Sensitivity and Monte Carlo (OP-65);
   Separate Fields/Configs; the polynomial fit and the cache; Force Ray Aiming; Config "All"; the
   .ZTD file, the Tolerance Data Viewer and compensator statistics (OP-66); CPAR and CMCO bounds;
   CEDV (deprecated) compensators.
@@ -3408,7 +3447,8 @@ annular closed form were not on hand; the closed forms are derived in the gate's
 - **One point for criteria.** `MtfEngine.Evaluate(lens, system, field, wavelengths, frequency,
   options)` returns the tangential and sagittal modulation (or square wave) of one field row and
   wavelength set at one frequency by any engine, on the lens and system given (a configuration's
-  own). Nothing calls it yet; OP-56's contrast criterion and OP-64's MTF criterion are to.
+  own). OP-64's MTF tolerance criteria (§42) and the MTF merit operands MTFT, MTFS, MTFA, GMTT,
+  GMTS and GMTA (§40, `Merit/MtfOperands.cs`) call it.
 - **Determinism.** Through-focus planes, vs-field points and map pixels are one `ParallelSlots`
   slot each, every FFT on one thread, so results are bitwise the same at any degree of
   parallelism.
@@ -3416,14 +3456,16 @@ annular closed form were not on hand; the closed forms are derived in the gate's
 **Not built.** Polarization; intermediate surfaces (the Surface setting); scattered rays; Use
 Dashes; the Huygens sum over configurations; the coherent transfer function; the 3-D surface plot
 with its Rotation and Scale; the through-focus spline and 101-point listing; the MTF operands'
-sparse methods (Grid = 0); object-space cycles per milliradian for focal systems; afocal angle
+sparse methods (Grid = 0; the grid method is used), their Data Type 1–3 and Field 0, the Huygens
+and square-wave operands (MTHx, MSWx) and the N and X (minimum, maximum) forms; object-space cycles per milliradian for focal systems; afocal angle
 units other than milliradians; afocal Huygens and through-focus MTF; the contrast loss map's
 circles and Show OPD indicator; O'Neill's annular closed form and Hopkins' series as gates.
 
 ## 40. Default merit function wizard
 
 `OpenSim.Optics/Merit/DefaultMeritWizard.cs` (OP-56) writes OpticStudio's default merit
-function; `OpenSim.Optics/Merit/RayAberrationOperands.cs` holds the operands it writes. The help
+function; `OpenSim.Optics/Merit/RayAberrationOperands.cs` and `MtfOperands.cs` hold the operands
+it writes. The help
 read is OpticStudio 2025 R2's Optimization Wizard and its pages (Optimization Function Types,
 Criteria, Reference Points, Distortion and Color, Pupil Integration Settings, Optimization Goal,
 Boundary Values, Other Settings, Button Functions; saved under
@@ -3445,6 +3487,22 @@ folder) and the alphabetical operand list (OP-54's folder).
   - spot x + y and angular: x rows weighted by the relative X weight a, y rows by b, so
     MF² = (a·R_x² + b·R_y²)/(a + b), which is R/√2 for a = b. A zero relative weight writes no
     rows for that component; both zero write radial rows (TRAC or TRAR, ANAC or ANAR).
+- **Contrast** (help, "Optimization Function Criteria": "Optimizes the MTF of the system using the
+  Moore-Elliott Contrast method"; "Other Settings": Relative S and T Weight, Spatial Frequency;
+  "Optimizing for MTF"). Per configuration, field and wavelength of non-zero weight and pupil
+  point of the rule, a MECT row (weight W × relative T weight) and a MECS row (W × relative S
+  weight), target 0, Data5 the spatial frequency (cycles/mm). A MEC row is the pupil phase
+  difference OPD(P) − OPD(P − Δ) in waves (OPDC's OPD), Δ = 2ξ·λ·F/# pupil radii along y (T) or
+  x (S), F/# the paraxial working F/# at the row's wavelength; MECA is their mean. A pair whose
+  partner lies outside the pupil, or whose partner ray fails, is not written (the notes count
+  them); no pair at all, a frequency at or past the cutoff, is refused; there is no symmetry
+  halving. The reference setting does not apply. Afocal image space is refused (no working F/#).
+  The readings are §10 item 36's.
+- **MTF operands** (help, "MTF Data"). MTFT, MTFS, MTFA (OP-39's FFT engine) and GMTT, GMTS, GMTA
+  (its geometric engine; !Scl 0 multiplies by the diffraction-limited MTF): field Field at Freq
+  (MTF units), wavelength Wave (0: every wavelength, polychromatic), on a 32·2^(Samp−1) pupil grid
+  (Samp 1 to 6), equal to `MtfEngine.Evaluate` on the configuration's lens; T and S are computed
+  once per lens, system and settings and shared. The wizard does not write them.
 - **Operands** (help: the alphabetical list). Centroid: TRAC (radial), TRCX, TRCY, ANAC, ANCX,
   ANCY (direction cosines l, m), OPDX (mean and tilt removed: the weighted least-squares plane
   a + b·Px + c·Py, OP-40's fit). Chief ray: TRAR, TRAX, TRAY, ANAR, ANAX, ANAY from the primary
@@ -3505,9 +3563,8 @@ folder) and the alphabetical operand list (OP-54's folder).
   (`OpticsSettings.MeritWizard`, an `OpticsMeritWizardSettings` with the choices by name); Load
   Settings and Reset Settings show the saved and the default options.
 
-**Not built.** The contrast (MTF) criterion with its spatial frequency and relative S and T
-weights (OP-39's MTF engine is not on main; the criterion is one more `MeritWizardCriterion`
-member and one arm in `DefaultMeritWizard`); the PTV function type (the rows are RMS); Max
+**Not built.** Contrast in afocal image space; MTHx, MSWx and the N and X forms of the MTF
+operands; the PTV function type (the rows are RMS); Max
 Distortion (DIMX); the optimization goal "Improve manufacturing yield" (HYLD); Add Favorite
 Operands; the Gaussian quadrature obscuration; OpticStudio's arm angles; the other boundary
 operands (MXEG, MXEA, XNEG and the rest); a copy of the boundary rows per configuration.

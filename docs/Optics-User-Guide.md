@@ -962,8 +962,8 @@ types OpticStudio's help lists; any other surface is refused, naming it, as is a
 with an r or r³ term. The transverse coefficients are the image-plane ray errors (TSPH matches the
 ray fan's cubic coefficient); the longitudinal ones are positive when rays cross the axis before
 the paraxial image. Definitions and the readings of OpticStudio's help that are this program's
-own are in `docs/Optics-Conventions.md` §32 and §10 item 28. Not built: the Contrast Loss Map
-(it needs the MTF), the Seidel diagram's plot scale, full-field aberration's icon and grey-scale
+own are in `docs/Optics-Conventions.md` §32 and §10 item 28. The Contrast Loss Map is in the MTF
+group (see Modulation transfer function). Not built: the Seidel diagram's plot scale, full-field aberration's icon and grey-scale
 displays, fifth-order coefficients, the afocal forms, and any comparison with OpticStudio's
 output.
 
@@ -1208,10 +1208,15 @@ Sensitivity, Inverse Limit and Inverse Increment modes.
   the criterion reaches the Limit; Inverse Increment until it changes by the Increment. A limit
   is never loosened, and a row marked Do not adjust is kept.
 - **Criterion.** RMS spot radius, x or y (lens units), RMS wavefront (waves), the merit function,
-  the boresight error (radians) or the Strehl ratio. Spot and wavefront are about the centroid
-  over every wavelength, at the field points chosen under Fields (Y-Symmetric, XY-Symmetric or the
-  system's own); Sampling is the rays along each arm of the Gaussian quadrature (twice as many
-  arms). PSF sampling applies to the Strehl ratio only.
+  the boresight error (radians), the Strehl ratio, the geometric or diffraction MTF (tangential,
+  sagittal or their average) at **MTF frequency** (cycles/mm), or the diffraction or geometric
+  encircled energy within **Encircled radius** (µm) of the centroid. Spot and wavefront are about
+  the centroid over every wavelength, at the field points chosen under Fields (Y-Symmetric,
+  XY-Symmetric or the system's own); Sampling is the rays along each arm of the Gaussian
+  quadrature (twice as many arms). **Pupil grid** (16 to 1024 per side) applies to the Strehl
+  ratio, the MTF and the encircled energy. For these three larger is better: a tolerance's
+  degradation is the decrease, the Limit lies below the nominal, and the Increment is a
+  decrease. The MTF frequency and the radius have no default; a run asks for them.
 - **Change.** Linear difference (P − N) or RSS difference.
 - **Compensators.** Paraxial focus holds the nominal lens's defocus at the image; Optimize (DLS
   or OD) drives the COMP, CPAR and CMCO rows with the local optimizer (all of them, or the rows
@@ -1228,7 +1233,8 @@ Sensitivity, Inverse Limit and Inverse Increment modes.
 The definitions are in docs/Optics-Conventions.md §42, and the readings where OpticStudio's help
 is short in §10 item 38.
 
-Not built: the MTF and encircled energy criteria, RMS angular and user scripts; Monte Carlo;
+Not built: ensquared, x-only and y-only enclosed energy as criteria, RMS angular and user
+scripts; Monte Carlo;
 Separate Fields/Configs, the polynomial fit and cache, Force Ray Aiming and the "All"
 configurations choice; the tolerance data file and viewer. Element decenter and tilt tolerances
 (TEDX … TETZ and the rolls) cannot be evaluated yet: the ray launcher refuses the decentered lens
@@ -1263,8 +1269,8 @@ and the maps sample fields between the table's, as the RMS analyses do; Remove v
 (on by default) replaces vignetting factors with apertures first. Map pixels are computed at their
 centres; a width of 0 is twice the largest radial field. The MTF unit is cycles per millimeter
 (cycles per milliradian in afocal mode); a focal system set to cycles per milliradian is refused.
-Definitions are in docs/Optics-Conventions.md §38. Merit-function criteria can call the same
-engine (`MtfEngine.Evaluate`), but no operand or criterion uses it yet.
+Definitions are in docs/Optics-Conventions.md §38. The same engine (`MtfEngine.Evaluate`) gives
+the MTF merit operands (MTFT, MTFS, MTFA; GMTT, GMTS, GMTA) and the MTF tolerance criteria.
 
 Not built: polarization, intermediate surfaces, scattered rays, the Huygens sum over
 configurations, the coherent transfer function, the 3-D surface plot, the through-focus spline,
@@ -1276,8 +1282,12 @@ the object-space cycles-per-milliradian unit of focal systems.
 **Wizard** in the Merit Function Editor opens the Optimization Wizard, which writes the default
 merit function: an RMS image error at every field and wavelength, integrated over the pupil.
 
-- **Criterion**: wavefront (OPD in waves), spot radius, spot x, spot y, spot x + y, or angular
-  (for afocal image space). **Reference**: centroid (the field's weighted centroid; for the
+- **Criterion**: wavefront (OPD in waves), spot radius, spot x, spot y, spot x + y, angular
+  (for afocal image space), or contrast (MTF): the Moore–Elliott method, which writes MECT and
+  MECS rows, the pupil phase differences across the shift of the **Spatial frequency**
+  (cycles/mm), weighted by **Relative T/S weight**. Contrast needs a frequency below the cutoff
+  and a focal image space; pupil points whose shifted partner falls outside the pupil are left
+  out and counted in the status line. **Reference**: centroid (the field's weighted centroid; for the
   wavefront the mean and tilt are removed), chief ray (the primary wavelength's chief ray; for
   the wavefront the mean is removed), or unreferenced (wavefront only). **Ignore lateral
   colour** gives each wavelength its own centroid.
@@ -1303,8 +1313,12 @@ wavelength weight × the pupil point's weight, so for one field and one waveleng
 is the RMS of the RMS analyses; for spot x + y with equal relative weights it is the RMS radius
 divided by √2. Docs/Optics-Conventions.md §40 has the rules and §10 item 36 the readings.
 
-Not built: the contrast (MTF) criterion, the PTV type, Max Distortion, the manufacturing-yield
-goal, Add Favorite Operands and the Gaussian obscuration.
+The Merit Function Editor also takes the MTF operands MTFT, MTFS, MTFA (diffraction) and GMTT,
+GMTS, GMTA (geometric): Samp (pupil grid 32·2^(Samp−1)), Wave (0 polychromatic), Field, Freq.
+
+Not built: contrast in afocal image space, the Huygens and square-wave MTF operands, the PTV
+type, Max Distortion, the manufacturing-yield goal, Add Favorite Operands and the Gaussian
+obscuration.
 
 ## Coming
 
@@ -1320,8 +1334,9 @@ Not built yet, and not to be relied on until they appear in this guide:
   option);
 - global optimization and the tolerance analyses (the merit function, its editor, the default
   merit function wizard, the local optimizer, glass substitution, the tolerance data editor with
-  its operands, and sensitivity and inverse sensitivity with compensators are built; the full
-  operand catalogue and Monte Carlo are not);
+  its operands, sensitivity and inverse sensitivity with compensators and the MTF and encircled
+  energy criteria, and the contrast (MTF) wizard criterion are built; the full operand catalogue,
+  the encircled-energy merit operands and Monte Carlo are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

@@ -356,15 +356,15 @@ public sealed class DefaultMeritWizardTests
         {
             Criterion = MeritWizardCriterion.Angular, Reference = MeritWizardReference.ChiefRay, Integration = PupilIntegration.RectangularArray,
             Rings = 5, Arms = 10, Grid = 12, DeleteVignetted = false, AssumeAxialSymmetry = false, IgnoreLateralColor = true, StartAt = 4,
-            OverallWeight = 3, RelativeXWeight = 0.5, RelativeYWeight = 2, Configurations = MeritWizardConfigurations.All,
+            OverallWeight = 3, RelativeXWeight = 0.5, RelativeYWeight = 2, RelativeSWeight = 0.25, RelativeTWeight = 4, SpatialFrequency = 30, Configurations = MeritWizardConfigurations.All,
             GlassBoundaries = true, GlassMinimum = 2, GlassMaximum = 9, GlassEdge = 1.5, AirBoundaries = true, AirMinimum = 0.2, AirMaximum = 400, AirEdge = 0.3,
         };
         var notes = new List<string>();
         Assert.Equal(options, DefaultMeritWizardSettings.FromSettings(DefaultMeritWizardSettings.ToSettings(options), notes));
         Assert.Empty(notes);
         Assert.Equal(new DefaultMeritOptions(), DefaultMeritWizardSettings.FromSettings(null, notes));
-        var unknown = DefaultMeritWizardSettings.FromSettings(new OpticsMeritWizardSettings { Criterion = "Contrast" }, notes);
+        var unknown = DefaultMeritWizardSettings.FromSettings(new OpticsMeritWizardSettings { Criterion = "Brightness" }, notes);   // a name no version uses
         Assert.Equal(new DefaultMeritOptions().Criterion, unknown.Criterion);
-        Assert.Contains(notes, n => n.Contains("'Contrast'"));
+        Assert.Contains(notes, n => n.Contains("'Brightness'"));
     }
 }

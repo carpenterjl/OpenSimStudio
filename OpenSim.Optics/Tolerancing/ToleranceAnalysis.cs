@@ -80,7 +80,7 @@ public sealed record ToleranceRunResult
     /// <summary>The criterion of the compensated nominal lens, N.</summary>
     public required double Nominal { get; init; }
 
-    /// <summary>The criterion's unit ("mm", "waves", "rad", or "" for the merit function and the Strehl ratio).</summary>
+    /// <summary>The criterion's unit ("mm", "waves", "rad", or "" for the merit function, the Strehl ratio, the MTF and the encircled energy).</summary>
     public required string Unit { get; init; }
 
     /// <summary>What each entry of <see cref="ToleranceTrial.Compensators"/> is.</summary>
@@ -155,7 +155,7 @@ public sealed record ToleranceRunResult
 /// "the procedure is repeated for the maximum tolerance". The change is Δ = P − N (Linear
 /// Difference) or Δ = S(P − N)√|P² − N²| (RSS Difference, S(x) = +1 for x ≥ 0, −1 otherwise). The RSS
 /// estimate is C² = Σᵢ (Δᵢ,min² + Δᵢ,max²)/2 and the estimated performance F = N + C (linear) or
-/// F = √(N² + C²) (RSS). For the Strehl ratio, where larger is better, the degradation is −Δ and
+/// F = √(N² + C²) (RSS). For a criterion where larger is better (the Strehl ratio, the MTF, the encircled energy), the degradation is −Δ and
 /// F = N − C with the linear difference (this program's reading, §10 item 38); with the RSS
 /// difference F is not given.
 /// </para>
@@ -282,7 +282,7 @@ public static class ToleranceAnalysis
             c = Math.Sqrt(c2);
             if (!info.HigherIsBetter) f = options.Change == ToleranceChangeMode.LinearDifference ? n + c : Math.Sqrt(n * n + c.Value * c.Value);
             else if (options.Change == ToleranceChangeMode.LinearDifference) f = n - c;
-            else notes.Add("The help defines the estimated performance with the RSS difference only for a criterion that grows worse upward; for the Strehl ratio it is not given.");
+            else notes.Add("The help defines the estimated performance with the RSS difference only for a criterion that grows worse upward; for a criterion where larger is better (the Strehl ratio, the MTF, the encircled energy) it is not given.");
         }
         else notes.Add($"{failed.Length} trial{(failed.Length == 1 ? "" : "s")} could not be evaluated, so the RSS estimate is not given (the help: the statistics are \"usually meaningless\" then). Tighten those tolerances and run again.");
 
@@ -309,8 +309,12 @@ public static class ToleranceAnalysis
             throw new ArgumentException("Tolerance run: an option is not one of its choices.");
         if (o.Sampling < 1 || o.Sampling > Analysis.Sampling.PupilQuadrature.MaximumRings)
             throw new ArgumentException($"Tolerance run: the sampling (rays along a radial arm) must be 1 to {Analysis.Sampling.PupilQuadrature.MaximumRings}, not {o.Sampling}.");
-        if (o.Criterion == ToleranceCriterion.StrehlRatio && (o.PsfSampling < 16 || o.PsfSampling > 1024))
-            throw new ArgumentException($"Tolerance run: the PSF sampling of the Strehl ratio must be 16 to 1024, not {o.PsfSampling}.");
+        if (ToleranceCriteria.UsesPupilGrid(o.Criterion) && (o.PsfSampling < 16 || o.PsfSampling > 1024))
+            throw new ArgumentException($"Tolerance run: the pupil grid of the {ToleranceCriteria.Info(o.Criterion).Name} must be 16 to 1024, not {o.PsfSampling}.");
+        if (ToleranceCriteria.IsMtf(o.Criterion) && !(o.MtfFrequency > 0 && double.IsFinite(o.MtfFrequency)))
+            throw new ArgumentException($"Tolerance run: the {ToleranceCriteria.Info(o.Criterion).Name} needs an MTF Frequency above zero (cycles/mm); it is {ToleranceRunSettings.F(o.MtfFrequency)}.");
+        if (ToleranceCriteria.IsEncircledEnergy(o.Criterion) && !(o.EncircledRadius > 0 && double.IsFinite(o.EncircledRadius)))
+            throw new ArgumentException($"Tolerance run: the {ToleranceCriteria.Info(o.Criterion).Name} needs a radius above zero (micrometers); it is {ToleranceRunSettings.F(o.EncircledRadius)}.");
         if (o.OptimizerCycles is int k && k < 0) throw new ArgumentException("Tolerance run: the optimizer cycles must be 0 (automatic) or more.");
         if (!(o.InverseTolerance > 0) || !(o.InverseTolerance < 0.1))
             throw new ArgumentException("Tolerance run: the inverse tolerance must lie between 0 and 0.1 of the starting limit.");
@@ -440,14 +444,24 @@ public static class ToleranceAnalysis
                     ? "The field values are combined as their weighted mean."
                     : "The field values are combined as √(Σ w v² / Σ w), the form of the merit function OpticStudio builds for tolerancing.");
                 lines.Add($"Every wavelength of the system, by its weight; configuration {configuration} of {configurations}.");
-                try
+                if (ToleranceCriteria.IsMtf(o.Criterion))
                 {
-                    var setup = RmsCore.Prepare(lens, system, false, "Tolerance criterion", new List<string>(), default);
-                    var q = ToleranceCriterionEvaluator.Quantity(o.Criterion);
-                    lines.AddRange(RmsCore.Assumptions(setup, q, RmsReference.Centroid, e.Rule, o.PsfSampling));
+                    bool geometric = o.Criterion is ToleranceCriterion.GeometricMtfAverage or ToleranceCriterion.GeometricMtfTangential or ToleranceCriterion.GeometricMtfSagittal;
+                    lines.Add($"MTF at {ToleranceRunSettings.F(o.MtfFrequency)} cycles/mm (help: \"MTF Frequency\"), modulation, {(geometric ? "OP-39's geometric engine (the ray spot's transform) times the diffraction-limited MTF of the same pupil" : "OP-39's FFT engine (the pupil autocorrelation)")}, {o.PsfSampling} × {o.PsfSampling} pupil grid; the average is (T + S)/2 (help).");
                 }
-                catch (Exception x) when (x is ArgumentException or InvalidOperationException) { lines.Add(x.Message); }
-                if (o.Criterion != ToleranceCriterion.StrehlRatio)
+                else if (ToleranceCriteria.IsEncircledEnergy(o.Criterion))
+                    lines.Add($"Encircled energy within {ToleranceRunSettings.F(o.EncircledRadius)} µm of the centroid, OP-41's {(o.Criterion == ToleranceCriterion.DiffractionEncircledEnergy ? "diffraction" : "geometric")} engine, {o.PsfSampling} × {o.PsfSampling} pupil grid.");
+                else
+                {
+                    try
+                    {
+                        var setup = RmsCore.Prepare(lens, system, false, "Tolerance criterion", new List<string>(), default);
+                        var q = ToleranceCriterionEvaluator.Quantity(o.Criterion);
+                        lines.AddRange(RmsCore.Assumptions(setup, q, RmsReference.Centroid, e.Rule, o.PsfSampling));
+                    }
+                    catch (Exception x) when (x is ArgumentException or InvalidOperationException) { lines.Add(x.Message); }
+                }
+                if (!ToleranceCriteria.UsesPupilGrid(o.Criterion))
                     lines.Add($"Sampling {o.Sampling}: {o.Sampling} rays along each of {2 * o.Sampling} arms (help: \"The number of arms is always twice the number of rays along each arm\"); centroid reference (help: \"OpticStudio always uses a centroid reference for tolerancing\").");
                 break;
         }
@@ -456,7 +470,7 @@ public static class ToleranceAnalysis
         if (o.Mode != ToleranceMode.Sensitivity)
             lines.Add($"Inverse: each limit is searched by Brent's method to {ToleranceRunSettings.F(o.InverseTolerance)} of its starting value, assuming the criterion changes monotonically with the tolerance (help); limits are only ever tightened.");
         lines.Add("Radial operands (TSDR, TEDR, TARR, TRLR) are applied along +y, TIRR's astigmatism along y (OP-63's defaults).");
-        lines.Add("Not built: Separate Fields/Configs, the polynomial fit and the cache, Force Ray Aiming, the Config \"All\" choice (the current configuration is toleranced), the MTF, encircled energy, RMS angular and user script criteria, Monte Carlo (OP-65).");
+        lines.Add("Not built: Separate Fields/Configs, the polynomial fit and the cache, Force Ray Aiming, the Config \"All\" choice (the current configuration is toleranced), the RMS angular and user script criteria, Monte Carlo (OP-65).");
         return lines;
     }
 }

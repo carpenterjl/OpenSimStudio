@@ -170,6 +170,7 @@ public sealed class ToleranceSensitivityTests
             Mode = ToleranceMode.InverseLimit, Criterion = ToleranceCriterion.StrehlRatio, Change = ToleranceChangeMode.RssDifference,
             Compensation = ToleranceCompensation.OptimizeOd, Fields = ToleranceFieldSet.XYSymmetric, Sampling = 5, PsfSampling = 128,
             OptimizerCycles = 3, CompensatorRows = new[] { 2, 4 }, Limit = 0.6, Increment = 0.1, ShowWorst = 7,
+            MtfFrequency = 25, EncircledRadius = 7.5,
         };
         var saved = ToleranceRunSettings.ToSettings(o)!;
         var notes = new List<string>();

@@ -197,6 +197,9 @@ public sealed class MeritOperandRegistry
         // RayAberrationOperands.
         foreach (var definition in RayAberrationOperands.Definitions()) r.Register(definition);
 
+        // OP-39 into OP-56 (wave 7): the MTF and Moore–Elliott contrast operands (help: MTF Data; MtfOperands).
+        foreach (var definition in MtfOperands.Definitions()) r.Register(definition);
+
         // OP-59: glass operands (help: Constraints on Glass Data; GlassOperands).
         r.Register(GlassOperands.ReasonableGlass());
         r.Register(GlassOperands.GlassCost());

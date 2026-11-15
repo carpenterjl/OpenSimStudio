@@ -20,7 +20,7 @@ public enum MeritWizardSymmetry
 /// it into the Merit Function Editor at Start At as one undo step; OK applies and closes. Save,
 /// Load and Reset Settings are the help's "Button Functions": the saved settings travel with the
 /// project (<see cref="OpticsMeritEditorViewModel.WizardSettings"/>). The contrast (MTF) criterion
-/// is not offered: it needs OP-39's MTF engine.
+/// writes the Moore–Elliott contrast rows at the Spatial Frequency.
 /// </summary>
 public sealed partial class OpticsMeritWizardViewModel : ObservableObject
 {
@@ -45,6 +45,7 @@ public sealed partial class OpticsMeritWizardViewModel : ObservableObject
         new OpticsChoice<MeritWizardCriterion>("Spot y", MeritWizardCriterion.SpotY),
         new OpticsChoice<MeritWizardCriterion>("Spot x + y", MeritWizardCriterion.SpotXY),
         new OpticsChoice<MeritWizardCriterion>("Angular", MeritWizardCriterion.Angular),
+        new OpticsChoice<MeritWizardCriterion>("Contrast (MTF)", MeritWizardCriterion.Contrast),
     };
 
     public IReadOnlyList<OpticsChoice<MeritWizardReference>> References { get; } = new[]
@@ -91,6 +92,11 @@ public sealed partial class OpticsMeritWizardViewModel : ObservableObject
     [ObservableProperty] private double _overallWeight;
     [ObservableProperty] private double _relativeXWeight;
     [ObservableProperty] private double _relativeYWeight;
+    [ObservableProperty] private double _relativeSWeight;
+    [ObservableProperty] private double _relativeTWeight;
+
+    /// <summary>Contrast: the spatial frequency, cycles/mm.</summary>
+    [ObservableProperty] private double _spatialFrequency;
     [ObservableProperty] private MeritWizardConfigurations _configurations;
     [ObservableProperty] private bool _glassBoundaries;
     [ObservableProperty] private double _glassMinimum;
@@ -116,6 +122,7 @@ public sealed partial class OpticsMeritWizardViewModel : ObservableObject
         AssumeAxialSymmetry = Symmetry switch { MeritWizardSymmetry.On => true, MeritWizardSymmetry.Off => false, _ => null },
         IgnoreLateralColor = IgnoreLateralColor, StartAt = StartAt,
         OverallWeight = OverallWeight, RelativeXWeight = RelativeXWeight, RelativeYWeight = RelativeYWeight,
+        RelativeSWeight = RelativeSWeight, RelativeTWeight = RelativeTWeight, SpatialFrequency = SpatialFrequency,
         Configurations = Configurations,
         GlassBoundaries = GlassBoundaries, GlassMinimum = GlassMinimum, GlassMaximum = GlassMaximum, GlassEdge = GlassEdge,
         AirBoundaries = AirBoundaries, AirMinimum = AirMinimum, AirMaximum = AirMaximum, AirEdge = AirEdge,
@@ -136,6 +143,9 @@ public sealed partial class OpticsMeritWizardViewModel : ObservableObject
         OverallWeight = o.OverallWeight;
         RelativeXWeight = o.RelativeXWeight;
         RelativeYWeight = o.RelativeYWeight;
+        RelativeSWeight = o.RelativeSWeight;
+        RelativeTWeight = o.RelativeTWeight;
+        SpatialFrequency = o.SpatialFrequency;
         Configurations = o.Configurations;
         GlassBoundaries = o.GlassBoundaries;
         GlassMinimum = o.GlassMinimum;

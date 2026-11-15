@@ -91,6 +91,13 @@
                     <TextBox Text="{Binding RelativeXWeight}" ToolTip="Spot x + y and angular: the weight of the x rows; 0 leaves them out. Both 0: radial rows."/>
                     <Label Content="Relative Y weight"/>
                     <TextBox Text="{Binding RelativeYWeight}"/>
+                    <Label Content="Relative S weight"/>
+                    <TextBox Text="{Binding RelativeSWeight}" ToolTip="Contrast: the weight of the sagittal phase differences (MECS); 0 leaves them out."/>
+                    <Label Content="Relative T weight"/>
+                    <TextBox Text="{Binding RelativeTWeight}" ToolTip="Contrast: the weight of the tangential phase differences (MECT); 0 leaves them out."/>
+                    <Label Content="Spatial frequency (cycles/mm)"/>
+                    <TextBox Text="{Binding SpatialFrequency}" AutomationProperties.AutomationId="MeritWizardSpatialFrequency"
+                             ToolTip="Contrast: the spatial frequency at which to optimize the MTF."/>
                 </controls:FormGrid>
             </StackPanel>
         </ScrollViewer>

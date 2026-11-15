@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using OpenSim.Core.Model;
 using OpenSim.Core.PostProcessing;
 using OpenSim.Optics.Analysis;
+using OpenSim.Optics.Analysis.EnclosedEnergy;
 using OpenSim.Optics.Analysis.Sampling;
 using OpenSim.Optics.Materials;
 using OpenSim.Optics.Merit;
@@ -32,7 +33,14 @@ internal sealed record ToleranceField(double X, double Y, double Weight, string 
 /// the field values are combined as √(Σ wᵢ vᵢ² / Σ wᵢ), the form of OpticStudio's merit function,
 /// since the help says OpticStudio "uses the Criterion, Field, MTF Frequency, and Sampling settings
 /// ... to define an appropriate merit function" and takes its value as the criterion. The Strehl
-/// ratio (OP-38's engine through the RMS core) is combined as the weighted mean. Boresight error:
+/// ratio (OP-38's engine through the RMS core) is combined as the weighted mean, and so are the
+/// MTF (OP-39's <see cref="MtfEngine.Evaluate"/>: FFT for the diffraction MTF, the geometric engine
+/// with the diffraction-limit factor for the geometric MTF, at <c>MtfFrequency</c> on a
+/// <c>PsfSampling</c> pupil grid, polychromatic over the system's wavelengths; average = (T + S)/2,
+/// help: "the average of the tangential and sagittal responses is used") and the encircled energy
+/// (OP-41's diffraction or geometric engine, about the centroid, at <c>EncircledRadius</c>
+/// micrometers). Each field is appended to the system as a field point of its own, as the RMS core
+/// does, so the symmetric field sets need not be among the system's fields. Boresight error:
 /// "the radial chief ray coordinate traced for the on axis field divided by the effective focal
 /// length", at the primary wavelength, radians. Merit function: the lens's own merit function.
 /// </summary>
@@ -141,10 +149,44 @@ internal sealed class ToleranceCriterionEvaluator
             Polychromatic = system.Wavelengths.Wavelengths.Count > 1,
             Label = field.Label,
         };
+        if (ToleranceCriteria.IsMtf(_o.Criterion) || ToleranceCriteria.IsEncircledEnergy(_o.Criterion))
+            return GridValue(setup.Rms!, point, cancellation);
         var q = Quantity(_o.Criterion);
         var v = RmsCore.Evaluate(setup.Rms!, point, q, RmsReference.Centroid, _rule, cancellation, _o.PsfSampling);
         if (!v.Succeeded) throw new ToleranceEvaluationException(v.Failure!);
         return RmsCore.IsSpot(q) ? OpticsConventions.FromMeters(v.Value, system.Units.LensUnit) : v.Value;
+    }
+
+    /// <summary>An MTF or encircled-energy criterion at one field point (see the class remarks).</summary>
+    private double GridValue(RmsSetup setup, RmsPoint point, CancellationToken cancellation)
+    {
+        var (system, field, rows) = RmsCore.Extended(setup, point);
+        var c = _o.Criterion;
+        try
+        {
+            if (ToleranceCriteria.IsMtf(c))
+            {
+                bool geometric = c is ToleranceCriterion.GeometricMtfAverage or ToleranceCriterion.GeometricMtfTangential or ToleranceCriterion.GeometricMtfSagittal;
+                var options = new MtfOptions { Method = geometric ? MtfMethod.Geometric : MtfMethod.Fft, Sampling = _o.PsfSampling };
+                var v = MtfEngine.Evaluate(setup.Lens, system, field, rows, _o.MtfFrequency, options, cancellation);
+                return c switch
+                {
+                    ToleranceCriterion.GeometricMtfTangential or ToleranceCriterion.DiffractionMtfTangential => v.Tangential,
+                    ToleranceCriterion.GeometricMtfSagittal or ToleranceCriterion.DiffractionMtfSagittal => v.Sagittal,
+                    _ => v.Average,
+                };
+            }
+            double radius = OpticsConventions.MicrometersToMeters(_o.EncircledRadius);
+            return c == ToleranceCriterion.DiffractionEncircledEnergy
+                ? DiffractionEnclosedEnergy.Fraction(setup.Lens, system, field, rows, _o.PsfSampling, EnclosedEnergyType.Encircled,
+                    EnclosedEnergyReference.Centroid, radius, cancellation: cancellation)
+                : GeometricEnclosedEnergy.Fraction(setup.Lens, system, field, rows, _o.PsfSampling, EnclosedEnergyType.Encircled,
+                    EnclosedEnergyReference.Centroid, radius, cancellation: cancellation);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException)
+        {
+            throw new ToleranceEvaluationException($"{Info.Name} at {point.Label}: {e.Message}");
+        }
     }
 
     internal static RmsQuantity Quantity(ToleranceCriterion c) => c switch
