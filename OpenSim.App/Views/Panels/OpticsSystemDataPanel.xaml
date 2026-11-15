@@ -263,6 +263,17 @@
             <Button x:Name="OpticsOpenLensButton" Content="Open a lens…" Command="{Binding Optics.OpenLensCommand}" Margin="2,0,0,0"
                     ToolTip="Replaces this workspace's optical system with a saved lens."/>
         </UniformGrid>
+        <!-- OP-94: Zemax lens files (.zmx, and the lens inside a .zar archive). -->
+        <UniformGrid Columns="2" Margin="0,4,0,0">
+            <Button x:Name="OpticsImportZemaxButton" Content="Import .zmx…" Command="{Binding Optics.ImportZemaxCommand}" Margin="0,0,2,0"
+                    AutomationProperties.AutomationId="OpticsImportZemaxButton"
+                    ToolTip="Replaces this workspace's optical system with a Zemax lens file (.zmx) or the lens in a Zemax archive (.zar)."/>
+            <Button x:Name="OpticsExportZemaxButton" Content="Export .zmx…" Command="{Binding Optics.ExportZemaxCommand}" Margin="2,0,0,0"
+                    AutomationProperties.AutomationId="OpticsExportZemaxButton"
+                    ToolTip="Writes the optical system as a Zemax lens file, for the content that format holds."/>
+        </UniformGrid>
+        <CheckBox Content="List unsupported Zemax content in the log instead of stopping" IsChecked="{Binding Optics.ZemaxUnsupportedAsWarnings}"
+                  Margin="0,2,0,0" AutomationProperties.AutomationId="OpticsZemaxLenientCheck"/>
         <TextBlock Text="{Binding Optics.LensFileStatus}" TextWrapping="Wrap" Margin="0,2,0,0"
                    Foreground="{DynamicResource TextFaintBrush}"/>
 

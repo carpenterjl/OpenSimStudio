@@ -184,6 +184,15 @@ public static partial class CliRunner
                                 montecarlo.txt, trials.csv, histogram.csv, log.txt (default
                                 folder <project>-optics-montecarlo); exit 2 when a trial failed.
 
+        opensim optics import <lens.zmx|archive.zar> [--out LENS.osslens] [--lenient] [--builtin-catalogs]
+            Reads a Zemax lens file (or the lens inside a .zar archive) into a lens file (OP-94).
+            Content this build does not read fails the import, every item listed; --lenient lists
+            it and leaves it out. Glass names are checked against the loaded catalogs.
+
+        opensim optics export <project.ossproj|lens.osslens> [--out LENS.zmx] [--lenient]
+            Writes the optical system as a Zemax lens file (UTF-16). Content the file subset
+            cannot hold fails the export, every item listed; --lenient lists it and leaves it out.
+
         Optics sweeps: a sweep job whose targets are all optics:... sets the lens instead of
         solving a body, and tabulates the saved merit function and each row's value.
             Targets: optics:surface<n>.radius|curvature|thickness|conic|semiDiameter|tce|index|

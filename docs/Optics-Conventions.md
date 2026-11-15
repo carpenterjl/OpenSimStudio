@@ -1229,6 +1229,32 @@ single place in the code, so a correction is one line and its test.
     Check: OpticStudio's Tolerance Wizard on a doublet-plus-singlet lens, the rows compared; its
     Quick Yield against this one on a linear-regime lens.
 
+48. **Zemax lens file readings** (OP-94, section 52). The lens file format is not published; the
+    keywords come from Optiland's and RayOptics' readers. These meanings are read from the
+    OpticStudio-written files those packages ship as test data, not from a reader's code:
+    - *Solve codes.* CURV code 4 is a curvature pickup with its source surface and scale in the
+      next two fields; GLAS code 2 a material pickup from the surface in the next field; DIAM code
+      0 automatic, 1 fixed, 2 a pickup from the surface in the next field (fields 4 and 5 read
+      "0 1" in every file seen). Each was checked in `US00583336-2-scaled.zmx` (rayoptics
+      zemax/tests): the picked-up value equals the scaled source value on every such surface.
+      The codes follow the order of the ZPL SOLVETYPE table for each column (help, "SOLVETYPE":
+      CF, CV, CM, CC, CP …; GF, GM, GP …; SA, SU, SP, SM …), which also gives CURV code 1 as
+      variable and GLAS code 1 as model glass — those two are not seen in a file.
+    - *PZUP, PPAR, VPAR, VDSZ.* PZUP s, scale is a thickness pickup and PPAR n, s, scale a parameter
+      pickup (checked in `US00583336-2-scaled.zmx` and `HoO-V2C18Ex46.zmx` as above); their last
+      two fields (offset and column, by the help's pickup formula) are zero in every file, and
+      anything else is refused. VPAR n and VDSZ are read as a parameter variable and a thickness
+      variable from their names and their place in an optimized file.
+    - *Model glass ΔPgF* is the field after Vd on a GLAS line.
+    - *ENVD* is read as temperature (°C) and pressure (atm); every file seen has 20 and 1.
+    - *XASPHERE and XOSPHERE* are read as the Extended Asphere and Extended Odd Asphere from their
+      names, *QED_TYPE* as the Q-Type Asphere from the one file that has it (`ASL5040-UV`), whose
+      extra data fit that layout.
+    - *Written lines.* Files are written in the forms read; whether OpticStudio reads them back
+      unchanged (in particular the fields this program writes as zeros) was not tried.
+    Check: a lens with each solve, pickup, variable and surface type saved by OpticStudio, read
+    here, and a file written here opened in OpticStudio.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -3938,7 +3964,8 @@ evaluation of element decenter and tilt trials (the launcher, OP-22).
 `OpenSim.Cli/CliRunner.Optics.cs`, `OpenSim.Cli/SweepSpec.cs` (`OpticsTargets`) and
 `OpenSim.Optics/Analysis/OpticsBatch.cs` (OP-97) run the optics of a saved project from the
 command line (`opensim optics list|analyse|trace|optimise|tolerance`, and optics targets in
-`opensim sweep`).
+`opensim sweep`). `opensim optics import` and `export` (OP-94, `CliRunner.OpticsZemax.cs`) read and
+write Zemax lens files (§52).
 
 - **One report function.** An analysis report is `OpticsAnalysisReport.Compose` over the
   analyses' results, the function the app's Save report calls
@@ -4286,3 +4313,131 @@ Standard surface needs OP-25); Save/Load of named wizard settings (they are save
 the .ZTD file and tolerance-script reported values (OP-67); Quick Yield's Precision levels and its
 own wavelength, field, sampling and compensation controls (the tolerance run's are used); the
 Histogram and Yield as entries of the analysis registry (they are in the viewer window).
+
+## 52. Zemax lens files
+
+Plan item OP-94: OpticStudio's lens file (.zmx) read into the saved optical model and written
+back for the subset this program holds, and the lens inside an archive (.zar) read. Code in
+`OpenSim.Optics/Interop/Zemax/`: `ZemaxLensReader`, `ZemaxLensWriter`, `ZemaxKeywords` (the
+tables and their sources), `ZemaxText` (encodings, numbers), `ZarArchive`, `ZemaxLensFiles` (files
+on disk). The newer .zos format has no public description and is not read.
+
+**Sources.** The format is not published by its vendor. Keyword meanings come from two
+permissively licensed readers, read as documentation: Optiland 0.6.3 (MIT),
+`optiland/fileio/zemax/reader/parser.py` (`ZemaxDataParser`) and `writer/encoder.py`
+(`ZemaxFileEncoder`); RayOptics 0.9.10 (BSD 3-clause), `rayoptics/zemax/zmxread.py`
+(`process_line`, `handle_types_and_params`, `handle_aperture_data`, `pupil_data`,
+`field_spec_data`, `ZmxGlassHandler`). The archive layout is from zmxtools 0.1.5
+(`zmxtools/zar.py`; AGPL-3, read as a description only, no code copied). Meanings read from the
+OpticStudio-written files those packages ship as test data, not from their code, are listed in
+§10 item 48.
+
+**Text.** Files are read as UTF-16 (with or without a byte-order mark), UTF-8 or, failing UTF-8,
+ISO-8859-1 (the readers' order); written as UTF-16 LE with a byte-order mark and CR LF line ends.
+Numbers are written with the shortest text that reads back to the same double.
+
+**Every line is accounted for.** A keyword is read (the list in `ZemaxKeywords.Read`), read and
+deliberately not used (`ZemaxKeywords.Ignored`: display and program settings, named in the
+import's notes; among them RAIM and POLS, so ray aiming and polarization are not read), or
+unsupported. Unsupported content fails the import with every problem listed, naming the line,
+the surface and the keyword: an unknown keyword; a TYPE, solve code or field form not in the
+tables below; a merit-function row (any unknown keyword after the surfaces); a tolerance row
+other than TOFF; multi-configuration data other than `MNUM 1 1` with MOFF rows; a glass not in
+the catalogs. The option "unsupported as warnings" lists them instead and reads the rest (a glass
+not found keeps its name). Keywords read only in part say so once in the notes
+(`ZemaxKeywords.PartlyRead`).
+
+**System data.** NAME gives the title; NOTE lines the notes (the text after each line's first
+field, joined); UNIT's first field the lens unit (MM, CM, IN or INCH); ENVD the temperature and
+pressure; ENPD (entrance pupil diameter), FNUM v 0|1 (image-space or paraxial working F/#), OBNA
+v 0|1 (object NA or cone angle) and FLOA (float by stop size) the aperture; FTYP the field type
+(0–4 in this program's order), telecentric object space, field count, wavelength count and
+afocal image space; XFLN, YFLN (or the older XFLD, YFLD), FWGN (FWGT), VDXN, VDYN, VCXN, VCYN,
+VANN the fields; WAVM (or WAVL with WWGT) and PWAV the wavelengths; GCAT the active catalogs, in
+order.
+
+**Surfaces.** SURF n (in order from 0); TYPE (table); COMM; STOP; CURV (the radius is 1/c, 0 a
+plane); DISZ (INFINITY allowed); CONI; COAT (the coating name); GLAS; DIAM; PARM n (n = 0–12 is
+saved parameter n); XDAT n (saved extra-data number n + 12, which is how this program's layouts
+number OpticStudio's extra data, §20); CLAP (circular aperture, minimum and maximum radius),
+FLAP (floating aperture), OBDC (the aperture's decenter). Parameters and extra data are checked
+against the type's layout (§20); a number the type does not have is a problem.
+
+| TYPE | Type | Source |
+|---|---|---|
+| STANDARD | Standard | Optiland `_read_surf_type` |
+| EVENASPH | Even Asphere | Optiland, RayOptics |
+| ODDASPHE | Odd Asphere | Optiland |
+| XASPHERE | Extended Asphere | RayOptics (name read, §10 item 48) |
+| XOSPHERE | Extended Odd Asphere | RayOptics (name read, §10 item 48) |
+| QED_TYPE | Q-Type Asphere | observed (§10 item 48) |
+| TOROIDAL | Toroidal | Optiland, RayOptics |
+| PARAXIAL | Paraxial | RayOptics |
+| COORDBRK | Coordinate Break | Optiland, RayOptics |
+
+**Media.** `GLAS name 0 …` is a catalog glass, looked up in the GCAT catalogs in order (all
+loaded catalogs when there is no GCAT line; an archive's own catalogs first); `GLAS name 1 0 nd
+Vd ΔPgF …` is a model glass, a constant index when Vd is 0 (RayOptics `ZmxGlassHandler`);
+`GLAS MIRROR` a mirror; a six-digit glass code is refused. A glass name is kept as written; the
+import option "glass substitutions" replaces a name not in the catalogs, with a note.
+
+**Solves read.** Only encodings seen in OpticStudio-written files (§10 item 48):
+
+| Line | Meaning | Saved flag |
+|---|---|---|
+| CURV c 1 … | curvature variable | Radius, Variable |
+| CURV c 4 s k 0 | curvature pickup from surface s, scale k on the curvature | Radius, Pickup |
+| PZUP s k 0 0 | thickness pickup | Thickness, Pickup |
+| VDSZ … | thickness variable | Thickness, Variable |
+| GLAS name 2 s … | material pickup | Material, Pickup |
+| DIAM v 2 s 0 1 | semi-diameter pickup | SemiDiameter, Pickup |
+| PPAR n s k 0 0 | parameter pickup | Par n, Pickup |
+| VPAR n | parameter variable | Par n, Variable |
+
+DIAM v 0 is an automatic semi-diameter (saved as none), DIAM v 1 a fixed one. Any other code,
+and a pickup with an offset or from another column, is refused. Flags are saved in the order
+radius, thickness, material, semi-diameter, parameters.
+
+**Writing.** `ZemaxLensWriter` writes exactly the subset above, in those line forms; the header
+VERS line and the fields of UNIT after the lens unit are written as Optiland's writer writes them
+(no reader interprets them), and ENVD's third field as 0. A name written "catalog:glass" is
+written as the glass with its catalog added to GCAT (it reads back as the bare name). An
+"Automatic" flag on a semi-diameter is not written (an automatic DIAM says it). Refused (every
+item listed, or with the option listed and left out): a type with no TYPE code above; surface
+tilts and decenters and coordinate returns (no reader interprets their keywords); apertures other
+than circular and floating, and obscurations; chip zone, mechanical semi-diameter, TCE,
+ignore/skip/hide/do-not-draw and row colour; solves other than those above; system settings away
+from their defaults whose lines are not interpreted (source, analysis and MTF units,
+apodization, semi-diameter margins, field normalization, index-to-environment, the air model,
+polarization, ray aiming and pupil shifts); the merit function, tolerances and more than one
+configuration (no published row layout); the coating catalog, thermal links and the glass
+substitution template. Notes and comments with line breaks are written with spaces; long notes
+go over several NOTE lines of 200 characters, which read back joined.
+
+**Round trip.** Export then import gives the same record except that a radius passes through
+1/R and back, two correctly rounded divisions, so it may move by about 2⁻⁵² relative (the gate
+allows 2⁻⁵¹).
+
+**Archive.** A .zar is a sequence of blocks: a 2-byte version, a header and the packed file.
+Version byte 0xEC: header 0x286 bytes, the size a 64-bit little-endian integer at header offset
+0x0E, the name UTF-16 LE from 0x2E; 0xEA: header 0x14A bytes, a 32-bit size at 0x0A, the name
+UTF-8 from 0x1E. A name ending ".LZW" is LZW-compressed (256 single-byte codes to start, codes
+most-significant bit first, width from 9 bits growing by one when the dictionary reaches
+2^width entries, no clear code). Any other version byte is refused, naming it. The archive must
+hold one .zmx; its .agf catalogs are read and searched first for glass names (copy them into the
+catalog folder to trace the lens); other files are named in the notes.
+
+**App and command line.** The optics panel's system-data section has Import .zmx and Export .zmx
+(beside Save and Open the lens) and a check box for listing unsupported content instead of
+stopping; warnings and notes go to the log. `opensim optics import <file.zmx|.zar> [--out
+LENS.osslens] [--lenient] [--builtin-catalogs]` writes a lens file; `opensim optics export
+<project|lens.osslens> [--out LENS.zmx] [--lenient]` writes a .zmx.
+
+**Not built.** Reading or writing: merit-function rows, tolerance rows other than TOFF,
+multi-configuration data, solves other than the table above (marginal-ray and other computed
+solves on any column, offsets, cross-column pickups), surface types other than the table
+(Biconic, Superconic, Fresnel, ABCD, the Zernike types and the rest have no TYPE code from a
+source), surface tilts and decenters, rectangular, elliptical, spider and user apertures and
+obscurations (SQAP, OBSC and similar keywords have no meaning from a reader), ray aiming,
+polarization and the mechanical semi-diameter; the .zos format; writing a .zar; CODE V and OSLO
+files (OP-95). No written file has been opened in OpticStudio (§10 item 48).

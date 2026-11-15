@@ -1480,6 +1480,11 @@ a part not built), 2 the run failed or was cancelled.
   (surface 0 is the object), `optics:system.apertureValue|temperature|pressure`,
   `optics:wavelength<n>[.weight]` and `optics:field<n>.x|y|weight`. A cell driven by a solve or
   pickup, a surface that does not exist and a property not listed are refused, naming the target.
+- `opensim optics import <file.zmx|file.zar>` reads a Zemax lens file into a lens file
+  (`--out`, default the input's name with `.osslens`), and `opensim optics export
+  <project|lens.osslens>` writes a project's or lens file's system as a `.zmx` (`--out`). Content
+  the subset does not hold fails the command (exit 2) with every item listed; `--lenient` lists
+  it and goes on (Zemax lens files below).
 - Glass catalogs: the app's (the built-in set and your catalog folder); `--builtin-catalogs` uses
   the built-in set alone, for a run that does not depend on the machine.
 - Ctrl+C stops a run between steps. A stopped optimization still writes the best design so far.
@@ -1633,6 +1638,41 @@ Zernike irregularity, named wizard settings files, the .ZTD data file, Quick Yie
 levels and own field and sampling controls. The definitions are in docs/Optics-Conventions.md
 §51, the readings in §10 item 47.
 
+## Zemax lens files
+
+**Import .zmx…** and **Export .zmx…** sit under **Save the lens** and **Open a lens** in the
+system data. Import replaces the workspace's optical system with a Zemax lens file (.zmx), or
+with the lens inside a Zemax archive (.zar); export writes the system as a .zmx (UTF-16, as
+OpticStudio writes them).
+
+What is read: the title and notes, the lens unit, the aperture, fields with their vignetting,
+wavelengths, temperature and pressure, the glass catalog list, and per surface the type, comment,
+stop, radius, thickness, conic, glass, coating name, semi-diameter, parameters and extra data,
+circular and floating apertures and their decenter. Surface types: Standard, Even, Odd, Extended,
+Extended Odd and Q-Type aspheres, Toroidal, Paraxial and Coordinate Break. Solves: curvature,
+thickness, material, semi-diameter and parameter pickups (scale only, same column), and curvature,
+thickness and parameter variables. Glass names are checked against your loaded catalogs, in the
+file's catalog order; a model glass and a constant index are read as such. An archive's own glass
+catalogs are used for the check; copy them into your catalog folder (Materials) to trace the lens.
+
+Anything else in the file stops the import, and the log lists every item with its line, surface
+and keyword: another surface type or solve, merit-function rows, tolerance rows, more than one
+configuration, an unknown keyword, a glass not in your catalogs. Tick **List unsupported Zemax
+content in the log instead of stopping** to read the rest and have those items listed. Display
+and program settings (drawing, physical optics, ray aiming, polarization and the like) are never
+read; the log names them. Export works the same way the other round: what a .zmx written here
+cannot hold (other surface types, surface tilts and decenters, other apertures, the merit
+function, tolerances, configurations, settings away from their defaults) stops it, or with the
+box ticked is listed and left out. A lens exported and imported again comes back the same.
+
+From the command line: `opensim optics import <file.zmx|file.zar> [--out lens.osslens]
+[--lenient]` and `opensim optics export <project|lens.osslens> [--out lens.zmx] [--lenient]`.
+
+Not built: merit-function, tolerance and multi-configuration data; surface types and solves not
+listed above; surface tilts and decenters; rectangular, elliptical and user apertures; ray aiming
+and polarization; writing archives; the .zos format; CODE V and OSLO files. Files written here
+have not been opened in OpticStudio. The details are in docs/Optics-Conventions.md §52.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
@@ -1655,5 +1695,5 @@ Not built yet, and not to be relied on until they appear in this guide:
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration
   data, real F/# per field, POP settings, the report graphic's page arrangement);
-- lens-file import;
+- CODE V and OSLO lens-file import; Zemax merit-function, tolerance and configuration data;
 - reference results from OpticStudio itself (the cross-checks use open programs only).
