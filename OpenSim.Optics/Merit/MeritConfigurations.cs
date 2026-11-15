@@ -84,7 +84,7 @@ public sealed class ProjectMeritConfigurations : IMeritConfigurations
             int configuration = k;
             _built[k - 1] = new Lazy<(SequentialLens, OpticalSystemData)>(() =>
             {
-                var settings = MultiConfig.MultiConfiguration.SettingsFor(optics, configuration);
+                var settings = MultiConfig.MultiConfiguration.SettingsFor(optics, configuration, catalogs);   // OP-91: thermal pickups need the glasses
                 var lens = ProjectLens.From(settings, catalogs)
                     ?? throw new ArgumentException($"Configuration {configuration} has no sequential surfaces: add them in the Lens Data Editor, so there is something to evaluate.");
                 return (lens, SystemDataSettings.FromSettings(settings.SystemData, new List<string>()));
