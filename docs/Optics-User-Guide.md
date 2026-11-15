@@ -933,96 +933,6 @@ general math operands. Rules and readings are in docs/Optics-Conventions.md §31
 rest of the operand catalogue, the default merit function wizard, the merit function listing,
 and .MF files. Optimization is the next section.
 
-## Optimization
-
-**Optimize…**, beside the Merit Function Editor in the Optics panel, opens the local optimizer.
-It lowers the merit function by changing the cells flagged Variable: radii (varied as
-curvatures, so a surface may go flat), thicknesses, conics, entered semi-diameters, TCE,
-surface parameters and extra data in the Lens Data Editor, and real-number cells of the
-Multi-Configuration Editor. Solves and pickups are re-evaluated for every trial design, so a
-solved radius or thickness follows the variables. A variable cell that cannot be varied (a
-material, an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text
-cell) is refused by name before anything runs.
-
-- **Algorithm.** Damped Least Squares (derivatives by finite differences; recommended) or
-  Orthogonal Descent (no derivatives; trial steps along orthonormal directions, for noisy merit
-  functions).
-- **Cycles.** Automatic runs until no progress is made; 1, 5, 10 or 50 run that many cycles (a
-  cycle is one derivative-and-step of DLS or one pass of OD); Infinite runs until Stop.
-- **Threads.** The number of threads; the result is the same at any number.
-- **Start / Stop.** The merit function before and now and the cycles run update as the run
-  improves the design. Stop keeps the best design so far.
-- **Applying and Undo.** When a run ends, finished or stopped, its variables are written into
-  the lens as one step of the Lens Data Editor's undo (and into the multi-configuration table
-  when one of its cells is a variable, which clears that editor's undo history). Undo in the
-  Optimize window puts the variable cells back exactly as they were saved.
-
-The starting design must evaluate with no failed row (as in OpticStudio); during the run a
-design that cannot be built or traced is scored with the failed-row penalty and avoided. Rows
-with a negative weight are met exactly (OpticStudio's Lagrangian multipliers); bound operands
-are ordinary weighted rows. Rules and readings are in docs/Optics-Conventions.md §35. Not built:
-glass variables (OP-59), global optimization (OP-58), analytic derivatives, per-type scale and
-derivative-increment settings in the window (the library takes them), saving the Optimize
-window's settings, and the "Auto Update" of open analysis windows during a run (they update
-when the result is applied).
-
-## RMS against field, wavelength and focus
-
-Four analyses in the RMS group plot the RMS wavefront error (waves) or the RMS spot radius,
-x or y (µm):
-
-- **RMS vs field**: at evenly spaced fields from the axis to the largest defined field in one
-  direction (+y, +x, −y, −x), one curve per wavelength and a polychromatic curve (or only one
-  of these, as Curves says).
-- **RMS vs wavelength**: at evenly spaced wavelengths between the shortest and longest in the
-  wavelength table, one curve per field.
-- **RMS vs focus**: at evenly spaced focus shifts (lens units, added to the thickness before
-  the image surface), one curve per field, polychromatic or at one wavelength.
-- **RMS field map**: over a grid of field positions centred on one field, as a false-colour
-  image or contours; with the rectangular array and one wavelength it can also show the
-  wavefront's peak to valley.
-
-Method: **Gaussian quadrature** traces rings and arms of rays with weights chosen so that few
-rays give an accurate RMS (ray density = rings, 1 to 20, with 4 arms per ring). It assumes the
-whole pupil is traced: where an aperture clips a ray, the point is left blank and the reason
-listed. Use the **rectangular array** (ray density = rays across a square grid) for a vignetted
-pupil; it leaves clipped rays out and counts them. Refer to chief ray removes the wavefront's
-piston (spot: about the chief ray); centroid also removes its tilt (spot: about the centroid).
-Show diffraction limit draws 0.072 waves, or 1.22 λ times the on-axis working F/# for a spot.
-Definitions are in docs/Optics-Conventions.md §34.
-
-Not built: Strehl ratio (it will come with the PSF analyses), Plot Scale, Use Polarization,
-the field map at intermediate surfaces, and afocal systems (refused).
-
-## Thermal analysis
-
-The **Thermal** section of the Multi-Configuration Editor sets a lens up at several temperatures,
-as OpticStudio's Make Thermal does.
-
-- **Make thermal.** Enter the number of new configurations and the minimum and maximum
-  temperature (°C); the new configurations span the range in equal steps. Off, "Use existing
-  configurations as nominal" replaces the table by one nominal configuration (the current one)
-  plus the new ones; on, each existing configuration gets its own set after the originals.
-  Pressure (atm) is the new configurations' air pressure; empty keeps the nominal's. The tool
-  adds TEMP and PRES rows and, for each radius, thickness and fixed semi-diameter, a row whose
-  new cells are thermal pickups of the nominal. The status line lists what got no row (a value
-  under a Lens Data Editor solve, for instance).
-- **Thermal pickups** (badge "T"): the reference configuration's value at this configuration's
-  temperature. Glass radii, thicknesses and semi-diameters grow with the glass's catalog TCE;
-  the air spaces grow with the TCE column of the surface before them (the mount), measured along
-  the lens edges at the mechanical semi-diameters, so a change of radius moves the spacing too.
-  A surface that is not a catalog glass (a constant index, a model glass) uses its TCE column.
-  Other operands copy the reference value. Docs/Optics-Conventions.md section 37 gives the rules.
-- **Indices.** Turn on "Adjust index to environment" in the system data for the glass indices to
-  follow each configuration's temperature and pressure; Make Thermal reminds you when it is off.
-- **Glass and mechanical material.** Link a glass to a material of the material library (Glass,
-  Mechanical material, Link): that glass then expands with the material's thermal expansion
-  coefficient instead of its catalog TCE. The link saves with the lens. The material library's
-  materials have no expansion coefficient yet; a linked material without one is refused by name.
-- **Not built.** Thermal pickups of parameters, several temperatures within one configuration,
-  thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
-  thermal table at a changed temperature.
-
 ## Seidel and full-field aberrations
 
 Three analyses (OP-36, `OpenSim.Optics/Analysis/Aberrations/`) under **Aberrations** read the lens
@@ -1099,6 +1009,67 @@ are in §10 item 29. Not built: polarization, image rotation, surface plots, int
 surfaces, OpticStudio's pupil-grid stretching, the Huygens spherical phase reference, the sum
 over configurations, True Color and the coherent line/edge spread.
 
+## RMS against field, wavelength and focus
+
+Four analyses in the RMS group plot the RMS wavefront error (waves) or the RMS spot radius,
+x or y (µm):
+
+- **RMS vs field**: at evenly spaced fields from the axis to the largest defined field in one
+  direction (+y, +x, −y, −x), one curve per wavelength and a polychromatic curve (or only one
+  of these, as Curves says).
+- **RMS vs wavelength**: at evenly spaced wavelengths between the shortest and longest in the
+  wavelength table, one curve per field.
+- **RMS vs focus**: at evenly spaced focus shifts (lens units, added to the thickness before
+  the image surface), one curve per field, polychromatic or at one wavelength.
+- **RMS field map**: over a grid of field positions centred on one field, as a false-colour
+  image or contours; with the rectangular array and one wavelength it can also show the
+  wavefront's peak to valley.
+
+Method: **Gaussian quadrature** traces rings and arms of rays with weights chosen so that few
+rays give an accurate RMS (ray density = rings, 1 to 20, with 4 arms per ring). It assumes the
+whole pupil is traced: where an aperture clips a ray, the point is left blank and the reason
+listed. Use the **rectangular array** (ray density = rays across a square grid) for a vignetted
+pupil; it leaves clipped rays out and counts them. Refer to chief ray removes the wavefront's
+piston (spot: about the chief ray); centroid also removes its tilt (spot: about the centroid).
+Show diffraction limit draws 0.072 waves, or 1.22 λ times the on-axis working F/# for a spot.
+Definitions are in docs/Optics-Conventions.md §34.
+
+Not built: Strehl ratio (it will come with the PSF analyses), Plot Scale, Use Polarization,
+the field map at intermediate surfaces, and afocal systems (refused).
+
+## Optimization
+
+**Optimize…**, beside the Merit Function Editor in the Optics panel, opens the local optimizer.
+It lowers the merit function by changing the cells flagged Variable: radii (varied as
+curvatures, so a surface may go flat), thicknesses, conics, entered semi-diameters, TCE,
+surface parameters and extra data in the Lens Data Editor, and real-number cells of the
+Multi-Configuration Editor. Solves and pickups are re-evaluated for every trial design, so a
+solved radius or thickness follows the variables. A variable cell that cannot be varied (a
+material, an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text
+cell) is refused by name before anything runs.
+
+- **Algorithm.** Damped Least Squares (derivatives by finite differences; recommended) or
+  Orthogonal Descent (no derivatives; trial steps along orthonormal directions, for noisy merit
+  functions).
+- **Cycles.** Automatic runs until no progress is made; 1, 5, 10 or 50 run that many cycles (a
+  cycle is one derivative-and-step of DLS or one pass of OD); Infinite runs until Stop.
+- **Threads.** The number of threads; the result is the same at any number.
+- **Start / Stop.** The merit function before and now and the cycles run update as the run
+  improves the design. Stop keeps the best design so far.
+- **Applying and Undo.** When a run ends, finished or stopped, its variables are written into
+  the lens as one step of the Lens Data Editor's undo (and into the multi-configuration table
+  when one of its cells is a variable, which clears that editor's undo history). Undo in the
+  Optimize window puts the variable cells back exactly as they were saved.
+
+The starting design must evaluate with no failed row (as in OpticStudio); during the run a
+design that cannot be built or traced is scored with the failed-row penalty and avoided. Rows
+with a negative weight are met exactly (OpticStudio's Lagrangian multipliers); bound operands
+are ordinary weighted rows. Rules and readings are in docs/Optics-Conventions.md §35. Not built:
+glass variables (OP-59), global optimization (OP-58), analytic derivatives, per-type scale and
+derivative-increment settings in the window (the library takes them), saving the Optimize
+window's settings, and the "Auto Update" of open analysis windows during a run (they update
+when the result is applied).
+
 ## Tolerance data
 
 **Tolerance Data Editor…** in the Optics panel opens the tolerance table: what may go wrong in
@@ -1135,35 +1106,50 @@ of compensators; the coating, non-sequential, TEXI and ISO 10110 operands (defin
 when applied, as are TEZI on surfaces other than Toroidal); the default tolerance wizard, the
 tolerance listing, sorting and .TOL files.
 
+## Thermal analysis
+
+The **Thermal** section of the Multi-Configuration Editor sets a lens up at several temperatures,
+as OpticStudio's Make Thermal does.
+
+- **Make thermal.** Enter the number of new configurations and the minimum and maximum
+  temperature (°C); the new configurations span the range in equal steps. Off, "Use existing
+  configurations as nominal" replaces the table by one nominal configuration (the current one)
+  plus the new ones; on, each existing configuration gets its own set after the originals.
+  Pressure (atm) is the new configurations' air pressure; empty keeps the nominal's. The tool
+  adds TEMP and PRES rows and, for each radius, thickness and fixed semi-diameter, a row whose
+  new cells are thermal pickups of the nominal. The status line lists what got no row (a value
+  under a Lens Data Editor solve, for instance).
+- **Thermal pickups** (badge "T"): the reference configuration's value at this configuration's
+  temperature. Glass radii, thicknesses and semi-diameters grow with the glass's catalog TCE;
+  the air spaces grow with the TCE column of the surface before them (the mount), measured along
+  the lens edges at the mechanical semi-diameters, so a change of radius moves the spacing too.
+  A surface that is not a catalog glass (a constant index, a model glass) uses its TCE column.
+  Other operands copy the reference value. Docs/Optics-Conventions.md section 37 gives the rules.
+- **Indices.** Turn on "Adjust index to environment" in the system data for the glass indices to
+  follow each configuration's temperature and pressure; Make Thermal reminds you when it is off.
+- **Glass and mechanical material.** Link a glass to a material of the material library (Glass,
+  Mechanical material, Link): that glass then expands with the material's thermal expansion
+  coefficient instead of its catalog TCE. The link saves with the lens. The material library's
+  materials have no expansion coefficient yet; a linked material without one is refused by name.
+- **Not built.** Thermal pickups of parameters, several temperatures within one configuration,
+  thermal merit operands and athermal optimization; the merit function cannot yet evaluate a
+  thermal table at a changed temperature.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
 
 - the non-sequential object editor;
-- layouts with traced rays, and the analysis windows not described above (MTF, PSF, Seidel
-  coefficients, encircled energy and the rest; the Configuration Matrix Spot; Strehl ratio in
-  the RMS analyses);
-
-- layouts with traced rays, and the analysis windows not described above (MTF, PSF, the
-  Contrast Loss Map, encircled energy and the rest; the Configuration Matrix Spot);
-
-- layouts with traced rays, and the analysis windows not described above (MTF, Seidel
-  coefficients, encircled energy and the rest; the Configuration Matrix Spot);
+- layouts with traced rays, and the analysis windows not described above (MTF, the Contrast
+  Loss Map, encircled energy and the rest; the Configuration Matrix Spot; Strehl ratio in the
+  RMS analyses);
 - real transmission and polarization in the image-quality analyses (the polarization trace of
   OP-51 is built; besides its own five analyses only relative illumination uses it, as an
   option);
-- global optimization, glass substitution and tolerancing of a lens (the merit function, its
-  editor and the local optimizer are built; the full operand catalogue and the default merit
-  function wizard are not);
-
-- optimization and tolerancing of a lens (the merit function and its editor, and the tolerance
-  data editor with its operands, are built; the full operand catalogue, the default merit
-  function wizard, the optimizer and the tolerance analyses are not);
-- thermal configurations (Make Thermal, thermal pickups) and Make Conjugate in the
-  Multi-Configuration Editor;
-
-- optimization and tolerancing of a lens (the merit function and its editor are built; the
-  full operand catalogue, the default merit function wizard and the optimizer are not);
+- global optimization, glass substitution and the tolerance analyses (the merit function, its
+  editor, the local optimizer and the tolerance data editor with its operands are built; the
+  full operand catalogue, the default merit function wizard, sensitivity, Monte Carlo and
+  compensator analyses are not);
 - Make Conjugate in the Multi-Configuration Editor; thermal pickups of parameters, several
   temperatures in one configuration, and athermal optimization;
 - the parts of OpticStudio's reports listed as not built under Reports (multi-configuration

@@ -759,65 +759,6 @@ single place in the code, so a correction is one line and its test.
       MAXX and MINN read their range inclusively; GOTO, SKIS and SKIN jump forward only.
     - *MXCT* is read as MNCT with the sign turned (the help's worked example is MNCT's).
 
-31. **Local optimization readings** (OP-57). Section 35 follows OpticStudio's help (Optimize!;
-    Modifying the merit function), but none of it is compared with OpticStudio's output:
-    - *Orthogonal Descent* is described in the help only as an orthonormalization of the
-      variables with discrete sampling and no derivatives; this program's is Rosenbrock's
-      rotating-coordinates search, with step factors of its own choosing.
-    - *A cycle* is read as one derivative-and-step of DLS (one kernel iteration) or one pass
-      through every direction of OD.
-    - *Negative weights* are met by the method of multipliers; the help says only that they are
-      treated as Lagrangian multipliers and converge in a few cycles. The tolerance
-      (1e-9 × max(1, |T|)) and the penalty schedule are this program's.
-    - *Radius variables* are varied as curvatures (the help lists "curvatures" among the
-      variables).
-    - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
-    Check: a merit function with one row of each operand, saved by OpticStudio with its values,
-    evaluated here on the same lens.
-33. **Thermal analysis readings** (OP-91). Section 37 follows OpticStudio's help pages, but
-    nothing is compared with OpticStudio's output, and these are this program's readings where
-    the help is short:
-    - *The mount's edge model.* The help ("Thickness (THIC) Values") describes the edge
-      thickness at the mechanical semi-diameters, the mount's radial growth and the two contact
-      cases in words and a figure; the formula T' = E(1 + α_mΔT) + Z'_n(h'_n) − Z'_{n+1}(h'_{n+1}),
-      with each surface's sag scaled by its own expansion and h' = min(h(1 + α_mΔT), h(1 + α_jΔT)),
-      is this program's reading of them. The help's linked Knowledgebase article was not read.
-    - *Semi-diameters.* Make Thermal's page says it adds thermal pickups for "clear
-      semi-diameter or semi-diameters"; the "Defining Which Parameters" pages do not say how they
-      scale. Here SDIA and MCSD scale with the radius rule's expansion; CHZN (chip zone) is a
-      straight pickup, as "All Other Values" says.
-    - *Make Thermal's choices.* The nominal of "Delete existing configuration data" is the current
-      configuration; with existing configurations kept, nominal c's new configurations follow the
-      originals c by c, new rows go after the existing ones, and existing non-length rows pick up
-      their nominal. Surface 0 and the image get no rows; a value under a Lens Data Editor solve
-      or pickup gets none (a row would replace the solve). One new configuration takes the
-      minimum temperature. The optional pressure is this program's addition.
-    - *Several TEMP rows* ("Defining Multiple Environments within a Single Configuration") are not
-      built: a thermal pickup of a length in such a table fails.
-    Check: a lens made thermal by OpticStudio, its thermal pickups' values read from its
-    Multi-Configuration Editor and compared with this program's for the same lens and catalog.
-
-30. **RMS against field, wavelength and focus** (OP-40, section 34). Read from the help pages'
-    wording; no OpticStudio number was compared:
-    - *Gaussian quadrature* is derived (Gauss–Legendre in ρ², equally spaced arms from +x), not
-      copied from Forbes's paper, which was not available; OpticStudio's ring radii, arm angles
-      and number of arms for the RMS analyses may differ (here 4 arms per ring). The values agree
-      wherever both rules are exact.
-    - *Centroid wavefront reference*: the weighted least-squares piston and tilt in pupil
-      coordinates are removed; the help's "mean shifted, tilted reference sphere" with Rimmer's
-      correction is not built.
-    - *Polychromatic wavefront* in waves of the primary wavelength, one mean and tilt over every
-      ray of every wavelength; the help does not name the unit.
-    - *Field scan extent*: the largest defined field component in the scan direction ("the
-      limits of the defined fields in the selected direction"); OP-37's scans use the largest
-      radial field instead.
-    - *Remove Vignetting Factors* replaces the factors with surface apertures, as in OP-37.
-    - *Field Map automatic size*: a field size of 0 means the largest radial defined field; the
-      help gives no default.
-    Check: RMS vs Field (wavefront and spot, chief and centroid, GQ and RA), RMS vs Focus and
-    RMS vs Wavelength of a singlet at two fields and three wavelengths against OpticStudio's
-    text output.
-
 28. **Seidel and full-field aberration readings** (OP-36, section 32). Read from the help pages
     "Seidel Coefficients", "Seidel Diagram" and "Full-Field Aberration"; no OpticStudio number
     was compared:
@@ -841,7 +782,6 @@ single place in the code, so a correction is one line and its test.
       default half-width (0) is the largest radial field.
     Check: Seidel Coefficients text of a singlet and of a two-mirror telescope, and Full-Field
     Aberration of a singlet, in both programs.
-
 29. **Point spread function readings** (OP-38). Section 33 follows OpticStudio's help, but no
     PSF is compared with its output, and some rules are this program's where the help is silent:
     - *Default FFT image delta.* The help stretches the pupil grid (Δ = λF(n − 2)/(2n)·(32/n)^½);
@@ -857,7 +797,41 @@ single place in the code, so a correction is one line and its test.
     - *Edge spread* runs from 0 to 1 across the window; the help does not give its normalisation.
     Check: FFT and Huygens PSFs of a singlet off axis, saved by OpticStudio as text, compared here
     at the same sampling.
-
+30. **RMS against field, wavelength and focus** (OP-40, section 34). Read from the help pages'
+    wording; no OpticStudio number was compared:
+    - *Gaussian quadrature* is derived (Gauss–Legendre in ρ², equally spaced arms from +x), not
+      copied from Forbes's paper, which was not available; OpticStudio's ring radii, arm angles
+      and number of arms for the RMS analyses may differ (here 4 arms per ring). The values agree
+      wherever both rules are exact.
+    - *Centroid wavefront reference*: the weighted least-squares piston and tilt in pupil
+      coordinates are removed; the help's "mean shifted, tilted reference sphere" with Rimmer's
+      correction is not built.
+    - *Polychromatic wavefront* in waves of the primary wavelength, one mean and tilt over every
+      ray of every wavelength; the help does not name the unit.
+    - *Field scan extent*: the largest defined field component in the scan direction ("the
+      limits of the defined fields in the selected direction"); OP-37's scans use the largest
+      radial field instead.
+    - *Remove Vignetting Factors* replaces the factors with surface apertures, as in OP-37.
+    - *Field Map automatic size*: a field size of 0 means the largest radial defined field; the
+      help gives no default.
+    Check: RMS vs Field (wavefront and spot, chief and centroid, GQ and RA), RMS vs Focus and
+    RMS vs Wavelength of a singlet at two fields and three wavelengths against OpticStudio's
+    text output.
+31. **Local optimization readings** (OP-57). Section 35 follows OpticStudio's help (Optimize!;
+    Modifying the merit function), but none of it is compared with OpticStudio's output:
+    - *Orthogonal Descent* is described in the help only as an orthonormalization of the
+      variables with discrete sampling and no derivatives; this program's is Rosenbrock's
+      rotating-coordinates search, with step factors of its own choosing.
+    - *A cycle* is read as one derivative-and-step of DLS (one kernel iteration) or one pass
+      through every direction of OD.
+    - *Negative weights* are met by the method of multipliers; the help says only that they are
+      treated as Lagrangian multipliers and converge in a few cycles. The tolerance
+      (1e-9 × max(1, |T|)) and the penalty schedule are this program's.
+    - *Radius variables* are varied as curvatures (the help lists "curvatures" among the
+      variables).
+    - *The default weight* of a new row in the editor is 1; OpticStudio's was not read.
+    Check: a merit function with one row of each operand, saved by OpticStudio with its values,
+    evaluated here on the same lens.
 32. **Tolerance operand readings** (OP-63). Section 36's rules come from OpticStudio's help;
     these choices fill its gaps and none is compared with OpticStudio's tolerance files:
     - *Radial direction:* TSDR and TEDR take the drawn direction (+y when none is drawn), as the
@@ -886,6 +860,28 @@ single place in the code, so a correction is one line and its test.
       item 7), not OpticStudio's model-glass difference.
     Check: a lens with one row of each built operand, OpticStudio's Monte Carlo file saved for a
     sensitivity case of each (SAVE), compared surface by surface with the perturbed record.
+33. **Thermal analysis readings** (OP-91). Section 37 follows OpticStudio's help pages, but
+    nothing is compared with OpticStudio's output, and these are this program's readings where
+    the help is short:
+    - *The mount's edge model.* The help ("Thickness (THIC) Values") describes the edge
+      thickness at the mechanical semi-diameters, the mount's radial growth and the two contact
+      cases in words and a figure; the formula T' = E(1 + α_mΔT) + Z'_n(h'_n) − Z'_{n+1}(h'_{n+1}),
+      with each surface's sag scaled by its own expansion and h' = min(h(1 + α_mΔT), h(1 + α_jΔT)),
+      is this program's reading of them. The help's linked Knowledgebase article was not read.
+    - *Semi-diameters.* Make Thermal's page says it adds thermal pickups for "clear
+      semi-diameter or semi-diameters"; the "Defining Which Parameters" pages do not say how they
+      scale. Here SDIA and MCSD scale with the radius rule's expansion; CHZN (chip zone) is a
+      straight pickup, as "All Other Values" says.
+    - *Make Thermal's choices.* The nominal of "Delete existing configuration data" is the current
+      configuration; with existing configurations kept, nominal c's new configurations follow the
+      originals c by c, new rows go after the existing ones, and existing non-length rows pick up
+      their nominal. Surface 0 and the image get no rows; a value under a Lens Data Editor solve
+      or pickup gets none (a row would replace the solve). One new configuration takes the
+      minimum temperature. The optional pressure is this program's addition.
+    - *Several TEMP rows* ("Defining Multiple Environments within a Single Configuration") are not
+      built: a thermal pickup of a length in such a table fails.
+    Check: a lens made thermal by OpticStudio, its thermal pickups' values read from its
+    Multi-Configuration Editor and compared with this program's for the same lens and catalog.
 
 ## 11. Paraxial optics
 
@@ -2568,199 +2564,6 @@ value meets its target); the default merit function and its wizard (OP-56); the 
 §35; the merit function listing; reading or writing OpticStudio's .MF
 files (the help names the file but does not document its format).
 
-## 34. RMS against field, wavelength and focus
-
-`OpenSim.Optics/Analysis/Rms` (OP-40) computes OpticStudio's RMS vs Field, RMS vs Wavelength,
-RMS vs Focus and RMS Field Map; `OpenSim.Optics/Analysis/Sampling/PupilQuadrature.cs` holds the
-pupil integration rules. The definitions were read from OpticStudio's 2025 R2 help pages of
-those names and "Gaussian Quadrature", "Rectangular Array", "Strehl Ratio", "Diffraction
-Limited", saved under `plans/sources/optics/op-40-help/`.
-
-- **Gaussian quadrature** (`PupilQuadrature.Gaussian`). n rings at the Gauss–Legendre nodes of
-  u = ρ² on [ε², 1] (`OpenSim.Core/Numerics/GaussLegendre`), N arms at θ = 2πj/N from +x, each
-  point weighted gᵢ/((1 − ε²)N); the weights sum to 1. Derived in the class remarks (Forbes,
-  JOSA A 5, 1943 (1988), which the help cites, was not available): the rule averages every
-  polynomial of degree ≤ min(4n − 1, N − 1) in (Px, Py) exactly, so with N = 4n (the RMS
-  analyses' choice) an RMS is exact when the OPD or ray error is a polynomial of degree
-  ≤ 2n − 1, the help's "(2*n − 1)". Rings 1 to 20 (the help's maximum). ε is the linear
-  obscuration ("done as a linear fraction"); the RMS analyses use ε = 0.
-- **Rectangular array** (`PupilQuadrature.Rectangular`): OP-34's cell-centred square grid
-  (`PupilSampling.Square`), the points inside the unit pupil weighted equally.
-- **Spot RMS**: √(Σw r²/Σw) of the image-surface positions (local frame) about the chief ray's
-  image point (the computed wavelength's, or the primary's when polychromatic) or about the
-  weighted centroid; x and y alike (§25). w is the pupil weight, times the wavelength weight when
-  polychromatic.
-- **Wavefront RMS**: the OPD of §26 against the exit-pupil reference sphere centred on the chief
-  ray, in waves; chief ray reference removes the weighted mean, centroid reference the weighted
-  least-squares a + b·Px + c·Py. Polychromatic: every wavelength's OPD against the primary
-  wavelength's sphere (`ReferenceToPrimary`), pooled with weights w·(wavelength weight), in
-  waves of the primary wavelength.
-- **Failed rays.** Gaussian quadrature: a point where any ray fails (or misses the reference
-  sphere) has no value; its message names the rays and suggests the rectangular array. The
-  rectangular array leaves such rays out and counts them by status and surface.
-- **Fields and wavelengths between the tables.** A sampled field is appended to the field table
-  as one more point (carrying the launcher's vignetting factors at that field), a sampled
-  wavelength to the wavelength table; the primary wavelength is unchanged. Floating
-  semi-diameters are sized once for the system as defined and frozen, except on the stop.
-- **Focus** (help, "RMS vs. Focus"): the shift, in lens units, is added to the thickness of the
-  surface before the image.
-- **Scans.** RMS vs Field: evenly spaced fields from 0 to the largest defined field component in
-  the chosen direction (+y, +x, −y, −x), 2 to 100 points. RMS vs Wavelength: 2 to 100 evenly
-  spaced wavelengths from the table's shortest to longest, each monochromatic, one curve per
-  field row. RMS vs Focus: 2 to 100 shifts, one curve per field row, polychromatic or one
-  wavelength. RMS Field Map: an nx × ny grid of field positions centred on a field row, half
-  widths in field units (0: the largest radial field).
-- **Diffraction limit** (help, "Show Diffraction Limit"): spot, 1.22 λ times the working F/# of
-  the on-axis field (§25's `RealWorkingFNumber`; primary wavelength when polychromatic; a curve
-  against wavelength for RMS vs Wavelength); wavefront, 0.072 waves.
-- **Peak to valley** (Field Map, rectangular array, one wavelength): max − min of the residual
-  OPD after the reference's piston (and tilt) removal.
-- **Determinism.** The sample points are evaluated one per `ParallelSlots` slot, each tracing
-  with one thread, so the result is bitwise the same at any degree of parallelism.
-- **Afocal image space** is refused (the help's afocal forms in diopters are not built).
-
-**Not built.** Strehl ratio: the help computes it "using the method described in "Strehl ratio
-approximation"", a section not found in the online help (its "Strehl Ratio" page describes the
-PSF peak ratio), so it waits for OP-38's PSF Strehl. Plot Scale; Use Polarization; the Field
-Map's Surface setting (image surface only); OpticStudio's halving of arms for symmetric systems;
-afocal units.
-
-## 35. Local optimization
-
-`OpenSim.Optics/Optimization` (OP-57) optimizes the project's system against its merit function
-(§31). The help read is OpticStudio 2025 R2's Optimize! page, saved under
-`plans/sources/optics/op-57-help/`, with Modifying the merit function from OP-54's folder.
-
-- **Variables** (`LensVariables`). Surface cells flagged Variable, in surface order and, within a
-  surface, flag order, then multi-configuration cells flagged Variable, row by row
-  (`MultiConfiguration.Variables`). Kinds: curvature (a Radius cell, varied as 1/R in 1/lens
-  unit, 0 written as a plane), thickness, conic, semi-diameter, TCE, parameter (any "Par n",
-  parameters and extra data, in the column's unit) and configuration (a real-number table
-  cell, in its operand's unit). Refused with the cell named: a material (glass variables are
-  OP-59), an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text,
-  whole-number or infinite table cell, any other column.
-- **Evaluation.** Each trial design writes the variables into a copy of the optics record and
-  builds every configuration through `ProjectMeritConfigurations` (the multi-configuration
-  table, then solves and pickups by `ProjectLens`), so solves and pickups follow the variables
-  inside every residual. The residuals are the merit function's (§31): Σ r² = MF².
-- **Damped least squares** is the kernel `Core/Numerics/Optimization/DampedLeastSquares`
-  (Levenberg–Marquardt through the SVD, Moré's column scaling, finite differences forward then
-  central), unchanged except an accepted-step callback (`OnAcceptedStep`) added for progress
-  and best-so-far.
-- **Orthogonal Descent** is `Core/Numerics/Optimization/OrthogonalDescent` (new): trial steps
-  along orthonormal directions, a success growing that direction's step by 3 and a failure
-  reversing it and halving it, the directions re-orthonormalised (Gram–Schmidt on the summed
-  progress, Rosenbrock 1960) once each has had a success and a failure. First steps 5 % of
-  |value| (5 % of the scale for a zero value); it stops when every step is below 1e-9 of its
-  first size. The factors are this program's choice.
-- **Scaling and increments** per kind (`LensVariableKindSettings`): the algorithms work on
-  value / Scale (default 1); a derivative increment, in the variable's unit, replaces the
-  kernel's relative finite-difference step (a kind without one then takes √ε·max(|x₀|, 1),
-  fixed at the start of each run).
-- **Cycles.** Automatic: the algorithm's own stopping tests (DLS at most 1000 iterations).
-  Fixed: that many cycles in all. Infinite: restarted from the best design whenever it stops,
-  until cancelled.
-- **Constraints.** Bound operands are weighted rows (§31). A row with a negative weight is an
-  exact constraint: with cᵢ its residual, rows √ρ(cᵢ + λᵢ/2ρ) are appended; after each run
-  λᵢ += 2ρcᵢ, and ρ (from 1) grows tenfold when ‖c‖ fell by less than a factor 4; the row is met
-  when |V − T| ≤ 1e-9 × max(1, |T|), otherwise the run ends after 30 rounds as "constraints not
-  met". The merit value reported is §31's, with absolute weights.
-- **Start and failures.** A starting design with a failed row is refused with every failure
-  named (help: "If any of the operands cannot be computed, the optimization cannot begin");
-  later designs that fail get §31's penalty and the algorithm steps away.
-- **Cancellation** returns the last accepted design, which without negative-weight rows is the
-  best so far (every accepted step lowers the merit).
-- **Determinism.** The finite-difference columns and the ray traces run in parallel slots; the
-  result is bitwise the same at any thread count. OD evaluates sequentially.
-- **Apply and undo** (`LocalOptimizationResult.ApplyTo`, `UndoOn`) copy only the variable cells
-  (the saved radius itself, not 1/(1/R)) into the current record, refusing if its variables are
-  no longer the run's.
-- **App.** The Optimize window (algorithm, cycles, threads, Start/Stop, merit before and now,
-  log) applies each run's result through the Lens Data Editor as one undo step, and the
-  multi-configuration table by reloading its editor.
-
-**Gate** (`Gates/LocalOptimizationGateTests`): a perturbed doublet returns to the optimum the
-test builds by optimizing it once; a 0.2 mm singlet with an F/# solve bends to the Coddington
-shape factor 2(N² − 1)/(N + 2), derived in the test from the Seidel sum, and agrees with an
-independent Brent search; results are bitwise identical at 1, 4 and unlimited threads;
-cancellation keeps the best design so far.
-
-**Not built.** Glass variables and substitution (OP-59); global optimization (OP-58); analytic
-or automatic derivatives (finite differences only; the kernel accepts an analytic Jacobian);
-OpticStudio's own Orthogonal Descent (unpublished); the window's per-kind scale and increment
-settings and saving its settings; Auto Update of analysis windows during a run.
-
-## 37. Thermal analysis
-
-OP-91 adds OpticStudio's thermal configurations: the thermal pickup solve of the
-Multi-Configuration Editor and the Make Thermal tool. Sources: OpticStudio 2025 R2 help, System
-Explorer › Environment and its pages ("Thermal Analysis of Optical Systems", "Defining Multiple
-Temperature and Pressure Values", "Defining Which Parameters Consider Thermal Effects",
-"Radius of Curvature (CRVT) Values", "Thickness (THIC) Values", "Thermal Parameter Values",
-"All Other Values", "Adding TCE data", "Modeling Gases and Liquids", "Index of Refraction
-Computation", "Limitations of Thermal Analysis", "Edge Thickness", "TCE"), and the
-Multi-Configuration pages "Make Thermal" and "Solve Types"; copies in
-`plans/sources/optics/op-91-help/` and `op-30-help/` (not in the repository). Code:
-`OpenSim.Optics/MultiConfig/LensThermalModel.cs` (the expansion rules),
-`MultiConfiguration.cs` (evaluation), `MultiConfigTools.MakeThermal`.
-
-- **Expansion.** A length L at a temperature ΔT from its reference becomes L(1 + αΔT)
-  ("Defining Multiple Temperature and Pressure Values"); a curvature c becomes c/(1 + αΔT).
-  TCEs, in the catalogs' ED line and in the Lens Data Editor's TCE column, are in 10⁻⁶/K
-  (help: TCE; ZemaxGlass manual). The catalog value is the −30…+70 °C one, used at any
-  temperature, as OpticStudio does (help: TCE).
-- **Which α.** Radii, and here also clear and mechanical semi-diameters: the surface's catalog
-  glass; for an air or MIRROR surface the previous surface's catalog glass, else its own TCE
-  column; for any other medium (constant index, model glass) the TCE column ("Radius of
-  Curvature (CRVT) Values", "Adding TCE data"). A glass whose catalog sets "ignore thermal
-  expansion" is not a solid and uses the TCE column ("Modeling Gases and Liquids").
-  Thicknesses: a solid catalog glass scales with its TCE; any other space is a mount.
-- **The mount.** The space after surface n is a spacer of length E = T − Z_n(h_n) + Z_{n+1}(h_{n+1})
-  (help: Edge Thickness), the sags Z taken at each surface's mechanical semi-diameter h of the
-  reference configuration (fixed values as entered, automatic ones sized by rays, section 13).
-  It expands with surface n's TCE column α_m: E' = E(1 + α_mΔT). Each bounding surface j grows
-  by s_j = 1 + α_jΔT (the radius rule), so its sag becomes s_j·Z_j(r/s_j); the contact moves
-  to h'_j = min(h_j(1 + α_mΔT), h_j s_j), never past the lens's expanded edge (the help's two
-  cases). T' = E' + Z'_n(h'_n) − Z'_{n+1}(h'_{n+1}). With every α equal this is T(1 + αΔT);
-  with α_m = 0 the thickness still changes when the radii do, as the help says.
-- **Glass and material (OQ-12).** `OpticsSettings.Thermal` (`OpticsThermalSettings`) may link a
-  glass ("N-BK7" or "CATALOG:N-BK7") to a mechanical `Material`, stored whole; its
-  `ThermalExpansionCoefficient` (1/K, a new nullable field of the material record) then
-  replaces the catalog TCE everywhere that glass's TCE is read. A linked material without a
-  coefficient, or an unlinked glass without a catalog TCE, fails by name. No built-in material
-  has a coefficient yet.
-- **The thermal pickup.** A cell of configuration k with reference configuration c (1 ≤ c < k)
-  takes the value of its row in c, changed for ΔT = T_k − T_c, where T is the configuration's
-  TEMP value (the system temperature without a TEMP row). CRVT, THIC, SDIA and MCSD expand as
-  above, read on configuration c's lens; every other operand copies c's value ("All Other
-  Values"); PRAM and PAR1–8 fail (scaling by the parameter's units, "Thermal Parameter Values",
-  needs units the surface types do not declare). ΔT = 0 returns c's value exactly. Thermal
-  pickups are evaluated after the configuration's other cells, so a pickup in the same
-  configuration cannot read one. The glasses come from the active catalogs, which
-  `SettingsFor`, `ValuesIn`, `SolveFor`, `LensFor` and `ForCurrentConfiguration` take; without
-  them a length's thermal pickup at a changed temperature fails by name.
-- **Indices.** Each configuration's TEMP and PRES set the system environment; with "Adjust index
-  to environment" on, the glass indices follow section 2's temperature and pressure model (OP-13, `ThermalIndex`). Make Thermal
-  says so when the setting is off.
-- **Make Thermal.** "Delete existing configuration data": one nominal configuration (the
-  current one, at its temperature and pressure) and N more at temperatures from the minimum to
-  the maximum in equal steps (N = 1: the minimum). "Use existing n configurations as nominal":
-  n + n·N configurations, nominal c's N following the originals in order; existing rows' new
-  cells pick up nominal c (a thermal pickup for CRVT, THIC, SDIA, MCSD), TEMP takes the new
-  temperatures. Rows TEMP and PRES (when missing) and CRVT, THIC, SDIA, MCSD for surfaces 1 to
-  the one before the image are added where the table lacks them and the value is fixed
-  (planes, infinite thicknesses and automatic semi-diameters have none; a Lens Data Editor
-  solve or pickup is kept and the notes name it), sorted by operand or by surface. The pressure
-  of the new configurations is the nominal's (help) unless given. The table is limited to 160
-  configurations.
-- **Not built.** Thermal pickups of parameters and extra data; several environments in one
-  configuration (several TEMP or PRES rows); thermal pickups of glasses beyond a copy; TCE and
-  thermal merit operands (OP-55) and athermalisation by optimization (OP-57); the merit function
-  over a thermal table needs the catalogs passed to `ProjectMeritConfigurations`'s `SettingsFor`
-  (a one-line change in `OpenSim.Optics/Merit/MeritConfigurations.cs`, not made here), until
-  then its thermal configurations at a changed temperature fail by name; the prescription
-  report's thermal listing; coupling to OpenSim's own thermal and structural solvers (OP-92).
-
 ## 32. Seidel and full-field aberrations
 
 OP-36 adds three analyses in `OpenSim.Optics/Analysis/Aberrations/`: Seidel Coefficients,
@@ -2907,6 +2710,128 @@ Not built: polarization (vector diffraction), the image rotation setting, surfac
 intermediate surfaces, the help's pupil-grid stretching, the Huygens spherical phase reference,
 the Huygens sum over configurations, True Color, and "Use Coherent PSF" in the line/edge spread.
 
+## 34. RMS against field, wavelength and focus
+
+`OpenSim.Optics/Analysis/Rms` (OP-40) computes OpticStudio's RMS vs Field, RMS vs Wavelength,
+RMS vs Focus and RMS Field Map; `OpenSim.Optics/Analysis/Sampling/PupilQuadrature.cs` holds the
+pupil integration rules. The definitions were read from OpticStudio's 2025 R2 help pages of
+those names and "Gaussian Quadrature", "Rectangular Array", "Strehl Ratio", "Diffraction
+Limited", saved under `plans/sources/optics/op-40-help/`.
+
+- **Gaussian quadrature** (`PupilQuadrature.Gaussian`). n rings at the Gauss–Legendre nodes of
+  u = ρ² on [ε², 1] (`OpenSim.Core/Numerics/GaussLegendre`), N arms at θ = 2πj/N from +x, each
+  point weighted gᵢ/((1 − ε²)N); the weights sum to 1. Derived in the class remarks (Forbes,
+  JOSA A 5, 1943 (1988), which the help cites, was not available): the rule averages every
+  polynomial of degree ≤ min(4n − 1, N − 1) in (Px, Py) exactly, so with N = 4n (the RMS
+  analyses' choice) an RMS is exact when the OPD or ray error is a polynomial of degree
+  ≤ 2n − 1, the help's "(2*n − 1)". Rings 1 to 20 (the help's maximum). ε is the linear
+  obscuration ("done as a linear fraction"); the RMS analyses use ε = 0.
+- **Rectangular array** (`PupilQuadrature.Rectangular`): OP-34's cell-centred square grid
+  (`PupilSampling.Square`), the points inside the unit pupil weighted equally.
+- **Spot RMS**: √(Σw r²/Σw) of the image-surface positions (local frame) about the chief ray's
+  image point (the computed wavelength's, or the primary's when polychromatic) or about the
+  weighted centroid; x and y alike (§25). w is the pupil weight, times the wavelength weight when
+  polychromatic.
+- **Wavefront RMS**: the OPD of §26 against the exit-pupil reference sphere centred on the chief
+  ray, in waves; chief ray reference removes the weighted mean, centroid reference the weighted
+  least-squares a + b·Px + c·Py. Polychromatic: every wavelength's OPD against the primary
+  wavelength's sphere (`ReferenceToPrimary`), pooled with weights w·(wavelength weight), in
+  waves of the primary wavelength.
+- **Failed rays.** Gaussian quadrature: a point where any ray fails (or misses the reference
+  sphere) has no value; its message names the rays and suggests the rectangular array. The
+  rectangular array leaves such rays out and counts them by status and surface.
+- **Fields and wavelengths between the tables.** A sampled field is appended to the field table
+  as one more point (carrying the launcher's vignetting factors at that field), a sampled
+  wavelength to the wavelength table; the primary wavelength is unchanged. Floating
+  semi-diameters are sized once for the system as defined and frozen, except on the stop.
+- **Focus** (help, "RMS vs. Focus"): the shift, in lens units, is added to the thickness of the
+  surface before the image.
+- **Scans.** RMS vs Field: evenly spaced fields from 0 to the largest defined field component in
+  the chosen direction (+y, +x, −y, −x), 2 to 100 points. RMS vs Wavelength: 2 to 100 evenly
+  spaced wavelengths from the table's shortest to longest, each monochromatic, one curve per
+  field row. RMS vs Focus: 2 to 100 shifts, one curve per field row, polychromatic or one
+  wavelength. RMS Field Map: an nx × ny grid of field positions centred on a field row, half
+  widths in field units (0: the largest radial field).
+- **Diffraction limit** (help, "Show Diffraction Limit"): spot, 1.22 λ times the working F/# of
+  the on-axis field (§25's `RealWorkingFNumber`; primary wavelength when polychromatic; a curve
+  against wavelength for RMS vs Wavelength); wavefront, 0.072 waves.
+- **Peak to valley** (Field Map, rectangular array, one wavelength): max − min of the residual
+  OPD after the reference's piston (and tilt) removal.
+- **Determinism.** The sample points are evaluated one per `ParallelSlots` slot, each tracing
+  with one thread, so the result is bitwise the same at any degree of parallelism.
+- **Afocal image space** is refused (the help's afocal forms in diopters are not built).
+
+**Not built.** Strehl ratio: the help computes it "using the method described in "Strehl ratio
+approximation"", a section not found in the online help (its "Strehl Ratio" page describes the
+PSF peak ratio), so it waits for OP-38's PSF Strehl. Plot Scale; Use Polarization; the Field
+Map's Surface setting (image surface only); OpticStudio's halving of arms for symmetric systems;
+afocal units.
+
+## 35. Local optimization
+
+`OpenSim.Optics/Optimization` (OP-57) optimizes the project's system against its merit function
+(§31). The help read is OpticStudio 2025 R2's Optimize! page, saved under
+`plans/sources/optics/op-57-help/`, with Modifying the merit function from OP-54's folder.
+
+- **Variables** (`LensVariables`). Surface cells flagged Variable, in surface order and, within a
+  surface, flag order, then multi-configuration cells flagged Variable, row by row
+  (`MultiConfiguration.Variables`). Kinds: curvature (a Radius cell, varied as 1/R in 1/lens
+  unit, 0 written as a plane), thickness, conic, semi-diameter, TCE, parameter (any "Par n",
+  parameters and extra data, in the column's unit) and configuration (a real-number table
+  cell, in its operand's unit). Refused with the cell named: a material (glass variables are
+  OP-59), an automatic semi-diameter, an infinite thickness, a whole-number parameter, a text,
+  whole-number or infinite table cell, any other column.
+- **Evaluation.** Each trial design writes the variables into a copy of the optics record and
+  builds every configuration through `ProjectMeritConfigurations` (the multi-configuration
+  table, then solves and pickups by `ProjectLens`), so solves and pickups follow the variables
+  inside every residual. The residuals are the merit function's (§31): Σ r² = MF².
+- **Damped least squares** is the kernel `Core/Numerics/Optimization/DampedLeastSquares`
+  (Levenberg–Marquardt through the SVD, Moré's column scaling, finite differences forward then
+  central), unchanged except an accepted-step callback (`OnAcceptedStep`) added for progress
+  and best-so-far.
+- **Orthogonal Descent** is `Core/Numerics/Optimization/OrthogonalDescent` (new): trial steps
+  along orthonormal directions, a success growing that direction's step by 3 and a failure
+  reversing it and halving it, the directions re-orthonormalised (Gram–Schmidt on the summed
+  progress, Rosenbrock 1960) once each has had a success and a failure. First steps 5 % of
+  |value| (5 % of the scale for a zero value); it stops when every step is below 1e-9 of its
+  first size. The factors are this program's choice.
+- **Scaling and increments** per kind (`LensVariableKindSettings`): the algorithms work on
+  value / Scale (default 1); a derivative increment, in the variable's unit, replaces the
+  kernel's relative finite-difference step (a kind without one then takes √ε·max(|x₀|, 1),
+  fixed at the start of each run).
+- **Cycles.** Automatic: the algorithm's own stopping tests (DLS at most 1000 iterations).
+  Fixed: that many cycles in all. Infinite: restarted from the best design whenever it stops,
+  until cancelled.
+- **Constraints.** Bound operands are weighted rows (§31). A row with a negative weight is an
+  exact constraint: with cᵢ its residual, rows √ρ(cᵢ + λᵢ/2ρ) are appended; after each run
+  λᵢ += 2ρcᵢ, and ρ (from 1) grows tenfold when ‖c‖ fell by less than a factor 4; the row is met
+  when |V − T| ≤ 1e-9 × max(1, |T|), otherwise the run ends after 30 rounds as "constraints not
+  met". The merit value reported is §31's, with absolute weights.
+- **Start and failures.** A starting design with a failed row is refused with every failure
+  named (help: "If any of the operands cannot be computed, the optimization cannot begin");
+  later designs that fail get §31's penalty and the algorithm steps away.
+- **Cancellation** returns the last accepted design, which without negative-weight rows is the
+  best so far (every accepted step lowers the merit).
+- **Determinism.** The finite-difference columns and the ray traces run in parallel slots; the
+  result is bitwise the same at any thread count. OD evaluates sequentially.
+- **Apply and undo** (`LocalOptimizationResult.ApplyTo`, `UndoOn`) copy only the variable cells
+  (the saved radius itself, not 1/(1/R)) into the current record, refusing if its variables are
+  no longer the run's.
+- **App.** The Optimize window (algorithm, cycles, threads, Start/Stop, merit before and now,
+  log) applies each run's result through the Lens Data Editor as one undo step, and the
+  multi-configuration table by reloading its editor.
+
+**Gate** (`Gates/LocalOptimizationGateTests`): a perturbed doublet returns to the optimum the
+test builds by optimizing it once; a 0.2 mm singlet with an F/# solve bends to the Coddington
+shape factor 2(N² − 1)/(N + 2), derived in the test from the Seidel sum, and agrees with an
+independent Brent search; results are bitwise identical at 1, 4 and unlimited threads;
+cancellation keeps the best design so far.
+
+**Not built.** Glass variables and substitution (OP-59); global optimization (OP-58); analytic
+or automatic derivatives (finite differences only; the kernel accepts an analytic Jacobian);
+OpticStudio's own Orthogonal Descent (unpublished); the window's per-kind scale and increment
+settings and saving its settings; Auto Update of analysis windows during a run.
+
 ## 36. Tolerance data editor and tolerance operands
 
 `OpenSim.Optics/Tolerancing` (OP-63) holds the tolerance table and the rules that perturb a copy
@@ -2988,3 +2913,74 @@ not saved), non-sequential operands (OP-70), Zernike Fringe and Standard Sag sur
 and composite add-ons (OP-32) with the operands that need them, cylindrical roll surfaces, the
 default tolerances wizard, the tolerance listing, sorting, .TOL files, the sensitivity and Monte
 Carlo analyses (OP-64, OP-65) and compensator optimization.
+
+## 37. Thermal analysis
+
+OP-91 adds OpticStudio's thermal configurations: the thermal pickup solve of the
+Multi-Configuration Editor and the Make Thermal tool. Sources: OpticStudio 2025 R2 help, System
+Explorer › Environment and its pages ("Thermal Analysis of Optical Systems", "Defining Multiple
+Temperature and Pressure Values", "Defining Which Parameters Consider Thermal Effects",
+"Radius of Curvature (CRVT) Values", "Thickness (THIC) Values", "Thermal Parameter Values",
+"All Other Values", "Adding TCE data", "Modeling Gases and Liquids", "Index of Refraction
+Computation", "Limitations of Thermal Analysis", "Edge Thickness", "TCE"), and the
+Multi-Configuration pages "Make Thermal" and "Solve Types"; copies in
+`plans/sources/optics/op-91-help/` and `op-30-help/` (not in the repository). Code:
+`OpenSim.Optics/MultiConfig/LensThermalModel.cs` (the expansion rules),
+`MultiConfiguration.cs` (evaluation), `MultiConfigTools.MakeThermal`.
+
+- **Expansion.** A length L at a temperature ΔT from its reference becomes L(1 + αΔT)
+  ("Defining Multiple Temperature and Pressure Values"); a curvature c becomes c/(1 + αΔT).
+  TCEs, in the catalogs' ED line and in the Lens Data Editor's TCE column, are in 10⁻⁶/K
+  (help: TCE; ZemaxGlass manual). The catalog value is the −30…+70 °C one, used at any
+  temperature, as OpticStudio does (help: TCE).
+- **Which α.** Radii, and here also clear and mechanical semi-diameters: the surface's catalog
+  glass; for an air or MIRROR surface the previous surface's catalog glass, else its own TCE
+  column; for any other medium (constant index, model glass) the TCE column ("Radius of
+  Curvature (CRVT) Values", "Adding TCE data"). A glass whose catalog sets "ignore thermal
+  expansion" is not a solid and uses the TCE column ("Modeling Gases and Liquids").
+  Thicknesses: a solid catalog glass scales with its TCE; any other space is a mount.
+- **The mount.** The space after surface n is a spacer of length E = T − Z_n(h_n) + Z_{n+1}(h_{n+1})
+  (help: Edge Thickness), the sags Z taken at each surface's mechanical semi-diameter h of the
+  reference configuration (fixed values as entered, automatic ones sized by rays, section 13).
+  It expands with surface n's TCE column α_m: E' = E(1 + α_mΔT). Each bounding surface j grows
+  by s_j = 1 + α_jΔT (the radius rule), so its sag becomes s_j·Z_j(r/s_j); the contact moves
+  to h'_j = min(h_j(1 + α_mΔT), h_j s_j), never past the lens's expanded edge (the help's two
+  cases). T' = E' + Z'_n(h'_n) − Z'_{n+1}(h'_{n+1}). With every α equal this is T(1 + αΔT);
+  with α_m = 0 the thickness still changes when the radii do, as the help says.
+- **Glass and material (OQ-12).** `OpticsSettings.Thermal` (`OpticsThermalSettings`) may link a
+  glass ("N-BK7" or "CATALOG:N-BK7") to a mechanical `Material`, stored whole; its
+  `ThermalExpansionCoefficient` (1/K, a new nullable field of the material record) then
+  replaces the catalog TCE everywhere that glass's TCE is read. A linked material without a
+  coefficient, or an unlinked glass without a catalog TCE, fails by name. No built-in material
+  has a coefficient yet.
+- **The thermal pickup.** A cell of configuration k with reference configuration c (1 ≤ c < k)
+  takes the value of its row in c, changed for ΔT = T_k − T_c, where T is the configuration's
+  TEMP value (the system temperature without a TEMP row). CRVT, THIC, SDIA and MCSD expand as
+  above, read on configuration c's lens; every other operand copies c's value ("All Other
+  Values"); PRAM and PAR1–8 fail (scaling by the parameter's units, "Thermal Parameter Values",
+  needs units the surface types do not declare). ΔT = 0 returns c's value exactly. Thermal
+  pickups are evaluated after the configuration's other cells, so a pickup in the same
+  configuration cannot read one. The glasses come from the active catalogs, which
+  `SettingsFor`, `ValuesIn`, `SolveFor`, `LensFor` and `ForCurrentConfiguration` take; without
+  them a length's thermal pickup at a changed temperature fails by name.
+- **Indices.** Each configuration's TEMP and PRES set the system environment; with "Adjust index
+  to environment" on, the glass indices follow section 2's temperature and pressure model (OP-13, `ThermalIndex`). Make Thermal
+  says so when the setting is off.
+- **Make Thermal.** "Delete existing configuration data": one nominal configuration (the
+  current one, at its temperature and pressure) and N more at temperatures from the minimum to
+  the maximum in equal steps (N = 1: the minimum). "Use existing n configurations as nominal":
+  n + n·N configurations, nominal c's N following the originals in order; existing rows' new
+  cells pick up nominal c (a thermal pickup for CRVT, THIC, SDIA, MCSD), TEMP takes the new
+  temperatures. Rows TEMP and PRES (when missing) and CRVT, THIC, SDIA, MCSD for surfaces 1 to
+  the one before the image are added where the table lacks them and the value is fixed
+  (planes, infinite thicknesses and automatic semi-diameters have none; a Lens Data Editor
+  solve or pickup is kept and the notes name it), sorted by operand or by surface. The pressure
+  of the new configurations is the nominal's (help) unless given. The table is limited to 160
+  configurations.
+- **Not built.** Thermal pickups of parameters and extra data; several environments in one
+  configuration (several TEMP or PRES rows); thermal pickups of glasses beyond a copy; TCE and
+  thermal merit operands (OP-55) and athermalisation by optimization (OP-57); the merit function
+  over a thermal table needs the catalogs passed to `ProjectMeritConfigurations`'s `SettingsFor`
+  (a one-line change in `OpenSim.Optics/Merit/MeritConfigurations.cs`, not made here), until
+  then its thermal configurations at a changed temperature fail by name; the prescription
+  report's thermal listing; coupling to OpenSim's own thermal and structural solvers (OP-92).
