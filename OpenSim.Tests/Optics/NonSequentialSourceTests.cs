@@ -424,7 +424,7 @@ public sealed class NonSequentialSourceTests
         var e = Assert.Throws<ArgumentException>(() => new NscSpectrum { Model = NscColorModel.D65White }.Lines(Array.Empty<NscSpectralLine>(), 0, x => x, "Object 3"));
         Assert.Contains("OP-79", e.Message);
         var table = new NscSpectrum { Model = NscColorModel.SpectrumFile, Table = new[] { new NscSpectralLine(0.5, 1), new NscSpectralLine(0.4, 1), new NscSpectralLine(0.6, 1) } };
-        Assert.Contains(Assert.Throws<ArgumentException>(() => table.Lines(Array.Empty<NscSpectralLine>(), 0, x => x, "test")).Message, "ascending");
+        Assert.Contains("ascending", Assert.Throws<ArgumentException>(() => table.Lines(Array.Empty<NscSpectralLine>(), 0, x => x, "test")).Message);
     }
 
     /// <summary>Lumens are converted with P_W = P_lm/(683·V̄) (683 lm/W from the SI candela; NIST,
