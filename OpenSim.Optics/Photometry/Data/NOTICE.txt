@@ -1,0 +1,23 @@
+CIE data tables shipped with OpenSim Studio (plan item OP-79)
+
+CIE_xyz_1931_2deg.csv
+  "Colour-matching functions of CIE 1931 standard colorimetric observer", International
+  Commission on Illumination (CIE), Vienna, 2019. DOI 10.25039/CIE.DS.xvudnb9b.
+  Original source: CIE 018:2019, Table 6. 360-830 nm in 1 nm steps.
+  https://files.cie.co.at/Publications-datasets/CIE_xyz_1931_2deg.csv
+
+CIE_sle_photopic.csv
+  "CIE spectral luminous efficiency for photopic vision", International Commission on
+  Illumination (CIE), Vienna, 2019. Original source: CIE 018:2019, Table 1. 360-830 nm in 1 nm
+  steps, wavelengths in standard air.
+  https://files.cie.co.at/Publications-datasets/CIE_sle_photopic.csv
+
+Both files, and the metadata files beside them (*_metadata.json, also as published), are
+licensed by the CIE under the Creative Commons Attribution-ShareAlike 4.0 International licence
+(CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/), as their metadata files state
+("rightsList"). They are redistributed here unchanged (byte for byte; the program checks their
+SHA-256 checksums against the metadata when it reads them). The ShareAlike terms apply to these
+data files and to any adaptation of them; the program code that reads them is not an adaptation
+of the data.
+
+Downloaded 2026-11-16.

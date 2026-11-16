@@ -1,0 +1,3 @@
+# The CIE data files are kept byte-for-byte as the CIE publishes them (OP-79); their SHA-256
+# checksums are checked when they are read.
+* -text

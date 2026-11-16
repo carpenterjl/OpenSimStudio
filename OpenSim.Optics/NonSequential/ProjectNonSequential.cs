@@ -95,6 +95,11 @@ public static class ProjectNonSequential
                     break;
                 }
                 // end OP-77
+
+                // OP-79: detector objects (Detector Surface and Detector Volume are refused by name).
+                case var detector when Detectors.NscDetectorTypes.IsDetectorType(detector):
+                    geometry = Detectors.NscDetectorTypes.Create(detector, p, v => OpticsConventions.ToMeters(v, unit), row);
+                    break;
                 default:
                     problems.Add($"{where}: the object type '{type}' is not built; OP-70 builds {string.Join(", ", BuiltTypes)}, and the object library is plan item OP-72.");
                     return null;

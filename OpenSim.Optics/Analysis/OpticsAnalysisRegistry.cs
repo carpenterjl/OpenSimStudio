@@ -193,6 +193,9 @@ public sealed class OpticsAnalysisRegistry
 
         // OP-70: the non-sequential core's single-ray listing.
         registry.Register(new NonSequential.NscSingleRayTraceAnalysis());
+
+        // OP-79: the Detector Viewer (saved detector data until OP-77's sources are joined).
+        registry.Register(new NonSequential.Detectors.NscDetectorViewerAnalysis());
         return registry;
     }
 }

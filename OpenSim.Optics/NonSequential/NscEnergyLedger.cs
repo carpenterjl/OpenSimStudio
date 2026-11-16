@@ -210,6 +210,12 @@ public sealed record NscRunResult
     public required NscEnergyLedger Ledger { get; init; }
     public required IReadOnlyList<string> Errors { get; init; }
     public required IReadOnlyList<string> Notes { get; init; }
+
+    // OP-79
+    /// <summary>What each detector object collected, in object order; null when the scene has no
+    /// detector objects (docs/Optics-Conventions.md §73). Combine the per-wavelength runs with
+    /// <see cref="global::OpenSim.Optics.NonSequential.Detectors.NscDetectorResults.Combine"/>.</summary>
+    public IReadOnlyList<global::OpenSim.Optics.NonSequential.Detectors.NscDetectorData>? Detectors { get; init; }
 }
 
 internal static class NscFormat

@@ -1798,6 +1798,33 @@ single place in the code, so a correction is one line and its test.
       X Axis Reference method (OpticStudio's default for the sequential polarization trace).
     Check: a polar detector (OP-79) against each source in OpticStudio.
 
+69. **Detector readings** (OP-79, section 73). From the help pages under
+    `plans/sources/optics/op-79-help/`; nothing has been compared with OpticStudio's output.
+    - *Coherent phase.* "The phase is determined by the total optical path length from the source
+      referenced to the center of the spatially distributed pixel" is read as the ray's phase
+      carried as a local plane wave from the hit point p to the pixel centre c:
+      φ = (2π/λ)(OPL + n·d̂·(c − p)), λ and n relative to the system's air.
+    - *Angle bins.* The help's x and y angles, θ·l/√(1 − n²) and θ·m/√(1 − n²) with
+      θ = |cos⁻¹ n|, are applied as written, so a ray arriving from the back (n < 0, θ > 90°)
+      falls outside the default ±90° range and is not binned in angle space. The pixel solid angle
+      (∫∫ sin θ/θ over the pixel) and the "cosine of the angle at the center of the pixel" (θ at
+      √(x² + y²) of the centre) are this program's.
+    - *Polar bins.* Increment = maximum angle/(# radial pixels − 1) and the half-width first and
+      last bins, from the help's figure "Detector Polar sampling" (its text gives the increment as
+      "# Radial Pixels/Radial Size" and the example "1.5/9 = 1.667", both inconsistent with the
+      figure). Azimuth arm a is centred on a·360°/n_a, as the figure's highlighted sector is.
+    - *Pixel interpolation.* "Apportioned among the neighboring pixels" is read as bilinear
+      sharing among the four nearest pixel centres, a share off the detector staying in the pixel.
+    - *Smoothing.* "The average of the data in the pixel and the neighboring pixels" is read as
+      the 3 × 3 block (the pixels that exist at an edge), applied to the displayed quantity.
+    - *Faceted polar detector.* Traced as the exact sphere; OpticStudio uses facets.
+    - *Tristimulus scale.* X, Y, Z = 683·(x̄, ȳ, z̄)·Φ, so Y is lumens; OpticStudio's scale for the
+      DDC and DDP X, Y, Z values is not stated.
+    - *File units.* source_multiplier 5 is read as "no prefix" (femto … milli, none, kilo … tera).
+      The gap after the ray-trace-method integer, if any, is not stated; none is written.
+    Check: trace a point source onto a Detector Rectangle and a Detector Polar here and in
+    OpticStudio, and compare a DDR file saved there with one read here.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6783,6 +6810,8 @@ The Non-Sequential Component Editor that edits the saved scene is section 71 (OP
 
 Sources as scene objects, and the run over several wavelengths, are in section 72 (OP-77).
 
+Detector objects, photometry and the Detector Viewer (OP-79) are in section 73.
+
 ## 70. CAD export
 
 OP-96 writes a sequential lens's elements, mirrors and rays as files a mechanical designer can
@@ -7037,3 +7066,136 @@ models that fit a spectrum to a colour; the hexagonal source array; coherence-le
 initial phase (no coherent detector data); bulk-scatter limits (OP-81); a source run analysis
 window, the ZPL NSTR binding, the editor's source columns (OP-71) and source viewers. Readings in
 §10 item 68.
+
+## 73. Detectors
+
+OP-79 builds the detector objects, photometry and the Detector Viewer
+(`OpenSim.Optics/NonSequential/Detectors/`, `OpenSim.Optics/Photometry/`). Tests:
+`OpenSim.Tests/Optics/NscDetectorTests.cs`. OpticStudio's behaviour is read from its 2025 R2
+help pages saved under `plans/sources/optics/op-79-help/` ("Detector Rectangle Object",
+"Detector Color Object", "Detector Polar Object", "Detector Surface Object", "Detector Volume
+Object", "Objects as Detectors", "Summary of NSC Detectors", "Detector Viewer", "Detector
+Settings", "Saving and Loading Detector Data", "Save Detector Data", "Load Detector Data",
+"Units").
+
+**Detector objects** are `NscGeometry` shapes that implement `INscDetector`, so they sit in the
+scene's object list like any other object (placement, reference object, Inside Of). All three are
+surface objects; their material decides what the ray does next, as the help says: blank passes
+(a transparent detector), MIRROR reflects, ABSORB absorbs. An absorbing detector's energy is
+"detected" in the ledger (per object); a transparent one takes nothing.
+
+- **Detector Rectangle** (17 parameters in OpticStudio's order: half widths, pixel counts, five
+  display parameters kept for the shaded model, Front Only, PSF Mode Wavenumber, x and y angle
+  ranges, polarization flag, mirroring flag). Per pixel it stores the incoherent flux in position
+  space, the incoherent flux in angle space, Σ A cos φ, Σ A sin φ and Σ A with A = √(ray flux), the
+  luminous flux 683·V(λ)·Φ, and the sums of squares for the noise estimate. Pixel 1 is the
+  (−x, −y) corner, x fastest. Angle space uses the same pixel counts over the angle ranges, with
+  x angle = θ·l/√(1 − n²) and y angle = θ·m/√(1 − n²), θ = |cos⁻¹ n|, l, m, n the direction
+  cosines in the detector frame. Refused by name: PSF mode (parameter 11 ≠ 0) and polarization
+  flags 1–9 (the trace carries a coherency matrix, not a field and its phase).
+- **Detector Color**: the same shape and parameters (11 unused), storing flux and tristimulus
+  X, Y, Z per pixel in position and angle space, and with "Record Spectral Data" the flux of
+  every ray in wavelength bins between "Min wave" and "Max wave" (whole detector; per-pixel
+  spectra are not built).
+- **Detector Polar** (maximum angle 1–180°, radial size, 10–721 polar and 12–720 azimuthal
+  pixels, a multiple of 4, mirroring): flux, luminous flux and X, Y, Z binned by the ray's
+  direction, θ from local +z and φ = atan2(m, l) from +x; polar index fastest. Bins: increment =
+  maximum angle/(# radial − 1), the first [0, inc/2], bin j [(j − ½)inc, (j + ½)inc], the last
+  ending at the maximum angle; azimuth arm a centred on a·360°/n_a. The face is the exact sphere,
+  not OpticStudio's facets.
+- **Front Only** (Rectangle, Color): rays travelling toward −z (from the +z side, "the back")
+  miss the object altogether, before its material. **Mirroring** 1, 2, 3 copy each ray to the
+  left-right, top-bottom or both mirror pixels with its flux divided by 2, 2 or 4; 4, 5, 6 the
+  same without dividing. **Use Pixel Interpolation** shares each ray's position-space flux
+  bilinearly among the four nearest pixel centres (coherent and angle data are not
+  interpolated).
+- **Not built, refused by name:** Detector Surface (its triangle pixels lie on an Aspheric
+  Surface shape, which the core does not have), Detector Volume (voxels in a volume that may
+  straddle other objects, which the core's medium stack refuses), and objects as detectors
+  (pixels are the triangles of an object's drawing; the core's objects are analytic). OP-70's
+  detecting stand-in still counts a surface object's total flux. The descriptors of all five
+  types, in OpticStudio's parameter order, are `NscDetectorTypes.Descriptors`.
+
+**The tracer hook.** `NscTracer.Run` creates one accumulator per detector object for every
+64-ray chunk. At each contact, after the media on the far side are checked and before the
+deciding object acts, every detector object of the contact receives an `NscDetectorHit`: object
+number, launched-ray number, hit point and direction in the detector frame, the ray's power after
+bulk absorption, its optical path from the launch point (meters, indices relative to the system's
+air), the index of the medium it arrives through, the wavelength, its coherency matrix when the
+polarization trace runs, and the ghost flag. After each launched ray the accumulators close the
+ray (its per-pixel totals enter the sums of squares). The chunks are added in chunk order, so the
+detector data is the same to the bit at any thread count. `NscRunResult.Detectors` holds the
+data (`NscFlatDetectorData`, `NscPolarDetectorData`), null when the scene has no detector;
+`NscDetectorResults.Combine` sums the runs of several wavelengths (and their launched rays).
+`TraceSingle` does not record.
+
+**Quantities.** Irradiance = pixel flux / pixel area. Radiant intensity = angle-space flux / the
+pixel's solid angle; for the rectangle the solid angle is ∫∫ (sin θ/θ) dx dy over the pixel in
+the angle coordinates (an azimuthal-equidistant map, whose area element is θ dθ dφ against
+sin θ dθ dφ), by 8 × 8 Gauss–Legendre; for the polar detector Δφ·(cos θ₁ − cos θ₂). Radiance in
+position space = irradiance/2π and in angle space = intensity/(detector area · cos θ at the pixel
+centre), both as the help defines them. Coherent irradiance (help, "Comments on coherent data
+computations"): with more than one pixel and Normalize Coherent Power on (the default), |ΣE|² per
+pixel scaled so the detector's total equals its incoherent flux; otherwise
+I_inc·(Re² + Im²)/(ΣA)². Each ray's phase is φ = (2π/λ)(OPL + n·d̂·(c − p)), its optical path
+carried as a local plane wave from the hit point p to the centre c of the pixel struck, λ the
+wavelength in the system's air. All rays are summed coherently, whatever their wavelength or
+source, as the help says OpticStudio does. Coherent phase = atan2(Σ A sin φ, Σ A cos φ).
+
+**Noise.** The help defines no per-pixel noise estimate. Each pixel carries Σ_k w_k² over the
+launched rays k, w_k the flux ray k (with all its split children and mirror copies) left in the
+pixel, and the standard error of the pixel's flux F is √(N/(N − 1)·(Σw_k² − F²/N)), N the
+launched rays: the standard error of a sum of N independent samples. For Sobol-sampled rays it
+overstates the error. Data loaded from a file has no sums of squares and so no estimate.
+
+**Photometry** (`Photometry/CieTables.cs`). The CIE 1931 2° colour-matching functions (CIE
+dataset DOI 10.25039/CIE.DS.xvudnb9b, from CIE 018:2019 Table 6) and the photopic V(λ)
+(CIE_sle_photopic.csv, from CIE 018:2019 Table 1, wavelengths in standard air), 360–830 nm in
+1 nm steps, are shipped byte for byte as the CIE publishes them, with their metadata, under the
+CIE's licence CC BY-SA 4.0 (`Photometry/Data/NOTICE.txt`); the SHA-256 published in each
+metadata file is checked on reading. Between rows the values are interpolated linearly, outside
+the range they are zero, as the metadata says. The luminous efficacy is K_cd = 683 lm/W (SI
+Brochure, 9th edition 2019, §2.3.1, "the luminous efficacy of monochromatic radiation of
+frequency 540 × 10¹² Hz"); luminous flux = 683·V(λ)·Φ_e, and tristimulus
+X, Y, Z = 683·(x̄, ȳ, z̄)·Φ_e (Y is the luminous flux, ȳ being V). V = 1 exactly in the 555 nm
+row, so one watt at 555 nm reads 683 lm. The SI's 540 × 10¹² Hz is 555.171 nm in vacuum (c/f);
+the table being in standard air, where that radiation is slightly shorter, this program reads
+between 683·V(555.171 nm) ≥ 682.98 lm and 683 lm for it: the SI value is exact at 540 THz, the
+CIE's V peak is a table row. Chromaticity x = X/(X+Y+Z), y = Y/(X+Y+Z) (CIE e-ILV 17-23-053),
+u′ = 4X/(X+15Y+3Z), v′ = 9Y/(X+15Y+3Z) (e-ILV 17-23-073). True colour uses linear sRGB from XYZ
+by the matrix of W3C CSS Color Module Level 4 §19 (`XYZ_to_lin_sRGB`, D65, exact quotients) and
+its transfer function (12.92·v up to 0.0031308, 1.055·v^(1/2.4) − 0.055 above); IEC 61966-2-1
+itself was not available. Photometric display assumes the rays carry watts.
+
+**Detector Viewer** (`NscDetectorViewerAnalysis`, id `NscDetectorViewer`; the renderer is
+`NscDetectorViewer.Render`). Show as: image, contours, a row or column cross section (Detector
+Polar: the arm at "Angle" with the opposite arm as negative angles), true colour, the CIE 1931
+x, y or 1976 u′, v′ chromaticity chart (spectrum locus every 5 nm from 380 to 780 nm), flux vs.
+wavelength. Show data: incoherent irradiance, coherent irradiance, coherent phase, radiant
+intensity, radiance in position or angle space, and this program's relative noise map; each in
+photometric units when asked (illuminance, luminous intensity in cd, luminance). Smoothing: each
+pass replaces every pixel by the average of the 3 × 3 block around it (the pixels that exist; the
+polar azimuth wraps), the polar data rescaled to keep its power, as the help says. Scale: linear
+(Min/Max Plot Scale when either is non-zero) or log₁₀ over 5, 10 or 15 decades below the top,
+the top being the next power of 10 above Max Plot Scale when it is positive, else the data's
+largest value. The text has the detector, the Beam Info (centroid, RMS widths and radius of the
+incoherent flux over pixel centres), the noise, the colour totals, and the pixel table for up to
+1024 pixels. True colour is drawn as its R, G and B channel maps, as no colour-picture plot kind
+exists. The analysis reads the detector data from a file; tracing the project's sources onto its
+detectors waits for OP-77.
+
+**Save/Load Detector Data** (`NscDetectorFile`) follows OpticStudio's binary layout: the header
+`int version, type, lens_units, source_units, source_multiplier; int i_data[50]; double
+d_data[50];` with the 4-byte gap before `d_data` (624 bytes in all), a 32-bit ray-trace-method
+code (2, NSC ray trace), then per pixel 5 doubles (DDR: position flux, angle flux, coherent real,
+imaginary, amplitude sum) or 8 (DDC: position P, X, Y, Z, angle P, X, Y, Z; DDP: four unused,
+then angle P, X, Y, Z); version 1004, little-endian, lengths in the file's lens unit. Written
+with watts (0) and multiplier 5 (no prefix); other source units are refused on reading. DDV is
+not built.
+
+**Not built:** Detector Surface, Detector Volume, objects as detectors; PSF mode; polarization
+flags 1–9; per-pixel spectra and CRI/CCT; LightningTrace; ray-database playback and filter
+strings (OP-83); the polar directivity plots and IES/LDT export; grey-scale and inverse colour
+maps, contrast enhancement, image-file output; tracing the project's own sources in the viewer
+(OP-77). The ZPL keywords and operands that read detectors (NSDD, NSDE, NSDC, NSDP,
+SAVEDETECTOR, LOADDETECTOR, SETDETECTOR) are not bound yet. Readings in §10 item 69.

@@ -3,6 +3,7 @@ using System.Numerics;
 using OpenSim.Core.Geometry;
 using OpenSim.Core.Numerics;
 using OpenSim.Optics.Coatings;
+using OpenSim.Optics.NonSequential.Detectors;   // OP-79
 using OpenSim.Optics.Polarization;
 using OpenSim.Optics.Sequential;
 
@@ -207,23 +208,30 @@ public sealed class NscTracer
             var ledger = new NscLedgerBuilder();
             var errors = new List<string>();
             var work = new Workspace();
+            var detectors = NscDetectorSet.For(_objects, AirMicrometers);   // OP-79: per-chunk detector sums
             int end = Math.Min(rays.Count, (c + 1) * RaysPerChunk);
             for (int i = c * RaysPerChunk; i < end; i++)
-                TraceTree(rays[i], i, ledger, null, errors, work);
-            return (ledger, errors);
+            {
+                TraceTree(rays[i], i, ledger, null, errors, work, detectors);
+                detectors?.EndRay();
+            }
+            return (ledger, errors, detectors);
         }, cancellation);
         var total = new NscLedgerBuilder();
         var allErrors = new List<string>();
-        foreach (var (ledger, errors) in parts)
+        var allDetectors = NscDetectorSet.For(_objects, AirMicrometers);    // OP-79: chunks added in chunk order
+        foreach (var (ledger, errors, detectors) in parts)
         {
             total.Add(ledger);
+            if (detectors is not null) allDetectors!.Add(detectors);
             foreach (var e in errors)
                 if (allErrors.Count < 20) allErrors.Add(e);
         }
         if (!Settings.IgnoreErrors && allErrors.Count > 0)
             throw new InvalidOperationException(
                 $"Non-sequential ray trace error (turn Ignore Errors on to count such rays as lost energy and go on): {allErrors[0]}");
-        return new NscRunResult { Ledger = total.Build(), Errors = allErrors, Notes = Notes() };
+        var built = total.Build();
+        return new NscRunResult { Ledger = built, Errors = allErrors, Notes = Notes(), Detectors = allDetectors?.Build(built.Rays) };
     }
 
     /// <summary>What the trace modelled, for reports.</summary>
@@ -244,7 +252,8 @@ public sealed class NscTracer
                 _ => "No ray splitting: the transmitted ray is traced (the reflected one on total internal reflection or at a mirror).",
             },
             $"Glue distance {s.GlueDistance.ToString("g6", CultureInfo.InvariantCulture)} m; maximum {s.MaxIntersectionsPerRay} intersections and {s.MaxSegmentsPerRay} segments per ray, {s.MaxNestedObjects} nested objects; minimum relative intensity {s.MinimumRelativeIntensity.ToString("g6", CultureInfo.InvariantCulture)}, absolute {s.MinimumAbsoluteIntensity.ToString("g6", CultureInfo.InvariantCulture)}.",
-            "Not built: scattering (OP-80), volume physics (OP-81), diffraction and gradient index in objects (OP-82), sources (OP-77) and detectors (OP-79) beyond the OP-70 stand-ins, Consider/Ignore Objects lists.",
+            // OP-79: detectors are built; Detector Surface, Detector Volume and objects as detectors are not.
+            "Not built: scattering (OP-80), volume physics (OP-81), diffraction and gradient index in objects (OP-82), sources (OP-77) beyond the OP-70 stand-in, Detector Surface, Detector Volume and objects as detectors (OP-79 builds Detector Rectangle, Color and Polar), Consider/Ignore Objects lists.",
         };
         return notes;
     }
@@ -339,7 +348,7 @@ public sealed class NscTracer
         inside.Length == 0 ? (_backgroundIndex, 0, 0) : (_index[inside[^1]], _alpha[inside[^1]], inside[^1] + 1);
 
     private void TraceTree(NscLaunchRay launch, long rayNumber, NscLedgerBuilder ledger, List<NscSegment>? segments,
-        List<string> errors, Workspace work)
+        List<string> errors, Workspace work, NscDetectorSet? detectors = null)
     {
         var s = Settings;
         bool energy = s.AccountsEnergy;
@@ -500,6 +509,17 @@ public sealed class NscTracer
                 nestingError = $"the ray would be inside {after.Length} objects at once, more than the maximum nested/touching objects ({s.MaxNestedObjects}).";
             if (nestingError is not null) { Error(nestingError); continue; }
 
+            // OP-79: every detector object of the contact records the hit (docs/Optics-Conventions.md §73).
+            bool detectorHere = false;
+            foreach (var h in group)
+            {
+                if (_objects[h.Object].Geometry is not INscDetector) continue;
+                detectorHere = true;
+                detectors?.Record(h.Object, new NscDetectorHit(h.Object + 1, rayNumber, h.LocalPoint,
+                    _global[h.Object].InverseApplyDirection(r.Direction), intensity, r.Optical + medium.Index * h.T,
+                    medium.Index, AirMicrometers, phi, r.Ghost));
+            }
+
             var spawnScale = Math.Abs(hit.Point.X) + Math.Abs(hit.Point.Y) + Math.Abs(hit.Point.Z) + length;
 
             void Spawn(Vector3D direction, double power, CoherencyMatrix? state, int[] inside, bool ghost)
@@ -515,7 +535,7 @@ public sealed class NscTracer
             if (decider < 0)
             {
                 // Only ignored surfaces here: pass straight on.
-                if (seg is not null) { seg.Events |= NscEvents.Transmitted; seg.Fate = "passed an ignored surface object"; }
+                if (seg is not null) { seg.Events |= NscEvents.Transmitted; seg.Fate = detectorHere ? "recorded and passed (transparent detector)" : "passed an ignored surface object"; }   // OP-79
                 Spawn(r.Direction, intensity, phi, after, false);
                 continue;
             }
@@ -528,6 +548,13 @@ public sealed class NscTracer
             }
             if (objRecord.Material.Kind == NscMaterialKind.Absorb || face.FaceIs == NscFaceBehaviour.Absorbing)
             {
+                // OP-79: an absorbing detector object counts what it absorbs as detected.
+                if (objRecord.Geometry is INscDetector)
+                {
+                    ledger.Detect(obj + 1, intensity);
+                    if (seg is not null) { seg.Events |= NscEvents.Terminated; seg.Fate = "detected (absorbed by the detector)"; }
+                    continue;
+                }
                 ledger.Absorbed.Add(intensity);
                 if (seg is not null) { seg.Events |= NscEvents.Terminated; seg.Fate = "absorbed"; }
                 continue;

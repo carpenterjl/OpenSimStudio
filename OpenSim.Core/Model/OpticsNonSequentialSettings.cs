@@ -56,6 +56,21 @@ public sealed record OpticsNscObjectSettings
 
     public string? Comment { get; init; }
 
+    // OP-79: detector object properties (OpticStudio's Object Properties, Type tab, "Detector
+    // Settings"); null is the engine's default.
+    /// <summary>"Use Pixel Interpolation" (Detector Rectangle and Color); default off.</summary>
+    public bool? DetectorPixelInterpolation { get; init; }
+
+    /// <summary>"Normalize Coherent Power" (Detector Rectangle); default on, as the help says.</summary>
+    public bool? DetectorNormalizeCoherentPower { get; init; }
+
+    /// <summary>"Record Spectral Data" (Detector Color): number of bins, null for off.</summary>
+    public int? DetectorSpectralBins { get; init; }
+
+    /// <summary>"Min wave" and "Max wave" of Record Spectral Data, µm.</summary>
+    public double? DetectorSpectralMinMicrometers { get; init; }
+    public double? DetectorSpectralMaxMicrometers { get; init; }
+
     // OP-77
     /// <summary>A source object's Sources tab (null for a non-source or the defaults).</summary>
     public OpticsNscSourceSettings? Source { get; init; }

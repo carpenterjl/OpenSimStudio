@@ -2385,6 +2385,9 @@ OP-75), sources (OP-77), detectors and the detector viewer (OP-79), scattering (
 
 Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
 OP-75), sources beyond those under Non-sequential sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
+
+Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
+OP-75), sources (OP-77), scattering (OP-80), volume
 physics (OP-81), diffraction, gradient index and coating plots in objects (OP-82), ray databases
 and filters (OP-83), Consider/Ignore Objects, mixed mode with ports, several wavelengths in one
 run, a layout of traced non-sequential rays. The readings not yet checked against OpticStudio are
@@ -2494,6 +2497,52 @@ OP-71, detectors OP-79). Not built: Source Object, Source Imported (OP-75), Sour
 IESNA File and Source EULUMDAT File (OP-78), Source DLL and Source Diffractive (OP-100), Radiant
 Source Models, spectrum files on disk, the CIE colour models, the hexagonal array. Details and the
 readings not yet checked against OpticStudio are in docs/Optics-Conventions.md §72 and §10 item 68.
+
+## Detectors and the detector viewer
+
+Where non-sequential light is counted (docs/Optics-Conventions.md §73). Detectors are objects in
+the non-sequential object list, placed like any other object; with a blank material they let the
+light through (and still record it), MIRROR reflects it, ABSORB absorbs it and the energy ledger
+lists it as detected.
+
+- **Detector Rectangle**: a flat rectangle of x × y pixels that records the incoherent flux of
+  every ray (irradiance), its flux by incidence angle (radiant intensity, radiance) and the
+  coherent sum of the rays' fields (coherent irradiance and phase, with or without "Normalize
+  Coherent Power"). Front Only, the angle ranges, mirroring and pixel interpolation work as in
+  OpticStudio.
+- **Detector Color**: the same rectangle recording colour (tristimulus X, Y, Z from the CIE 1931
+  colour-matching functions) and, with Record Spectral Data, the flux in wavelength bins.
+- **Detector Polar**: part of a sphere (up to a full sphere) recording flux and colour by the
+  direction of each ray: far-field intensity.
+- **Noise**: every pixel carries an estimate of its statistical error (the standard error of the
+  ray contributions), shown in the viewer's Noise section and as a relative-noise map.
+- **Photometry**: lumens from watts with the CIE photopic V(λ) and the SI's 683 lm/W
+  (1 W at 555 nm is 683 lm); illuminance, luminous intensity (cd), luminance; chromaticity x, y
+  and u′, v′; true colour in sRGB. The CIE tables are shipped as the CIE publishes them, under its
+  CC BY-SA 4.0 licence.
+- **Saved scene**: rows of type "Detector Rectangle", "Detector Color" and "Detector Polar" with
+  OpticStudio's parameters, plus the properties Use Pixel Interpolation, Normalize Coherent Power
+  and Record Spectral Data (`DetectorPixelInterpolation`, `DetectorNormalizeCoherentPower`,
+  `DetectorSpectralBins`, `DetectorSpectralMinMicrometers`, `DetectorSpectralMaxMicrometers` in the
+  project file).
+- **Detector viewer** (analysis group "Non-sequential", also `optics analyse` with id
+  `NscDetectorViewer`): a detector's data as an image, contours, a row or column cross section,
+  true colour (as R, G, B maps), the CIE 1931 or 1976 chromaticity chart or flux against
+  wavelength; showing incoherent or coherent irradiance, coherent phase, radiant intensity,
+  radiance in position or angle space, or the relative noise; radiometric or photometric; linear
+  or logarithmic (5, 10, 15 decades) with Max/Min Plot Scale; smoothed any number of times; with
+  the beam's centroid and RMS sizes. It shows data saved in OpticStudio's detector file formats
+  (.DDR, .DDC, .DDP), which `NscDetectorFile` writes and reads.
+- **Library API**: `NscTracer.Run` fills `NscRunResult.Detectors`; `NscDetectorResults.Combine`
+  adds runs at several wavelengths; `NscDetectorViewer.Render` draws any detector's data.
+
+Not built: Detector Surface, Detector Volume and objects as detectors (refused by name), PSF mode,
+polarization-filtered detector data, per-pixel spectra, CRI and CCT, the polar directivity plots,
+IES/LDT export, LightningTrace, ray-database playback, image-file output. The viewer cannot yet
+trace the project's own sources onto its detectors: that waits for the source objects (OP-77).
+The detector macro keywords and operands (NSDD, NSDE, NSDC, NSDP, SAVEDETECTOR, LOADDETECTOR,
+SETDETECTOR) are not bound yet. The readings not yet checked against OpticStudio are listed in
+docs/Optics-Conventions.md §10 item 69.
 
 ## Coming
 

@@ -16,6 +16,12 @@
     <EmbeddedResource Include="Materials\RefractiveIndexInfo\**\*" Exclude="Materials\RefractiveIndexInfo\.gitattributes" LogicalName="riidb/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- OP-79: the CIE colour-matching and V(lambda) tables (CC BY-SA 4.0), embedded unchanged.
+       Resource names are "cie/" plus the file name. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Photometry\Data\*.csv" LogicalName="cie/%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
