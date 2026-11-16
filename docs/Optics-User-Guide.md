@@ -1864,7 +1864,8 @@ MFCN, OPER, OPEV), OPTIMIZE and QUICKFOCUS, analyses to text files (GETTEXTFILE)
 ZBFCLR, ZBFMULT, ZBFTILT, the coherent ZBFSUM), the geometric image analysis (IMA, IMAE,
 IMASUM), single-mode fiber coupling (FICL), CAD export (EXPORTCAD: IGES, STEP, STL) and the saved
 non-sequential objects (NOBJ, NPAR, NPOS, NPRO, OBJC, SETNSCPARAMETER, SETNSCPOSITION,
-SETNSCPROPERTY; surface 1). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
+SETNSCPROPERTY; surface 1), the non-sequential trace (NSTR, NSTR2, LOST) and its detectors (NSDD,
+NSDE, NSDP, NSDC, SAVEDETECTOR, LOADDETECTOR). docs/Optics-ZPL-Library.md lists every keyword and function of the ZPL help
 with what each does here or why it is not bound. Lengths are in lens units; the lens-data
 functions show solved values, as the editor does; a change made by a keyword takes effect at once
 (UPDATE is accepted and checks the lens builds). POP and IMA run their analysis with its
@@ -1881,8 +1882,7 @@ From the command line: `opensim optics macro <macro.zpl> [--lens FILE] [--arg NA
 [--macro-folder DIR] [--lens-folder DIR] [--out FILE] [--save-lens FILE]`.
 
 Not built: macro graphics and plots, analysis windows driven from a macro (GETT, OPENANALYSISWINDOW),
-non-sequential traces and detectors (NSTR, NSTR2, LOST, NSDD …: they wait for source and
-detector objects), inserting and deleting objects, the ray database keywords, SAT and the
+SETDETECTOR and GETNSCMTF, inserting and deleting objects, the ray database keywords, SAT and the
 EXPORTCAD settings with no counterpart in the export, ZBFRESAMPLE, the incoherent ZBFSUM, XDIFFIA, the viewer windows
 (ZBFSHOW, IMASHOW), RAYTRACEX and polarization traces, DEFAULTMERIT,
 HAMMER and the tolerancing keywords, the multi-configuration and tolerance editor keywords, the
@@ -2183,7 +2183,7 @@ built: see Physical optics propagation; FICL and FICP: see Fiber coupling.)
 
 When you type or load an OpticStudio operand this version does not have, whether from the imaging
 or the constraint half, the message says what it computes and why it is not built, for example
-"NSDD (OpticStudio: Non-sequential incoherent detector data…) is not built yet: needs OP-79". A
+"NSDD (OpticStudio: Non-sequential incoherent detector data…) is not built yet: needs OP-88". A
 loaded row with such a code becomes OOFF. The same message answers SETOPERAND in a ZPL macro, and
 OPEV evaluates any operand listed here by its OCOD number. (The Zemax lens file import reads no
 merit rows: it refuses them all, so it never meets an operand code.)
@@ -2339,60 +2339,6 @@ single-mode analysis (use POP), OpticStudio's automatic switch-off of the fast a
 multimode fiber modes, polarized POP coupling. The readings not yet checked against OpticStudio are
 listed in docs/Optics-Conventions.md §10 item 64.
 
-## Non-sequential ray tracing
-
-The second engine (docs/Optics-Conventions.md §69): rays that find their own path through objects
-placed in space, reflecting, refracting, splitting and being absorbed wherever they land. What is
-built is the core: the engine, three objects, a stand-in source and detector, the energy ledger,
-and one analysis.
-
-- **Objects.** Sphere (solid or a mirror/absorbing shell), Rectangle, and Standard Lens (two
-  conic faces with annular flats and a possibly tapered edge, OpticStudio's nine parameters).
-  Each has a position, tilts (about x, then the new y, then the new z, or about the fixed axes),
-  a reference object, an "Inside Of" object, a material (blank, a glass or an index, MIRROR or
-  ABSORB) and per-face "Face Is" and coating. Where objects overlap or touch, the later object
-  decides.
-- **Saved scene.** The project's optics record carries the objects and the non-sequential
-  controls (`NonSequential` in the project file, lengths in lens units). The objects are edited
-  in the Non-Sequential Component Editor (below), written in the file or built through the
-  library API.
-- **Controls.** Maximum intersections and segments per ray, maximum nested/touching objects,
-  minimum relative and absolute intensity, glue distance, simple ray splitting.
-- **Energy.** With "Use polarization" on (the default) every face reflects, transmits and absorbs
-  by Fresnel's equations or its coating, uncoated mirrors are aluminium, and glasses absorb by
-  their internal transmittance; off, interfaces are lossless. Splitting traces both the reflected
-  and transmitted rays; simple splitting picks one at random; no splitting traces the transmitted
-  ray.
-- **Energy ledger.** Every run reports where the emitted energy went: detected, absorbed,
-  escaped, below the thresholds, reflected but not traced, stopped at a limit, lost to errors; the
-  lines add up to the emitted energy.
-- **NSC single ray trace** (analysis group "Non-sequential", also `optics analyse` with id
-  `NscSingleRayTrace`): one ray from a start point and direction (optionally in an object's
-  frame, optionally inside an object), with or without polarization and splitting, at one
-  wavelength; every segment with its parent, level, the object it runs through and hits, the
-  face, what happened (X, R, T, G, Z, I), position, direction, normal, intensity and path, then
-  the ray's energy ledger. Trace errors are listed, unless "Ignore trace errors" is set.
-- **Library API.** `NscTracer.Run` traces any list of rays as a Monte Carlo run, the same to the
-  bit at any thread count; `NscSourceStandIn` makes a point-into-a-cone or a collimated-disk
-  source; a surface object flagged as a detecting stand-in absorbs and counts what it receives.
-- **Macros.** NOBJ, NPAR, NPOS, NPRO and OBJC read the saved objects and SETNSCPARAMETER,
-  SETNSCPOSITION and SETNSCPROPERTY change them (surface 1; the built types' parameters and the
-  type, comment, reference object, inside of, material, face coating, rotation order and "Face Is"
-  properties). NSTR and the detector functions wait for source and detector objects.
-
-Not built: the rest of the object library (OP-72 to
-OP-75), sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
-
-Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
-OP-75), sources beyond those under Non-sequential sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
-
-Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
-OP-75), sources (OP-77), scattering (OP-80), volume
-physics (OP-81), diffraction, gradient index and coating plots in objects (OP-82), ray databases
-and filters (OP-83), Consider/Ignore Objects, mixed mode with ports, several wavelengths in one
-run, a layout of traced non-sequential rays. The readings not yet checked against OpticStudio are
-listed in docs/Optics-Conventions.md §10 item 65.
-
 ## CAD export
 
 **Export CAD Files…** in the Optics panel writes the lens elements, mirrors and rays as a file a
@@ -2438,6 +2384,54 @@ and chamfers. The macro keyword EXPORTCAD writes IGES, STEP or STL with the sett
 VEC1 (see ZPL macros); SAT and the settings the export has no counterpart for are refused by name.
 The equations are in `docs/Optics-Conventions.md` §70.
 
+## Non-sequential ray tracing
+
+The second engine (docs/Optics-Conventions.md §69): rays that find their own path through objects
+placed in space, reflecting, refracting, splitting and being absorbed wherever they land. This
+section is the core: the engine, three objects, a stand-in source and detector, the energy ledger
+and one analysis; the editor, the sources and the detectors follow in their own sections.
+
+- **Objects.** Sphere (solid or a mirror/absorbing shell), Rectangle, and Standard Lens (two
+  conic faces with annular flats and a possibly tapered edge, OpticStudio's nine parameters).
+  Each has a position, tilts (about x, then the new y, then the new z, or about the fixed axes),
+  a reference object, an "Inside Of" object, a material (blank, a glass or an index, MIRROR or
+  ABSORB) and per-face "Face Is" and coating. Where objects overlap or touch, the later object
+  decides.
+- **Saved scene.** The project's optics record carries the objects and the non-sequential
+  controls (`NonSequential` in the project file, lengths in lens units). The objects are edited
+  in the Non-Sequential Component Editor (below), written in the file or built through the
+  library API.
+- **Controls.** Maximum intersections and segments per ray, maximum nested/touching objects,
+  minimum relative and absolute intensity, glue distance, simple ray splitting.
+- **Energy.** With "Use polarization" on (the default) every face reflects, transmits and absorbs
+  by Fresnel's equations or its coating, uncoated mirrors are aluminium, and glasses absorb by
+  their internal transmittance; off, interfaces are lossless. Splitting traces both the reflected
+  and transmitted rays; simple splitting picks one at random; no splitting traces the transmitted
+  ray.
+- **Energy ledger.** Every run reports where the emitted energy went: detected, absorbed,
+  escaped, below the thresholds, reflected but not traced, stopped at a limit, lost to errors; the
+  lines add up to the emitted energy.
+- **NSC single ray trace** (analysis group "Non-sequential", also `optics analyse` with id
+  `NscSingleRayTrace`): one ray from a start point and direction (optionally in an object's
+  frame, optionally inside an object), with or without polarization and splitting, at one
+  wavelength; every segment with its parent, level, the object it runs through and hits, the
+  face, what happened (X, R, T, G, Z, I), position, direction, normal, intensity and path, then
+  the ray's energy ledger. Trace errors are listed, unless "Ignore trace errors" is set.
+- **Library API.** `NscTracer.Run` traces any list of rays as a Monte Carlo run, the same to the
+  bit at any thread count; `NscSourceStandIn` makes a point-into-a-cone or a collimated-disk
+  source; a surface object flagged as a detecting stand-in absorbs and counts what it receives.
+- **Macros.** NOBJ, NPAR, NPOS, NPRO and OBJC read the saved objects and SETNSCPARAMETER,
+  SETNSCPOSITION and SETNSCPROPERTY change them (surface 1; the built types' parameters and the
+  type, comment, reference object, inside of, material, face coating, rotation order and "Face Is"
+  properties, and a source's Sources tab). NSTR traces the sources onto the detectors, and NSDD,
+NSDE, NSDP and NSDC read them (see Detectors and the detector viewer).
+
+Not built: the rest of the object library (OP-72 to OP-75), scattering (OP-80), volume
+physics (OP-81), diffraction, gradient index and coating plots in objects (OP-82), ray databases
+and filters (OP-83), Consider/Ignore Objects, mixed mode with ports, a layout of traced
+non-sequential rays. The readings not yet checked against OpticStudio are
+listed in docs/Optics-Conventions.md §10 item 65.
+
 ## Non-Sequential Component Editor
 
 The Optics panel's "Non-Sequential Component Editor…" opens the table of the non-sequential
@@ -2446,17 +2440,19 @@ at once; every edit can be undone.
 
 - **The table.** One row per object: type, comment, reference object, Inside Of, X, Y, Z, the
   tilts about X, Y, Z, the material, then the type's parameters in OpticStudio's order (Sphere,
-  Rectangle, Standard Lens). Insert, delete and move rows with the buttons or the grid's keys
+  Rectangle, Standard Lens, the built sources and detectors). Insert, delete and move rows with the buttons or the grid's keys
   (Insert, Ctrl+Delete, Alt+Up/Down). Reference objects and Inside Of numbers keep naming the same
   objects when rows are inserted, deleted or moved, absolute ones as absolute and relative ones as
   relative; deleting an object another one refers to, or moving it below that object, is refused.
 - **Object properties** ("Object properties…"): the type, "Use global XYZ rotation order", the
   detecting stand-in, and "Face Is" and the coating of each face. Sources, scattering, volume
   physics, GRIN, birefringence, diffraction, CAD and detector settings are listed as not built,
-  each with its plan item where one exists.
+  each with its reason (a source's Sources tab and a detector's settings are saved and traced, but
+  are set in the project file or by macro for now).
 - **Types not built.** An object of a type this build does not have (read from a file) is shown
   with its parameters by number and saved unchanged; it is not traced, and no new object of such a
-  type can be added.
+  type can be added. OpticStudio's source and detector types that are not built (Source File,
+  Detector Surface, …) say why when you try.
 - **Replicate Object** (Tools): Number X, Y, Z (odd counts) and Delta X, Y, Z make an array with
   the current object at its centre; the copies follow it as independent rows referenced to it
   (absolute, or relative when checked).
@@ -2482,8 +2478,8 @@ the number of rays, and an array of sources multiplies the power.
 - Spectrum: the system wavelengths (all by weight, or the row the wavenumber names), a uniform
   power spectrum, a black body spectrum, or a table of wavelength–weight pairs. Each ray picks its
   wavelength at random by weight.
-- Units: the system's source unit. Watts and joules are traced as stated. Lumens need the CIE
-  luminous efficiency table (plan item OP-79) and are refused until it is connected.
+- Units: the system's source unit. Watts and joules are traced as stated. Lumens are converted to
+  watts with the CIE photopic luminous efficiency V(λ) and 683 lm/W.
 - Sources tab: random polarization or a Jones vector, pre-propagation, reverse rays, Sobol or
   random sampling, and rectangular, circular or hexapolar arrays. Initial phase, coherence length
   and bulk scatter are saved but have no effect yet.
@@ -2492,8 +2488,9 @@ the number of rays, and an array of sources multiplies the power.
   source and the ray.
 
 The engine traces one wavelength at a time; a source run traces each wavelength of every source and
-adds up the energy. There is no analysis window or ZPL command for a source run yet (the editor is
-OP-71, detectors OP-79). Not built: Source Object, Source Imported (OP-75), Source File, Source
+adds up the energy. The detector viewer and the macro keyword NSTR trace the project's sources; there is
+no source-run analysis window of its own. Sources are added in the Non-Sequential Component
+Editor; their Sources tab has no fields there yet. Not built: Source Object, Source Imported (OP-75), Source File, Source
 IESNA File and Source EULUMDAT File (OP-78), Source DLL and Source Diffractive (OP-100), Radiant
 Source Models, spectrum files on disk, the CIE colour models, the hexagonal array. Details and the
 readings not yet checked against OpticStudio are in docs/Optics-Conventions.md §72 and §10 item 68.
@@ -2531,17 +2528,23 @@ lists it as detected.
   wavelength; showing incoherent or coherent irradiance, coherent phase, radiant intensity,
   radiance in position or angle space, or the relative noise; radiometric or photometric; linear
   or logarithmic (5, 10, 15 decades) with Max/Min Plot Scale; smoothed any number of times; with
-  the beam's centroid and RMS sizes. It shows data saved in OpticStudio's detector file formats
-  (.DDR, .DDC, .DDP), which `NscDetectorFile` writes and reads.
+  the beam's centroid and RMS sizes. With no file it traces the project's own sources (all of them, the analysis
+  ray counts, no splitting) and shows the detector its Detector setting names (0: the first); with
+  a file it shows data saved in OpticStudio's detector file formats (.DDR, .DDC, .DDP), which
+  `NscDetectorFile` writes and reads.
+- **Macros**: NSTR traces the sources and adds the data to the detectors; NSDD (Detector
+  Rectangle), NSDE (Detector Color), NSDP (Detector Polar) and NSDC (coherent data) read pixels,
+  totals, extremes, centroids and RMS sizes by the help's pixel and data codes, and with object 0
+  clear the detectors; SAVEDETECTOR and LOADDETECTOR write and read the detector files; LOST gives
+  the energy the last trace lost.
 - **Library API**: `NscTracer.Run` fills `NscRunResult.Detectors`; `NscDetectorResults.Combine`
   adds runs at several wavelengths; `NscDetectorViewer.Render` draws any detector's data.
 
 Not built: Detector Surface, Detector Volume and objects as detectors (refused by name), PSF mode,
 polarization-filtered detector data, per-pixel spectra, CRI and CCT, the polar directivity plots,
-IES/LDT export, LightningTrace, ray-database playback, image-file output. The viewer cannot yet
-trace the project's own sources onto its detectors: that waits for the source objects (OP-77).
-The detector macro keywords and operands (NSDD, NSDE, NSDC, NSDP, SAVEDETECTOR, LOADDETECTOR,
-SETDETECTOR) are not bound yet. The readings not yet checked against OpticStudio are listed in
+IES/LDT export, LightningTrace, ray-database playback, image-file output. SETDETECTOR, and
+the merit operands NSTR, NSDD, NSDE, NSDP and NSDC (the merit function evaluates sequential
+lenses; plan item OP-88). The readings not yet checked against OpticStudio are listed in
 docs/Optics-Conventions.md §10 item 69.
 
 ## Coming

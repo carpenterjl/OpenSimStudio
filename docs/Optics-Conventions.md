@@ -1822,6 +1822,12 @@ single place in the code, so a correction is one line and its test.
       DDC and DDP X, Y, Z values is not stated.
     - *File units.* source_multiplier 5 is read as "no prefix" (femto … milli, none, kilo … tera).
       The gap after the ray-trace-method integer, if any, is not stated; none is written.
+    - *Macros (wave 15 wiring).* NSTR adds to what the detectors hold (the help has the merit
+      function clear them with NSDD before NSTR and says nothing of NSTR clearing them); flux per
+      area is per square meter (no Analysis Units setting); NSDP −4 takes each pixel's polar angle
+      as its nominal angle j·inc, the centre of its bin [(j − ½)inc, (j + ½)inc] (the first and
+      last bins are half bins); NSDE and NSDP at pixel 0 average the chromaticity over the pixels
+      with non-zero lumens, as the help says, and exclude unlit pixels from −1 and −2.
     Check: trace a point source onto a Detector Rectangle and a Detector Polar here and in
     OpticStudio, and compare a DDR file saved there with one read here.
 
@@ -5532,13 +5538,21 @@ object ranges, footprints, the chief ray), the list and solid-beam ray patterns,
 and a system in non-sequential mode. NOBJ, NPAR, NPOS, NPRO and OBJC read, and SETNSCPARAMETER,
 SETNSCPOSITION and SETNSCPROPERTY change, OP-70's saved objects (section 69) in lens units; the
 surface argument must be 1, as the help says for non-sequential mode (non-sequential component
-surfaces in a sequential lens are OP-86). Only the parameters of the built types (Sphere 2,
-Rectangle 2, Standard Lens 9) and the property codes the saved objects hold (0 type, 1 comment, 2
-reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 29 "Face
-Is") are bound; any other code is refused by number with the plan item it waits for. NSTR, NSTR2,
-LOST, NSDD and NSDE wait for source objects (OP-77; OP-70's source stand-in is not a saved object),
-NSDC, NSDP and the detector keywords for detectors (OP-79), INSERTOBJECT and DELETEOBJECT for the
-editor (OP-71), the ZRD keywords for the ray database (OP-83). Readings in §10 item 52.
+surfaces in a sequential lens are OP-86). The built types are the editor's catalogue (section
+71: OP-70's Sphere, Rectangle and Standard Lens, the sources of section 72 and the detectors of section 73), each with the help's type code
+(NSC_SPHE, NSC_RECT, NSC_SLEN, NSC_SRCP …, NSC_DETE, NSC_DETC, NSC_DETP). The property codes bound
+are those the saved objects hold: 0 type, 1 comment, 2 reference object, 3 inside of, 4 material,
+5 face coating, 15 global XYZ rotation order, 20 "Use Pixel Interpolation" (Detector Rectangle and
+Color), 29 "Face Is", and on source objects the Sources tab, 101–112, 114–116, 161, 162, 165 and
+166 (random polarization, reverse rays, Jones x and y, phases, initial phase, coherence length,
+pre-propagation, sampling 0 random 1 Sobol, bulk scatter 0 many 1 once 2 never, array mode 0 none
+to 4 hexagonal, spectrum steps and limits, the array integers and sizes). Any other code is refused
+by number with its reason: 113 numbers the colour modes by the dialog's list, which the help does
+not print; 117 names a spectrum file, and this build saves the spectrum as a table; the help gives
+Temperature no code. NSTR, NSTR2, LOST, NSDD, NSDE, NSDP, NSDC, SAVEDETECTOR and LOADDETECTOR are in
+section 73 ("Macros"). INSERTOBJECT and DELETEOBJECT are not bound: the help does not say what type
+a new object is, nor what becomes of objects that refer to a deleted one. SETDETECTOR and GETNSCMTF
+are not bound; the ZRD keywords wait for the ray database (OP-83). Readings in §10 item 52.
 
 **Calling macros.** CALLMACRO runs a macro of the macro folder as a child with its own variables;
 the call buffers (51 numbers and 51 strings), the lens, the vectors, OPTRETURN and SOLVERETURN are
@@ -6262,7 +6276,7 @@ DSLP, DPHS, QSLP, TSAG, GOPT, IMSF, PRIM, SVIG, CVIG, FDMO, FDRE, EQUA, the skew
 operands, the gradient-index operands, UDOC, the non-sequential operands,
 CMFV, the coating operands and CODA, and the obsolete PnGT, PnLT, PnVA. OP-55A's not-built codes
 join through its `Imaging` hook. `MeritOperandCatalogue.Describe` and `Unknown` turn a code into
-"NSDD (OpticStudio: …) is not built yet: needs OP-79: …"; the merit function editor's operand
+"NSDD (OpticStudio: …) is not built yet: needs OP-88: …"; the merit function editor's operand
 column, `MeritEvaluator.Validate` and `MeritFunctionSettings.FromSettings` (and so the command line
 and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
 
@@ -6794,17 +6808,16 @@ interaction there. "Ignore trace errors" leaves the error section out; the rows 
 
 **ZPL.** NOBJ, NPAR, NPOS, NPRO and OBJC read, and SETNSCPARAMETER, SETNSCPOSITION and
 SETNSCPROPERTY change, the saved objects (surface 1; the built types' parameters and the property
-codes the objects hold, section 56). NSTR, NSTR2, LOST, NSDD and NSDE are not bound: a trace starts
-from saved source objects (OP-77), which the stand-in source is not. The String Codes table has no
+codes the objects hold, section 56). NSTR, NSTR2, LOST and the detector functions trace the saved
+source objects onto the saved detector objects (sections 72 and 73). The String Codes table has no
 code for NSC Single Ray Trace, so GETTEXTFILE does not reach it.
 
 **Not built:** the object library (OP-72) and illumination, constructive and CAD objects
-(OP-73 to OP-75); sources (OP-77) and detectors (OP-79) beyond the stand-ins (transparent
-detectors, pixels, objects as detectors); scattering (OP-80); volume physics (OP-81);
-diffraction and gradient index in objects (OP-82); the ray database and filters (OP-83);
-Consider Objects, Ignore Objects and "Rays Ignore Object"; mixed mode (NSC groups in a
-sequential lens with ports); the Non-Sequential Component Editor (OP-71); polychromatic
-tracing (one wavelength per tracer); an absorbing background medium.
+(OP-73 to OP-75); Detector Surface, Detector Volume and objects as detectors (section 73);
+scattering (OP-80); volume physics (OP-81); diffraction and gradient index in objects (OP-82); the
+ray database and filters (OP-83); Consider Objects, Ignore Objects and "Rays Ignore Object"; mixed
+mode (NSC groups in a sequential lens with ports); several wavelengths in one tracer (section 72's
+runner uses one tracer per wavelength); an absorbing background medium.
 
 The Non-Sequential Component Editor that edits the saved scene is section 71 (OP-71).
 
@@ -6918,9 +6931,16 @@ function that builds the shape from the parameters in meters. `NscCoreObjectType
 three: Sphere (Radius, "Is Volume?"; face 0), Rectangle (X and Y Half Width; face 0) and Standard
 Lens (Radius 1, Conic 1, Clear 1, Edge 1, Thickness, Radius 2, Conic 2, Clear 2, Edge 2; faces 0
 side, 1 front, 2 back). The defaults are this program's (a unit sphere and square, a flat plate of
-unit thickness); the help gives none. Other items add types with `NscObjectCatalogue.Join`; a type
-the catalogue does not know is named with the plan item that builds it ("Source …" OP-77,
-"Detector …" OP-79, any other OP-72 to OP-75).
+unit thickness); the help gives none. `NscObjectCatalogue.Default`, the editor's,
+is `Built` joined (`Join`) with the source types (`NscSourceTypes.Descriptors`, category Source,
+section 72) and the detector types (`NscDetectorTypes.Descriptors`, category Detector, section 73).
+A descriptor may also carry the type's ZPL code (`ZplCode`, from the help's SETNSCPROPERTY table), a
+one-line summary, `SavedGeometry` (the shape from every saved parameter in lens units, for types
+whose unit conversion depends on other parameters, as Source Ellipse's Source X and Y, or that have
+a variable tail, as Source Radial's intensities) and `NotBuiltReason`. A type with a reason (Source
+File, Source DLL, Detector Surface, Detector Volume, …) is kept in `Refused`: it is not offered,
+and adding one gives its reason. Any other type the catalogue does not know is named with the plan
+item that builds it (the object library, OP-72 to OP-75).
 
 **The table.** One row per object: Object Type, Comment, Ref Object, Inside Of, X, Y and Z
 Position, Tilt About X, Y and Z, Material, then the type's parameters (up to 32 columns). A saved
@@ -6933,8 +6953,9 @@ them, until edited; data the table has no cell for (parameters past the type's c
 The object properties (the row's flyout) hold the type, "Use Global XYZ Rotation Order", the
 detecting stand-in and, for each face of the type, "Face Is" (Object Default, Reflective,
 Absorbing) and the coating. The Sources, Scatter, Scatter To, Volume Physics, Index (GRIN,
-birefringent), Diffraction, CAD and detector sections are listed as not built with the plan item
-that builds them.
+birefringent), Diffraction, CAD and detector sections are listed as not built with their reasons;
+the Sources tab and the detector settings are saved with the object and used by the trace, but
+have no fields in the editor yet.
 
 **Insert, delete, move.** `NscObjectTable` and the sheet's structure hook keep every reference
 object and Inside Of naming the same object, in its own form: an absolute link becomes the target's
@@ -7003,8 +7024,9 @@ intersections: rays never meet it (§10 item 68). It carries parameters 1–5 (`
 layout rays, analysis rays, power, wavenumber, colour) and the Sources tab
 (`NscSourceProperties`).
 
-**Built types** (parameters in OpticStudio's order after 1–5; `NscSourceTypes.All` lists them with
-names, defaults and ZPL type codes):
+**Built types** (parameters in OpticStudio's order after 1–5; `NscSourceTypes.Descriptors` lists
+them as the editor's descriptors, section 71, with names, defaults and ZPL type codes; Source Radial
+shows 22 intensity columns, defaults 1, and keeps saved intensities past them):
 
 | Type | Start points | Directions |
 |---|---|---|
@@ -7029,9 +7051,10 @@ wavelength. Ray k depends only on k, so emission is bitwise the same at any thre
 
 **Power.** Every ray of an array element carries P/N; arrays multiply the power ("a 3 x 3 array of 1
 watt sources will produce 9 watts"). Watts and joules are traced as stated. Lumens are converted to
-watts with the spectrum, P_W = P_lm/(683·Σwᵢ V(λᵢ)/Σwᵢ), V(λ) a delegate the caller supplies (plan
-item OP-79 bundles the CIE table); without it lumens are refused. The unit is the system's
-`SourceUnit` (System Explorer, Units); prefixes are not modelled.
+watts with the spectrum, P_W = P_lm/(683·Σwᵢ V(λᵢ)/Σwᵢ), V(λ) a delegate: a project's emission
+options (`ProjectNscSources.EmitOptions`) pass the CIE table of section 73
+(`Photometric.PhotopicEfficiency`); options built without one refuse lumens. The unit is the
+system's `SourceUnit` (System Explorer, Units); prefixes are not modelled.
 
 **Spectrum** (`NscSpectrum`). System Wavelength (wavenumber 0: all rows by weight; else one row),
 Uniform Power Spectrum, Black Body Spectrum (Planck's B_λ at the vacuum wavelength of each line) and
@@ -7057,14 +7080,19 @@ source object and its ray.
 **Saved data.** A source row is an `OpticsNscObjectSettings` with its type name and parameters
 (lengths in lens units; Source Ellipse's Source X and Y are cosines when the distance is 0) and an
 optional `Source` (`OpticsNscSourceSettings`: the Sources tab). `ProjectNonSequential` reads the
-built types; `ProjectNscSources.EmitOptions` gives the system wavelengths and source unit.
+built types; `ProjectNscSources.EmitOptions` gives the system wavelengths, source unit and V(λ).
+`ProjectNscSources.Trace` runs a project's own sources (its scene, saved controls, environment,
+coatings and primary wavelength, the analysis ray counts) with the Ray Trace control's choices as
+arguments (sources, splitting, polarization, Ignore Errors, seed); the Detector Viewer and the macro
+NSTR use it. `NscSourceRunResult.Detectors` holds each detector's data summed over the wavelengths
+in ascending order (`NscDetectorResults.Combine`).
 
 **Not built:** Source Object (no area sampler over a parent's faces), Source Imported (OP-75),
 Source File, Source IESNA File and Source EULUMDAT File (OP-78), Source DLL and Source Diffractive
 (OP-100), Radiant Source Models (proprietary); reading .SPCD spectrum files (OP-78); the colour
 models that fit a spectrum to a colour; the hexagonal source array; coherence-length phase and
 initial phase (no coherent detector data); bulk-scatter limits (OP-81); a source run analysis
-window, the ZPL NSTR binding, the editor's source columns (OP-71) and source viewers. Readings in
+window, the Sources tab's fields in the editor and source viewers. Readings in
 §10 item 68.
 
 ## 73. Detectors
@@ -7114,7 +7142,10 @@ surface objects; their material decides what the ray does next, as the help says
   straddle other objects, which the core's medium stack refuses), and objects as detectors
   (pixels are the triangles of an object's drawing; the core's objects are analytic). OP-70's
   detecting stand-in still counts a surface object's total flux. The descriptors of all five
-  types, in OpticStudio's parameter order, are `NscDetectorTypes.Descriptors`.
+  types, in OpticStudio's parameter order, are `NscDetectorTypes.Descriptors` (the editor's
+  descriptors, section 71; the two not built carry their reason). Where the help states no default
+  the editor's new row has half widths and radial size 1, 100 × 100 pixels and a 90° polar
+  detector of 18 × 36 pixels (this program's choice, so that a new row is a valid detector).
 
 **The tracer hook.** `NscTracer.Run` creates one accumulator per detector object for every
 64-ray chunk. At each contact, after the media on the far side are checked and before the
@@ -7181,8 +7212,45 @@ the top being the next power of 10 above Max Plot Scale when it is positive, els
 largest value. The text has the detector, the Beam Info (centroid, RMS widths and radius of the
 incoherent flux over pixel centres), the noise, the colour totals, and the pixel table for up to
 1024 pixels. True colour is drawn as its R, G and B channel maps, as no colour-picture plot kind
-exists. The analysis reads the detector data from a file; tracing the project's sources onto its
-detectors waits for OP-77.
+exists. With a file the analysis shows that data. Without one it traces the
+project's sources (`ProjectNscSources.Trace`: every source, the analysis ray counts, no splitting,
+scattering or polarization, the default seed) and shows the detector its Detector setting names
+(0: the first), its data summed over the wavelengths, with the energy ledger in the notes.
+
+**Macros** (`Scripting/Zpl/ZplNscTraceLibrary.cs`, the values in `NscDetectorQueries`; help
+pages NSTR, NSTR2, SAVEDETECTOR, LOADDETECTOR, Numeric Functions and, for the pixel and data
+codes, "Non-sequential Ray Tracing and Detector Operands"). NSTR surf, source, split, scatter,
+usepolar, ignore_errors, random_seed (and NSTR2's longer list) runs `ProjectNscSources.Trace`:
+source 0 is every source; polarization is on whenever splitting is, as the help says; a seed of 0
+draws one from the macro's RAND generator. Scatter is refused (OP-80, OP-81), and so are saving
+rays (ZRD, DAT, SDF) and PAF files (OP-83). The data each detector receives is added to what it
+holds in the macro's session; NSDD, NSDE and NSDP with object 0 clear every detector and with −n
+detector n, returning 0; a detector never traced or cleared reads zero. LOST(1) and LOST(2) are the
+last trace's energy lost to errors and below the thresholds. NSDD reads a Detector Rectangle: pixel
+n > 0; 0 the total (Data 0 flux, 1 the average flux per area over the included pixels, 2 the
+angle-space flux); −1 and −2 the maximum and minimum; −3 the rays striking it; −4 and −5 the
+standard deviation (RMS from the mean) and the mean of the non-zero pixels; −6, −7, −8 the
+centroid and −9 to −12 the RMS radius, x, y and z about it, σ² = Σw(x − x*)²/Σw with
+x* = Σwx/Σw over the pixel centres (lens units, or degrees for Data 2), the weights the Data
+values; z is 0 on the flat detector, refused in angle space. NSDE reads a Detector Color (Data 1
+power, 2 power per area or steradian, 3 lumens, 4 lumens per area or steradian, 5–8 chromaticity
+x, y, u′, v′, 9–11 X, Y, Z per area or steradian; pixel 0 sums, averages the chromaticity over the
+pixels with lumens and divides per-area data by the whole detector's area or solid angle). NSDP
+reads a Detector Polar (the same Data per steradian; −4 the RMS polar angle about 0° for Data 1
+and 3, 0 for the others as the help says). NSDC reads the coherent sums of a Detector Rectangle
+(Data 0 real, 1 imaginary, 2 amplitude, 3 the coherent irradiance times the pixel area). Areas are
+square meters: this build has no Analysis Units setting, and square meters is one of the help's
+choices. The macro functions use # Ignored = 0, as the help says. Refused by name: NSDD Data 3
+(the bitmap normalisation), 4 and 5 (objects as detectors), −13 (the square root of the xy moment,
+which can be negative), −14 and −15 (the geometric MTF, OP-87); NSDE Data 12–21 (CRI and CCT,
+bitmap normalisation, per-bin centroids); NSDP pixel 0 with per-steradian data (the help does not
+say whether it sums intensities or divides by the solid angle). SAVEDETECTOR writes, and
+LOADDETECTOR reads, the formats below; a name without a folder is in the lens file's folder; a
+loaded file must be of the object's type, pixel counts and size (sizes and angles to 1e-9
+relative, as the file holds them in its lens unit). The merit operands NSTR, NSDD, NSDE, NSDP and
+NSDC are not built: the merit function evaluates a sequential lens per configuration, and these
+rows need the project's scene per configuration and the detector data kept in row order (plan item
+OP-88). Readings in §10 item 69.
 
 **Save/Load Detector Data** (`NscDetectorFile`) follows OpticStudio's binary layout: the header
 `int version, type, lens_units, source_units, source_multiplier; int i_data[50]; double
@@ -7196,6 +7264,5 @@ not built.
 **Not built:** Detector Surface, Detector Volume, objects as detectors; PSF mode; polarization
 flags 1–9; per-pixel spectra and CRI/CCT; LightningTrace; ray-database playback and filter
 strings (OP-83); the polar directivity plots and IES/LDT export; grey-scale and inverse colour
-maps, contrast enhancement, image-file output; tracing the project's own sources in the viewer
-(OP-77). The ZPL keywords and operands that read detectors (NSDD, NSDE, NSDC, NSDP,
-SAVEDETECTOR, LOADDETECTOR, SETDETECTOR) are not bound yet. Readings in §10 item 69.
+maps, contrast enhancement, image-file output; SETDETECTOR; the
+merit operands that read detectors (OP-88). Readings in §10 item 69.
