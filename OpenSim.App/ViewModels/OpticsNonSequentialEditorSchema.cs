@@ -79,7 +79,7 @@ public static class OpticsNonSequentialEditorSchema
         new SheetColumn(StandInProperty, "Detecting stand-in (OP-70)")
         {
             Kind = CellKind.Choice, Choices = YesNo,
-            ToolTip = "Absorbs and counts every ray that meets this surface object; detectors proper are plan item OP-79.",
+            ToolTip = "Absorbs and counts every ray that meets this surface object; the detector objects (Detector Rectangle, Color, Polar) record pixel data.",
         },
     };
 

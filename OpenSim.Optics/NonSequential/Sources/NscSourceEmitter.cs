@@ -17,7 +17,7 @@ public sealed record NscSourceEmitOptions
     public SourceUnit Units { get; init; } = SourceUnit.Watts;
 
     /// <summary>V(λ), λ in µm (in air), the CIE photopic luminous efficiency normalised to 1 at
-    /// its peak; needed for lumens only. Plan item OP-79 bundles it; without it lumens are
+    /// its peak; needed for lumens only. ProjectNscSources.EmitOptions passes OP-79's Photometric.PhotopicEfficiency; without it lumens are
     /// refused.</summary>
     public Func<double, double>? LuminousEfficiency { get; init; }
 }

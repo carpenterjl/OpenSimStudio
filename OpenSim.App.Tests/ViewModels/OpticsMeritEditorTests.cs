@@ -183,7 +183,7 @@ public sealed class OpticsMeritEditorTests : IDisposable
         var result = doc.SetText(0, 0, "NSDD");
         Assert.False(result.Succeeded);
         Assert.StartsWith("Row 1: NSDD (OpticStudio:", result.Message);
-        Assert.Contains("needs OP-79", result.Message);
+        Assert.Contains("needs OP-88", result.Message);
         var unknown = doc.SetText(0, 0, "QQQQ");
         Assert.False(unknown.Succeeded);
         Assert.Contains("there is no row type 'QQQQ'", unknown.Message);

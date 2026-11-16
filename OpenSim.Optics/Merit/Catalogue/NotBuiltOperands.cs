@@ -27,7 +27,8 @@ public sealed record NotBuiltOperand(string Code, string Category, string Descri
 /// </summary>
 public static class NotBuiltOperands
 {
-    private const string Nsc = "the non-sequential ray-trace engine and its objects are not built";
+    // wire-15: the non-sequential engine, editor, sources and detectors are built (OP-70, OP-71, OP-77, OP-79).
+    private const string NscMerit = "the merit function evaluates a sequential lens; non-sequential rows (object data, traces and detector data, which need the project's scene per configuration and the detector data kept in row order) are not built (the ZPL functions NPAR, NPOS, NSTR, NSDD, NSDE, NSDP and NSDC read the same data)";
 
     /// <summary>The category of OP-55A's entries, whose reasons come from
     /// <see cref="Imaging"/> without a description of their own.</summary>
@@ -121,35 +122,39 @@ public static class NotBuiltOperands
 
         // ---- Non-sequential object data ----
         const string nso = "Constraints on non-sequential object data";
-        Add("FREZ", nso, "Shape data of a Freeform Z object (z and y extremes and increments, volume, monotonic deviation, slopes), as a value or a bound.", Nsc, "OP-72");
+        Add("FREZ", nso, "Shape data of a Freeform Z object (z and y extremes and increments, volume, monotonic deviation, slopes), as a value or a bound.", "the Freeform Z object is not built", "OP-72");
         foreach (var (code, what) in new[] { ("NPGT", "parameter greater than"), ("NPLT", "parameter less than"), ("NPVA", "parameter value") })
-            Add(code, nso, $"Non-sequential object {what}.", Nsc, "OP-71");
+            Add(code, nso, $"Non-sequential object {what}.", NscMerit, "OP-88");
         foreach (char axis in "XYZ")
         {
-            Add($"NP{axis}G", nso, $"Non-sequential object position {char.ToLowerInvariant(axis)} greater than.", Nsc, "OP-71");
-            Add($"NP{axis}L", nso, $"Non-sequential object position {char.ToLowerInvariant(axis)} less than.", Nsc, "OP-71");
-            Add($"NP{axis}V", nso, $"Non-sequential object position {char.ToLowerInvariant(axis)} value.", Nsc, "OP-71");
+            Add($"NP{axis}G", nso, $"Non-sequential object position {char.ToLowerInvariant(axis)} greater than.", NscMerit, "OP-88");
+            Add($"NP{axis}L", nso, $"Non-sequential object position {char.ToLowerInvariant(axis)} less than.", NscMerit, "OP-88");
+            Add($"NP{axis}V", nso, $"Non-sequential object position {char.ToLowerInvariant(axis)} value.", NscMerit, "OP-88");
         }
-        Add("NSRM", nso, "Non-sequential object rotation matrix component.", Nsc, "OP-71");
+        Add("NSRM", nso, "Non-sequential object rotation matrix component.", NscMerit, "OP-88");
         foreach (char axis in "XYZ")
         {
-            Add($"NT{axis}G", nso, $"Non-sequential object tilt about {char.ToLowerInvariant(axis)} greater than.", Nsc, "OP-71");
-            Add($"NT{axis}L", nso, $"Non-sequential object tilt about {char.ToLowerInvariant(axis)} less than.", Nsc, "OP-71");
-            Add($"NT{axis}V", nso, $"Non-sequential object tilt about {char.ToLowerInvariant(axis)} value.", Nsc, "OP-71");
+            Add($"NT{axis}G", nso, $"Non-sequential object tilt about {char.ToLowerInvariant(axis)} greater than.", NscMerit, "OP-88");
+            Add($"NT{axis}L", nso, $"Non-sequential object tilt about {char.ToLowerInvariant(axis)} less than.", NscMerit, "OP-88");
+            Add($"NT{axis}V", nso, $"Non-sequential object tilt about {char.ToLowerInvariant(axis)} value.", NscMerit, "OP-88");
         }
 
         // ---- Non-sequential ray tracing and detectors ----
         const string nsr = "Non-sequential ray tracing and detector operands";
-        Add("NPAF", nsr, "Names a PAF file for the NSTR trace to save.", Nsc, "OP-70");
-        Add("NSDC", nsr, "Non-sequential coherent detector data (real, imaginary, amplitude or power).", "detectors are not built", "OP-79");
-        Add("NSDD", nsr, "Non-sequential incoherent detector data: pixel, total, extreme, centroid, RMS or geometric MTF values.", "detectors are not built", "OP-79");
-        Add("NSDE", nsr, "Non-sequential Detector Color object data: power, lumens, chromaticity, tristimulus, CRI, CCT.", "detectors are not built", "OP-79");
-        Add("NSDP", nsr, "Non-sequential Detector Polar object data.", "detectors are not built", "OP-79");
+        // wire-15: sources and detectors are built (OP-77, OP-79) and the ZPL functions NSTR, NSDD,
+        // NSDE, NSDP and NSDC read them, but the merit function evaluates a sequential lens per
+        // configuration; non-sequential rows need the project's scene per configuration, the
+        // detector data held in row order and non-sequential variables (illumination optimization, OP-88).
+        Add("NPAF", nsr, "Names a PAF file for the NSTR trace to save.", "PAF path files are not built", "OP-83");
+        Add("NSDC", nsr, "Non-sequential coherent detector data (real, imaginary, amplitude or power).", NscMerit, "OP-88");
+        Add("NSDD", nsr, "Non-sequential incoherent detector data: pixel, total, extreme, centroid, RMS or geometric MTF values.", NscMerit, "OP-88");
+        Add("NSDE", nsr, "Non-sequential Detector Color object data: power, lumens, chromaticity, tristimulus, CRI, CCT.", NscMerit, "OP-88");
+        Add("NSDP", nsr, "Non-sequential Detector Polar object data.", NscMerit, "OP-88");
         Add("NSLT", nsr, "Non-sequential LightningTrace: traces mesh rays as the LightningTrace analysis defines them.", "the noise-free fast illumination solve is not built", "OP-85");
-        Add("NSRA", nsr, "Non-sequential single ray trace from a source: data of one segment of the ray.", Nsc, "OP-70");
+        Add("NSRA", nsr, "Non-sequential single ray trace from a source: data of one segment of the ray.", NscMerit, "OP-88");
         Add("NSRW", nsr, "Non-sequential roadway lighting data, after an NSTW trace.", "roadway lighting is not built", "OP-89");
         Add("NSST", nsr, "Traces one sequential ray into a non-sequential surface and returns data about it there.", "mixed mode (non-sequential surfaces in a sequential system) is not built", "OP-86");
-        Add("NSTR", nsr, "Non-sequential trace from a source, filling the detectors.", Nsc, "OP-70");
+        Add("NSTR", nsr, "Non-sequential trace from a source, filling the detectors.", NscMerit, "OP-88");
         Add("NSTW", nsr, "Non-sequential roadway lighting ray trace for the NSC Roadway Merit Function.", "roadway lighting is not built", "OP-89");
         Add("NSRD", nsr, "Names a ZRD ray database file for the NSTR trace to save.", "the ray database is not built", "OP-83");
 

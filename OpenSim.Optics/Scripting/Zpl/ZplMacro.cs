@@ -247,6 +247,15 @@ internal sealed class ZplSession
     public long Steps { get; private set; }
     public void CountStep() => Steps++;
 
+    // wire-15
+    /// <summary>The data on each detector object (by object number) that NSTR traces add to and
+    /// NSDD, NSDE and NSDP with object 0 or −n clear (help, "Numeric Functions"); LOADDETECTOR
+    /// replaces one.</summary>
+    public Dictionary<int, OpenSim.Optics.NonSequential.Detectors.NscDetectorData> NscDetectors { get; } = new();
+
+    /// <summary>The energy ledger of the most recent NSTR trace (LOST), or null.</summary>
+    public OpenSim.Optics.NonSequential.NscEnergyLedger? NscLedger { get; set; }
+
     // OP-67
     /// <summary>The context keywords this run binds (a tolerance script's commands); null for a plain macro.</summary>
     public ZplDialect? Dialect { get; set; }

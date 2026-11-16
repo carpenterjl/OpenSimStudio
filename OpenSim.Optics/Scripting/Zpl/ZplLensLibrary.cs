@@ -35,6 +35,7 @@ public static partial class ZplLibrary
         RegisterLensNotBound();
         RegisterBeamsAndImages();   // wire-13: after the not-bound notes, so its own notes stand
         RegisterFiberCadAndObjects();   // wire-14: FICL, EXPORTCAD and the non-sequential objects (ZplObjectsLibrary.cs)
+        RegisterNscTrace();             // wire-15: NSTR, NSTR2, the detector functions and files, LOST (ZplNscTraceLibrary.cs)
     }
 
     // ================================================================ Rays
@@ -1228,13 +1229,11 @@ public static partial class ZplLibrary
     {
         NotBound("COMPOSITEOFFAXISAPERTUREON", "Not bound: its OpticStudio 2025 R2 help page repeats COMPOSITEON's title, syntax and discussion, so what it does is not given (it may be the Composite page's \"Set Tilt/Decenter to follow Base surface aperture\", which is not built).");
         // wire-14: the non-sequential keywords that OP-70's core does not reach, each with the plan item it waits for.
-        foreach (var k in new[] { "INSERTOBJECT", "DELETEOBJECT" })
-            NotBound(k, "Not bound: inserting and deleting objects (renumbering the references to them) is the Non-Sequential Component Editor's, plan item OP-71.");
-        foreach (var k in new[] { "NSTR", "NSTR2" })
-            NotBound(k, "Not bound: a trace starts from the system's source objects, which are plan item OP-77 (OP-70's source stand-in is for code, not a saved object); saving rays to ZRD and PAF files is OP-83.");
-        foreach (var k in new[] { "LOADDETECTOR", "SAVEDETECTOR", "SETDETECTOR" })
-            NotBound(k, "Not bound: detector objects and their data are plan item OP-79.");
-        NotBound("GETNSCMTF", "Not bound: it reads detector objects, plan item OP-79 (the non-sequential image-quality analyses are OP-87).");
+        // wire-15: NSTR, NSTR2, SAVEDETECTOR, LOADDETECTOR, LOST, NSDD, NSDE, NSDP and NSDC are bound in ZplNscTraceLibrary.cs.
+        NotBound("INSERTOBJECT", "Not bound: the help does not say what type the new object is (OpticStudio inserts a Null Object, which is not built); the editor's insert (OP-71) renumbers the references.");
+        NotBound("DELETEOBJECT", "Not bound: the help does not say what becomes of objects that refer to the deleted one (OP-71's editor refuses such a delete).");
+        NotBound("SETDETECTOR", "Not bound: setting one pixel's data by hand is not built (NSTR, LOADDETECTOR and the NSDD family are).");
+        NotBound("GETNSCMTF", "Not bound: the geometric MTF on a Detector Rectangle is not built (the non-sequential image-quality analyses are plan item OP-87).");
         NotBound("MAKEFACETLIST", "Not bound: imported CAD parts are plan item OP-75.");
         NotBound("NSLT", "Not bound: Lightning Trace is plan item OP-85.");
         NotBound("RELOADOBJECTS", "Not bound: objects read from files (polygon objects, CAD parts) are plan items OP-74 and OP-75; OP-70's objects are parametric, so there is nothing to reload.");
@@ -1268,11 +1267,6 @@ public static partial class ZplLibrary
             NotBound(k, "Not bound (GETTEXTFILE writes the analyses' text).");
 
         // wire-14: NOBJ, NPAR, NPOS, NPRO and OBJC are bound in ZplObjectsLibrary.cs.
-        FunctionNotBound("LOST", "Not bound: it reads the most recent NSTR trace, and NSTR waits for source objects (plan item OP-77).");
-        foreach (var f in new[] { "NSDD", "NSDE" })
-            FunctionNotBound(f, "Not bound: detector data follows an NSTR trace, which waits for source objects (OP-77); detector objects are OP-79 (OP-70's detecting stand-in counts flux only).");
-        foreach (var f in new[] { "NSDC", "NSDP" })
-            FunctionNotBound(f, "Not bound: detector rectangle (coherent) and detector polar objects are plan item OP-79.");
         foreach (var f in new[] { "GLCA", "GLCB", "GLCC", "GLCM", "GLCX", "GLCY", "GLCZ" })
             FunctionNotBound(f, "Not bound: OpticStudio's global coordinate reference surface is not read (see RAGX).");
         FunctionNotBound("EDGE", "Not bound.");

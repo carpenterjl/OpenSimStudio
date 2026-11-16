@@ -13,7 +13,8 @@ namespace OpenSim.Optics.NonSequential.Detectors;
 /// degrees; a saved row may stop after parameter 4 (Rectangle, Color) and the rest are then 0,
 /// except those angles. The editor's defaults for a new row where the help states none (half
 /// widths and radial size 1, 100 × 100 pixels, a 90° polar detector of 18 × 36 pixels) are this
-/// build's own, chosen to give a valid detector.
+/// build's own, chosen to give a valid detector. The ZPL type codes (NSC_DETE, NSC_DETC,
+/// NSC_DETP, NSC_DETS, NSC_DETV) are from the help's "SETNSCPROPERTY (keywords)" table.
 /// </summary>
 public static class NscDetectorTypes
 {
@@ -34,9 +35,9 @@ public static class NscDetectorTypes
         N("Polarization", 0), N("Mirroring", 0),
     };
 
-    private static NscObjectTypeDescriptor Built(string name, IReadOnlyList<NscParameterDescriptor> parameters, string page) => new()
+    private static NscObjectTypeDescriptor Built(string name, string code, IReadOnlyList<NscParameterDescriptor> parameters, string page) => new()
     {
-        TypeName = name, Category = NscObjectCategory.Detector, Parameters = parameters, Faces = AllFaces, IsVolume = false,
+        TypeName = name, ZplCode = code, Category = NscObjectCategory.Detector, Parameters = parameters, Faces = AllFaces, IsVolume = false,
         Source = $"OpticStudio 2025 R2 help, \"{page}\"", PlanItem = "OP-79",
         SavedGeometry = (p, unit) => Create(name, p, v => OpticsConventions.ToMeters(v, unit), new OpticsNscObjectSettings()),
     };
@@ -44,13 +45,13 @@ public static class NscDetectorTypes
     /// <summary>The detector types, built and refused.</summary>
     public static IReadOnlyList<NscObjectTypeDescriptor> Descriptors { get; } = new[]
     {
-        Built(Rectangle, Flat("PSF Mode Wavenumber"), "Detector Rectangle Object"),
-        Built(Color, Flat("Unused"), "Detector Color Object"),
-        Built(Polar, new[] { N("Maximum Angle", 90), L("Radial Size", 1), N("# Radial Pixels", 18), N("# Angular Pixels", 36), N("Mirroring", 0) },
+        Built(Rectangle, "NSC_DETE", Flat("PSF Mode Wavenumber"), "Detector Rectangle Object"),
+        Built(Color, "NSC_DETC", Flat("Unused"), "Detector Color Object"),
+        Built(Polar, "NSC_DETP", new[] { N("Maximum Angle", 90), L("Radial Size", 1), N("# Radial Pixels", 18), N("# Angular Pixels", 36), N("Mirroring", 0) },
             "Detector Polar Object"),
         new NscObjectTypeDescriptor
         {
-            TypeName = Surface, Category = NscObjectCategory.Detector, Faces = AllFaces, IsVolume = false,
+            TypeName = Surface, ZplCode = "NSC_DETS", Category = NscObjectCategory.Detector, Faces = AllFaces, IsVolume = false,
             Parameters = new[]
             {
                 L("Radius"), N("Conic"), L("Max Aperture"), L("Min Aperture"), N("# A Zones"), N("# R Zones"),
@@ -60,7 +61,7 @@ public static class NscDetectorTypes
         },
         new NscObjectTypeDescriptor
         {
-            TypeName = Volume, Category = NscObjectCategory.Detector, Faces = new Dictionary<int, string>(), IsVolume = true,
+            TypeName = Volume, ZplCode = "NSC_DETV", Category = NscObjectCategory.Detector, Faces = new Dictionary<int, string>(), IsVolume = true,
             Parameters = new[] { L("X Half Width"), L("Y Half Width"), L("Z Half Length"), N("# X pixels"), N("# Y pixels"), N("# Z pixels") },
             Source = "OpticStudio 2025 R2 help, \"Detector Volume Object\"", PlanItem = "OP-79", NotBuiltReason = VolumeReason,
         },

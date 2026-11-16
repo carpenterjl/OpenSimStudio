@@ -12,7 +12,7 @@ public static class MeritOperandCatalogue
 {
     /// <summary>
     /// One sentence about <paramref name="code"/>: "Edge thickness value (ETVA): …" when the
-    /// registry has it; "NSDD (OpticStudio: …) is not built yet: needs OP-79: …" when it is an
+    /// registry has it; "NSDD (OpticStudio: …) is not built yet: needs OP-88: …" when it is an
     /// OpticStudio operand this build lacks; "there is no operand 'XXXX'." otherwise.
     /// </summary>
     public static string Describe(string? code, MeritOperandRegistry? registry = null)

@@ -124,7 +124,7 @@ public sealed class OperandCatalogueCoverageTests
     [Fact]
     public void NotBuiltLookup_FindsCodesAndNumberedFamilies()
     {
-        Assert.Equal("OP-79", NotBuiltOperands.Find("nsdd")!.WaitsFor);
+        Assert.Equal("OP-88", NotBuiltOperands.Find("nsdd")!.WaitsFor);   // wire-15: the merit function's non-sequential rows
         Assert.Equal("InGT", NotBuiltOperands.Find("I3GT")!.Code);
         Assert.Equal("InVA", NotBuiltOperands.Find("I6VA")!.Code);
         Assert.Null(NotBuiltOperands.Find("I7GT"));   // the help names six points
@@ -139,7 +139,7 @@ public sealed class OperandCatalogueCoverageTests
         Assert.StartsWith("Edge thickness value (ETVA):", MeritOperandCatalogue.Describe("etva"));
         string nsdd = MeritOperandCatalogue.Describe("NSDD");
         Assert.StartsWith("NSDD (OpticStudio: Non-sequential incoherent detector data", nsdd);
-        Assert.Contains("is not built yet: needs OP-79", nsdd);
+        Assert.Contains("is not built yet: needs OP-88", nsdd);
         Assert.Equal("there is no operand 'QQQQ'.", MeritOperandCatalogue.Describe("QQQQ"));
         Assert.Contains("needs OP-28", MeritOperandCatalogue.Unknown("I2LT"));
     }

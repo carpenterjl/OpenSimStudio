@@ -11,7 +11,7 @@ docs/Optics-Conventions.md §56; the user's view is in docs/Optics-User-Guide.md
 The table is generated from `ZplLibrary.TableMarkdown()`; `ZplConformanceTests` checks that this
 page holds it unchanged and that every bound name has a conformance macro.
 
-Counts: 218 keywords (89 bound, the language's own included), 156 numeric functions (102 bound),
+Counts: 218 keywords (93 bound, the language's own included), 156 numeric functions (107 bound),
 32 string functions (24 bound).
 
 | Name | Kind | Bound | What it does here, or why not |
@@ -49,7 +49,7 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | DELETEFILE | keyword | yes | Deletes a file (a name without a folder is in the macro folder); a file that does not exist is an error. |
 | DELETEMCO | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
 | DELETEMFO | keyword | yes | Deletes a row, or every row (ALL). |
-| DELETEOBJECT | keyword | no | Not bound: inserting and deleting objects (renumbering the references to them) is the Non-Sequential Component Editor's, plan item OP-71. |
+| DELETEOBJECT | keyword | no | Not bound: the help does not say what becomes of objects that refer to the deleted one (OP-71's editor refuses such a delete). |
 | DELETETOL | keyword | no | Not bound: the tolerance editor's keywords are not bound. |
 | EDVA | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | END | keyword | yes | Language core (Conventions §56). |
@@ -77,7 +77,7 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | GETLSF | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETMTF | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETMTFUSER1D | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
-| GETNSCMTF | keyword | no | Not bound: it reads detector objects, plan item OP-79 (the non-sequential image-quality analyses are OP-87). |
+| GETNSCMTF | keyword | no | Not bound: the geometric MTF on a Detector Rectangle is not built (the non-sequential image-quality analyses are plan item OP-87). |
 | GETPSF | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETSYSTEMDATA | keyword | no | Not bound (GETTEXTFILE writes the analyses' text). |
 | GETTEXTFILE | keyword | yes | Writes an analysis's text (its default settings) to a file (UTF-8): the 3-letter code of the help's String Codes for the analyses this program has of that name (Conventions §56); no code is the single ray trace (Rtr), as the help says. A settings file is not read or written (fails). |
@@ -111,13 +111,13 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | INSERTCONFIG | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
 | INSERTMCO | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
 | INSERTMFO | keyword | yes | Inserts a BLNK row at row (1 to the row count + 1). |
-| INSERTOBJECT | keyword | no | Not bound: inserting and deleting objects (renumbering the references to them) is the Non-Sequential Component Editor's, plan item OP-71. |
+| INSERTOBJECT | keyword | no | Not bound: the help does not say what type the new object is (OpticStudio inserts a Null Object, which is not built); the editor's insert (OP-71) renumbers the references. |
 | INSERTTOL | keyword | no | Not bound: the tolerance editor's keywords are not bound. |
 | LABEL | keyword | yes | Language core (Conventions §56). |
 | LINE | keyword | no | Not bound: macro graphics and image files are not built. |
 | LOADARCHIVE | keyword | no | Not bound (LOADLENS reads a .zar). |
 | LOADCATALOG | keyword | no | Not bound: catalogs are loaded once per run. |
-| LOADDETECTOR | keyword | no | Not bound: detector objects and their data are plan item OP-79. |
+| LOADDETECTOR | keyword | yes | Reads a DDR, DDC or DDP file onto a detector object (surface 1) of the same type and size, replacing its data; a name without a folder is in the lens file's folder. Detector Volume (DDV) is not built. |
 | LOADLENS | keyword | yes | Replaces the lens with a .zmx or .zar (OP-94 reader), .osslens or .ossproj file; a name without a folder is in the lens folder. Appending (appendflag ≠ 0) and session files are not bound. |
 | LOADMERIT | keyword | no | Not bound: OpticStudio's .MF file layout is not published. |
 | LOADTOLERANCE | keyword | no | Not bound. |
@@ -127,8 +127,8 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | MAKEFOLDER | keyword | yes | Creates a folder; an existing folder is left alone. |
 | MODIFYSETTINGS | keyword | no | Not bound: macros here do not drive analysis windows or their settings files. |
 | NSLT | keyword | no | Not bound: Lightning Trace is plan item OP-85. |
-| NSTR | keyword | no | Not bound: a trace starts from the system's source objects, which are plan item OP-77 (OP-70's source stand-in is for code, not a saved object); saving rays to ZRD and PAF files is OP-83. |
-| NSTR2 | keyword | no | Not bound: a trace starts from the system's source objects, which are plan item OP-77 (OP-70's source stand-in is for code, not a saved object); saving rays to ZRD and PAF files is OP-83. |
+| NSTR | keyword | yes | Traces the system's sources (source 0: all; surface 1) through OP-77's runner with the analysis ray counts, splitting, polarization (on whenever splitting is), Ignore Errors and the seed (0: one drawn from the macro's RAND generator); the detector data is added to what each detector holds (clear it with NSDD(1, 0, 0, 0)). Refused by name: scatter (OP-80, OP-81) and saving rays (ZRD, DAT, SDF: OP-83). |
+| NSTR2 | keyword | yes | As NSTR, with NSTR2's arguments; savepaths (PAF files) is refused as saving rays is (OP-83). |
 | NUMFIELD | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | NUMWAVE | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | OPEN | keyword | yes | Opens a text file for READ; a name without a folder is taken in the macro folder. |
@@ -169,7 +169,7 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | RENAMEFILE | keyword | yes | Renames a file; an existing target is an error. |
 | REWIND | keyword | yes | Erases the last line printed to the screen; on output sent to a file it fails (not bound there). |
 | SAVEARCHIVE | keyword | no | Not bound. |
-| SAVEDETECTOR | keyword | no | Not bound: detector objects and their data are plan item OP-79. |
+| SAVEDETECTOR | keyword | yes | Writes the data on a detector object (surface 1) to a DDR, DDC or DDP file (OP-79's format, Conventions §73); a name without a folder is in the lens file's folder. |
 | SAVELENS | keyword | yes | Saves the lens as .zmx (OP-94 writer) or .osslens; without a name, to the lens's own file. Session files are not bound. |
 | SAVEMERIT | keyword | no | Not bound: OpticStudio's .MF file layout is not published. |
 | SAVETOLERANCE | keyword | no | Not bound. |
@@ -180,11 +180,11 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | SETAIMDATA | keyword | no | Not bound (SETAIM and SETSYSTEMPROPERTY 70–78 are). |
 | SETAPODIZATION | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | SETCONFIG | keyword | yes | Makes configuration n current. |
-| SETDETECTOR | keyword | no | Not bound: detector objects and their data are plan item OP-79. |
+| SETDETECTOR | keyword | no | Not bound: setting one pixel's data by hand is not built (NSTR, LOADDETECTOR and the NSDD family are). |
 | SETMCOPERAND | keyword | no | Not bound: the multi-configuration editor's keywords are not bound (SETCONFIG is). |
-| SETNSCPARAMETER | keyword | yes | Sets a parameter of an object (surface 1), lens units as saved; the parameters of OP-70's types only (Sphere 1–2, Rectangle 1–2, Standard Lens 1–9). |
+| SETNSCPARAMETER | keyword | yes | Sets a parameter of an object (surface 1), lens units as saved; the built types only (OP-70's Sphere, Rectangle and Standard Lens, the sources and the detectors). |
 | SETNSCPOSITION | keyword | yes | Sets x, y, z (lens units) or tilt x, y, z (degrees) of an object (surface 1), codes 1 to 6. |
-| SETNSCPROPERTY | keyword | yes | Sets a property of an object (surface 1) by the help's codes OP-70 holds: 0 type (NSC_SPHE, NSC_RECT, NSC_SLEN), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 29 "Face Is" (0 Object Default, 1 Reflective, 2 Absorbing). A new type keeps the saved parameters (the help does not say what becomes of them). Any other code is refused by number with the plan item it waits for. |
+| SETNSCPROPERTY | keyword | yes | Sets a property of an object (surface 1) by the help's codes the saved objects hold: 0 type (the help's NSC_ codes of the built types: NSC_SPHE, NSC_RECT, NSC_SLEN, the sources and NSC_DETE, NSC_DETC, NSC_DETP), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 20 "Use Pixel Interpolation" (Detector Rectangle and Color), 29 "Face Is" (0 Object Default, 1 Reflective, 2 Absorbing); on source objects the Sources tab: 101 random polarization, 102 reverse rays, 103 Jones x, 104 Jones y, 105 phase x, 106 phase y, 107 initial phase (degrees), 108 coherence length, 109 pre-propagation (lens units), 110 sampling (0 random, 1 Sobol), 111 bulk scatter (0 many, 1 once, 2 never), 112 array mode (0 none, 1 rectangular, 2 circular, 3 hexapolar, 4 hexagonal), 114 spectrum steps, 115 start and 116 end wavelength (µm), 161 and 162 the array integers, 165 and 166 the array sizes. A new type keeps the saved parameters (the help does not say what becomes of them). Any other code is refused by number with the plan item it waits for. |
 | SETOPERAND | keyword | yes | Sets a Merit Function Editor cell: column 1 type (ONUM number), 2 int1, 3 int2, 4–7 data1–4, 8 target, 9 weight, 10 comment, 11 type by name, 12–13 data5–6. |
 | SETSTDD | keyword | no | Obsolete in the help (no syntax given; it points to SETSURFACEPROPERTY, SETSYSTEMPROPERTY or a function). |
 | SETSURFACEPROPERTY | keyword | yes | Sets a surface property by code or mnemonic; bound codes: 0 TYPE (the surface names this program builds), 1 COMM, 2 CURV, 3 THIC, 4 GLAS, 5 CONI, 6 SDIA, 7 TCE, 8 COAT, 10 PARM, 14 row color, 16 ignore, 23 APDX, 24 APDY, 27 CHZN, 28 MCSD, 60–65 tilt/decenter before, 66 APU, 70–75 after, 76–77 coordinate return, 90–92 draw flags. Not on a lens with a multi-configuration table. |
@@ -292,7 +292,7 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | ISMS | numeric function | no | Not bound. |
 | LOGE | numeric function | yes | Natural logarithm; x ≤ 0 fails. |
 | LOGT | numeric function | yes | Base-10 logarithm; x ≤ 0 fails. |
-| LOST | numeric function | no | Not bound: it reads the most recent NSTR trace, and NSTR waits for source objects (plan item OP-77). |
+| LOST | numeric function | yes | The energy the most recent NSTR trace lost: code 1 to errors, 2 to the intensity thresholds (its ledger, source units). |
 | LVAL | numeric function | yes | Number of a string in the current culture's decimal separator; text that is not a number fails. |
 | MAGN | numeric function | yes | √(x² + y²). |
 | MAXF | numeric function | yes | The largest radial field (degrees or lens units). |
@@ -304,13 +304,13 @@ Counts: 218 keywords (89 bound, the language's own included), 156 numeric functi
 | NCON | numeric function | yes | The number of configurations. |
 | NFLD | numeric function | yes | The number of fields. |
 | NOBJ | numeric function | yes | The number of non-sequential objects; the surface must be 1 (the system's objects, as in non-sequential mode; mixed mode is OP-86). |
-| NPAR | numeric function | yes | A parameter of an object (surface 1), as saved in lens units; the parameters of OP-70's types only (Sphere 1–2, Rectangle 1–2, Standard Lens 1–9). |
+| NPAR | numeric function | yes | A parameter of an object (surface 1), as saved in lens units; the built types only (OP-70's Sphere, Rectangle and Standard Lens, the sources and the detectors), with their parameters in the editor's order. |
 | NPOS | numeric function | yes | x, y, z (lens units) or tilt x, y, z (degrees) of an object (surface 1) by SETNSCPOSITION's codes 1 to 6. The help's NPOS page names seven values (the reference object first) for codes 1 to 6; the codes are read as SETNSCPOSITION's, which it points to, and the reference object is NPRO code 2. |
-| NPRO | numeric function | yes | A property of an object (surface 1) by SETNSCPROPERTY's codes OP-70 holds: 0 type (NSC_SPHE, NSC_RECT, NSC_SLEN), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 29 "Face Is" (0 Object Default, 1 Reflective, 2 Absorbing); string values go to $BUFFER() and 0 is returned. Any other code is refused by number. |
-| NSDC | numeric function | no | Not bound: detector rectangle (coherent) and detector polar objects are plan item OP-79. |
-| NSDD | numeric function | no | Not bound: detector data follows an NSTR trace, which waits for source objects (OP-77); detector objects are OP-79 (OP-70's detecting stand-in counts flux only). |
-| NSDE | numeric function | no | Not bound: detector data follows an NSTR trace, which waits for source objects (OP-77); detector objects are OP-79 (OP-70's detecting stand-in counts flux only). |
-| NSDP | numeric function | no | Not bound: detector rectangle (coherent) and detector polar objects are plan item OP-79. |
+| NPRO | numeric function | yes | A property of an object (surface 1) by SETNSCPROPERTY's codes the saved objects hold: 0 type (the help's NSC_ codes of the built types: NSC_SPHE, NSC_RECT, NSC_SLEN, the sources and NSC_DETE, NSC_DETC, NSC_DETP), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 20 "Use Pixel Interpolation" (Detector Rectangle and Color), 29 "Face Is" (0 Object Default, 1 Reflective, 2 Absorbing); on source objects the Sources tab: 101 random polarization, 102 reverse rays, 103 Jones x, 104 Jones y, 105 phase x, 106 phase y, 107 initial phase (degrees), 108 coherence length, 109 pre-propagation (lens units), 110 sampling (0 random, 1 Sobol), 111 bulk scatter (0 many, 1 once, 2 never), 112 array mode (0 none, 1 rectangular, 2 circular, 3 hexapolar, 4 hexagonal), 114 spectrum steps, 115 start and 116 end wavelength (µm), 161 and 162 the array integers, 165 and 166 the array sizes; string values go to $BUFFER() and 0 is returned. Any other code is refused by number. |
+| NSDC | numeric function | yes | Detector Rectangle coherent data (surface 1): pixel > 0 that pixel, 0 the sum; Data 0 real, 1 imaginary, 2 amplitude, 3 power (coherent irradiance × pixel area). |
+| NSDD | numeric function | yes | Detector Rectangle data (surface 1) by the NSDD operand's pixel and data codes with # Ignored 0: pixel > 0 that pixel, 0 total, −1/−2 max/min, −3 rays, −4/−5 SD/mean of non-zero pixels, −6 to −12 centroid and RMS (Data 0 flux, 1 flux/m², 2 flux/sr); object 0 clears every detector, −n detector n, and returns 0. Refused by name: Data 3 (bitmap), 4 and 5 (objects as detectors), −13, −14 and −15. |
+| NSDE | numeric function | yes | Detector Color data (surface 1) by the NSDE operand's codes with # Ignored 0: pixel > 0, 0 (sum; chromaticity averaged over lit pixels), −1/−2, −3; angle 0 position, 1 angle space; Data 1 W, 2 W/m² or W/sr, 3 lm, 4 lm/m² or lm/sr, 5–8 CIE x, y, u′, v′, 9–11 X, Y, Z per area; object 0 or −n clears and returns 0. Data 12–21 (CRI, CCT, bitmap, spectral bins) are refused by name. |
+| NSDP | numeric function | yes | Detector Polar data (surface 1) by the NSDP operand's codes: pixel > 0, 0 (sum), −1/−2, −3 rays, −4 RMS angle; Data 1 W, 2 W/sr, 3 lm, 4 lm/sr, 5–8 chromaticity, 9–11 X, Y, Z per sr; object 0 or −n clears and returns 0. Pixel 0 with per-steradian data is refused (the help does not say how it sums). |
 | NSUR | numeric function | yes | The image surface's number (surfaces are 0 to NSUR(); the help's Example Macro 1 reads the image intercept as RAYX(NSUR())). |
 | NWAV | numeric function | yes | The number of wavelengths. |
 | OBJC | numeric function | yes | The first non-sequential object whose comment matches the string, case ignored; −1 when none does. |

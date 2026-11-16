@@ -17,6 +17,7 @@ public static class NscCoreObjectTypes
     public static NscObjectTypeDescriptor Sphere { get; } = new()
     {
         TypeName = "Sphere",
+        ZplCode = "NSC_SPHE",   // help, "SETNSCPROPERTY (keywords)", object type codes
         Parameters = new NscParameterDescriptor[]
         {
             new("Radius", 1) { Description = "The radius of the sphere." },
@@ -34,6 +35,7 @@ public static class NscCoreObjectTypes
     public static NscObjectTypeDescriptor Rectangle { get; } = new()
     {
         TypeName = "Rectangle",
+        ZplCode = "NSC_RECT",   // help, "SETNSCPROPERTY (keywords)", object type codes
         Parameters = new NscParameterDescriptor[]
         {
             new("X Half Width", 1) { Description = "The X half width." },
@@ -51,6 +53,7 @@ public static class NscCoreObjectTypes
     public static NscObjectTypeDescriptor StandardLens { get; } = new()
     {
         TypeName = "Standard Lens",
+        ZplCode = "NSC_SLEN",   // help, "SETNSCPROPERTY (keywords)", object type codes
         Parameters = new NscParameterDescriptor[]
         {
             new("Radius 1", 0) { Description = "The radius of curvature of the front face; zero for flat." },

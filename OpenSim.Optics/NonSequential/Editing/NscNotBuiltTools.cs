@@ -31,7 +31,7 @@ public static class NscNotBuiltTools
     /// builds them (help, "Object Properties (non-sequential component editor)").</summary>
     public static IReadOnlyList<(string Section, string Reason)> PropertySections { get; } = new[]
     {
-        ("Sources", "source properties are plan item OP-77"),
+        ("Sources", "the Sources tab has no fields in the editor yet; it is saved with the object, read by the trace and set by the macro codes 101 to 166 of SETNSCPROPERTY"),
         ("Scatter (on the Coat/Scatter section)", "surface scattering is plan item OP-80"),
         ("Scatter To", "scattering, plan item OP-80"),
         ("Volume Physics", "bulk scatter, wavelength shift and fluorescence are plan item OP-81"),
@@ -39,7 +39,7 @@ public static class NscNotBuiltTools
         ("Index (birefringent types)", "non-sequential birefringence is not built (no plan item names it)"),
         ("Diffraction", "non-sequential diffraction is plan item OP-82"),
         ("CAD", "CAD parts are plan item OP-75"),
-        ("Detector settings", "detectors are plan item OP-79"),
+        ("Detector settings", "the detector settings (pixel interpolation, coherent power normalization, spectral bins) have no fields in the editor yet; they are saved with the object and read by the trace"),
         ("Draw (on layout plots)", "there is no non-sequential layout plot yet; the single-object viewer takes its own resolution and opacity"),
     };
 

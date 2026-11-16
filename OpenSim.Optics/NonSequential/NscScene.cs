@@ -187,7 +187,7 @@ public sealed record NscScene
             if (!o.Geometry.IsVolume && o.Material.Kind == NscMaterialKind.Refractive && o.Geometry is NscSphere)
                 problems.Add($"{where}: a hollow sphere must be MIRROR or ABSORB; \"refraction is not allowed\" (help, \"Sphere (non-sequential geometry objects)\").");
             if (o.IsDetectingStandIn && o.Geometry.IsVolume)
-                problems.Add($"{where}: the detecting stand-in is a surface object only; objects as detectors are plan item OP-79.");
+                problems.Add($"{where}: the detecting stand-in is a surface object only; objects as detectors are not built (OP-79 built the detector objects Detector Rectangle, Color and Polar).");
             if (o.Material.Kind == NscMaterialKind.Refractive && o.Material.Medium is { } m)
                 m.Validate(where, problems);
             if (o.FaceProperties is { } faces)

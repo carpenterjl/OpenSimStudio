@@ -51,7 +51,7 @@ public sealed record OpticsNscObjectSettings
 
     public List<OpticsNscFaceSettings>? Faces { get; init; }
 
-    /// <summary>OP-70's detecting stand-in (absorbs and counts; OP-79 builds real detectors).</summary>
+    /// <summary>OP-70's detecting stand-in (absorbs and counts; OP-79's detector objects record pixels).</summary>
     public bool? DetectingStandIn { get; init; }
 
     public string? Comment { get; init; }

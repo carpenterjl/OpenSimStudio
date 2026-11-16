@@ -152,8 +152,9 @@ public sealed partial class ZplConformanceTests
         Assert.Contains("OP-79", Fails("x = NPRO(1, 2, 17, 0)"));
         Assert.Contains("OP-72", Fails("SETNSCPROPERTY 1, 1, 0, 0, \"NSC_CONE\""));
         Assert.Contains("face 1 is not one", Fails("SETNSCPROPERTY 1, 2, 29, 1, 1"));
-        Assert.Contains("OP-77", Assert.Throws<ZplNotBoundException>(() => Run("NSTR 1, 0, 0, 0, 0, 1, 0", WithObjects())).Message);
-        Assert.Throws<ZplNotBoundException>(() => Run("x = LOST(1)", WithObjects()));
+        // wire-15: NSTR is bound; this scene has no source objects, which the runner refuses by name.
+        Assert.Contains("no source objects", Fails("NSTR 1, 0, 0, 0, 0, 1, 0"));
+        Assert.Contains("no NSTR trace", Fails("x = LOST(1)"));
         Assert.Contains("OP-71", Assert.Throws<ZplNotBoundException>(() => Run("INSERTOBJECT 1, 1", WithObjects())).Message);
         Assert.Equal(0, Run("OPTRETURN 0, NOBJ(1)").OptReturn[0]);   // the singlet has no objects
     }

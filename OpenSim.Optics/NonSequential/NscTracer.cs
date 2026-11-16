@@ -253,7 +253,8 @@ public sealed class NscTracer
             },
             $"Glue distance {s.GlueDistance.ToString("g6", CultureInfo.InvariantCulture)} m; maximum {s.MaxIntersectionsPerRay} intersections and {s.MaxSegmentsPerRay} segments per ray, {s.MaxNestedObjects} nested objects; minimum relative intensity {s.MinimumRelativeIntensity.ToString("g6", CultureInfo.InvariantCulture)}, absolute {s.MinimumAbsoluteIntensity.ToString("g6", CultureInfo.InvariantCulture)}.",
             // OP-79: detectors are built; Detector Surface, Detector Volume and objects as detectors are not.
-            "Not built: scattering (OP-80), volume physics (OP-81), diffraction and gradient index in objects (OP-82), sources (OP-77) beyond the OP-70 stand-in, Detector Surface, Detector Volume and objects as detectors (OP-79 builds Detector Rectangle, Color and Polar), Consider/Ignore Objects lists.",
+            // wire-15: sources are built (OP-77, traced through NscSourceRun).
+            "Not built: scattering (OP-80), volume physics (OP-81), diffraction and gradient index in objects (OP-82), Detector Surface, Detector Volume and objects as detectors (OP-79 builds Detector Rectangle, Color and Polar), Consider/Ignore Objects lists.",
         };
         return notes;
     }

@@ -71,7 +71,7 @@ public sealed class NscSingleRayTraceAnalysis : OpticsAnalysis<NscSingleRayTrace
             {
                 new ReportSection("No objects")
                 {
-                    Lines = new[] { "The system has no non-sequential objects, so there is nothing to trace. (The Non-Sequential Component Editor is plan item OP-71; objects are read from the project's saved non-sequential section.)" }
+                    Lines = new[] { "The system has no non-sequential objects, so there is nothing to trace. (Objects are added in the Non-Sequential Component Editor; they are read from the project's saved non-sequential section.)" }
                 }
             }, new[] { "Nothing is traced." });
         }
