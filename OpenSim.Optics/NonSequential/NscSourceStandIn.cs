@@ -18,6 +18,8 @@ public enum NscSampling
 /// k + 1, skipping the origin, or SplitMix64.ForStream(seed, k)), so the rays are the same
 /// whatever order or thread computes them. Spectra, polarization states other than
 /// unpolarized, source units and every other source type are OP-77.
+/// <para>Superseded by OP-77's source objects (<c>NonSequential/Sources/</c>, run through
+/// <c>NscSourceRun</c>); kept for the tests that build rays directly.</para>
 /// </summary>
 public static class NscSourceStandIn
 {

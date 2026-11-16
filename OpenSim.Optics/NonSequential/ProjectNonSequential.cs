@@ -1,6 +1,7 @@
 using System.Globalization;
 using OpenSim.Core.Model;
 using OpenSim.Optics.Analysis;
+using OpenSim.Optics.NonSequential.Sources;
 using OpenSim.Optics.Paraxial;
 
 namespace OpenSim.Optics.NonSequential;
@@ -15,7 +16,8 @@ namespace OpenSim.Optics.NonSequential;
 public static class ProjectNonSequential
 {
     /// <summary>Saved names of the object types this build reads.</summary>
-    public static IReadOnlyList<string> BuiltTypes { get; } = new[] { "Sphere", "Rectangle", "Standard Lens" };
+    public static IReadOnlyList<string> BuiltTypes { get; } = new[] { "Sphere", "Rectangle", "Standard Lens" }
+        .Concat(NscSourceTypes.BuiltNames).ToArray();   // OP-77: the source types
 
     /// <summary>The scene of the snapshot, or null when it has no non-sequential objects. Throws
     /// <see cref="ArgumentException"/> listing every problem, each naming the object.</summary>
@@ -84,6 +86,15 @@ public static class ProjectNonSequential
                     if (!Need(9)) return null;
                     geometry = new NscStandardLens(L(0), p[1], L(2), L(3), L(4), L(5), p[6], L(7), L(8));
                     break;
+                // OP-77: source objects (types and parameters in Sources/NscSourceTypes.cs)
+                case var t when NscSourceTypes.Find(t) is not null:
+                {
+                    var props = ProjectNscSources.Properties(row.Source, unit, where, problems);
+                    if (props is null) return null;
+                    geometry = NscSourceTypes.Create(t, p, unit, props);
+                    break;
+                }
+                // end OP-77
                 default:
                     problems.Add($"{where}: the object type '{type}' is not built; OP-70 builds {string.Join(", ", BuiltTypes)}, and the object library is plan item OP-72.");
                     return null;

@@ -1771,6 +1771,33 @@ single place in the code, so a correction is one line and its test.
     Check: insert, delete and move rows, Replicate Object with an even and an odd count, and Modify
     Reference Object on a relative reference, in OpticStudio's editor.
 
+68. **Source readings** (OP-77, section 72). From the help pages under
+    `plans/sources/optics/op-77-help/`; nothing has been compared with OpticStudio's output.
+    - *Rays pass through sources.* The help names no interaction of a ray with a source object; a
+      source here has no intersections.
+    - *Source Point* emits uniformly in solid angle inside its cone (the help gives the cone only).
+    - *Source Ellipse / Rectangle.* A cosine exponent between 0 and 1 is a cosine distribution
+      (the help says "1.0 or greater"); the Gaussian far field exp(−(Gx·l² + Gy·m²)) is intensity
+      per solid angle over the forward hemisphere; a negative source distance (and a negative
+      Source Gaussian position) makes the rays converge toward the point in front; an annulus
+      needs both minimum half widths above zero.
+    - *Source Diode.* θx and θy are drawn independently from the one-dimensional super-Gaussians
+      restricted to (−90°, 90°); a zero width s puts the start points at 0; the astigmatic start
+      point is (A·tan θx, 0, 0); an array shares the source's power equally.
+    - *Source Two Angle.* The angles are the diode's projected angles; "uniform in angle" is
+      uniform in (θx, θy), "uniform on a distant plane" uniform in (tan θx, tan θy).
+    - *Source Radial.* The spline is natural; the data are intensity per solid angle, so θ has
+      density I(θ)·sin θ; negative spline values are taken as zero (and reported).
+    - *Source Filament* runs from z = 0 to L starting on +x; *Source Tube* and the filament emit
+      uniformly over the whole sphere, like the volume sources.
+    - *Spectra.* Colour-model numbering follows the help's listing order; the Uniform Power and
+      Black Body spectra put their lines equally spaced with both ends included; their
+      wavelengths are in the system's air, and Planck's law is evaluated at the vacuum wavelength.
+    - *Sources tab.* The rectangular array starts at the parent's location (as the help says) and
+      the circular array runs counter-clockwise from +x seen from +z; the Jones vector uses the
+      X Axis Reference method (OpticStudio's default for the sequential polarization trace).
+    Check: a polar detector (OP-79) against each source in OpticStudio.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6754,6 +6781,8 @@ tracing (one wavelength per tracer); an absorbing background medium.
 
 The Non-Sequential Component Editor that edits the saved scene is section 71 (OP-71).
 
+Sources as scene objects, and the run over several wavelengths, are in section 72 (OP-77).
+
 ## 70. CAD export
 
 OP-96 writes a sequential lens's elements, mirrors and rays as files a mechanical designer can
@@ -6926,3 +6955,85 @@ variables and pickups on object cells, and with them Replicate's "Add Pickup Sol
 Object, Edit Object Data File, CAD Tools, Go to Object, Express View, row colours by material;
 the Draw settings on layouts (no non-sequential layout plot exists), picking faces in the viewer;
 even-count replication.
+
+## 72. Sources
+
+OP-77 builds the non-sequential sources (`OpenSim.Optics/NonSequential/Sources/`). The tests are in
+`OpenSim.Tests/Optics/NonSequentialSourceTests.cs`. OpticStudio's behaviour was read from its 2025
+R2 help pages saved under `plans/sources/optics/op-77-help/` (one page per source type, "Summary of
+NSC Sources", "Parameters Common to All Source Objects", "Sources" (the Sources tab), "Placing
+Sources Inside Objects", "Random vs Sobol Sampling", "How rays are selected from the spectrum",
+"Defining a spectrum file", "Defining the Initial Polarization", "Units", "Coherence Length
+Modeling"); physical constants from NIST (CODATA 2022 values for h, c, k, c₂ and Wien's b, and the
+SI definition of the candela, saved under `op-77-help/nist/`); Planck's law in its B_λ form from
+Wikipedia, "Planck's law" (saved beside them).
+
+**Sources are objects.** Each source type is an `NscGeometry` subclass (`NscSource`) in the scene's
+object list, placed, referenced and nested like any object. A source is a surface with no
+intersections: rays never meet it (§10 item 68). It carries parameters 1–5 (`NscSourceCommon`:
+layout rays, analysis rays, power, wavenumber, colour) and the Sources tab
+(`NscSourceProperties`).
+
+**Built types** (parameters in OpticStudio's order after 1–5; `NscSourceTypes.All` lists them with
+names, defaults and ZPL type codes):
+
+| Type | Start points | Directions |
+|---|---|---|
+| Source Point | the origin | uniform in solid angle inside a 0–180° semi-cone |
+| Source Ray | the origin | the normalised cosines |
+| Source Ellipse, Source Rectangle | uniform over the shape (an annulus by rejection) | from an apparent point, collimated, cos^Cn θ, or exp(−(Gx·l² + Gy·m²)) (rejection) |
+| Source Gaussian | normal, σ = w/2 (w the 1/e² radius) | from the apparent point at −Position, or collimated |
+| Source Diode | super-Gaussian in x and y within ±W, or the astigmatic line; Nx × Ny diodes | super-Gaussians in θx = atan(l/n), θy = atan(m/n) on (−90°, 90°) |
+| Source Two Angle | uniform over a rectangle or ellipse | uniform in (θx, θy) or in (tan θx, tan θy) over a rectangle or ellipse |
+| Source Radial | uniform over a rectangle or ellipse | θ with density I(θ)·sin θ, I the natural spline of the data |
+| Source Filament | uniform along the helix (R cos 2πNt, R sin 2πNt, Lt) | uniform over the sphere |
+| Source Tube | uniform over the wall, 0 ≤ z ≤ L | uniform over the sphere |
+| Source Volume Cylinder / Ellipse / Rectangle | uniform in the volume | uniform over the sphere |
+
+**Sampling.** Each type maps `Dimensions` numbers in [0, 1) to a ray by inverting its
+distributions; where there is no closed-form inverse (the diode's super-Gaussians, the radial
+spline) `NscInverseCdf` inverts a CDF built from adaptive Gauss–Legendre panels to about 1e-14 in
+probability. Ray k (element e's ray j is k = e·N + j) takes Sobol point k + 1 or the first numbers
+of `SplitMix64.ForStream(s, k)`, s the source's seed (Source Ray's own seed, else derived from the
+trace seed and the object number); rejection steps draw from that stream; the last number picks the
+wavelength. Ray k depends only on k, so emission is bitwise the same at any thread count.
+
+**Power.** Every ray of an array element carries P/N; arrays multiply the power ("a 3 x 3 array of 1
+watt sources will produce 9 watts"). Watts and joules are traced as stated. Lumens are converted to
+watts with the spectrum, P_W = P_lm/(683·Σwᵢ V(λᵢ)/Σwᵢ), V(λ) a delegate the caller supplies (plan
+item OP-79 bundles the CIE table); without it lumens are refused. The unit is the system's
+`SourceUnit` (System Explorer, Units); prefixes are not modelled.
+
+**Spectrum** (`NscSpectrum`). System Wavelength (wavenumber 0: all rows by weight; else one row),
+Uniform Power Spectrum, Black Body Spectrum (Planck's B_λ at the vacuum wavelength of each line) and
+a spectrum table (the .SPCD rules: 3–200 ascending pairs). Rays pick their wavelength at random by
+weight, as OpticStudio does, each with equal power. The colour models that fit a spectrum to a
+colour (CIE 1931 XYZ, xy, RGB, D65 White, Color Temperature, CIE 1976 u′v′) are refused by name.
+
+**Sources tab.** Random polarization or a Jones vector (Jx, Jy, X-Phase, Y-Phase) turned into the
+3-D field by the X Axis Reference method (P = K × X̂, S = P × K) in the local frame; pre-propagation
+then reverse rays; Sobol or random sampling; rectangular, circular and hexapolar arrays. Initial
+phase, coherence length and bulk scatter are stored, not used.
+
+**Emission and run.** `NscSourceEmitter.Emit` gives one source's rays as `NscEmission` records, one
+per wavelength (`WavelengthMicrometers`, `Rays`, and per ray the source object and source ray
+number), placed by the object's global placement with its resolved Inside Of. `NscSourceRun.Run`
+emits every source (or a list), joins rays of equal wavelength (sources in object order), traces
+each wavelength with its own `NscTracer` (seed `SplitMix64.ForStream(seed, −1 − g)` for wavelength g
+in ascending order, so simple splitting is independent between wavelengths), and returns the
+`NscRunResult` of each wavelength with the ledgers merged by compensated sums
+(`NscSourceRun.Merge`). A trace error names the wavelength and maps the tracer's ray number to the
+source object and its ray.
+
+**Saved data.** A source row is an `OpticsNscObjectSettings` with its type name and parameters
+(lengths in lens units; Source Ellipse's Source X and Y are cosines when the distance is 0) and an
+optional `Source` (`OpticsNscSourceSettings`: the Sources tab). `ProjectNonSequential` reads the
+built types; `ProjectNscSources.EmitOptions` gives the system wavelengths and source unit.
+
+**Not built:** Source Object (no area sampler over a parent's faces), Source Imported (OP-75),
+Source File, Source IESNA File and Source EULUMDAT File (OP-78), Source DLL and Source Diffractive
+(OP-100), Radiant Source Models (proprietary); reading .SPCD spectrum files (OP-78); the colour
+models that fit a spectrum to a colour; the hexagonal source array; coherence-length phase and
+initial phase (no coherent detector data); bulk-scatter limits (OP-81); a source run analysis
+window, the ZPL NSTR binding, the editor's source columns (OP-71) and source viewers. Readings in
+§10 item 68.

@@ -55,6 +55,48 @@ public sealed record OpticsNscObjectSettings
     public bool? DetectingStandIn { get; init; }
 
     public string? Comment { get; init; }
+
+    // OP-77
+    /// <summary>A source object's Sources tab (null for a non-source or the defaults).</summary>
+    public OpticsNscSourceSettings? Source { get; init; }
+}
+
+// OP-77
+/// <summary>
+/// A source object's Sources tab as saved (plan item OP-77; help, "Sources"). Lengths in lens
+/// units; every property nullable, null the default. Names: <see cref="Sampling"/> "Sobol" or
+/// "Random"; <see cref="BulkScatter"/> "Many", "Once" or "Never"; <see cref="ArrayType"/> "None",
+/// "Rectangular", "Circular", "Hexapolar" or "Hexagonal"; <see cref="ColorModel"/> OpticStudio's
+/// colour-model name ("System Wavelength", "Uniform Power Spectrum", "Black Body Spectrum",
+/// "Spectrum File", ...).
+/// </summary>
+public sealed record OpticsNscSourceSettings
+{
+    public bool? RandomPolarization { get; init; }
+    public double? Jx { get; init; }
+    public double? Jy { get; init; }
+    public double? XPhase { get; init; }
+    public double? YPhase { get; init; }
+    public double? InitialPhase { get; init; }
+    public double? CoherenceLength { get; init; }
+    public bool? ReverseRays { get; init; }
+    public double? PrePropagation { get; init; }
+    public string? Sampling { get; init; }
+    public string? BulkScatter { get; init; }
+    public string? ArrayType { get; init; }
+    public int? ArrayCount1 { get; init; }
+    public int? ArrayCount2 { get; init; }
+    public double? ArraySize1 { get; init; }
+    public double? ArraySize2 { get; init; }
+    public string? ColorModel { get; init; }
+    public double? Temperature { get; init; }
+    public int? SpectrumCount { get; init; }
+    public double? WavelengthFrom { get; init; }
+    public double? WavelengthTo { get; init; }
+
+    /// <summary>The spectrum table's wavelengths (µm) and weights, pair by pair.</summary>
+    public List<double>? SpectrumWavelengths { get; init; }
+    public List<double>? SpectrumWeights { get; init; }
 }
 
 /// <summary>One face's saved properties.</summary>

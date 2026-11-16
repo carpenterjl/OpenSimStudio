@@ -2382,6 +2382,9 @@ and one analysis.
 
 Not built: the rest of the object library (OP-72 to
 OP-75), sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
+
+Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
+OP-75), sources beyond those under Non-sequential sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
 physics (OP-81), diffraction, gradient index and coating plots in objects (OP-82), ray databases
 and filters (OP-83), Consider/Ignore Objects, mixed mode with ports, several wavelengths in one
 run, a layout of traced non-sequential rays. The readings not yet checked against OpticStudio are
@@ -2463,6 +2466,34 @@ Not built: Combine Objects, Create Polygon Object, Freeform Z Tools and the Obje
 says which plan item builds it), solves and pickups on object cells, even-count replication,
 picking a face in the viewer, Draw settings on layouts. Readings not yet checked against
 OpticStudio: Conventions §10 item 67.
+
+## Non-sequential sources
+
+Sources are objects in the non-sequential scene, saved as object rows with their OpticStudio type
+name and parameters (1–5 are # Layout Rays, # Analysis Rays, Power, Wavenumber and Color #) and an
+optional Sources tab. Built: Source Point, Source Ray, Source Ellipse, Source Rectangle, Source
+Gaussian, Source Diode, Source Two Angle, Source Radial, Source Filament, Source Tube and the three
+volume sources. Rays never strike a source. Each analysis ray carries the source power divided by
+the number of rays, and an array of sources multiplies the power.
+
+- Spectrum: the system wavelengths (all by weight, or the row the wavenumber names), a uniform
+  power spectrum, a black body spectrum, or a table of wavelength–weight pairs. Each ray picks its
+  wavelength at random by weight.
+- Units: the system's source unit. Watts and joules are traced as stated. Lumens need the CIE
+  luminous efficiency table (plan item OP-79) and are refused until it is connected.
+- Sources tab: random polarization or a Jones vector, pre-propagation, reverse rays, Sobol or
+  random sampling, and rectangular, circular or hexapolar arrays. Initial phase, coherence length
+  and bulk scatter are saved but have no effect yet.
+- Inside Of: a source inside a glass object must name it, as OpticStudio requires; a ray that
+  starts inside an object its source does not name stops the run with a message naming the
+  source and the ray.
+
+The engine traces one wavelength at a time; a source run traces each wavelength of every source and
+adds up the energy. There is no analysis window or ZPL command for a source run yet (the editor is
+OP-71, detectors OP-79). Not built: Source Object, Source Imported (OP-75), Source File, Source
+IESNA File and Source EULUMDAT File (OP-78), Source DLL and Source Diffractive (OP-100), Radiant
+Source Models, spectrum files on disk, the CIE colour models, the hexagonal array. Details and the
+readings not yet checked against OpticStudio are in docs/Optics-Conventions.md §72 and §10 item 68.
 
 ## Coming
 
