@@ -9,15 +9,18 @@ namespace OpenSim.Optics.NonSequential;
 /// <summary>
 /// The non-sequential scene a project saves (<see cref="OpticsNonSequentialSettings"/>, OP-70)
 /// turned into an <see cref="NscScene"/> and the base <see cref="NscTraceSettings"/>, lengths
-/// converted from the lens unit. Only the object types OP-70 builds are read: Sphere (radius,
-/// "Is Volume?"), Rectangle (x and y half widths) and Standard Lens (OpticStudio's nine
-/// parameters, a radius of 0 flat); any other type is refused by name (plan item OP-72).
+/// converted from the lens unit. The object types read are OP-70's Sphere (radius, "Is
+/// Volume?"), Rectangle (x and y half widths) and Standard Lens (OpticStudio's nine parameters, a
+/// radius of 0 flat), OP-77's source types and OP-79's detector types (<see cref="BuiltTypes"/>);
+/// any other type is refused by name (the object library is plan items OP-72 to OP-75).
 /// </summary>
 public static class ProjectNonSequential
 {
     /// <summary>Saved names of the object types this build reads.</summary>
     public static IReadOnlyList<string> BuiltTypes { get; } = new[] { "Sphere", "Rectangle", "Standard Lens" }
-        .Concat(NscSourceTypes.BuiltNames).ToArray();   // OP-77: the source types
+        .Concat(NscSourceTypes.BuiltNames)                 // OP-77: the source types
+        .Concat(Detectors.NscDetectorTypes.BuiltNames)     // OP-79: the detector types
+        .ToArray();
 
     /// <summary>The scene of the snapshot, or null when it has no non-sequential objects. Throws
     /// <see cref="ArgumentException"/> listing every problem, each naming the object.</summary>
@@ -101,7 +104,7 @@ public static class ProjectNonSequential
                     geometry = Detectors.NscDetectorTypes.Create(detector, p, v => OpticsConventions.ToMeters(v, unit), row);
                     break;
                 default:
-                    problems.Add($"{where}: the object type '{type}' is not built; OP-70 builds {string.Join(", ", BuiltTypes)}, and the object library is plan item OP-72.");
+                    problems.Add($"{where}: the object type '{type}' is not built; this build reads {string.Join(", ", BuiltTypes)}, and the object library is plan items OP-72 to OP-75.");
                     return null;
             }
         }

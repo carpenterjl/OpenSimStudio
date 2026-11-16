@@ -71,6 +71,36 @@ public sealed class NscEditingTests
         Assert.Contains("'Cylinder Volume'", c.NotBuiltMessage("Cylinder Volume"));
     }
 
+    [Fact]
+    public void DefaultCatalogue_JoinsTheSourceAndDetectorTypes_BuildsTheirDefaults_AndRefusesTheUnbuiltByName()
+    {
+        // Wave 15 wiring: Built, then OP-77's sources, then OP-79's detectors.
+        var c = NscObjectCatalogue.Default;
+        Assert.Equal(NscObjectCatalogue.Built.Types.Select(t => t.TypeName)
+            .Concat(OpenSim.Optics.NonSequential.Sources.NscSourceTypes.BuiltNames)
+            .Concat(OpenSim.Optics.NonSequential.Detectors.NscDetectorTypes.BuiltNames), c.Types.Select(t => t.TypeName));
+        Assert.Equal(ProjectNonSequential.BuiltTypes, c.Types.Select(t => t.TypeName));
+        foreach (var d in c.Types)
+        {
+            var g = d.Build(d.Defaults, LensUnit.Millimeter);
+            Assert.Equal(d.TypeName, g.TypeName);
+            Assert.Equal(d.Faces.Keys.OrderBy(k => k), g.Faces.Keys.OrderBy(k => k));
+            Assert.Equal(d.IsVolumeFor(d.Defaults), g.IsVolume);
+        }
+        Assert.Equal(NscObjectCategory.Source, c.Find("Source Point")!.Category);
+        Assert.Equal(NscObjectCategory.Detector, c.Find("detector rectangle")!.Category);
+        Assert.Equal(17, c.Find("Detector Rectangle")!.Parameters.Count);
+
+        // Refused types are not offered, and asking for one gives its own reason.
+        Assert.Null(c.Find("Source File"));
+        Assert.Null(c.Find("Detector Surface"));
+        Assert.Contains(c.Refused, d => d.TypeName == "Detector Volume");
+        Assert.Contains("OP-78", c.NotBuiltMessage("Source File"));
+        Assert.Contains("Detector Surface is not built", c.NotBuiltMessage("Detector Surface"));
+        Assert.Throws<NotSupportedException>(() => c.Refused.First(d => d.TypeName == "Source File").Build(null, LensUnit.Millimeter));
+        Assert.Contains("OP-72", c.NotBuiltMessage("Cylinder Volume"));
+    }
+
     // ================================================================= renumbering
 
     /// <summary>Objects: 1 (0, 0); 2 ref 1; 3 ref −1 (object 2), inside 1; 4 ref 2, inside −3

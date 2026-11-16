@@ -197,9 +197,10 @@ public sealed class OpticsNonSequentialEditorTests : IDisposable
     public void ObjectsOfATypeNotBuilt_AreRefused_ByName()
     {
         var e = Loaded(EveryType());
-        e.NewObjectType = "Source Ellipse";
+        // Source File is in OP-77's list but refused (ray files are OP-78): its own reason is given.
+        e.NewObjectType = "Source File";
         e.InsertObjectCommand.Execute(null);
-        Assert.Contains("OP-77", e.Status);
+        Assert.Contains("OP-78", e.Status);
         Assert.Equal(5, e.ObjectCount);
 
         var typed = e.Document.SetText(0, SheetSchema.TypeColumn, "Cylinder Pipe");

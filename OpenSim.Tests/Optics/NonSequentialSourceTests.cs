@@ -595,14 +595,15 @@ public sealed class NonSequentialSourceTests
     [Fact]
     public void Descriptors_ListEverySourceType_AndTheBuiltOnesCreateFromTheirDefaults()
     {
-        Assert.Equal(21, NscSourceTypes.All.Count);
+        Assert.Equal(21, NscSourceTypes.Descriptors.Count);
         Assert.Equal(13, NscSourceTypes.BuiltNames.Count);
-        foreach (var d in NscSourceTypes.All)
+        foreach (var d in NscSourceTypes.Descriptors)
         {
             Assert.Equal("# Analysis Rays", d.Parameters[1].Name);
+            Assert.Equal(OpenSim.Optics.NonSequential.Editing.NscObjectCategory.Source, d.Category);
+            // Source Radial's descriptor carries its intensity columns, so its defaults are complete.
             var values = d.Parameters.Select(p => p.Default).ToList();
-            if (d.RepeatingParameter is not null) values.AddRange(Enumerable.Repeat(d.RepeatingDefault, (int)d.Parameters[9].Default));
-            if (d.Built)
+            if (d.IsBuilt)
             {
                 var s = NscSourceTypes.Create(d.TypeName, values, LensUnit.Millimeter);
                 Assert.Equal(d.TypeName, s.TypeName);

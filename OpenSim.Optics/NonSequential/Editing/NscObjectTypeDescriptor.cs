@@ -80,6 +80,27 @@ public sealed record NscObjectTypeDescriptor
     /// naming the parameter. Null for a type with no shape of its own to show.</summary>
     public Func<IReadOnlyList<double>, NscGeometry>? Geometry { get; init; }
 
+    /// <summary>Builds the shape from every saved parameter in lens units (the list padded with the
+    /// defaults, longer when the type has a variable tail such as Source Radial's intensities) and
+    /// the lens unit, for a type whose unit conversion depends on other parameters (Source
+    /// Ellipse's Source X and Y are lengths only when Source Distance is not zero). Used instead of
+    /// <see cref="Geometry"/> when set. Added by the wave 15 wiring for the source and detector lists.</summary>
+    public Func<IReadOnlyList<double>, LensUnit, NscGeometry>? SavedGeometry { get; init; }
+
+    /// <summary>Why the type is not built, naming the plan item that will build it; null for a built
+    /// type. A catalogue keeps such types apart from <see cref="NscObjectCatalogue.Types"/> and gives
+    /// this text when one is asked for.</summary>
+    public string? NotBuiltReason { get; init; }
+
+    /// <summary>True unless <see cref="NotBuiltReason"/> is set.</summary>
+    public bool IsBuilt => NotBuiltReason is null;
+
+    /// <summary>The type's code in ZPL's object-type table (help, "SETNSCPROPERTY keywords"), or null.</summary>
+    public string? ZplCode { get; init; }
+
+    /// <summary>One line on what the type is, for the type list's tooltip.</summary>
+    public string? Summary { get; init; }
+
     /// <summary>The parameters of a new object.</summary>
     public IReadOnlyList<double> Defaults => Parameters.Select(p => p.Default).ToArray();
 
@@ -96,6 +117,15 @@ public sealed record NscObjectTypeDescriptor
     /// the defaults and its lengths converted to meters.</summary>
     public NscGeometry Build(IReadOnlyList<double>? parameters, LensUnit unit)
     {
+        if (NotBuiltReason is not null) throw new NotSupportedException(NotBuiltReason);
+        if (SavedGeometry is not null)
+        {
+            int n = Math.Max(Parameters.Count, parameters?.Count ?? 0);
+            var raw = new double[n];
+            for (int i = 0; i < n; i++)
+                raw[i] = parameters is not null && i < parameters.Count ? parameters[i] : Parameters[i].Default;
+            return SavedGeometry(raw, unit);
+        }
         if (Geometry is null) throw new NotSupportedException($"{TypeName}: this type has no shape to build.");
         var p = new double[Parameters.Count];
         for (int i = 0; i < p.Length; i++)
@@ -116,6 +146,11 @@ public sealed record NscObjectTypeDescriptor
         else
             for (int i = 0; i < Parameters.Count; i++)
                 if (string.IsNullOrWhiteSpace(Parameters[i]?.Name)) problems.Add($"{where}: parameter {i + 1} has no name.");
+        if (NotBuiltReason is not null)
+        {
+            if (string.IsNullOrWhiteSpace(NotBuiltReason)) problems.Add($"{where}: the reason it is not built is blank.");
+            return problems;
+        }
         if (Faces is null || Faces.Count == 0) problems.Add($"{where}: no faces (every object has at least face 0).");
         if (IsVolume is null && (VolumeFlagParameter is not int f || Parameters is null || f < 0 || f >= Parameters.Count))
             problems.Add($"{where}: it must say whether it is a volume, or name the parameter that does.");
