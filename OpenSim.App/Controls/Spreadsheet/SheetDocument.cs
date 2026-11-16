@@ -61,6 +61,34 @@ public sealed partial class SheetDocument
     /// </summary>
     public Func<int, string?>? InsertGuard { get; set; }
 
+    // OP-71
+    /// <summary>
+    /// Asked before rows are inserted, deleted or moved (not by undo or redo, nor by a paste that
+    /// only appends): given where each present row will be (its new index, or −1 when deleted),
+    /// returns why not, or null. An editor whose cells hold row numbers (the non-sequential
+    /// editor's reference objects) refuses an edit that would leave one pointing at nothing.
+    /// </summary>
+    public Func<IReadOnlyList<int>, string?>? StructureGuard { get; set; }
+
+    // OP-71
+    /// <summary>
+    /// Called after rows are inserted, deleted or moved, inside the same undo step, with the same
+    /// map as <see cref="StructureGuard"/>: the owner rewrites the cells that hold row numbers
+    /// through the ordinary edits, so undo and redo restore them with the rows.
+    /// </summary>
+    public Action<IReadOnlyList<int>>? StructureEdited { get; set; }
+
+    // OP-71
+    private SheetEditResult Structural(int[] map, string description, Func<SheetEditResult> edit)
+    {
+        if (StructureGuard?.Invoke(map) is { } refusal) return SheetEditResult.Fail(refusal);
+        if (StructureEdited is null) return edit();
+        using var group = History.BeginGroup(description);
+        var result = edit();
+        if (result.Succeeded) StructureEdited(map);
+        return result;
+    }
+
     /// <summary>The row with this <see cref="SheetRow.Id"/> while it is in the sheet, else null.</summary>
     public SheetRow? FindRow(long id) => _byId.TryGetValue(id, out var row) && row.IsAttached ? row : null;
 
@@ -109,7 +137,8 @@ public sealed partial class SheetDocument
         if (count < 1) throw new ArgumentOutOfRangeException(nameof(count), "Insert at least one row.");
         type ??= Schema.DefaultRowType;
         if (!Schema.RowTypes.Contains(type)) throw new ArgumentException($"Row type '{type.Name}' is not in this sheet's schema.", nameof(type));
-        var result = InsertRowsCore(index, count, type);
+        var insertMap = Enumerable.Range(0, _rows.Count).Select(i => i < index ? i : i + count).ToArray();   // OP-71
+        var result = Structural(insertMap, count == 1 ? "Insert row" : "Insert rows", () => InsertRowsCore(index, count, type));
         if (!result.Succeeded) return result;
         RaiseChanged();
         return SheetEditResult.Ok with
@@ -137,12 +166,19 @@ public sealed partial class SheetDocument
         if (sorted.Select(i => _rows[i]).FirstOrDefault(r => r.IsLocked) is { } locked)
             return SheetEditResult.Fail($"Row {locked.Number} ({locked.Type.Name}) cannot be deleted.");
 
+        // OP-71: the guard and the renumbering hook.
+        var deleteMap = new int[_rows.Count];
+        var deleted = sorted.ToHashSet();
+        for (int i = 0, next = 0; i < deleteMap.Length; i++) deleteMap[i] = deleted.Contains(i) ? -1 : next++;
+        if (StructureGuard?.Invoke(deleteMap) is { } refusal) return SheetEditResult.Fail(refusal);
+
         using (History.BeginGroup(sorted.Length == 1 ? "Delete row" : "Delete rows"))
         {
             var edit = new RemoveRowsEdit(this, sorted.Select(i => (i, _rows[i])).ToArray());
             edit.Redo();
             History.Push(edit);
             RevertDanglingPickups();
+            StructureEdited?.Invoke(deleteMap);   // OP-71
         }
         RaiseChanged();
         return SheetEditResult.Ok;
@@ -176,9 +212,18 @@ public sealed partial class SheetDocument
             if (after[i].IsLocked && !ReferenceEquals(after[i], before[i]))
                 return SheetEditResult.Fail($"Row {after[i].Number} ({after[i].Type.Name}) cannot be moved.");
 
-        var edit = new ReorderEdit(this, before, after, selected.Length == 1 ? "Move row" : "Move rows");
-        edit.Redo();
-        History.Push(edit);
+        // OP-71: the guard and the renumbering hook.
+        var moveMap = new int[before.Length];
+        for (int i = 0; i < after.Length; i++) moveMap[Array.IndexOf(before, after[i])] = i;
+        string description = selected.Length == 1 ? "Move row" : "Move rows";
+        var moved = Structural(moveMap, description, () =>
+        {
+            var edit = new ReorderEdit(this, before, after, description);
+            edit.Redo();
+            History.Push(edit);
+            return SheetEditResult.Ok;
+        });
+        if (!moved.Succeeded) return moved;
         RaiseChanged();
         return SheetEditResult.Ok;
     }

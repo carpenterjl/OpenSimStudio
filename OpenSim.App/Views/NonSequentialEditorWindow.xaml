@@ -1,0 +1,99 @@
+<Window x:Class="OpenSim.App.Views.NonSequentialEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        xmlns:sheet="clr-namespace:OpenSim.App.Controls.Spreadsheet"
+        Title="Non-Sequential Component Editor" Width="1200" Height="600" MinWidth="560" MinHeight="320"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-71: the Non-Sequential Component Editor. DataContext is the
+         OpticsNonSequentialEditorViewModel; the sheet is OP-10's SpreadsheetGrid, whose own keys
+         (Insert, Ctrl+Delete, Alt+Up/Down, Ctrl+Z...) and context menu also work and also keep the
+         reference object and Inside Of numbers pointing at the same objects. -->
+    <DockPanel Margin="8">
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+            <ComboBox ItemsSource="{Binding ObjectTypes}" SelectedItem="{Binding NewObjectType}" Width="140" Margin="0,0,4,4"
+                      ToolTip="The type the insert buttons add. Other OpticStudio types are later plan items."/>
+            <Button Content="Insert object" Command="{Binding InsertObjectCommand}" Margin="0,0,4,4"
+                    ToolTip="Insert an object before the current one."/>
+            <Button Content="Insert after" Command="{Binding InsertObjectAfterCommand}" Margin="0,0,4,4"/>
+            <Button Content="Delete object" Command="{Binding DeleteObjectCommand}" Margin="0,0,4,4"
+                    ToolTip="Refused while another object refers to it as its reference object or Inside Of."/>
+            <Button Content="Move up" Command="{Binding MoveObjectUpCommand}" Margin="0,0,4,4"/>
+            <Button Content="Move down" Command="{Binding MoveObjectDownCommand}" Margin="0,0,4,4"/>
+            <Button Content="Undo" Command="{Binding UndoCommand}" Margin="8,0,4,4"/>
+            <Button Content="Redo" Command="{Binding RedoCommand}" Margin="0,0,4,4"/>
+            <Button Content="Object properties…" Click="Properties_Click" Margin="8,0,4,4"
+                    ToolTip="Type, rotation order, the detecting stand-in, and Face Is and coating of each face."/>
+            <Button Content="View current object…" Click="ViewObject_Click" Margin="0,0,4,4"
+                    ToolTip="The current object on its own, in its local frame."/>
+        </WrapPanel>
+
+        <Expander DockPanel.Dock="Top" Header="Tools" Margin="0,0,0,4">
+            <DockPanel Margin="4">
+                <GroupBox DockPanel.Dock="Left" Header="Replicate Object (current object)" Width="300">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="Number X"/>
+                            <TextBox Text="{Binding ReplicateNumberX}"/>
+                            <Label Content="Number Y"/>
+                            <TextBox Text="{Binding ReplicateNumberY}"/>
+                            <Label Content="Number Z"/>
+                            <TextBox Text="{Binding ReplicateNumberZ}"/>
+                            <Label Content="Delta X [lens units]"/>
+                            <TextBox Text="{Binding ReplicateDeltaX}"/>
+                            <Label Content="Delta Y [lens units]"/>
+                            <TextBox Text="{Binding ReplicateDeltaY}"/>
+                            <Label Content="Delta Z [lens units]"/>
+                            <TextBox Text="{Binding ReplicateDeltaZ}"/>
+                            <Label Content="Relative references"/>
+                            <CheckBox IsChecked="{Binding ReplicateRelativeReferences}"/>
+                            <Label Content="Add pickup solves"/>
+                            <CheckBox IsChecked="{Binding ReplicateAddPickupSolves}" ToolTip="Not built: the copies are independent rows."/>
+                        </controls:FormGrid>
+                        <Button Content="Replicate" Command="{Binding ReplicateObjectCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                ToolTip="Number X × Y × Z objects (odd counts), the original at the centre; the copies follow it, referenced to it."/>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox DockPanel.Dock="Left" Header="Modify Reference Object" Width="260" Margin="8,0,0,0">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="First object"/>
+                            <TextBox Text="{Binding ModifyFirstObject}"/>
+                            <Label Content="Last object"/>
+                            <TextBox Text="{Binding ModifyLastObject}"/>
+                            <Label Content="Refer to"/>
+                            <TextBox Text="{Binding ModifyReferTo}" ToolTip="0 for the scene frame; it must precede the first object."/>
+                        </controls:FormGrid>
+                        <Button Content="Modify reference" Command="{Binding ModifyReferenceObjectCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                ToolTip="Recompute position and tilts against the new reference so each object stays where it is."/>
+                    </StackPanel>
+                </GroupBox>
+                <WrapPanel Margin="8,0,0,0" VerticalAlignment="Top">
+                    <Button Content="Combine Objects" Command="{Binding CombineObjectsCommand}" Margin="0,0,4,4" ToolTip="Not built (OP-74, OP-75)."/>
+                    <Button Content="Create Polygon Object" Command="{Binding CreatePolygonObjectCommand}" Margin="0,0,4,4" ToolTip="Not built (OP-74)."/>
+                    <Button Content="Freeform Z Tools" Command="{Binding FreeformZToolsCommand}" Margin="0,0,4,4" ToolTip="Not built (OP-72)."/>
+                    <Button Content="Object Editor" Command="{Binding ObjectEditorCommand}" Margin="0,0,4,4" ToolTip="Not built."/>
+                </WrapPanel>
+            </DockPanel>
+        </Expander>
+
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Margin="0,2,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource FaintText}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasProblems}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <TextBlock Text="{Binding NotBuiltPropertiesText}" TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,2,0,0"/>
+        </StackPanel>
+
+        <sheet:SpreadsheetGrid x:Name="Grid" Document="{Binding Document}"/>
+    </DockPanel>
+</Window>

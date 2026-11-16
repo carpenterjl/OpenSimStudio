@@ -97,6 +97,13 @@
                           AutomationProperties.AutomationId="OpticsCurrentConfigurationCombo"/>
                 <TextBlock Text="{Binding Optics.MultiConfig.Summary}" VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
             </DockPanel>
+            <!-- OP-71: the non-sequential objects, edited in the Non-Sequential Component Editor window. -->
+            <DockPanel Margin="0,8,0,0">
+                <Button DockPanel.Dock="Left" Content="Non-Sequential Component Editor…" Click="NonSequentialEditor_Click"
+                        AutomationProperties.AutomationId="OpticsNonSequentialEditorButton"/>
+                <TextBlock Text="{Binding Optics.NonSequentialEditor.ObjectCount, StringFormat='{}{0} objects'}"
+                           VerticalAlignment="Center" Margin="8,0,0,0" Style="{StaticResource FaintText}"/>
+            </DockPanel>
             <!-- OP-18: the system data; OP-10: the lens on its own. -->
             <panels:OpticsSystemDataPanel/>
             <!-- OP-11: the glass catalogs. -->

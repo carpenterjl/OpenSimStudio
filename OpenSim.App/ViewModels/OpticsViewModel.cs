@@ -187,11 +187,12 @@ public partial class OpticsViewModel : ObservableObject
         GlassSubstitution = Optimize.TemplateToSettings(),   // OP-59
         MeritWizard = MeritEditor?.WizardSettings,   // OP-56
         HighYield = Optimize.HighYieldToSettings(),   // OP-62
-        NonSequential = _nonSequential,   // OP-70: kept as loaded until OP-71's editor edits it
+        NonSequential = _nonSequential,   // OP-70; OP-71: the editor's edits replace it (OpticsViewModel.NonSequential.cs)
     };
 
     // OP-70
-    /// <summary>The saved non-sequential objects, carried through unchanged (no editor yet: OP-71).</summary>
+    /// <summary>The saved non-sequential system: as loaded until the Non-Sequential Component
+    /// Editor (OP-71) edits it.</summary>
     private OpenSim.Core.Model.OpticsNonSequentialSettings? _nonSequential;
 
     /// <summary>Restores the workspace from a project or lens file; null (every older file)
@@ -219,6 +220,7 @@ public partial class OpticsViewModel : ObservableObject
         Optimize.LoadTemplate(saved.GlassSubstitution);   // OP-59
         Optimize.LoadHighYield(saved.HighYield);   // OP-62
         _nonSequential = saved.NonSequential;   // OP-70
+        LoadNonSequentialEditor(notes);   // OP-71
 
         MultiConfig.LoadThermalSettings(saved.Thermal);   // OP-91: before the table, whose thermal pickups read it
         MultiConfig.LoadSettings(saved.MultiConfiguration, notes);   // OP-30: null is one configuration
@@ -238,6 +240,7 @@ public partial class OpticsViewModel : ObservableObject
         ToleranceEditor.Reset();   // OP-63
         Optimize.LoadTemplate(null);   // OP-59
         _nonSequential = null;   // OP-70
+        LoadNonSequentialEditor(new List<string>());   // OP-71
 
         MultiConfig.LoadThermalSettings(null);   // OP-91
         MultiConfig.Reset();

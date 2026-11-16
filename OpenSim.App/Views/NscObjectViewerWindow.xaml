@@ -1,0 +1,35 @@
+<Window x:Class="OpenSim.App.Views.NscObjectViewerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helix="http://helix-toolkit.org/wpf"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        Title="{Binding Title, StringFormat='View Current Object: {0}'}" Width="720" Height="520" MinWidth="400" MinHeight="300"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-71: View Current Object. DataContext is an OpticsNscObjectViewModel; the 3-D view is
+         the Helix viewport the main 3-D view uses, the object in its own frame (lens units). -->
+    <DockPanel Margin="8">
+        <StackPanel DockPanel.Dock="Left" Width="220" Margin="0,0,8,0">
+            <controls:FormGrid>
+                <Label Content="Drawing resolution"/>
+                <ComboBox ItemsSource="{Binding Resolutions}" SelectedItem="{Binding Resolution}"/>
+                <Label Content="Opacity [%]"/>
+                <TextBox Text="{Binding OpacityPercent}"/>
+                <Label Content="Draw local axes"/>
+                <CheckBox IsChecked="{Binding ShowLocalAxes}"/>
+            </controls:FormGrid>
+            <TextBlock Text="Faces (each its own colour):" Margin="0,8,0,2"/>
+            <ItemsControl ItemsSource="{Binding Faces}"/>
+            <TextBlock Text="Local axes: x red, y green, z blue, at the reference point. Picking a face by clicking is not built."
+                       TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,8,0,0"/>
+        </StackPanel>
+        <helix:HelixViewport3D x:Name="Viewport" Background="{DynamicResource PanelBgRaisedBrush}"
+                               ShowCoordinateSystem="True" ShowViewCube="True" ZoomExtentsWhenLoaded="True">
+            <helix:DefaultLights/>
+            <ModelVisual3D x:Name="ObjectVisual"/>
+            <helix:LinesVisual3D x:Name="AxisX" Color="#D04040" Thickness="2"/>
+            <helix:LinesVisual3D x:Name="AxisY" Color="#40A040" Thickness="2"/>
+            <helix:LinesVisual3D x:Name="AxisZ" Color="#4060D0" Thickness="2"/>
+        </helix:HelixViewport3D>
+    </DockPanel>
+</Window>

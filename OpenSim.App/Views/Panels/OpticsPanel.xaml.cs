@@ -200,4 +200,17 @@ public partial class OpticsPanel : UserControl
         _multiConfigEditor.Closed += (_, _) => _multiConfigEditor = null;
         _multiConfigEditor.Show();
     }
+
+    // OP-71
+    private NonSequentialEditorWindow? _nonSequentialEditor;
+
+    /// <summary>Opens the Non-Sequential Component Editor (OP-71), or brings the open one forward.</summary>
+    private void NonSequentialEditor_Click(object sender, RoutedEventArgs e)
+    {
+        if (_nonSequentialEditor is { IsLoaded: true }) { _nonSequentialEditor.Activate(); return; }
+        if (DataContext is not MainViewModel { Optics: { } optics }) return;
+        _nonSequentialEditor = new NonSequentialEditorWindow(optics.NonSequentialEditor) { Owner = Window.GetWindow(this) };
+        _nonSequentialEditor.Closed += (_, _) => _nonSequentialEditor = null;
+        _nonSequentialEditor.Show();
+    }
 }

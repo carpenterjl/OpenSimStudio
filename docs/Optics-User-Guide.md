@@ -2353,8 +2353,9 @@ and one analysis.
   ABSORB) and per-face "Face Is" and coating. Where objects overlap or touch, the later object
   decides.
 - **Saved scene.** The project's optics record carries the objects and the non-sequential
-  controls (`NonSequential` in the project file, lengths in lens units). There is no editor yet
-  (OP-71): the objects are written in the file or built through the library API.
+  controls (`NonSequential` in the project file, lengths in lens units). The objects are edited
+  in the Non-Sequential Component Editor (below), written in the file or built through the
+  library API.
 - **Controls.** Maximum intersections and segments per ray, maximum nested/touching objects,
   minimum relative and absolute intensity, glue distance, simple ray splitting.
 - **Energy.** With "Use polarization" on (the default) every face reflects, transmits and absorbs
@@ -2379,7 +2380,7 @@ and one analysis.
   type, comment, reference object, inside of, material, face coating, rotation order and "Face Is"
   properties). NSTR and the detector functions wait for source and detector objects.
 
-Not built: the Non-Sequential Component Editor (OP-71), the rest of the object library (OP-72 to
+Not built: the rest of the object library (OP-72 to
 OP-75), sources (OP-77), detectors and the detector viewer (OP-79), scattering (OP-80), volume
 physics (OP-81), diffraction, gradient index and coating plots in objects (OP-82), ray databases
 and filters (OP-83), Consider/Ignore Objects, mixed mode with ports, several wavelengths in one
@@ -2431,11 +2432,42 @@ and chamfers. The macro keyword EXPORTCAD writes IGES, STEP or STL with the sett
 VEC1 (see ZPL macros); SAT and the settings the export has no counterpart for are refused by name.
 The equations are in `docs/Optics-Conventions.md` §70.
 
+## Non-Sequential Component Editor
+
+The Optics panel's "Non-Sequential Component Editor…" opens the table of the non-sequential
+objects (docs/Optics-Conventions.md §71). Edits are saved with the project and reach the analyses
+at once; every edit can be undone.
+
+- **The table.** One row per object: type, comment, reference object, Inside Of, X, Y, Z, the
+  tilts about X, Y, Z, the material, then the type's parameters in OpticStudio's order (Sphere,
+  Rectangle, Standard Lens). Insert, delete and move rows with the buttons or the grid's keys
+  (Insert, Ctrl+Delete, Alt+Up/Down). Reference objects and Inside Of numbers keep naming the same
+  objects when rows are inserted, deleted or moved, absolute ones as absolute and relative ones as
+  relative; deleting an object another one refers to, or moving it below that object, is refused.
+- **Object properties** ("Object properties…"): the type, "Use global XYZ rotation order", the
+  detecting stand-in, and "Face Is" and the coating of each face. Sources, scattering, volume
+  physics, GRIN, birefringence, diffraction, CAD and detector settings are listed as not built,
+  each with its plan item where one exists.
+- **Types not built.** An object of a type this build does not have (read from a file) is shown
+  with its parameters by number and saved unchanged; it is not traced, and no new object of such a
+  type can be added.
+- **Replicate Object** (Tools): Number X, Y, Z (odd counts) and Delta X, Y, Z make an array with
+  the current object at its centre; the copies follow it as independent rows referenced to it
+  (absolute, or relative when checked).
+- **Modify Reference Object** (Tools): objects First to Last are placed relative to another
+  object (or 0, the scene) without moving: position and tilts are recomputed.
+- **View current object…**: the current object alone in a 3-D view, each face its own colour, with
+  its local axes; the drawing resolution and opacity are the viewer's own settings.
+
+Not built: Combine Objects, Create Polygon Object, Freeform Z Tools and the Object Editor (each
+says which plan item builds it), solves and pickups on object cells, even-count replication,
+picking a face in the viewer, Draw settings on layouts. Readings not yet checked against
+OpticStudio: Conventions §10 item 67.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:
 
-- the non-sequential object editor;
 - layouts with traced rays, and the analysis windows not described above (the Configuration
   Matrix Spot and the rest);
 - the MTF in object-space cycles per milliradian for focal systems, afocal through-focus MTF

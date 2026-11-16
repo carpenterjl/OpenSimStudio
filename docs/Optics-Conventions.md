@@ -1754,6 +1754,23 @@ single place in the code, so a correction is one line and its test.
       value on the fit's check grid) and as the chordal error of STL triangles and DXF polylines.
     Check: export the same lens from OpticStudio and here and compare the files in a CAD program.
 
+67. **Non-Sequential Component Editor readings** (OP-71, section 71). From the help pages under
+    `plans/sources/optics/op-70-help/` and `op-71-help/`; nothing has been compared with
+    OpticStudio's editor.
+    - *Renumbering.* The help defines absolute and relative references and says relative ones make
+      copying groups easy, but not what inserting, deleting or moving a row does to the numbers.
+      Here every reference object and Inside Of keeps naming the same object in the same form; an
+      edit that would delete a referenced object, or put it after its user, is refused.
+    - *Replicate Object.* The original is the centre of the array, so every count must be odd (an
+      even count is refused); the copies follow the original, x fastest, then y, then z; each is a
+      full copy referenced to the original with its offset as position and zero tilts.
+    - *Modify Reference Object.* An object whose reference was relative gets a relative one to the
+      new object; each object keeps its rotation order.
+    - *Column names.* The type pages describe the parameters in sentences; the short column names
+      ("Radius 1", "X Half Width") are this program's, except "Is Volume?".
+    Check: insert, delete and move rows, Replicate Object with an even and an odd count, and Modify
+    Reference Object on a relative reference, in OpticStudio's editor.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6735,6 +6752,8 @@ Consider Objects, Ignore Objects and "Rays Ignore Object"; mixed mode (NSC group
 sequential lens with ports); the Non-Sequential Component Editor (OP-71); polychromatic
 tracing (one wavelength per tracer); an absorbing background medium.
 
+The Non-Sequential Component Editor that edits the saved scene is section 71 (OP-71).
+
 ## 70. CAD export
 
 OP-96 writes a sequential lens's elements, mirrors and rays as files a mechanical designer can
@@ -6818,3 +6837,92 @@ counterpart for are refused by name (section 56).
 (refused by name), apertures other than centred circles (refused), dummy surfaces, solid beams and
 ray footprints, configurations exported by file or layer, non-sequential objects, IGES solids, STEP
 sheets, chamfers, OpticStudio's STL angular tolerance. Readings in §10 item 66.
+
+## 71. Non-Sequential Component Editor
+
+OP-71 builds the editor of the saved non-sequential scene (`OpticsNonSequentialSettings`, section
+69) and its object tools. The UI-free parts are in `OpenSim.Optics/NonSequential/Editing/`, the
+editor in `OpenSim.App/ViewModels/OpticsNonSequentialEditorViewModel.cs` and
+`Views/NonSequentialEditorWindow.xaml`. Tests: `OpenSim.Tests/Optics/NscEditingTests.cs` and
+`OpenSim.App.Tests/ViewModels/OpticsNonSequentialEditorTests.cs`. OpticStudio's behaviour was read
+from its 2025 R2 help pages under `plans/sources/optics/op-70-help/` and `op-71-help/`
+("Non-sequential Component Editor", "NSC Editor Toolbar", "Object Placement", "Placing Sources
+Inside Objects", "Object Properties", "Type", "General Settings", "Draw", "Coat/Scatter", "Replicate
+Object", "Combine Objects", "Create Polygon Object", "Modify Reference Object", "View Current
+Object", "Freeform Z Tools", and the Sphere, Rectangle and Standard Lens pages).
+
+**Object types.** The editor's catalogue (`NscObjectCatalogue`) is a list of
+`NscObjectTypeDescriptor` records: the saved type name, the parameters in OpticStudio's order
+(`NscParameterDescriptor`: column name, the value of a new object, and its kind: length in lens
+units, number, flag, angle in degrees or integer), the face numbers and names from the type's help
+page, whether the object is a volume (or which parameter decides it), the help page, and a
+function that builds the shape from the parameters in meters. `NscCoreObjectTypes` holds OP-70's
+three: Sphere (Radius, "Is Volume?"; face 0), Rectangle (X and Y Half Width; face 0) and Standard
+Lens (Radius 1, Conic 1, Clear 1, Edge 1, Thickness, Radius 2, Conic 2, Clear 2, Edge 2; faces 0
+side, 1 front, 2 back). The defaults are this program's (a unit sphere and square, a flat plate of
+unit thickness); the help gives none. Other items add types with `NscObjectCatalogue.Join`; a type
+the catalogue does not know is named with the plan item that builds it ("Source …" OP-77,
+"Detector …" OP-79, any other OP-72 to OP-75).
+
+**The table.** One row per object: Object Type, Comment, Ref Object, Inside Of, X, Y and Z
+Position, Tilt About X, Y and Z, Material, then the type's parameters (up to 32 columns). A saved
+type the catalogue does not know is shown with its raw parameters as "Par n", is written back
+unchanged, and is not traced; the editor will not add an object of such a type (insert, typing the
+type name, or retyping a row to it) and names the plan item. Values the file left out stay left out
+and values shown differently (a lower-case type or "Face Is") are written back as the file had
+them, until edited; data the table has no cell for (parameters past the type's columns or past the
+32nd, faces the type does not have, fields later items add to `OpticsNscObjectSettings`) are kept.
+The object properties (the row's flyout) hold the type, "Use Global XYZ Rotation Order", the
+detecting stand-in and, for each face of the type, "Face Is" (Object Default, Reflective,
+Absorbing) and the coating. The Sources, Scatter, Scatter To, Volume Physics, Index (GRIN,
+birefringent), Diffraction, CAD and detector sections are listed as not built with the plan item
+that builds them.
+
+**Insert, delete, move.** `NscObjectTable` and the sheet's structure hook keep every reference
+object and Inside Of naming the same object, in its own form: an absolute link becomes the target's
+new number, a relative one the target's new number minus the object's. An edit that would delete an
+object another still names, or place a named object after the object naming it, is refused naming
+both. A link already broken before the edit is left alone. The renumbering is part of the same
+undo step, whether the edit came from the editor's buttons or the grid's keys and menu. A pasted
+block keeps its numbers as copied (so relative links inside it keep working, the help's reason for
+them). Readings in §10 item 67.
+
+**Replicate Object** (`NscReplicate`). Number X, Y, Z (the total objects along each axis) and
+Delta X, Y, Z (lens units). The original is the centre of the array; every count must be odd. The
+N − 1 copies are inserted after the original, x varying fastest, then y, then z, at offsets
+((i − (Nx − 1)/2)Δx, (j − (Ny − 1)/2)Δy, (k − (Nz − 1)/2)Δz) in the original's frame: each copy is
+the original's row (type, parameters, material, faces, comment, everything) with its reference
+object the original (absolute, or relative if asked), its position the offset and its tilts zero; a
+relative Inside Of is rewritten for the copy's own number. Objects after the original are
+renumbered as for any insertion. "Add Pickup Solves" is refused (the editor has no solves or
+pickups on object cells), so the copies are independent rows. The help offers no tilt between
+copies.
+
+**Modify Reference Object** (`NscObjectPlacement.ModifyReference`). Objects First to Last get the
+new reference ("must precede the first object selected"; 0 is the scene frame). Each object's
+global frame G (section 69, through its reference chain) is kept: the new local transform is
+G_ref⁻¹·G, split into decenters (its translation) and tilts in the object's own rotation order,
+Rx(a)·Ry(b)·Rz(c) by `TiltDecenter.FromTransform` (section 4), or Rz(c)·Ry(b)·Rx(a) through
+(Rz·Ry·Rx)ᵀ = Rx(−a)·Ry(−b)·Rz(−c). At a y tilt of ±90° only a ± c is defined and c comes back
+zero; the rotation is the same. Objects that refer to a modified object keep their place because
+its global frame is unchanged. A relative reference stays relative.
+
+**View Current Object** (`NscObjectMesher`, `NscObjectViewerWindow`): one object in its own frame,
+lens units, in the Helix 3-D view the main viewport uses, each face its own colour, with the local
+axes (z twice the length of x and y, as the Draw page says). Its drawing resolution (Standard,
+Medium, High, Presentation; the ring and segment counts are this program's), opacity and local
+axes are the viewer's own and are not saved: there is no non-sequential layout plot yet to read
+them. Picking a face by clicking is not built.
+
+**Check.** After every edit the table is checked by building each row's shape and handing the rows
+to `NscScene.Validate` (`NscObjectCheck`): references and Inside Of, hollow spheres, the stand-in
+on surfaces, face numbers, shapes that cannot be built, coatings not in the catalog. Glass names
+are not looked up (the trace does). When a row cannot be built the scene's own rules are not run
+until it can.
+
+**Not built:** Combine Objects (Boolean objects OP-74, CAD parts OP-75), Create Polygon Object
+(OP-74), Freeform Z Tools (OP-72) and the Object Editor, each refused by name; NSC solves,
+variables and pickups on object cells, and with them Replicate's "Add Pickup Solves"; Reload
+Object, Edit Object Data File, CAD Tools, Go to Object, Express View, row colours by material;
+the Draw settings on layouts (no non-sequential layout plot exists), picking faces in the viewer;
+even-count replication.
