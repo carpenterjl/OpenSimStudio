@@ -72,8 +72,10 @@ public static class ProjectNscSources
         return problems.Count > before ? null : props;
     }
 
-    /// <summary>The emission options of a project: its system wavelengths with their weights and
-    /// its source units.</summary>
+    /// <summary>The emission options of a project: its system wavelengths with their weights,
+    /// its source units, and the CIE photopic luminous efficiency V(λ)
+    /// (<see cref="Photometry.Photometric.PhotopicEfficiency"/>, OP-79) for lumens, unless
+    /// <paramref name="luminousEfficiency"/> gives another.</summary>
     public static NscSourceEmitOptions EmitOptions(OpticsAnalysisContext context, NscEmissionPurpose purpose,
         Func<double, double>? luminousEfficiency = null)
     {
@@ -85,8 +87,44 @@ public static class ProjectNscSources
             Purpose = purpose,
             SystemWavelengths = system.Wavelengths.Wavelengths.Select(w => new NscSpectralLine(w.Micrometers, w.Weight)).ToArray(),
             Units = system.Units.SourceUnit,
-            LuminousEfficiency = luminousEfficiency,
+            LuminousEfficiency = luminousEfficiency ?? Photometry.Photometric.PhotopicEfficiency,
         };
+    }
+
+    /// <summary>
+    /// Traces a project's own sources (wave 15 wiring): the saved scene
+    /// (<see cref="ProjectNonSequential.Scene"/>), the saved non-sequential controls on top of the
+    /// system environment, coatings and primary wavelength, the analysis ray counts and the
+    /// project's emission options (V(λ) included), through <see cref="NscSourceRun.Run"/>. The
+    /// Ray Trace control's choices are the arguments: which sources (null for all), splitting
+    /// (<paramref name="split"/>: OpticStudio's "Split NSC Rays", simple when the system says
+    /// so), polarization, Ignore Errors and the seed (null: the settings' default). Throws
+    /// <see cref="ArgumentException"/> naming the problem when the system has no objects or no
+    /// sources.
+    /// </summary>
+    public static NscSourceRunResult Trace(OpticsAnalysisContext context, IReadOnlyList<int>? sources = null, bool split = false,
+        bool usePolarization = false, bool ignoreErrors = false, long? seed = null, CancellationToken cancellation = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var notes = new List<string>();
+        var system = SystemDataSettings.FromSettings(context.System.SystemData, notes);
+        var unit = system.Units.LensUnit;
+        var scene = ProjectNonSequential.Scene(context, unit)
+            ?? throw new ArgumentException("The system has no non-sequential objects, so there are no sources to trace.");
+        var saved = context.System.NonSequential;
+        var baseline = new NscTraceSettings
+        {
+            UsePolarization = usePolarization,
+            Splitting = !split ? NscSplitting.None : saved?.SimpleRaySplitting == true ? NscSplitting.Simple : NscSplitting.Split,
+            IgnoreErrors = ignoreErrors,
+            Environment = system.Environment,
+            Coatings = OpenSim.Optics.Coatings.CoatingCatalogSettings.FromSettings(context.System.Coatings, notes),
+            PrimaryMicrometers = system.Wavelengths.Primary.Micrometers,
+        };
+        if (seed is long s) baseline = baseline with { Seed = s };
+        var settings = ProjectNonSequential.Settings(saved, unit, baseline);
+        var run = NscSourceRun.Run(scene, settings, EmitOptions(context, NscEmissionPurpose.Analysis), sources, cancellation);
+        return notes.Count == 0 ? run : run with { Notes = notes.Concat(run.Notes).ToArray() };
     }
 
     private static T Parse<T>(string? text, string what, string where, List<string> problems, T fallback, params (string Name, T Value)[] names)

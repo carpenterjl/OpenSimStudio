@@ -743,12 +743,12 @@ public sealed class NscDetectorTests
     }
 
     [Fact]
-    public void TheViewerAnalysis_ReadsAFile_AndWithoutOne_NamesOP77()
+    public void TheViewerAnalysis_ReadsAFile_AndWithoutOne_NeedsObjectsToTrace()
     {
         Assert.True(OpticsAnalysisRegistry.CreateDefault().TryGet(NscDetectorViewerAnalysis.SavedId, out _));
         var analysis = new NscDetectorViewerAnalysis();
         var context = new OpticsAnalysisContext("P", new OpticsSettings());
-        Assert.Contains("OP-77", Assert.Throws<ArgumentException>(() => analysis.Compute(context, new NscDetectorViewerSettings(), default)).Message);
+        Assert.Contains("no non-sequential objects", Assert.Throws<ArgumentException>(() => analysis.Compute(context, new NscDetectorViewerSettings(), default)).Message);
         string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".DDP");
         try
         {
@@ -765,5 +765,46 @@ public sealed class NscDetectorTests
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>
+    /// Wave 15 wiring: with no file the viewer traces the project's own sources. A Source Point
+    /// (1 W, a 40° cone, 2000 analysis rays) 10 mm in front of an absorbing Detector Rectangle
+    /// (±5 mm, 10 × 10 pixels): the cone's edge at 10·tan 40° = 8.4 mm passes the detector's
+    /// corner (7.07 mm), so some power escapes. Every ray ends detected or in another ledger line,
+    /// so the detector's total flux equals the emitted power less what the ledger says went
+    /// elsewhere, to rounding (2000 terms summed two ways, compensated and pixel by pixel: 1e-12
+    /// relative is far above the double rounding of either). The emitted power is the source's
+    /// 1 W (the stated power, the system's default watts). The viewer's report shows that total.
+    /// </summary>
+    [Fact]
+    public void TheViewerAnalysis_TracesTheProjectsSources_AndItsTotalFluxBalancesTheLedger()
+    {
+        var context = new OpticsAnalysisContext("P", new OpticsSettings
+        {
+            NonSequential = new OpticsNonSequentialSettings
+            {
+                Objects = new()
+                {
+                    new OpticsNscObjectSettings { Type = "Source Point", Parameters = new() { 10, 2000, 1, 0, 0, 40 } },
+                    new OpticsNscObjectSettings { Type = "Detector Rectangle", Z = 10, Material = "ABSORB", Parameters = new() { 5, 5, 10, 10 } },
+                },
+            },
+        });
+        var run = OpenSim.Optics.NonSequential.Sources.ProjectNscSources.Trace(context);
+        var data = Assert.IsType<NscFlatDetectorData>(Assert.Single(run.Detectors!));
+        Assert.Equal(2, data.ObjectNumber);
+        var l = run.Ledger;
+        Within(1.0, l.Emitted, 1e-12, "emitted power (the source's 1 W)");
+        double elsewhere = l.Absorbed + l.Escaped + l.Thresholded + l.NotTraced + l.LimitTerminated + l.Errors;
+        Assert.True(l.Escaped > 0, "some rays should miss the detector");
+        double total = data.Flux.Sum();
+        Within(l.Emitted - elsewhere, total, 1e-12 * l.Emitted, "detector total flux against the ledger");
+
+        var result = new NscDetectorViewerAnalysis().Compute(context, new NscDetectorViewerSettings(), default);
+        Assert.Contains(OpenSim.Core.PostProcessing.StudyReport.Number(total, "g6") + " W", result.Text);
+        Assert.Contains("Detector object 2", result.Text);
+        var wrong = Assert.Throws<ArgumentException>(() => new NscDetectorViewerAnalysis().Compute(context, new NscDetectorViewerSettings { Detector = 1 }, default));
+        Assert.Contains("not a detector", wrong.Message);
     }
 }

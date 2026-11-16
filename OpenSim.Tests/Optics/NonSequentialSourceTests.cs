@@ -434,12 +434,35 @@ public sealed class NonSequentialSourceTests
     public void Lumens_NeedTheLuminousEfficiency_AndConvertToWatts()
     {
         var lumens = Mono with { Units = SourceUnit.Lumens };
+        // Options built by hand without V(λ) are still refused; a project's options carry the CIE table.
         var e = Assert.Throws<NotSupportedException>(() => EmitSet((c, p) => new NscSourcePoint(30, c, p), 10, NscSourceSampling.Sobol, options: lumens));
-        Assert.Contains("OP-79", e.Message);
+        Assert.Contains("V(λ)", e.Message);
         var set = EmitSet((c, p) => new NscSourcePoint(30, c, p), 1000, NscSourceSampling.Sobol, options: lumens with { LuminousEfficiency = _ => 0.5 });
         double watts = 2 / (683 * 0.5);
         Assert.True(Math.Abs(set.TracedPower - watts) <= 1e-14 * watts, $"{set.TracedPower:R} W, expected {watts:R}");
         Assert.Equal(2, set.StatedPower);
+    }
+
+    /// <summary>
+    /// Wave 15 wiring: a project's emission options carry the CIE photopic V(λ), so lumens work.
+    /// One lumen at 555 nm is 1/683 W: K_cd = 683 lm/W (BIPM, The International System of Units,
+    /// 9th edition 2019, §2.3.1 "The candela", pp. 130–131; the copy in
+    /// plans/sources/optics/op-79-help/si/SI-Brochure-9-EN.pdf) and V(555 nm) = 1.0000000000000
+    /// (CIE_sle_photopic.csv, row 555, op-79-help/cie). 0.555·1000 is 555 only to a rounding, and
+    /// V's slope there is about 1.4e-4 per nm (the 556 nm row, 0.9998567), so the relative
+    /// tolerance 1e-12 covers it with room.
+    /// </summary>
+    [Fact]
+    public void Lumens_FromAProject_UseTheCiePhotopicEfficiency_OneLumenAt555nmIs1Over683Watt()
+    {
+        var context = new OpticsAnalysisContext("P", new OpticsSettings());
+        var project = ProjectNscSources.EmitOptions(context, NscEmissionPurpose.Analysis);
+        Assert.NotNull(project.LuminousEfficiency);
+        var options = project with { SystemWavelengths = new[] { new NscSpectralLine(0.555, 1) }, Units = SourceUnit.Lumens };
+        var set = EmitSet((c, p) => new NscSourcePoint(30, c, p), 1000, NscSourceSampling.Sobol, options: options, power: 1);
+        double watts = 1.0 / 683;
+        Assert.True(Math.Abs(set.TracedPower - watts) <= 1e-12 * watts, $"{set.TracedPower:R} W, expected {watts:R}");
+        Assert.Equal(1, set.StatedPower);
     }
 
     /// <summary>The X Axis Reference method: for K = ẑ, S = x̂ and P = ŷ, so (Jx, Jy) = (1, 1) with

@@ -105,7 +105,7 @@ public static class NscSourceEmitter
         if (options.Units == SourceUnit.Lumens)
         {
             var v = options.LuminousEfficiency
-                ?? throw new NotSupportedException($"{where}: the source units are lumens, which need the CIE photopic luminous efficiency V(λ) (plan item OP-79 bundles it); none was given. Use watts or joules.");
+                ?? throw new NotSupportedException($"{where}: the source units are lumens, which need the CIE photopic luminous efficiency V(λ), and these emission options carry none (ProjectNscSources.EmitOptions passes Photometric.PhotopicEfficiency). Use watts or joules, or give V(λ).");
             var weighted = new NscLedgerBuilder.Sum();
             var weights = new NscLedgerBuilder.Sum();
             foreach (var l in lines)

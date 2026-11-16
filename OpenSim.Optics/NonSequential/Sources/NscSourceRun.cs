@@ -1,10 +1,11 @@
 using System.Globalization;
 using OpenSim.Core.Numerics;
+using OpenSim.Optics.NonSequential.Detectors;
 
 namespace OpenSim.Optics.NonSequential.Sources;
 
 /// <summary>One wavelength's part of a source run: the rays launched and the tracer's result
-/// (ledger, errors, notes; detector data when plan item OP-79 adds it).</summary>
+/// (ledger, errors, notes, and that wavelength's detector data).</summary>
 public sealed record NscWavelengthRun(double WavelengthMicrometers, int Rays, NscRunResult Result);
 
 /// <summary>What one source launched: its stated power (source units, every array element
@@ -26,6 +27,11 @@ public sealed record NscSourceRunResult
     public required string Unit { get; init; }
 
     public required IReadOnlyList<string> Notes { get; init; }
+
+    /// <summary>Each detector's data summed over the wavelengths in ascending order
+    /// (<see cref="NscDetectorResults.Combine"/>, OP-79), in the runs' flux unit
+    /// (<see cref="Unit"/>); null when the scene has no detector objects.</summary>
+    public IReadOnlyList<NscDetectorData>? Detectors { get; init; }
 }
 
 /// <summary>
@@ -105,6 +111,7 @@ public static class NscSourceRun
             Sources = summaries,
             Unit = options.Units == SourceUnit.Joules ? "J" : "W",
             Notes = notes,
+            Detectors = NscDetectorResults.Combine(runs.Select(r => r.Result)),
         };
     }
 

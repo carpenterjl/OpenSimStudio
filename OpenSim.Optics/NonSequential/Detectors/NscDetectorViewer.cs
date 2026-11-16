@@ -53,8 +53,11 @@ public enum NscDetectorScale
 /// <summary>Settings of the <see cref="NscDetectorViewerAnalysis"/> (help, "Detector Viewer").</summary>
 public sealed record NscDetectorViewerSettings
 {
-    [DisplayName("File"), Description("The full path of a .DDR, .DDC or .DDP detector data file (Save Detector Data). Tracing the project's sources onto its detectors waits for OP-77's sources.")]
+    [DisplayName("File"), Description("The full path of a .DDR, .DDC or .DDP detector data file (Save Detector Data); blank to trace the project's own sources onto its detectors.")]
     public string File { get; init; } = "";
+
+    [DisplayName("Detector"), Description("The detector object to show when tracing the project (its object number); 0 for the first detector in the scene. Not used with a file.")]
+    public int Detector { get; init; }
 
     [DisplayName("Show as"), Description("Image, contours, a row or column cross section, true colour, a chromaticity chart or flux vs. wavelength.")]
     public NscDetectorShow ShowAs { get; init; } = NscDetectorShow.Image;
@@ -89,8 +92,9 @@ public sealed record NscDetectorViewerSettings
 /// what a detector collected, as an image, contours or a cross section, on a linear or log
 /// scale, smoothed, in radiometric or photometric units, with the beam information and a
 /// per-pixel noise estimate; true colour and the CIE 1931 and 1976 chromaticity charts for colour
-/// data. <see cref="Render"/> is the whole viewer on a data record; the analysis reads the record
-/// from a DDR, DDC or DDP file until OP-77's sources can be traced from the project.
+/// data. <see cref="Render"/> is the whole viewer on a data record; the analysis gets the record
+/// by tracing the project's sources (<see cref="Sources.ProjectNscSources.Trace"/>) or from a DDR,
+/// DDC or DDP file.
 /// </summary>
 public static class NscDetectorViewer
 {
@@ -569,10 +573,13 @@ public static class NscDetectorViewer
 }
 
 /// <summary>
-/// OpticStudio's Detector Viewer as an analysis (help, "Detector Viewer"): the data of a detector
-/// saved with Save Detector Data (.DDR, .DDC, .DDP), shown by <see cref="NscDetectorViewer"/>.
-/// Tracing the project's own sources onto its detectors waits for OP-77's source objects; the
-/// library's <see cref="NscRunResult.Detectors"/> holds the same data after a run.
+/// OpticStudio's Detector Viewer as an analysis (help, "Detector Viewer"), shown by
+/// <see cref="NscDetectorViewer"/>. With a file (.DDR, .DDC, .DDP, Save Detector Data) it shows
+/// that data. Without one it traces the project's own sources onto its detectors
+/// (<see cref="Sources.ProjectNscSources.Trace"/>: every source, the analysis ray counts, no
+/// splitting or polarization, the default seed; OpticStudio's Ray Trace control with its
+/// checkboxes clear) and shows the detector the settings name, its data summed over the
+/// wavelengths.
 /// </summary>
 public sealed class NscDetectorViewerAnalysis : OpticsAnalysis<NscDetectorViewerSettings>
 {
@@ -583,13 +590,38 @@ public sealed class NscDetectorViewerAnalysis : OpticsAnalysis<NscDetectorViewer
 
     protected override OpticsAnalysisResult Compute(OpticsAnalysisContext context, NscDetectorViewerSettings settings, CancellationToken cancellation)
     {
-        if (string.IsNullOrWhiteSpace(settings.File))
-            throw new ArgumentException($"{Name}: give a detector data file (.DDR, .DDC or .DDP). Tracing the project's sources onto its detectors waits for the source objects of plan item OP-77; until they are joined, the viewer shows saved detector data.");
         var notes = new List<string>();
         var unit = SystemDataSettings.FromSettings(context.System.SystemData, notes).Units.LensUnit;
-        var data = NscDetectorFile.Read(settings.File);
-        var result = NscDetectorViewer.Render(data, settings, unit, Name);
-        return OpticsAnalysisResult.FromSections(Name, result.Sections,
-            result.Assumptions.Concat(notes).Prepend($"Data read from {Path.GetFileName(settings.File)}.").ToArray(), result.Plots);
+        if (!string.IsNullOrWhiteSpace(settings.File))
+        {
+            var data = NscDetectorFile.Read(settings.File);
+            var result = NscDetectorViewer.Render(data, settings, unit, Name);
+            return OpticsAnalysisResult.FromSections(Name, result.Sections,
+                result.Assumptions.Concat(notes).Prepend($"Data read from {Path.GetFileName(settings.File)}.").ToArray(), result.Plots);
+        }
+
+        var scene = ProjectNonSequential.Scene(context, unit)
+            ?? throw new ArgumentException($"{Name}: the system has no non-sequential objects; add sources and a detector, or give a detector data file (.DDR, .DDC or .DDP).");
+        var detectors = Enumerable.Range(1, scene.Objects.Count).Where(i => scene.Objects[i - 1].Geometry is INscDetector).ToArray();
+        if (detectors.Length == 0)
+            throw new ArgumentException($"{Name}: the scene has no detector objects (Detector Rectangle, Detector Color or Detector Polar); add one, or give a detector data file.");
+        if (!scene.Objects.Any(o => o.Geometry is Sources.NscSource))
+            throw new ArgumentException($"{Name}: the scene has no source objects to trace onto its detectors; add one, or give a detector data file.");
+        int number = settings.Detector == 0 ? detectors[0] : settings.Detector;
+        if (!detectors.Contains(number))
+            throw new ArgumentException($"{Name}: object {settings.Detector} is not a detector; the detectors are object{(detectors.Length == 1 ? "" : "s")} {string.Join(", ", detectors)}.");
+
+        var run = Sources.ProjectNscSources.Trace(context, cancellation: cancellation);
+        var traced = run.Detectors?.FirstOrDefault(d => d.ObjectNumber == number)
+            ?? throw new InvalidOperationException($"{Name}: the source run returned no data for detector object {number}.");
+        var shown = NscDetectorViewer.Render(traced, settings, unit, Name);
+        var ledger = run.Ledger;
+        var traceNotes = new List<string>
+        {
+            $"Detector object {number} ({traced.TypeName}): the project's sources traced ({string.Join(", ", run.Sources.Select(s => $"object {s.ObjectNumber} {s.TypeName}, {s.Rays} rays"))}) at {run.Runs.Count} wavelength{(run.Runs.Count == 1 ? "" : "s")}, data summed over them; fluxes in {run.Unit}.",
+            $"Energy ledger ({run.Unit}): emitted {StudyReport.Number(ledger.Emitted, "g6")}, detected {StudyReport.Number(ledger.Detected, "g6")}, absorbed {StudyReport.Number(ledger.Absorbed, "g6")}, escaped {StudyReport.Number(ledger.Escaped, "g6")}.",
+        };
+        return OpticsAnalysisResult.FromSections(Name, shown.Sections,
+            shown.Assumptions.Concat(notes).Concat(run.Notes).Concat(traceNotes).ToArray(), shown.Plots);
     }
 }
