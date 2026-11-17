@@ -34,7 +34,8 @@ public static class NscNotBuiltTools
         ("Sources", "the Sources tab has no fields in the editor yet; it is saved with the object, read by the trace and set by the macro codes 101 to 166 of SETNSCPROPERTY"),
         // OP-80: Scatter and Scatter To are built (the editor's Coat/Scatter and Scatter To fields).
         ("Scatter profiles and User Defined scatter (on the Coat/Scatter section)", "scatter profiles (SCATTER_PROFILE.DAT, undocumented), scatter DLLs and the IS/ISX scatter catalogs are not built; the other scatter models are (OP-80)"),
-        ("Volume Physics", "bulk scatter, wavelength shift and fluorescence are plan item OP-81"),
+        // OP-81: Volume Physics is built (the editor's Volume Physics fields); DLLs other than the first-party samples are refused.
+        ("Volume Physics DLLs", "bulk-scatter DLLs other than the first-party Henyey-Greenstein-bulk, Rayleigh and Mie, the excitation spectrum (ZEX) and the Mie threshold are not built"),
         ("Index (GRIN types)", "non-sequential gradient index is plan item OP-82"),
         ("Index (birefringent types)", "non-sequential birefringence is not built (no plan item names it)"),
         ("Diffraction", "non-sequential diffraction is plan item OP-82"),

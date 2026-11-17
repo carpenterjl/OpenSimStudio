@@ -2673,6 +2673,36 @@ row has no text cell for a file name), mixed
 mode (NSST), roadway lighting (NSRW, NSTW), FREZ, NSRA phases and fields, solves and pickups on
 object cells, the wizards' saved settings, preview picture and terminate button, JPG pictures.
 
+## Volume scattering and fluorescence
+
+Light that scatters, is absorbed or changes colour inside an object (docs/Optics-Conventions.md
+§77). In the Non-Sequential Component Editor, open "Volume Physics (current object)", choose the
+model, fill its fields and press Apply (Read reloads the saved values). Solid objects of blank or
+glass material only.
+
+- **Angle Scattering**: mean path (lens units) between events and the cone angle the new
+  direction falls in (180 scatters in any direction).
+- **DLL Defined Scattering**: no DLLs are loaded, but the help's sample DLLs are built in by name:
+  `Henyey-Greenstein-bulk.dll` (parameter: g), `Rayleigh.dll` (reference wavelength in µm,
+  transmission) and `Mie.dll` (particle index, radius in µm, density in cm⁻³, or density 0 to use
+  the mean path). Any other DLL name is refused.
+- **Wavelength shift**: "in, out, prob; ..." with system wavelength numbers, applied at each Angle
+  or DLL scatter event.
+- **Phosphors and Fluorescence**: full paths of the absorption (.ZAS), emission (.ZES) and quantum
+  yield (.ZQE) files in the help's text layouts; extinction coefficient and wavelength, phosphor
+  density; optionally Mie scattering from particle index, radius and density (or a Mie mean free
+  path). Standard and Basic models as in the help. The editor shows the mean free path at the
+  extinction wavelength.
+- The source's **Bulk Scatter** setting (Many, Once, Never) is used. Sources whose colour model is
+  not System Wavelengths do not change wavelength.
+- Converted light reaches detectors at its new wavelength (Detector Color's colours and spectral
+  bins), and ray databases record it; the filter `X_WAVESHIFT(i,j)` finds rays shifted from
+  wavelength i to j. The trace report's ledger lists what photoluminescence lost, what it
+  re-emitted, and the number of volume events.
+
+Not built: other bulk-scatter DLLs, the Mie threshold, excitation (.ZEX) files, absorbing Mie
+particles, polarization-dependent scattering.
+
 ## Fast illumination solve (LightningTrace)
 
 A noise-free irradiance estimate for iterating an illumination design without millions of

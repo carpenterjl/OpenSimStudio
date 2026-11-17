@@ -55,6 +55,13 @@ public static class NscZrdFile
 
     public const int OpenSimVersion = 1;
 
+    // OP-81
+    /// <summary>The OpenSim format version written when some segment's wavelength was shifted by a
+    /// volume event: each segment adds its wavelength (µm, NaN for the run's) and wavelength number
+    /// after its index, and its detector hits are at that wavelength. Databases without shifts are
+    /// still written as version 1, byte for byte as before.</summary>
+    public const int OpenSimShiftedVersion = 2;
+
     /// <summary>UFD status bits (help, "The ZRD Uncompressed Full Data Format (UFD)", "status").</summary>
     private const uint SxTerminated = 1, SxReflected = 2, SxRefracted = 4, SxScattered = 8, SxDiffracted = 16, SxGhost = 32,
         SxDiffractedFromPrevious = 64, SxScatteredFromPrevious = 128, SxError = 256, SxBulk = 512;
@@ -222,8 +229,8 @@ public static class NscZrdFile
         try
         {
             int version = r.ReadInt32();
-            if (version != OpenSimVersion)
-                throw new InvalidDataException($"{name}: OpenSim ray database version {version} is not read (this program writes version {OpenSimVersion}).");
+            if (version != OpenSimVersion && version != OpenSimShiftedVersion)   // OP-81: version 2
+                throw new InvalidDataException($"{name}: OpenSim ray database version {version} is not read (this program writes versions {OpenSimVersion} and {OpenSimShiftedVersion}).");
             int runCount = r.ReadInt32();
             if (runCount < 0) throw new InvalidDataException($"{name}: {runCount} runs.");
             var runs = new List<NscRayDatabaseRun>();
@@ -250,6 +257,20 @@ public static class NscZrdFile
                     int parent = r.ReadInt32(), level = r.ReadInt32(), inside = r.ReadInt32(), hit = r.ReadInt32(), face = r.ReadInt32(), events = r.ReadInt32();
                     var pos = V(r); var dir = V(r); var normal = V(r);
                     double intensity = r.ReadDouble(), path = r.ReadDouble(), optical = r.ReadDouble(), index = r.ReadDouble();
+                    // OP-81: version 2 carries the segment's shifted wavelength.
+                    double? segUm = null;
+                    int? segNumber = null;
+                    if (version == OpenSimShiftedVersion)
+                    {
+                        double w = r.ReadDouble();
+                        int wn = r.ReadInt32();
+                        if (!double.IsNaN(w))
+                        {
+                            if (!(w > 0)) throw new InvalidDataException($"{name}: ray {k}, segment {s}: wavelength {w} µm.");
+                            segUm = w;
+                            segNumber = wn;
+                        }
+                    }
                     int hits = r.ReadInt32();
                     if (hits < 0) throw new InvalidDataException($"{name}: ray {k}, segment {s}: {hits} detector hits.");
                     List<NscDetectorHit>? list = hits == 0 ? null : new List<NscDetectorHit>(hits);
@@ -266,13 +287,14 @@ public static class NscZrdFile
                             for (int e = 0; e < 9; e++) m[e] = new Complex(r.ReadDouble(), r.ReadDouble());
                             phi = CoherencyMatrix.FromElements(m);
                         }
-                        list!.Add(new NscDetectorHit(obj, rayNumber, lp, ld, power, opl, mi, um, phi, ghost));
+                        list!.Add(new NscDetectorHit(obj, rayNumber, lp, ld, power, opl, mi, segUm ?? um, phi, ghost));   // OP-81
                     }
                     segs[s] = new NscSegment
                     {
                         Number = s, Parent = parent, Level = level, Inside = inside, Hit = hit, Face = face,
                         Position = pos, Direction = dir, Normal = normal, Intensity = intensity, PathLength = path,
                         OpticalPath = optical, Index = index, Events = (NscEvents)events, DetectorHits = list,
+                        AirMicrometers = segUm, WavelengthNumber = segNumber,   // OP-81
                     };
                 }
                 rays.Add(new NscRecordedRay { Run = run, RayNumber = rayNumber, SourceObject = source, Segments = segs });
@@ -370,7 +392,8 @@ public static class NscZrdFile
         if (!db.HasDetectorHits)
             throw new InvalidOperationException($"{name}: a database read from a UFD file has no detector hits; save it as UFD, not in the OpenSim format, which promises them.");
         w.Write(OpenSimMagic);
-        w.Write(OpenSimVersion);
+        bool shifted = db.Rays.Any(ray => ray.Segments.Any(g => g.AirMicrometers is not null));   // OP-81
+        w.Write(shifted ? OpenSimShiftedVersion : OpenSimVersion);
         w.Write(db.Runs.Count);
         foreach (var run in db.Runs)
         {
@@ -390,12 +413,14 @@ public static class NscZrdFile
                 w.Write(s.Parent); w.Write(s.Level); w.Write(s.Inside); w.Write(s.Hit); w.Write(s.Face); w.Write((int)s.Events);
                 W(w, s.Position); W(w, s.Direction); W(w, s.Normal);
                 w.Write(s.Intensity); w.Write(s.PathLength); w.Write(s.OpticalPath); w.Write(s.Index);
+                if (shifted) { w.Write(s.AirMicrometers ?? double.NaN); w.Write(s.WavelengthNumber ?? 0); }   // OP-81
+                double segUm = s.AirMicrometers ?? um;   // OP-81: hits are at the segment's wavelength
                 var hits = s.DetectorHits ?? Array.Empty<NscDetectorHit>();
                 w.Write(hits.Count);
                 foreach (var h in hits)
                 {
-                    if (h.RayNumber != ray.RayNumber || h.AirMicrometers != um)
-                        throw new InvalidOperationException($"{name}: ray {ray.RayNumber}, segment {s.Number}: a detector hit belongs to ray {h.RayNumber} at {h.AirMicrometers} µm, not to this ray at {um} µm.");
+                    if (h.RayNumber != ray.RayNumber || h.AirMicrometers != segUm)
+                        throw new InvalidOperationException($"{name}: ray {ray.RayNumber}, segment {s.Number}: a detector hit belongs to ray {h.RayNumber} at {h.AirMicrometers} µm, not to this segment at {segUm} µm.");
                     w.Write(h.ObjectNumber);
                     W(w, h.LocalPoint); W(w, h.LocalDirection);
                     w.Write(h.Power); w.Write(h.OpticalPath); w.Write(h.MediumIndex);

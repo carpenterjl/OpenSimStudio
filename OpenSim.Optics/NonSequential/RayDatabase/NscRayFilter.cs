@@ -88,7 +88,7 @@ public sealed class NscNamedFilters
 /// B, D, E, F, G, H, L, M, O, R, S, T, W, Z, the path filters ~ and $, and the X_ flags listed in
 /// §75. Refused by name: J (its detector-only zeroing is not built), _n and {@n} (Path Analysis,
 /// OP-84), SEQ[a:b] (Sequence Selector, OP-84), X_DIFF and diffraction orders in X_SEQ (OP-82),
-/// X_EXT and X_ORD (birefringence), X_WAVESHIFT (OP-81).
+/// X_EXT and X_ORD (birefringence). X_WAVESHIFT is built (OP-81).
 /// </para>
 /// </summary>
 public sealed class NscRayFilter
@@ -597,7 +597,15 @@ public sealed class NscRayFilter
                 case "X_ORD":
                     throw Fail($"{shown}: ordinary and extraordinary rays need birefringent objects, which are not built.");
                 case "X_WAVESHIFT":
-                    throw Fail($"{shown}: wavelength shifting in bulk scatter is plan item OP-81; not built.");
+                {
+                    // OP-81: "Ray has wave shifted during a bulk scatter event from wavelength i to
+                    // wavelength j": a B segment at wavelength i followed by its child at j.
+                    Count(2);
+                    int from = Int(args[0]), to = Int(args[1]);
+                    static int Number(Ctx c, NscSegment g) => g.WavelengthNumber ?? c.Run.WavelengthNumber;
+                    return new FlagNode(c => from != to && c.Steps().Any(t => t.Prev.Events.HasFlag(NscEvents.BulkScattered)
+                        && Number(c, t.Prev) == from && Number(c, t.Seg) == to));
+                }
 
                 case "X_HIT":
                 case "X_HITFACE2":

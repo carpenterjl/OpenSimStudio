@@ -146,6 +146,7 @@ public static class ProjectNonSequential
             IsDetectingStandIn = row.DetectingStandIn ?? false,
             Comment = row.Comment ?? "",
             ScatterTo = Scattering.ProjectNscScatter.ScatterTo(row, unit, where, problems),   // OP-80
+            VolumePhysics = Volume.ProjectNscVolume.Physics(row.VolumePhysics, unit, where, problems),   // OP-81
         };
 
         bool Need(int count)

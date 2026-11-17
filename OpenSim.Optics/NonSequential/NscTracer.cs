@@ -23,6 +23,15 @@ public sealed record NscLaunchRay
     public double Intensity { get; init; } = 1;
     public int InsideOf { get; init; }
     public RayField? Field { get; init; }
+
+    // OP-81
+    /// <summary>The source's "Bulk Scatter" setting (help, "Sources"): Many, Once ("each branch of
+    /// a ray can only bulk scatter once") or Never.</summary>
+    public Sources.NscSourceBulkScatter BulkScatter { get; init; }
+
+    /// <summary>True for rays whose wavelength may not change in volume physics (sources whose
+    /// colour model is not System Wavelengths "will not undergo wavelength shift").</summary>
+    public bool FixedWavelength { get; init; }
 }
 
 /// <summary>
@@ -52,7 +61,7 @@ public sealed record NscLaunchRay
 /// </list>
 /// Immutable after construction and safe to share between threads.
 /// </summary>
-public sealed class NscTracer
+public sealed partial class NscTracer   // OP-81: partial (Volume/NscTracer.Volume.cs)
 {
     private readonly NscObject[] _objects;
     private readonly RigidTransform[] _global;
@@ -130,24 +139,29 @@ public sealed class NscTracer
             throw new NotSupportedException("The background medium absorbs; an absorbing background (rays that escape through it) is not built. Use a non-absorbing background and put the absorbing medium in an object.");
         _bvh = new BoundingVolumeHierarchy(boxes);
         _scatter = NscScatterer.For(_objects, _global, airMicrometers);   // OP-80
+        _primary = PrimaryOptics();   // OP-81: the trace wavelength's optics and volume physics
     }
 
-    private double IndexOf(Paraxial.ParaxialMedium medium, string where)
+    private double IndexOf(Paraxial.ParaxialMedium medium, string where) => IndexOf(medium, where, AirMicrometers);   // OP-81
+
+    private double IndexOf(Paraxial.ParaxialMedium medium, string where, double airMicrometers)   // OP-81: any wavelength
     {
         double n;
-        try { n = medium.IndexAt(AirMicrometers, Settings.Environment); }
+        try { n = medium.IndexAt(airMicrometers, Settings.Environment); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException)
         {
-            throw new InvalidOperationException($"{where}: no index at {AirMicrometers.ToString("g9", CultureInfo.InvariantCulture)} µm: {e.Message}", e);
+            throw new InvalidOperationException($"{where}: no index at {airMicrometers.ToString("g9", CultureInfo.InvariantCulture)} µm: {e.Message}", e);
         }
         if (!(n > 0) || !double.IsFinite(n))
-            throw new InvalidOperationException($"{where}: the index is {n} at {AirMicrometers} µm; it must be positive.");
+            throw new InvalidOperationException($"{where}: the index is {n} at {airMicrometers} µm; it must be positive.");
         return n;
     }
 
-    private double AlphaOf(Paraxial.ParaxialMedium medium, string where)
+    private double AlphaOf(Paraxial.ParaxialMedium medium, string where) => AlphaOf(medium, where, AirMicrometers);   // OP-81
+
+    private double AlphaOf(Paraxial.ParaxialMedium medium, string where, double airMicrometers)   // OP-81: any wavelength
     {
-        try { return BulkAbsorption.Coefficient(medium, AirMicrometers); }
+        try { return BulkAbsorption.Coefficient(medium, airMicrometers); }
         catch (InvalidOperationException e) { throw new InvalidOperationException($"{where}: {e.Message}", e); }
     }
 
@@ -279,7 +293,7 @@ public sealed class NscTracer
             $"Glue distance {s.GlueDistance.ToString("g6", CultureInfo.InvariantCulture)} m; maximum {s.MaxIntersectionsPerRay} intersections and {s.MaxSegmentsPerRay} segments per ray, {s.MaxNestedObjects} nested objects; minimum relative intensity {s.MinimumRelativeIntensity.ToString("g6", CultureInfo.InvariantCulture)}, absolute {s.MinimumAbsoluteIntensity.ToString("g6", CultureInfo.InvariantCulture)}.",
             // OP-79: detectors are built; Detector Surface, Detector Volume and objects as detectors are not.
             // wire-15: sources are built (OP-77, traced through NscSourceRun).
-            "Not built: user-defined (DLL) scattering, sequential surface scattering and the IS/ISX scatter catalogs (OP-80 builds Lambertian, Gaussian, ABg, ABg File and tabular BSDF scattering), volume physics (OP-81), diffraction and gradient index in objects (OP-82), Detector Surface, Detector Volume and objects as detectors (OP-79 builds Detector Rectangle, Color and Polar), Consider/Ignore Objects lists.",
+            "Not built: user-defined (DLL) scattering, sequential surface scattering and the IS/ISX scatter catalogs (OP-80 builds Lambertian, Gaussian, ABg, ABg File and tabular BSDF scattering), bulk-scatter DLLs other than the first-party Henyey-Greenstein, Rayleigh and Mie (OP-81), diffraction and gradient index in objects (OP-82), Detector Surface, Detector Volume and objects as detectors (OP-79 builds Detector Rectangle, Color and Polar), Consider/Ignore Objects lists.",
         };
         // OP-80
         if (_scatter is not null)
@@ -288,6 +302,7 @@ public sealed class NscTracer
                     ? "With ray splitting the specular ray keeps 1 − f of the energy and the scatter rays share the rest."
                     : "Without ray splitting each specular ray scatters with probability f and the scattered ray takes all the energy.")
                 : "Scattering is defined on some faces but Scatter NSC Rays is off: no ray scatters.");
+        VolumeNotes(notes);   // OP-81
         return notes;
     }
 
@@ -304,6 +319,8 @@ public sealed class NscTracer
         public bool Ghost, Launch;
         public bool Scattered;      // OP-80: scattered from the parent's hit (event F)
         public int[]? ScatterTo;    // OP-80: the only objects (0-based, ascending) this scattered ray may meet
+        public WaveOptics? Wave;    // OP-81: the ray's wavelength when a volume event changed it; null for the trace's
+        public bool VolumeDone;     // OP-81: no more volume events on this branch (Bulk Scatter "Once" after one, "Never")
     }
 
     private readonly record struct GlobalHit(int Object, double T, Vector3D LocalPoint, Vector3D Point, Vector3D Normal, int Face);
@@ -385,6 +402,10 @@ public sealed class NscTracer
     private (double Index, double Alpha, int Object) MediumOf(int[] inside) =>
         inside.Length == 0 ? (_backgroundIndex, 0, 0) : (_index[inside[^1]], _alpha[inside[^1]], inside[^1] + 1);
 
+    // OP-81
+    private static (double Index, double Alpha, int Object) MediumOf(int[] inside, WaveOptics w) =>
+        inside.Length == 0 ? (w.BackgroundIndex, 0, 0) : (w.Index[inside[^1]], w.Alpha[inside[^1]], inside[^1] + 1);
+
     private void TraceTree(NscLaunchRay launch, long rayNumber, NscLedgerBuilder ledger, List<NscSegment>? segments,
         List<string> errors, Workspace work, NscDetectorSet? detectors = null)
     {
@@ -411,6 +432,7 @@ public sealed class NscTracer
         {
             Origin = launch.Position, Direction = d0, Intensity = i0, Inside = inside0, Level = 0, Parent = 0, Launch = true,
             Phi = energy ? LaunchCoherency(launch, d0) : null,
+            VolumeDone = launch.BulkScatter == Sources.NscSourceBulkScatter.Never,   // OP-81
         });
         int traced = 0;
 
@@ -435,7 +457,8 @@ public sealed class NscTracer
             traced++;
             ledger.Segments++;
             number++;
-            var medium = MediumOf(r.Inside);
+            var wave = r.Wave ?? _primary;   // OP-81: the ray's wavelength
+            var medium = MediumOf(r.Inside, wave);
 
             // ---- first hit and the contact around it
             work.Hits.Clear();
@@ -457,6 +480,7 @@ public sealed class NscTracer
                     Position = r.Origin, Direction = r.Direction, Intensity = intensity, Index = medium.Index,
                     OpticalPath = r.Optical, Events = NscEvents.Terminated | (r.Ghost ? NscEvents.Ghost : 0)
                         | (r.Scattered ? NscEvents.ScatteredFromParent : 0),   // OP-80
+                    AirMicrometers = r.Wave?.AirMicrometers, WavelengthNumber = r.Wave?.WavelengthNumber,   // OP-81
                     Fate = r.ScatterTo is not null ? "scattered ray meets none of the Scatter To objects: not traced; the position is the segment's start"
                         : "escaped (no object hit); the position is the segment's start",
                 });
@@ -488,6 +512,18 @@ public sealed class NscTracer
             var objRecord = _objects[obj];
             double length = hit.T;
 
+            // OP-81: a volume event before the face (docs/Optics-Conventions.md §77).
+            if (!r.VolumeDone && medium.Object > 0 && wave.Volume[medium.Object - 1] is { } volume)
+            {
+                rng ??= SplitMix64.ForStream(s.Seed, rayNumber);
+                double free = volume.FreePath(rng);
+                if (free < length)
+                {
+                    VolumeEvent(r, wave, volume, medium, free, number, rayNumber, launch, ledger, segments, errors, stack, rng);
+                    continue;
+                }
+            }
+
             // ---- bulk absorption over the segment
             CoherencyMatrix? phi = r.Phi;
             if (medium.Alpha > 0)
@@ -508,6 +544,7 @@ public sealed class NscTracer
                     Position = hit.Point, Direction = r.Direction, Normal = hit.Normal, Intensity = intensity,
                     PathLength = length, OpticalPath = optical, Index = medium.Index,
                     Events = (r.Ghost ? NscEvents.Ghost : NscEvents.None) | (r.Scattered ? NscEvents.ScatteredFromParent : 0),   // OP-80: F
+                    AirMicrometers = r.Wave?.AirMicrometers, WavelengthNumber = r.Wave?.WavelengthNumber,   // OP-81
                 };
                 segments.Add(seg);
             }
@@ -560,7 +597,7 @@ public sealed class NscTracer
                 detectorHere = true;
                 var detectorHit = new NscDetectorHit(h.Object + 1, rayNumber, h.LocalPoint,
                     _global[h.Object].InverseApplyDirection(r.Direction), intensity, r.Optical + medium.Index * h.T,
-                    medium.Index, AirMicrometers, phi, r.Ghost);
+                    medium.Index, wave.AirMicrometers, phi, r.Ghost);   // OP-81: the ray's wavelength
                 detectors?.Record(h.Object, detectorHit);
                 if (seg is not null) seg.DetectorHits = RayDatabase.NscRayRecorder.Append(seg.DetectorHits, detectorHit);   // OP-83
             }
@@ -576,12 +613,14 @@ public sealed class NscTracer
                     Origin = origin, Direction = direction, Intensity = power, Phi = state, Inside = inside,
                     Level = level, Parent = segIndex, Optical = optical, Ghost = ghost,
                     Scattered = scattered, ScatterTo = scatterTo,   // OP-80
+                    Wave = r.Wave, VolumeDone = r.VolumeDone,       // OP-81: the branch keeps its wavelength and its Once state
                 });
             }
 
             // OP-80: a specular child of the face interaction, scattered by the face's model
             // (docs/Optics-Conventions.md §74) when Scatter NSC Rays is on; otherwise spawned as is.
-            var scatterFace = _scatter is not null && s.ScatterRays && decider >= 0 ? _scatter.Face(obj, hit.Face) : null;
+            var scatterer = wave.Scatter;   // OP-81: the scatter models at the ray's wavelength
+            var scatterFace = scatterer is not null && s.ScatterRays && decider >= 0 ? scatterer.Face(obj, hit.Face) : null;
             void Emit(Vector3D direction, double power, CoherencyMatrix? state, int[] inside, bool ghost, bool reflectedRay)
             {
                 var model = scatterFace is null ? null : reflectedRay ? scatterFace.Reflect : scatterFace.Transmit;
@@ -595,7 +634,7 @@ public sealed class NscTracer
                 NscScatterOutcome outcome;
                 try
                 {
-                    outcome = _scatter!.Scatter(model, scatterFace!, obj, hit.Point, hit.Normal, r.Direction, direction, power,
+                    outcome = scatterer!.Scatter(model, scatterFace!, obj, hit.Point, hit.Normal, r.Direction, direction, power,
                         s.Splitting == NscSplitting.Split, rng, list);
                 }
                 catch (InvalidOperationException e)
@@ -615,7 +654,7 @@ public sealed class NscTracer
                     seg.Fate += $"; the {(reflectedRay ? "reflected" : "transmitted")} ray scattered into {list.Count} ray{(list.Count == 1 ? "" : "s")}{(outcome.Specular > 0 ? " and the specular ray" : "")}";
                 }
                 if (outcome.Specular > 0) Spawn(direction, outcome.Specular, state?.Scaled(outcome.Specular / power), inside, ghost);
-                var to = _scatter.ScatterToList(obj);
+                var to = scatterer.ScatterToList(obj);
                 foreach (var (d, p) in list)
                     Spawn(d, p, state is null ? null : RotatedState(state, direction, d).Scaled(p / power), inside, ghost, scattered: true, scatterTo: to);
             }
@@ -653,7 +692,7 @@ public sealed class NscTracer
             var reflected = Unit(r.Direction - eta * (2 * cosI));
             int[] before = r.Inside;
             if (mirror) after = before;   // "Rays will always reflect from mirror surfaces back into the medium the rays had been traveling through."
-            double n1 = medium.Index, n2 = MediumOf(after).Index;
+            double n1 = medium.Index, n2 = MediumOf(after, wave).Index;   // OP-81: at the ray's wavelength
             _coatings.TryGetValue((obj, hit.Face), out var coating);
 
             if (!mirror && n1 == n2 && coating is null)
@@ -695,7 +734,7 @@ public sealed class NscTracer
                 Substrate = mirror ? Complex.One : n2,
                 IsMirror = mirror,
                 ReverseLayers = !mirror && exitingDecider,
-                Micrometers = AirMicrometers,
+                Micrometers = wave.AirMicrometers,   // OP-81: the ray's wavelength
                 PrimaryMicrometers = _primaryMicrometers,
                 AngleDegrees = angle,
                 X = OpticsConventions.FromMeters(hit.LocalPoint.X, unit),
@@ -814,10 +853,17 @@ public sealed class NscTracer
             if (!(power > 0)) throw new ArgumentException("The launch field has no part at right angles to the ray's direction.");
             return CoherencyMatrix.FromField(transverse).Scaled(ray.Intensity / power);
         }
+        return Unpolarized(d, ray.Intensity);   // OP-81: shared with photoluminescence
+    }
+
+    /// <summary>The unpolarized state of power <paramref name="intensity"/> travelling along
+    /// <paramref name="d"/>: the mean of two orthogonal transverse states.</summary>
+    private static CoherencyMatrix Unpolarized(Vector3D d, double intensity)
+    {
         var a = Math.Abs(d.X) < 0.9 ? Vector3D.UnitX : Vector3D.UnitY;
         var u = Unit(a - d * Vector3D.Dot(a, d));
         var v = Vector3D.Cross(d, u);
-        double amp = Math.Sqrt(ray.Intensity);
+        double amp = Math.Sqrt(intensity);
         return CoherencyMatrix.Average(
             CoherencyMatrix.FromField(new RayField(amp * u.X, amp * u.Y, amp * u.Z)),
             CoherencyMatrix.FromField(new RayField(amp * v.X, amp * v.Y, amp * v.Z)));

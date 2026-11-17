@@ -197,9 +197,18 @@ internal sealed class FlatAccumulator : NscDetectorAccumulator
         double nz = Math.Clamp(d.Z, -1, 1);
         double theta = Math.Acos(nz) * 180 / Math.PI;     // |cos⁻¹ n|, degrees
         double sin = Math.Sqrt(Math.Max(0, 1 - nz * nz));
-        if (Spectrum is not null && _spectral is { } s && _micrometers >= s.Min && _micrometers <= s.Max)
+        // OP-81: a hit at a wavelength other than the run's (a volume event shifted it) is weighted
+        // at its own wavelength; at the run's wavelength the run's factors are used as before.
+        double um = hit.AirMicrometers, lumens = _lumens, tx = _tx, ty = _ty, tz = _tz, waveNumber = _waveNumber;
+        if (um != _micrometers)
         {
-            int b = Math.Min(s.Bins - 1, (int)((_micrometers - s.Min) / (s.Max - s.Min) * s.Bins));
+            lumens = Photometric.LumensPerWatt(um);
+            if (_color) (tx, ty, tz) = Photometric.TristimulusPerWatt(um);
+            waveNumber = 2 * Math.PI / (um * 1e-6);
+        }
+        if (Spectrum is not null && _spectral is { } s && um >= s.Min && um <= s.Max)
+        {
+            int b = Math.Min(s.Bins - 1, (int)((um - s.Min) / (s.Max - s.Min) * s.Bins));
             Spectrum[b] += hit.Power;
         }
         foreach (var (sx, sy, wf) in _copies)
@@ -211,14 +220,14 @@ internal sealed class FlatAccumulator : NscDetectorAccumulator
             int ix = Math.Clamp((int)Math.Floor((x + g.HalfWidthX) / dx), 0, g.PixelsX - 1);
             int iy = Math.Clamp((int)Math.Floor((y + g.HalfWidthY) / dy), 0, g.PixelsY - 1);
             SpatialHits++;
-            if (g.PixelInterpolation) Interpolated(x, y, w, dx, dy);
-            else Deposit(iy * g.PixelsX + ix, w);
+            if (g.PixelInterpolation) Interpolated(x, y, w, dx, dy, lumens, tx, ty, tz);   // OP-81: the hit's factors
+            else Deposit(iy * g.PixelsX + ix, w, lumens, tx, ty, tz);
             if (_coherent)
             {
                 // φ = k·(OPL + n·d·(c − p)): the ray's phase carried as a local plane wave to the
                 // centre c of the pixel struck (§73).
                 double cx = -g.HalfWidthX + (ix + 0.5) * dx, cy = -g.HalfWidthY + (iy + 0.5) * dy;
-                double phase = _waveNumber * (hit.OpticalPath + hit.MediumIndex * (l * (cx - x) + m * (cy - y)));
+                double phase = waveNumber * (hit.OpticalPath + hit.MediumIndex * (l * (cx - x) + m * (cy - y)));
                 double a = Math.Sqrt(w);
                 int k = iy * g.PixelsX + ix;
                 Re![k] += a * Math.Cos(phase);
@@ -234,24 +243,24 @@ internal sealed class FlatAccumulator : NscDetectorAccumulator
                 int k = jy * g.PixelsX + jx;
                 AngularHits++;
                 AngleFlux[k] += w;
-                AngleLuminous[k] += w * _lumens;
-                if (_color) { AX![k] += w * _tx; AY![k] += w * _ty; AZ![k] += w * _tz; }
+                AngleLuminous[k] += w * lumens;
+                if (_color) { AX![k] += w * tx; AY![k] += w * ty; AZ![k] += w * tz; }
                 _rayAng[k] = _rayAng.GetValueOrDefault(k) + w;
             }
         }
     }
 
-    private void Deposit(int k, double w)
+    private void Deposit(int k, double w, double lumens, double tx, double ty, double tz)   // OP-81: the hit's factors
     {
         Flux[k] += w;
-        Luminous[k] += w * _lumens;
-        if (_color) { X![k] += w * _tx; Y![k] += w * _ty; Z![k] += w * _tz; }
+        Luminous[k] += w * lumens;
+        if (_color) { X![k] += w * tx; Y![k] += w * ty; Z![k] += w * tz; }
         _rayPos[k] = _rayPos.GetValueOrDefault(k) + w;
     }
 
     /// <summary>Bilinear sharing among the pixel centres around (x, y); a share that would fall
     /// off the detector stays with the pixel inside ("with pixels, if any, adjacent to the edge").</summary>
-    private void Interpolated(double x, double y, double w, double dx, double dy)
+    private void Interpolated(double x, double y, double w, double dx, double dy, double lumens, double tx, double ty, double tz)   // OP-81
     {
         var g = _g;
         double u = (x + g.HalfWidthX) / dx - 0.5, v = (y + g.HalfWidthY) / dy - 0.5;
@@ -263,7 +272,7 @@ internal sealed class FlatAccumulator : NscDetectorAccumulator
         ys[0] = (Math.Clamp(j0, 0, g.PixelsY - 1), 1 - fv); ys[1] = (Math.Clamp(j0 + 1, 0, g.PixelsY - 1), fv);
         foreach (var (iy, wy) in ys)
             foreach (var (ix, wx) in xs)
-                if (wx * wy > 0) Deposit(iy * g.PixelsX + ix, w * wx * wy);
+                if (wx * wy > 0) Deposit(iy * g.PixelsX + ix, w * wx * wy, lumens, tx, ty, tz);
     }
 
     public override void EndRay()

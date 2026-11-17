@@ -141,6 +141,11 @@ public sealed record NscObject
     /// targets, help "Scatter To"); null for none.</summary>
     public Scattering.NscScatterTo? ScatterTo { get; init; }
 
+    // OP-81
+    /// <summary>The object's Volume Physics section (bulk scattering, wavelength shift,
+    /// phosphors; docs/Optics-Conventions.md §77); null for none. Refractive volumes only.</summary>
+    public Volume.NscVolumePhysics? VolumePhysics { get; init; }
+
     /// <summary>The properties of face <paramref name="face"/>.</summary>
     public NscFace Face(int face) =>
         FaceProperties is not null && FaceProperties.TryGetValue(face, out var f) ? f : Default;
@@ -209,6 +214,13 @@ public sealed record NscScene
                 foreach (var (key, face) in scatterFaces)
                     face.Scatter?.Validate($"{where}, face {key}", problems);
             o.ScatterTo?.Validate(where, Objects.Count, problems);
+            // OP-81: volume physics on refractive volumes only.
+            if (o.VolumePhysics is { } volume)
+            {
+                if (!o.Geometry.IsVolume || o.Material.Kind != NscMaterialKind.Refractive)
+                    problems.Add($"{where}: Volume Physics needs a refractive volume (a solid object of blank or glass material); this object is {(o.Geometry.IsVolume ? o.Material.Describe() : "a surface")}.");
+                volume.Validate(where, problems);
+            }
         }
         Background?.Validate("The background medium", problems);
         return problems;

@@ -135,6 +135,67 @@
             </WrapPanel>
         </Expander>
 
+        <!-- OP-81: Volume Physics of the current object. -->
+        <Expander DockPanel.Dock="Top" Header="Volume Physics (current object)" Margin="0,0,0,4">
+            <WrapPanel Margin="4">
+                <GroupBox Header="Bulk scattering" Width="320" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="Model"/>
+                            <ComboBox ItemsSource="{Binding VolumeModels}" SelectedItem="{Binding VolumeModel}" ToolTip="Refractive volumes only."/>
+                            <Label Content="Mean path"/>
+                            <TextBox Text="{Binding VolumeMeanPath}" ToolTip="Lens units (Angle and DLL Defined Scattering)."/>
+                            <Label Content="Angle [deg]"/>
+                            <TextBox Text="{Binding VolumeAngle}" ToolTip="Angle Scattering: the cone semi-angle, 0 to 180."/>
+                            <Label Content="DLL"/>
+                            <TextBox Text="{Binding VolumeDll}" ToolTip="Henyey-Greenstein-bulk.dll, Rayleigh.dll or Mie.dll (first-party); other DLLs are not built."/>
+                            <Label Content="DLL parameters"/>
+                            <TextBox Text="{Binding VolumeDllParameters}" ToolTip="Separated by spaces. Henyey-Greenstein: g. Rayleigh: reference wavelength (µm), transmission. Mie: particle index, radius (µm), density (cm⁻³; 0 uses the mean path)."/>
+                            <Label Content="Wavelength shift"/>
+                            <TextBox Text="{Binding WavelengthShift}" ToolTip="in, out, prob; ... (system wavelength numbers)."/>
+                        </controls:FormGrid>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="Phosphors and fluorescence" Width="360" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="Photoluminescence model"/>
+                            <ComboBox ItemsSource="{Binding PhotoluminescenceModels}" SelectedItem="{Binding PhotoluminescenceModel}"/>
+                            <Label Content="Absorption spectrum (.ZAS)"/>
+                            <TextBox Text="{Binding AbsorptionFile}" ToolTip="Full path."/>
+                            <Label Content="Emission spectrum (.ZES)"/>
+                            <TextBox Text="{Binding EmissionFile}" ToolTip="Full path."/>
+                            <Label Content="Quantum yield spectrum (.ZQE)"/>
+                            <TextBox Text="{Binding QuantumYieldFile}" ToolTip="Full path."/>
+                            <Label Content="Extinction coefficient [M⁻¹cm⁻¹]"/>
+                            <TextBox Text="{Binding ExtinctionCoefficient}"/>
+                            <Label Content="Extinction wavelength [µm]"/>
+                            <TextBox Text="{Binding ExtinctionWavelength}"/>
+                            <Label Content="Phosphor density [cm⁻³]"/>
+                            <TextBox Text="{Binding PhosphorDensity}"/>
+                            <Label Content="Consider Mie scattering"/>
+                            <CheckBox IsChecked="{Binding ConsiderMie}"/>
+                            <Label Content="Particle index"/>
+                            <TextBox Text="{Binding ParticleIndex}"/>
+                            <Label Content="Particle radius [µm]"/>
+                            <TextBox Text="{Binding ParticleRadius}"/>
+                            <Label Content="Particle density [cm⁻³]"/>
+                            <TextBox Text="{Binding ParticleDensity}"/>
+                            <Label Content="Use Mie mean free path"/>
+                            <CheckBox IsChecked="{Binding UseMieMeanFreePath}"/>
+                            <Label Content="Mie mean free path"/>
+                            <TextBox Text="{Binding MieMeanFreePath}" ToolTip="Lens units."/>
+                        </controls:FormGrid>
+                        <TextBlock Text="{Binding VolumeInfo}" TextWrapping="Wrap" Style="{StaticResource FaintText}" Margin="0,4,0,0"/>
+                        <WrapPanel Margin="0,4,0,0">
+                            <Button Content="Read" Command="{Binding ReadVolumeCommand}" Margin="0,0,4,0" ToolTip="Load the current object's saved fields."/>
+                            <Button Content="Apply" Command="{Binding ApplyVolumeCommand}" ToolTip="Write the Volume Physics fields into the current object."/>
+                        </WrapPanel>
+                    </StackPanel>
+                </GroupBox>
+            </WrapPanel>
+        </Expander>
+
         <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Margin="0,2,0,0">

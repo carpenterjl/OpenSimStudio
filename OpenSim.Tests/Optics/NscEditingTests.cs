@@ -403,7 +403,7 @@ public sealed class NscEditingTests
         Assert.Contains("OP-75", NscNotBuiltTools.CombineObjects);
         Assert.Contains("OP-74", NscNotBuiltTools.CreatePolygonObject);
         Assert.Contains("OP-72", NscNotBuiltTools.FreeformZTools);
-        foreach (var section in new[] { "User Defined scatter", "Volume Physics", "Diffraction", "GRIN", "birefringent" })   // OP-80: Scatter To is built
+        foreach (var section in new[] { "User Defined scatter", "Volume Physics DLLs", "Diffraction", "GRIN", "birefringent" })   // OP-80: Scatter To is built; OP-81: Volume Physics is, but for DLLs
             Assert.Contains(section, NscNotBuiltTools.PropertySectionsText);
     }
 

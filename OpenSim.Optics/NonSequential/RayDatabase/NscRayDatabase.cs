@@ -57,6 +57,11 @@ public sealed record NscRayDatabase
     /// <summary>The wavelength (µm in air) of ray <paramref name="ray"/>.</summary>
     public double Wavelength(NscRecordedRay ray) => Runs[ray.Run].AirMicrometers;
 
+    // OP-81
+    /// <summary>The wavelength (µm in air) of one segment: its own when a volume event shifted it,
+    /// otherwise its run's.</summary>
+    public double Wavelength(NscRecordedRay ray, NscSegment segment) => segment.AirMicrometers ?? Runs[ray.Run].AirMicrometers;
+
     /// <summary>Checks the database is well formed: runs exist, ray numbers ascend within a run,
     /// segments are numbered from 0 with parents before children. Throws
     /// <see cref="InvalidDataException"/> naming the ray and segment.</summary>

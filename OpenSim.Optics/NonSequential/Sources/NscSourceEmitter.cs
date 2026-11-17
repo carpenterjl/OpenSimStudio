@@ -147,6 +147,8 @@ public static class NscSourceEmitter
         var pol = source.Properties.Polarization;
         double pre = source.Properties.PrePropagation;
         bool reverse = source.Properties.ReverseRays;
+        var bulk = source.Properties.BulkScatter;                                                 // OP-81
+        bool fixedWavelength = source.Properties.Spectrum.Model != NscColorModel.SystemWavelengths;   // OP-81
 
         var rays = new NscLaunchRay[count];
         var line = new int[count];
@@ -177,6 +179,8 @@ public static class NscSourceEmitter
                     Intensity = rayPower,
                     InsideOf = insideOf,
                     Field = pol.Random ? null : Field(pol, d, where, k).Rotated(transform),
+                    BulkScatter = bulk,                // OP-81: the source's Bulk Scatter setting
+                    FixedWavelength = fixedWavelength, // OP-81: only System Wavelengths sources shift
                 };
                 line[k] = Pick(cumulative, u[dims - 1]);
             }
@@ -203,8 +207,9 @@ public static class NscSourceEmitter
         }
         if (source.Properties.CoherenceLength != 0 || source.Properties.InitialPhaseDegrees != 0)
             notes.Add($"{where}: the coherence length and initial phase are stored but not used (no coherent detector data is traced yet).");
-        if (source.Properties.BulkScatter != NscSourceBulkScatter.Many)
-            notes.Add($"{where}: the bulk scatter setting is stored but not used (volume physics is plan item OP-81).");
+        // OP-81: the Bulk Scatter setting is used by the tracer's volume physics.
+        if (fixedWavelength && scene.Objects.Any(x => x.VolumePhysics is { } v && (v.WavelengthShift is not null || v.Model == Volume.NscVolumeModel.PhosphorsAndFluorescence)))
+            notes.Add($"{where}: its colour model is not System Wavelengths, so its rays do not change wavelength in volume physics (no wavelength shift, no photoluminescence; help, \"Wavelength Shift\" and \"Phosphors & Fluorescence\").");
         return new NscSourceEmissionSet(objectNumber, source.TypeName, count, source.Common.Power * offsets.Count, options.Units,
             traced.Total, emissions, notes);
     }

@@ -109,6 +109,12 @@ public sealed record NscTraceSettings
     /// the trace of OP-70 to the bit.</summary>
     public bool ScatterRays { get; init; }
 
+    // OP-81
+    /// <summary>The system wavelengths (µm in air, row 1 first) that wavelength shift strings
+    /// number (help, "Wavelength Shift"); null when unknown, and then a scene with a wavelength
+    /// shift is refused. <see cref="Sources.NscSourceRun"/> fills it from the emit options.</summary>
+    public IReadOnlyList<double>? SystemWavelengths { get; init; }
+
     /// <summary>True when energy is accounted: <see cref="UsePolarization"/> or any splitting.</summary>
     public bool AccountsEnergy => UsePolarization || Splitting != NscSplitting.None;
 
@@ -131,6 +137,8 @@ public sealed record NscTraceSettings
         if (!Enum.IsDefined(Splitting)) p.Add($"Unknown splitting mode {(int)Splitting}.");
         if (MaxDegreeOfParallelism is int t && t < 1) p.Add($"The thread limit must be at least 1; it is {t}.");
         if (PrimaryMicrometers < 0 || !double.IsFinite(PrimaryMicrometers)) p.Add($"The primary wavelength must be zero or positive (µm); it is {F(PrimaryMicrometers)}.");
+        if (SystemWavelengths is { } system && system.Any(w => !(w > 0) || !double.IsFinite(w)))   // OP-81
+            p.Add("Every system wavelength must be positive (µm).");
         return p;
     }
 

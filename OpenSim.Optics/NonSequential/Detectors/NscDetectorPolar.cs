@@ -92,6 +92,7 @@ internal sealed class PolarAccumulator : NscDetectorAccumulator
     private readonly NscPolarDetectorData _layout;
     private readonly int _object;
     private readonly double _lumens, _tx, _ty, _tz;
+    private readonly double _micrometers;   // OP-81
     private readonly double[] _flux, _squares, _lum, _x, _y, _z;
     private long _hits;
     private readonly Dictionary<int, double> _ray = new();
@@ -103,6 +104,7 @@ internal sealed class PolarAccumulator : NscDetectorAccumulator
         _flux = new double[n]; _squares = new double[n]; _lum = new double[n]; _x = new double[n]; _y = new double[n]; _z = new double[n];
         _lumens = Photometric.LumensPerWatt(airMicrometers);
         (_tx, _ty, _tz) = Photometric.TristimulusPerWatt(airMicrometers);
+        _micrometers = airMicrometers;   // OP-81
     }
 
     public override void Record(in NscDetectorHit hit)
@@ -112,6 +114,13 @@ internal sealed class PolarAccumulator : NscDetectorAccumulator
         int j = _layout.PolarIndex(theta);
         if (j < 0) return;   // a direction beyond the maximum angle is not binned
         _hits++;
+        // OP-81: a hit shifted to another wavelength by a volume event is weighted at its own.
+        double lumens = _lumens, tx = _tx, ty = _ty, tz = _tz;
+        if (hit.AirMicrometers != _micrometers)
+        {
+            lumens = Photometric.LumensPerWatt(hit.AirMicrometers);
+            (tx, ty, tz) = Photometric.TristimulusPerWatt(hit.AirMicrometers);
+        }
         double phi = Math.Atan2(d.Y, d.X) * 180 / Math.PI;
         // Mirroring: left-right is x → −x (φ → 180° − φ), top-bottom y → −y (φ → −φ).
         foreach (var (sx, sy, wf) in NscFlatDetector.MirrorCopies(_g.Mirroring))
@@ -120,8 +129,8 @@ internal sealed class PolarAccumulator : NscDetectorAccumulator
             if (sy < 0) p = -p;
             int k = _layout.Index(j, _layout.AzimuthIndex(p));
             double w = hit.Power * wf;
-            _flux[k] += w; _lum[k] += w * _lumens;
-            _x[k] += w * _tx; _y[k] += w * _ty; _z[k] += w * _tz;
+            _flux[k] += w; _lum[k] += w * lumens;
+            _x[k] += w * tx; _y[k] += w * ty; _z[k] += w * tz;
             _ray[k] = _ray.GetValueOrDefault(k) + w;
         }
     }

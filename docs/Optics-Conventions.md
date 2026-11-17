@@ -1932,6 +1932,36 @@ single place in the code, so a correction is one line and its test.
       Detector Rectangle and NSDE Data 15 (or 14–16 with Color Targets) on a Detector Color.
     Check: build the same merit function with OpticStudio's wizards and compare the rows and their
     values on one scene.
+73. **Volume physics readings** (OP-81, section 77). From the help pages under
+    `plans/sources/optics/op-81-help/`; nothing has been compared with OpticStudio's output.
+    - *Angle Scattering's cone.* "uniformly distributed within a cone" is read as uniform per
+      solid angle (μ uniform on [cos θ_max, 1]).
+    - *Sample DLL parameters.* Their order and names come from the DLLs' UserParamNames, which the
+      help does not list: Henyey-Greenstein g as parameter 1; Rayleigh Reference Wavelength (µm)
+      and Transmission as 1 and 2; Mie particle index, radius (µm; the phosphor page's "Particle
+      Radius", which it says is "the same parameters defined for the Mie.dll") and density (cm⁻³)
+      as 1–3, density 0 meaning the Mean Path. Rayleigh's L(λ) = M·(λ/λ_ref)⁴ is read from the
+      help's λ⁻⁴ and "the wavelength associated with the input value for the Mean Path".
+    - *Mie in a host.* m = n_particle/n_host and x = 2π n_host r/λ, with λ in the system's air and
+      indices relative to it; the help does not say how the host enters.
+    - *Spectra.* Linear interpolation between the points of ZAS and ZQE files and between the
+      emission wavelengths of a ZES file (the emission pdf is piecewise linear); the "cubic spline"
+      over more than five incident wavelengths is the natural cubic spline, negative values taken
+      as zero; an incident wavelength beyond the ZES grid takes the nearest column; a quantum
+      yield outside its spectrum (with more than one point) is a trace error; yields above 1, and
+      in the Basic model absorption values above 1, are refused. The re-emitted wavelength is
+      continuous, not snapped to a system wavelength; with no emission above λ_in the branch ends
+      as conversion loss.
+    - *Wavelength shift.* The help does not say whether a shift changes the power; it does not.
+      A shift string with Phosphors and Fluorescence is refused, as the help gives the emission
+      spectrum that role.
+    - *Sources not using System Wavelengths.* The help says they "will not undergo wavelength
+      shift" and that photoluminescence "is only applicable" to System Wavelengths sources; here
+      they still Mie scatter, and a photoluminescence event passes them unchanged.
+    - *Segments.* A volume event's segment has Hit 0 and Face 0 (the object is its Inside); its
+      children start at the event point.
+    Check: trace the help's "Bulk Scatter.ZMX" style slab and a phosphor sample in OpticStudio and
+    compare the B counts, the converted spectrum and the ledger.
 
 75. **Fast illumination solve readings** (OP-85, section 79). From the help pages under
     `plans/sources/optics/op-85-help/` ("Lightning Trace", "The LightningTrace Control", "Source
@@ -6837,6 +6867,8 @@ fiber coupling. Readings in §10 item 64.
 (Optimizing non-sequential systems against detector data: §76.)
 (Noise-free LightningTrace and the Source Illumination Map, OP-85: §79.)
 
+(Volume scattering, fluorescence and wavelength changes inside objects: §77.)
+
 OP-70 builds the second engine: rays that find their own path through objects placed in space
 (`OpenSim.Optics/NonSequential/`). The tests are in `OpenSim.Tests/Optics/NonSequentialTests.cs`
 and `OpenSim.Tests/Core/BoundingVolumeHierarchyTests.cs`. OpticStudio's behaviour was read from its
@@ -7791,6 +7823,111 @@ NSRD (a merit row has no text cell for the file name they take); NSST (mixed mod
 FREZ (Freeform Z, OP-72); NSDD Data 4 and 5 and Pix# −13 to −15, NSDE Data 12, 13 and 17–21 (as
 §73); NSRA phases and fields; Surf other than 1; solves and pickups on object cells; the wizards'
 Save/Load Settings, preview drawing and terminate button; a user-set NSTR seed; JPG images.
+
+## 77. Volume scattering and fluorescence
+
+OP-81 makes rays scatter, lose energy and change wavelength inside a refractive volume, from the
+object's Volume Physics section (help, "Volume Physics"). Code: `OpenSim.Optics/NonSequential/Volume/`
+(`NscVolumePhysics.cs` the settings, `NscVolumeEvents.cs` the prepared physics and events,
+`NscPhaseFunctions.cs`, `NscMie.cs`, `NscSpectrumFiles.cs`, `ProjectNscVolume.cs` the saved section,
+`NscTracer.Volume.cs` the tracer's part); saved as `OpticsNscObjectSettings.VolumePhysics`
+(`OpticsNscVolumePhysicsSettings`); edited in the Non-Sequential Component Editor's Volume Physics
+fields (`OpticsNonSequentialEditorViewModel.Volume.cs`). Tests: `OpenSim.Tests/Optics/NscVolumeTests.cs`,
+`OpenSim.App.Tests/ViewModels/OpticsNscVolumeEditorTests.cs`. Sources: OpticStudio 2025 R2 help,
+"Volume Physics", "Angle Scattering", "DLL Defined Scattering", "Wavelength Shift", "Phosphors &
+Fluorescence", "Bulk scattering" (`plans/sources/optics/op-81-help/`, equations rendered from the
+help's SVGs), "Sources" (`op-77-help/`, Bulk Scatter); Wikipedia "Mie scattering", "Rayleigh
+scattering", "Extinction paradox", "Avogadro constant"; miepython 3.3.1 (MIT) read as
+documentation and used as the test oracle. Wiscombe's MIEV0 notes and Bohren and Huffman were not
+available. Readings in §10 item 73.
+
+**Where.** Volume Physics is allowed on refractive volumes (a solid of blank or glass material);
+anywhere else the scene is refused. A ray's medium is the highest-numbered volume it is inside
+(§69), and that object's physics applies.
+
+**Free paths.** At every segment inside such an object the ray draws u from its own stream
+(`SplitMix64.ForStream(seed, ray number)`, the stream simple splitting and surface scatter use)
+and a free path x = −L·ln(1 − u), the inverse of the help's p(x) = 1 − e^(−x/M). If x is shorter
+than the distance to the next face, the segment ends there: a volume event, its segment marked B
+(`NscEvents.BulkScattered`), Hit 0, Face 0, its position the event point and its intensity after
+bulk absorption over x. Otherwise the segment goes on to the face and nothing was drawn but u. A
+ray inside an object without volume physics draws nothing, so a trace without volume physics is
+the trace of OP-80 to the bit. Bulk absorption (§69) applies over every segment as before.
+
+**Models.**
+- *Angle Scattering*: mean path M (lens units) and cone angle θ_max (0–180°); the new direction is
+  uniform per solid angle within the cone (μ uniform on [cos θ_max, 1]), azimuth uniform.
+- *DLL Defined Scattering*: no DLL is loaded. The help's sample DLLs are built first-party, by name
+  (with or without ".dll", any case): `Henyey-Greenstein-bulk` (parameter 1 g, limited as the help
+  says to [−1, 0.9999] and |g| ≥ 1e-4; P(θ) = (1 − g²)/(4π(1 + g² − 2g cos θ)^(3/2)), sampled by its
+  inverse distribution); `Rayleigh` (parameter 1 the Reference Wavelength in µm, 2 the
+  Transmission; P ∝ 1 + cos²θ; L(λ) = M·(λ/λ_ref)⁴ from the help's λ⁻⁴; each event keeps the
+  Transmission and the rest is absorbed); `Mie` (parameter 1 the particle index, 2 the particle
+  radius in µm, 3 the density in cm⁻³; density 0 uses the Mean Path). Any other DLL, the poly and
+  Phosphor sample DLLs among them, is refused by name. The Angle field is not used by the built
+  DLLs.
+- *Phosphors and Fluorescence*, Standard: absorption (ZAS), emission (ZES) and quantum yield (ZQE)
+  files; ε(λ) = ε(λ_x)/A(λ_x)·A(λ); c = density·1000/N_A mol/L; L_PL = [ε(λ)·c·ln 10]⁻¹ cm, +∞
+  outside the absorption spectrum; with Consider Mie, L_Mie from the particles (density or the Mie
+  mean free path) and L_tot = L_Mie·L_PL/(L_Mie + L_PL), else L_tot = L_PL. At an event a second u:
+  u < L_tot/L_PL is photoluminescence, otherwise Mie scattering. Photoluminescence: Q = Q(λ_in); Q = 0
+  ends the branch; otherwise λ_out is drawn from the emission spectrum at λ_in above λ_in, the new
+  ray carries I·Q·λ_in/λ_out, leaves in a direction uniform over the sphere and is unpolarized.
+  Basic: events at L_Mie; inside the absorption spectrum's range every event is photoluminescence
+  with I·A(λ_in)·Q·λ_in/λ_out, outside it Mie scattering.
+- *Mie* (`NscMie`): real relative index m = n_p/n_host and x = 2π·n_host·r/λ (λ in the system's
+  air, indices relative to it); Q_ext, Q_sca, g by the series of Wikipedia's "Mie scattering
+  efficiencies" with D_n(mx) by downward recurrence, ψ_n by Miller's downward recurrence, χ_n
+  upward, to Wiscombe's N = ⌊x + 4.05x^(1/3) + 2⌋ (as miepython); L = 1/(N·Q_sca·πr²). The angles
+  are drawn from a table of the unpolarized phase function (|S₁|² + |S₂|²)/(2πx²Q_sca) at θ_k =
+  π(k/K)², accepted when it integrates to 1 and keeps g within 2e-4 (K doubles from 2048 to 262144,
+  else refused naming the particle). x above 10⁵ is refused.
+
+**Wavelength shift.** "in, out, prob" triples (system wavelength numbers, probabilities relative
+among the same input) apply at Angle and DLL Defined Scattering events: a third u picks the
+output, and the ray's power is unchanged. A ray at a wavelength that is not a system wavelength,
+or with no triple for its wavelength, does not shift. The trace needs the system wavelengths
+(`NscTraceSettings.SystemWavelengths`, filled by `NscSourceRun` from the emit options); a shift
+string with none, or naming a wavelength beyond them, is refused. A shift string with Phosphors
+and Fluorescence, or with model None, is refused.
+
+**Directions and polarization.** The new direction is d·μ + (u cos φ + w sin φ)√(1 − μ²) about the
+old one, φ = 2πu′. With the polarization trace on, a scattered ray's coherency matrix is the old
+one turned by the rotation from the old direction to the new (OP-80's rotation) times the event's
+power factor; a re-emitted ray's is unpolarized. Polarization-dependent (Mueller-matrix) scattering
+is not built.
+
+**A wavelength that changes mid-tree.** The ray carries its wavelength (`Pending.Wave`). At the new
+wavelength the tracer builds the indices and bulk absorption of every object, the background
+index, the surface scatter models and the volume physics (`OpticsAt`, cached for up to 1024
+wavelengths, rebuilt beyond, the same values either way); a material or model that does not cover
+it ends the ray as a trace error naming the wavelength and object. Coatings are evaluated at the
+ray's wavelength. Detector hits carry it (`NscDetectorHit.AirMicrometers`): Detector Rectangle,
+Color and Polar weight luminous flux, tristimulus values, coherent phase and spectral bins at the
+hit's own wavelength (at the run's wavelength exactly as before). Segments after a change carry
+`NscSegment.AirMicrometers` and `WavelengthNumber` (0 for a non-system wavelength); the ray
+database keeps them, the filter flag X_WAVESHIFT(i, j) passes a branch with a B segment at
+wavelength i whose child is at j (W still reads the launched wavelength), and this program's ZRD
+format writes version 2 (each segment's wavelength and number after its index) when some segment
+was shifted, version 1 byte for byte otherwise. The UFD file keeps only the run's wavelength.
+
+**Source rays.** The source's Bulk Scatter (help, "Sources") is used: Many; Once ("each branch of a
+ray can only bulk scatter once": a volume event's children have no further events, rays split
+before it each have their own); Never (no events, nothing drawn). Rays of a source whose colour
+model is not System Wavelengths do not change wavelength: no shift, and a photoluminescence event
+leaves them unchanged (not marked B). Photoluminescence counts as a bulk scatter for Once.
+
+**Ledger.** New lines (`NscEnergyLedger`): ConversionLoss, a destination (what photoluminescence
+does not re-emit), included in Accounted; Converted, the power re-emitted at new wavelengths (not
+a destination); VolumeEvents and ConversionEvents. Energy lost at a Rayleigh Transmission is
+Absorbed. So converted + absorbed + transmitted (escaped, detected) closes.
+
+**Not built.** Bulk-scatter DLLs other than the three first-party samples, the poly and Phosphor
+sample DLLs, the Mie Threshold parameter (its definition is in a knowledge-base article that was
+not available), the deprecated excitation spectrum (ZEX), absorbing (complex-index) Mie particles,
+polarization-dependent scattering and fluorescence anisotropy, up-conversion, volume physics in
+the background medium, the Sources tab's "Bulk Scatter" editor field (it is saved and read; OP-77's
+Sources tab has no editor fields yet).
 
 ## 79. Fast illumination solve
 

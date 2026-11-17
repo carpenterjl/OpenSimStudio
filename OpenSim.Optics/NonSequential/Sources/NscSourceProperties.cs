@@ -35,8 +35,8 @@ public enum NscSourceSampling
     Random = 1,
 }
 
-/// <summary>"Bulk Scatter" on the Sources tab (help, "Sources"): stored only; volume physics is
-/// plan item OP-81.</summary>
+/// <summary>"Bulk Scatter" on the Sources tab (help, "Sources"): how often each branch of the
+/// source's rays may undergo volume events (OP-81).</summary>
 public enum NscSourceBulkScatter
 {
     Many = 0,
@@ -185,7 +185,7 @@ public sealed record NscSourcePolarization
 /// phase is not traced.</item>
 /// <item><see cref="InitialPhaseDegrees"/>, <see cref="CoherenceLength"/> (meters): stored only;
 /// they act on coherent detector data, which the tracer does not carry yet (OP-79/OP-82).</item>
-/// <item><see cref="BulkScatter"/>: stored only (volume physics, OP-81).</item>
+/// <item><see cref="BulkScatter"/>: Many, Once or Never volume events per branch (OP-81).</item>
 /// </list>
 /// </summary>
 public sealed record NscSourceProperties

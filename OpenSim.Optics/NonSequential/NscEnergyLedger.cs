@@ -47,6 +47,22 @@ public sealed record NscEnergyLedger
     /// energy outside the target cones). Zero without scattering.</summary>
     public double ScatterNotTraced { get; init; }
 
+    // OP-81
+    /// <summary>Lost at photoluminescence events (docs/Optics-Conventions.md §77): the absorbed
+    /// power not re-emitted (quantum yield below 1, the Stokes ratio λ_in/λ_out, rays not
+    /// re-emitted). Zero without phosphors.</summary>
+    public double ConversionLoss { get; init; }
+
+    /// <summary>Not a destination: the power re-emitted at a new wavelength by photoluminescence
+    /// (it goes on and ends in the other lines).</summary>
+    public double Converted { get; init; }
+
+    /// <summary>Volume events: bulk scatters and photoluminescence events.</summary>
+    public long VolumeEvents { get; init; }
+
+    /// <summary>Photoluminescence events (re-emitted or not).</summary>
+    public long ConversionEvents { get; init; }
+
     public long Rays { get; init; }
     public long Segments { get; init; }
     public long ThresholdedRays { get; init; }
@@ -58,7 +74,8 @@ public sealed record NscEnergyLedger
 
     /// <summary>The sum of every destination.</summary>
     public double Accounted => Detected + Absorbed + Escaped + Thresholded + NotTraced + LimitTerminated + Errors
-        + ScatterNotTraced;   // OP-80
+        + ScatterNotTraced   // OP-80
+        + ConversionLoss;    // OP-81
 
     /// <summary>Emitted − accounted: zero to rounding.</summary>
     public double Residual => Emitted - Accounted;
@@ -84,6 +101,13 @@ public sealed record NscEnergyLedger
         };
         // OP-80: only when something scattered and was not traced.
         if (ScatterNotTraced != 0) rows.Insert(rows.Count - 1, ("Scattered, not traced (Scatter To, importance sampling)", E(ScatterNotTraced) + P(ScatterNotTraced)));
+        // OP-81: only when the trace met volume physics.
+        if (VolumeEvents != 0 || ConversionLoss != 0)
+        {
+            rows.Insert(rows.Count - 1, ($"Lost at photoluminescence ({ConversionEvents} events)", E(ConversionLoss) + P(ConversionLoss)));
+            rows.Add(($"Volume events (bulk scatter and photoluminescence)", VolumeEvents.ToString(CultureInfo.InvariantCulture)));
+            rows.Add(("Re-emitted at a new wavelength (not a destination)", E(Converted) + P(Converted)));
+        }
         foreach (var (obj, energy) in DetectedByObject.OrderBy(p => p.Key))
             rows.Add(($"Detected on object {obj}", E(energy) + P(energy)));
         return rows;
@@ -120,6 +144,8 @@ internal sealed class NscLedgerBuilder
 
     public Sum Emitted, Detected, Absorbed, Escaped, Thresholded, NotTraced, LimitTerminated, Errors;
     public Sum ScatterNotTraced;   // OP-80
+    public Sum ConversionLoss, Converted;    // OP-81
+    public long VolumeEvents, ConversionEvents;   // OP-81
     public long Rays, Segments, ThresholdedRays, LimitTerminatedRays, ErrorRays;
     public readonly SortedDictionary<int, Sum> DetectedByObject = new();
 
@@ -136,6 +162,7 @@ internal sealed class NscLedgerBuilder
         Emitted.Add(o.Emitted); Detected.Add(o.Detected); Absorbed.Add(o.Absorbed); Escaped.Add(o.Escaped);
         Thresholded.Add(o.Thresholded); NotTraced.Add(o.NotTraced); LimitTerminated.Add(o.LimitTerminated); Errors.Add(o.Errors);
         ScatterNotTraced.Add(o.ScatterNotTraced);   // OP-80
+        ConversionLoss.Add(o.ConversionLoss); Converted.Add(o.Converted); VolumeEvents += o.VolumeEvents; ConversionEvents += o.ConversionEvents;   // OP-81
         Rays += o.Rays; Segments += o.Segments; ThresholdedRays += o.ThresholdedRays;
         LimitTerminatedRays += o.LimitTerminatedRays; ErrorRays += o.ErrorRays;
         foreach (var (k, v) in o.DetectedByObject)
@@ -151,6 +178,7 @@ internal sealed class NscLedgerBuilder
         Emitted = Emitted.Total, Detected = Detected.Total, Absorbed = Absorbed.Total, Escaped = Escaped.Total,
         Thresholded = Thresholded.Total, NotTraced = NotTraced.Total, LimitTerminated = LimitTerminated.Total, Errors = Errors.Total,
         ScatterNotTraced = ScatterNotTraced.Total,   // OP-80
+        ConversionLoss = ConversionLoss.Total, Converted = Converted.Total, VolumeEvents = VolumeEvents, ConversionEvents = ConversionEvents,   // OP-81
         Rays = Rays, Segments = Segments, ThresholdedRays = ThresholdedRays, LimitTerminatedRays = LimitTerminatedRays, ErrorRays = ErrorRays,
         DetectedByObject = DetectedByObject.ToDictionary(p => p.Key, p => p.Value.Total),
     };
@@ -224,6 +252,15 @@ public sealed record NscSegment
     /// for none. The ray database keeps these so a saved trace replays onto the detectors to the
     /// bit (docs/Optics-Conventions.md §75).</summary>
     public IReadOnlyList<global::OpenSim.Optics.NonSequential.Detectors.NscDetectorHit>? DetectorHits { get; set; }
+
+    // OP-81
+    /// <summary>The segment's wavelength (µm in the system's air) when a volume event changed it
+    /// from the run's; null for the run's own wavelength (docs/Optics-Conventions.md §77).</summary>
+    public double? AirMicrometers { get; init; }
+
+    /// <summary>With <see cref="AirMicrometers"/>: its system wavelength number (1-based), 0 when
+    /// it is not a system wavelength; null for the run's own.</summary>
+    public int? WavelengthNumber { get; init; }
 }
 
 /// <summary>One launched ray's whole tree: its segments in the order traced, its ledger and its
@@ -263,6 +300,7 @@ internal static class NscFormat
         if (e.HasFlag(NscEvents.TotalInternalReflection)) s.Append('I');
         if (e.HasFlag(NscEvents.Scattered)) s.Append('S');              // OP-80
         if (e.HasFlag(NscEvents.ScatteredFromParent)) s.Append('F');    // OP-80
+        if (e.HasFlag(NscEvents.BulkScattered)) s.Append('B');          // OP-81
         return s.ToString();
     }
 }

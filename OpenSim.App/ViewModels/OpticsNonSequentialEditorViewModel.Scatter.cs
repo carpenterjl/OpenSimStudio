@@ -39,7 +39,11 @@ public sealed partial class OpticsNonSequentialEditorViewModel
     /// <summary>The ABg catalog as text, one row per line: NAME wavelength angle A B g.</summary>
     [ObservableProperty] private string _abgCatalogText = "";
 
-    partial void OnCurrentRowChanged(int value) => LoadScatterFields();
+    partial void OnCurrentRowChanged(int value)
+    {
+        LoadScatterFields();
+        LoadVolumeFields();   // OP-81
+    }
 
     /// <summary>Loads the current object's scatter fields and the catalog.</summary>
     [RelayCommand]

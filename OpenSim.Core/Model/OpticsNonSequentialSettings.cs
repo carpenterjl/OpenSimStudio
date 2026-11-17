@@ -131,6 +131,64 @@ public sealed record OpticsNscObjectSettings
 
     /// <summary>Importance-sampling targets, ray 1 first (at most 6).</summary>
     public List<OpticsNscScatterTargetSettings>? ScatterTargets { get; init; }
+
+    // OP-81
+    /// <summary>The object's Volume Physics section (bulk scattering, wavelength shift,
+    /// phosphors and fluorescence); null for none.</summary>
+    public OpticsNscVolumePhysicsSettings? VolumePhysics { get; init; }
+}
+
+// OP-81
+/// <summary>
+/// An object's Volume Physics section as saved (plan item OP-81; help, "Volume Physics"). Lengths
+/// in lens units; every property nullable, null the default. <see cref="Model"/> is "None",
+/// "Angle Scattering", "DLL Defined Scattering" or "Phosphors and Fluorescence";
+/// <see cref="PhotoluminescenceModel"/> "Standard" or "Basic". Spectrum files are full paths
+/// (.ZAS, .ZES, .ZQE).
+/// </summary>
+public sealed record OpticsNscVolumePhysicsSettings
+{
+    public string? Model { get; init; }
+
+    /// <summary>"Mean path" (lens units) of Angle and DLL Defined Scattering.</summary>
+    public double? MeanPath { get; init; }
+
+    /// <summary>"Angle" (degrees) of Angle and DLL Defined Scattering.</summary>
+    public double? Angle { get; init; }
+
+    /// <summary>The DLL name of DLL Defined Scattering.</summary>
+    public string? Dll { get; init; }
+
+    /// <summary>The DLL's parameter values, parameter 1 first.</summary>
+    public List<double>? DllParameters { get; init; }
+
+    /// <summary>The wavelength shift string ("in, out, prob; ...").</summary>
+    public string? WavelengthShift { get; init; }
+
+    public string? PhotoluminescenceModel { get; init; }
+    public string? AbsorptionFile { get; init; }
+    public string? EmissionFile { get; init; }
+    public string? QuantumYieldFile { get; init; }
+
+    /// <summary>M⁻¹ cm⁻¹ at <see cref="ExtinctionWavelength"/> (µm).</summary>
+    public double? ExtinctionCoefficient { get; init; }
+    public double? ExtinctionWavelength { get; init; }
+
+    /// <summary>Phosphor density, cm⁻³.</summary>
+    public double? PhosphorDensity { get; init; }
+
+    public bool? ConsiderMie { get; init; }
+    public double? ParticleIndex { get; init; }
+
+    /// <summary>Particle radius, µm.</summary>
+    public double? ParticleRadius { get; init; }
+
+    /// <summary>Particle density, cm⁻³ (used unless <see cref="UseMieMeanFreePath"/>).</summary>
+    public double? ParticleDensity { get; init; }
+
+    /// <summary>The Mie mean free path (lens units), used when <see cref="UseMieMeanFreePath"/>.</summary>
+    public double? MieMeanFreePath { get; init; }
+    public bool? UseMieMeanFreePath { get; init; }
 }
 
 // OP-77

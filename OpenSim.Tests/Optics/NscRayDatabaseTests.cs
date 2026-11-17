@@ -516,7 +516,7 @@ public sealed class NscRayDatabaseTests
     [InlineData("{@5}H1", "OP-84")]
     [InlineData("X_DIFF(1,1,1)", "OP-82")]
     [InlineData("X_SEQ(2,4.1/(2,*),4.2)", "OP-82")]
-    [InlineData("X_WAVESHIFT(1,2)", "OP-81")]
+    [InlineData("X_WAVESHIFT(1)", "2 arguments")]   // OP-81: X_WAVESHIFT is built
     [InlineData("X_EXT(1,1)", "birefringent")]
     [InlineData("X_HIT(3)", "2 arguments")]
     [InlineData("H0", "1 or more")]
