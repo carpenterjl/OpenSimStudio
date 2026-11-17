@@ -100,12 +100,13 @@ public static class ProjectNscSources
     /// (<paramref name="split"/>: OpticStudio's "Split NSC Rays", simple when the system says
     /// so), polarization, Ignore Errors and the seed (null: the settings' default). Throws
     /// <see cref="ArgumentException"/> naming the problem when the system has no objects or no
-    /// sources.
+    /// sources. <paramref name="scatter"/> is "Scatter NSC Rays" (OP-80).
     /// </summary>
     public static NscSourceRunResult Trace(OpticsAnalysisContext context, IReadOnlyList<int>? sources = null, bool split = false,
         bool usePolarization = false, bool ignoreErrors = false, long? seed = null, CancellationToken cancellation = default,
         RayDatabase.NscRayRecorder? recorder = null,   // OP-83: Save Rays (docs/Optics-Conventions.md §75)
-        int? maxDegreeOfParallelism = null)   // OP-88: the merit evaluator's thread limit (the result does not depend on it)
+        int? maxDegreeOfParallelism = null,   // OP-88: the merit evaluator's thread limit (the result does not depend on it)
+        bool scatter = false)   // OP-80: scatter
     {
         ArgumentNullException.ThrowIfNull(context);
         var notes = new List<string>();
@@ -119,6 +120,7 @@ public static class ProjectNscSources
             UsePolarization = usePolarization,
             Splitting = !split ? NscSplitting.None : saved?.SimpleRaySplitting == true ? NscSplitting.Simple : NscSplitting.Split,
             IgnoreErrors = ignoreErrors,
+            ScatterRays = scatter,   // OP-80
             Environment = system.Environment,
             Coatings = OpenSim.Optics.Coatings.CoatingCatalogSettings.FromSettings(context.System.Coatings, notes),
             PrimaryMicrometers = system.Wavelengths.Primary.Micrometers,

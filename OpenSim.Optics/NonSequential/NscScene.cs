@@ -57,11 +57,16 @@ public enum NscFaceBehaviour
 }
 
 /// <summary>The properties of one face of an object: "Face Is" and a coating name from the
-/// system coating catalog (null for uncoated). Scattering is OP-80 and not here.</summary>
+/// system coating catalog (null for uncoated), and its scattering (OP-80).</summary>
 public sealed record NscFace
 {
     public NscFaceBehaviour FaceIs { get; init; }
     public string? Coating { get; init; }
+
+    // OP-80
+    /// <summary>The face's scatter model (help, "Coat/Scatter"); null for none. The trace
+    /// scatters only with <see cref="NscTraceSettings.ScatterRays"/> on.</summary>
+    public Scattering.NscFaceScatter? Scatter { get; init; }
 }
 
 /// <summary>
@@ -131,6 +136,11 @@ public sealed record NscObject
 
     public string Comment { get; init; } = "";
 
+    // OP-80
+    /// <summary>The object's Scatter To section (a Scatter To list or importance-sampling
+    /// targets, help "Scatter To"); null for none.</summary>
+    public Scattering.NscScatterTo? ScatterTo { get; init; }
+
     /// <summary>The properties of face <paramref name="face"/>.</summary>
     public NscFace Face(int face) =>
         FaceProperties is not null && FaceProperties.TryGetValue(face, out var f) ? f : Default;
@@ -194,6 +204,11 @@ public sealed record NscScene
                 foreach (var key in faces.Keys)
                     if (!o.Geometry.Faces.ContainsKey(key))
                         problems.Add($"{where}: it has no face {key} (its faces are {string.Join(", ", o.Geometry.Faces.Keys)}).");
+            // OP-80: scatter models and the Scatter To section.
+            if (o.FaceProperties is { } scatterFaces)
+                foreach (var (key, face) in scatterFaces)
+                    face.Scatter?.Validate($"{where}, face {key}", problems);
+            o.ScatterTo?.Validate(where, Objects.Count, problems);
         }
         Background?.Validate("The background medium", problems);
         return problems;

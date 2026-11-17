@@ -78,6 +78,63 @@
             </DockPanel>
         </Expander>
 
+        <!-- OP-80: Coat/Scatter of a face, Scatter To of the current object, the ABg catalog. -->
+        <Expander DockPanel.Dock="Top" Header="Coat/Scatter, Scatter To and ABg catalog (current object)" Margin="0,0,0,4">
+            <WrapPanel Margin="4">
+                <GroupBox Header="Coat/Scatter (one face)" Width="320" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="Face"/>
+                            <TextBox Text="{Binding ScatterFace}" ToolTip="The face number; Read loads its saved fields."/>
+                            <Label Content="Scatter model"/>
+                            <ComboBox ItemsSource="{Binding ScatterModels}" SelectedItem="{Binding ScatterModel}" ToolTip="User Defined (DLL) is not built."/>
+                            <Label Content="Number of rays"/>
+                            <TextBox Text="{Binding ScatterRays}" ToolTip="0 to 300; used with ray splitting."/>
+                            <Label Content="Scatter fraction"/>
+                            <TextBox Text="{Binding ScatterFraction}" ToolTip="Lambertian, Gaussian and BSDF; ABg takes its fraction from its TIS."/>
+                            <Label Content="Gaussian σ"/>
+                            <TextBox Text="{Binding ScatterSigma}" ToolTip="0 to 5."/>
+                            <Label Content="Reflect"/>
+                            <TextBox Text="{Binding ScatterReflect}" ToolTip="ABg: the catalog profile name; ABg File and BSDF: the full path of the .ABGF or .BSDF file."/>
+                            <Label Content="Transmit"/>
+                            <TextBox Text="{Binding ScatterTransmit}"/>
+                            <Label Content="BSDF angle [deg]"/>
+                            <TextBox Text="{Binding ScatterAngle}"/>
+                            <Label Content="Thin window scattering"/>
+                            <CheckBox IsChecked="{Binding ThinWindowScattering}"/>
+                        </controls:FormGrid>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="Scatter To (object)" Width="300" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="Scatter To method"/>
+                            <ComboBox ItemsSource="{Binding ScatterToMethods}" SelectedItem="{Binding ScatterToMethod}"/>
+                            <Label Content="Scatter To list"/>
+                            <TextBox Text="{Binding ScatterToList}" ToolTip="Object numbers separated by spaces."/>
+                            <Label Content="Targets (object size limit)"/>
+                            <TextBox Text="{Binding ScatterTargets}" AcceptsReturn="True" MinHeight="60" VerticalScrollBarVisibility="Auto"
+                                     ToolTip="Importance sampling: one line per ray (at most 6): object, size in lens units, limit in steradians; object 0 is None."/>
+                        </controls:FormGrid>
+                        <WrapPanel Margin="0,4,0,0">
+                            <Button Content="Read" Command="{Binding ReadScatterCommand}" Margin="0,0,4,0" ToolTip="Load the current object's saved fields."/>
+                            <Button Content="Apply" Command="{Binding ApplyScatterCommand}" ToolTip="Write the face's scattering and the Scatter To section into the current object."/>
+                        </WrapPanel>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="ABg catalog (project)" Width="360" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="Rows (NAME wavelength angle A B g)"/>
+                            <TextBox Text="{Binding AbgCatalogText}" AcceptsReturn="True" MinHeight="80" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/>
+                        </controls:FormGrid>
+                        <Button Content="Apply catalog" Command="{Binding ApplyAbgCatalogCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"
+                                ToolTip="Upper-case names; wavelength in µm (0: no scaling); at most 10 rows per profile and 100 profiles."/>
+                    </StackPanel>
+                </GroupBox>
+            </WrapPanel>
+        </Expander>
+
         <StackPanel DockPanel.Dock="Bottom" Margin="0,4,0,0">
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
             <TextBlock Text="{Binding ProblemsText}" TextWrapping="Wrap" Margin="0,2,0,0">

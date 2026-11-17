@@ -32,8 +32,8 @@ public static class NscNotBuiltTools
     public static IReadOnlyList<(string Section, string Reason)> PropertySections { get; } = new[]
     {
         ("Sources", "the Sources tab has no fields in the editor yet; it is saved with the object, read by the trace and set by the macro codes 101 to 166 of SETNSCPROPERTY"),
-        ("Scatter (on the Coat/Scatter section)", "surface scattering is plan item OP-80"),
-        ("Scatter To", "scattering, plan item OP-80"),
+        // OP-80: Scatter and Scatter To are built (the editor's Coat/Scatter and Scatter To fields).
+        ("Scatter profiles and User Defined scatter (on the Coat/Scatter section)", "scatter profiles (SCATTER_PROFILE.DAT, undocumented), scatter DLLs and the IS/ISX scatter catalogs are not built; the other scatter models are (OP-80)"),
         ("Volume Physics", "bulk scatter, wavelength shift and fluorescence are plan item OP-81"),
         ("Index (GRIN types)", "non-sequential gradient index is plan item OP-82"),
         ("Index (birefringent types)", "non-sequential birefringence is not built (no plan item names it)"),

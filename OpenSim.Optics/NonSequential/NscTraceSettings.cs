@@ -102,6 +102,13 @@ public sealed record NscTraceSettings
     /// <summary>The lens unit coating tapers read the face point in.</summary>
     public LensUnit LensUnit { get; init; } = LensUnit.Millimeter;
 
+    // OP-80
+    /// <summary>"Scatter NSC Rays" on the Ray Trace control ("If checked, rays will scatter
+    /// according to the scatter properties of the interface", help "Ray Trace") and ZPL NSTR's
+    /// scatter flag. The help gives no default; this program's is off, so a trace without it is
+    /// the trace of OP-70 to the bit.</summary>
+    public bool ScatterRays { get; init; }
+
     /// <summary>True when energy is accounted: <see cref="UsePolarization"/> or any splitting.</summary>
     public bool AccountsEnergy => UsePolarization || Splitting != NscSplitting.None;
 

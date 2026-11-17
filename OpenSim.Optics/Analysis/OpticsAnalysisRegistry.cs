@@ -199,6 +199,10 @@ public sealed class OpticsAnalysisRegistry
 
         // OP-83: the Ray Database Viewer (playback onto detectors is the Detector Viewer's "Playback ZRD").
         registry.Register(new NonSequential.RayDatabase.NscRayDatabaseViewerAnalysis());
+
+        // OP-80: the scatter models' plots.
+        registry.Register(new NonSequential.Scattering.NscScatterFunctionViewerAnalysis());
+        registry.Register(new NonSequential.Scattering.NscScatterPolarPlotAnalysis());
         return registry;
     }
 }

@@ -40,6 +40,13 @@ public sealed record NscEnergyLedger
     /// <summary>Carried by rays stopped by a trace error (geometry, nesting, coating).</summary>
     public double Errors { get; init; }
 
+    // OP-80
+    /// <summary>Scattered energy not traced: scattered rays that miss every object of a Scatter
+    /// To list, and importance sampling's correction (the scattered energy minus what the aimed
+    /// and BSDF rays carry; one event's share may be negative, its expectation is the scattered
+    /// energy outside the target cones). Zero without scattering.</summary>
+    public double ScatterNotTraced { get; init; }
+
     public long Rays { get; init; }
     public long Segments { get; init; }
     public long ThresholdedRays { get; init; }
@@ -50,7 +57,8 @@ public sealed record NscEnergyLedger
     public IReadOnlyDictionary<int, double> DetectedByObject { get; init; } = new Dictionary<int, double>();
 
     /// <summary>The sum of every destination.</summary>
-    public double Accounted => Detected + Absorbed + Escaped + Thresholded + NotTraced + LimitTerminated + Errors;
+    public double Accounted => Detected + Absorbed + Escaped + Thresholded + NotTraced + LimitTerminated + Errors
+        + ScatterNotTraced;   // OP-80
 
     /// <summary>Emitted − accounted: zero to rounding.</summary>
     public double Residual => Emitted - Accounted;
@@ -74,6 +82,8 @@ public sealed record NscEnergyLedger
             ($"Lost to errors ({ErrorRays} rays)", E(Errors) + P(Errors)),
             ("Emitted − accounted", E(Residual)),
         };
+        // OP-80: only when something scattered and was not traced.
+        if (ScatterNotTraced != 0) rows.Insert(rows.Count - 1, ("Scattered, not traced (Scatter To, importance sampling)", E(ScatterNotTraced) + P(ScatterNotTraced)));
         foreach (var (obj, energy) in DetectedByObject.OrderBy(p => p.Key))
             rows.Add(($"Detected on object {obj}", E(energy) + P(energy)));
         return rows;
@@ -109,6 +119,7 @@ internal sealed class NscLedgerBuilder
     }
 
     public Sum Emitted, Detected, Absorbed, Escaped, Thresholded, NotTraced, LimitTerminated, Errors;
+    public Sum ScatterNotTraced;   // OP-80
     public long Rays, Segments, ThresholdedRays, LimitTerminatedRays, ErrorRays;
     public readonly SortedDictionary<int, Sum> DetectedByObject = new();
 
@@ -124,6 +135,7 @@ internal sealed class NscLedgerBuilder
     {
         Emitted.Add(o.Emitted); Detected.Add(o.Detected); Absorbed.Add(o.Absorbed); Escaped.Add(o.Escaped);
         Thresholded.Add(o.Thresholded); NotTraced.Add(o.NotTraced); LimitTerminated.Add(o.LimitTerminated); Errors.Add(o.Errors);
+        ScatterNotTraced.Add(o.ScatterNotTraced);   // OP-80
         Rays += o.Rays; Segments += o.Segments; ThresholdedRays += o.ThresholdedRays;
         LimitTerminatedRays += o.LimitTerminatedRays; ErrorRays += o.ErrorRays;
         foreach (var (k, v) in o.DetectedByObject)
@@ -138,6 +150,7 @@ internal sealed class NscLedgerBuilder
     {
         Emitted = Emitted.Total, Detected = Detected.Total, Absorbed = Absorbed.Total, Escaped = Escaped.Total,
         Thresholded = Thresholded.Total, NotTraced = NotTraced.Total, LimitTerminated = LimitTerminated.Total, Errors = Errors.Total,
+        ScatterNotTraced = ScatterNotTraced.Total,   // OP-80
         Rays = Rays, Segments = Segments, ThresholdedRays = ThresholdedRays, LimitTerminatedRays = LimitTerminatedRays, ErrorRays = ErrorRays,
         DetectedByObject = DetectedByObject.ToDictionary(p => p.Key, p => p.Value.Total),
     };
@@ -248,6 +261,8 @@ internal static class NscFormat
         if (e.HasFlag(NscEvents.Ghost)) s.Append('G');
         if (e.HasFlag(NscEvents.Error)) s.Append('Z');
         if (e.HasFlag(NscEvents.TotalInternalReflection)) s.Append('I');
+        if (e.HasFlag(NscEvents.Scattered)) s.Append('S');              // OP-80
+        if (e.HasFlag(NscEvents.ScatteredFromParent)) s.Append('F');    // OP-80
         return s.ToString();
     }
 }

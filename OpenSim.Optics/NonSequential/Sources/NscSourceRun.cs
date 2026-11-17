@@ -156,12 +156,14 @@ public static class NscSourceRun
     {
         NscLedgerBuilder.Sum emitted = default, detected = default, absorbed = default, escaped = default,
             thresholded = default, notTraced = default, limit = default, errors = default;
+        NscLedgerBuilder.Sum scatterNotTraced = default;   // OP-80
         long rays = 0, segments = 0, thresholdedRays = 0, limitRays = 0, errorRays = 0;
         var byObject = new SortedDictionary<int, NscLedgerBuilder.Sum>();
         foreach (var l in ledgers)
         {
             emitted.Add(l.Emitted); detected.Add(l.Detected); absorbed.Add(l.Absorbed); escaped.Add(l.Escaped);
             thresholded.Add(l.Thresholded); notTraced.Add(l.NotTraced); limit.Add(l.LimitTerminated); errors.Add(l.Errors);
+            scatterNotTraced.Add(l.ScatterNotTraced);   // OP-80
             rays += l.Rays; segments += l.Segments; thresholdedRays += l.ThresholdedRays; limitRays += l.LimitTerminatedRays; errorRays += l.ErrorRays;
             foreach (var (k, v) in l.DetectedByObject)
             {
@@ -174,6 +176,7 @@ public static class NscSourceRun
         {
             Emitted = emitted.Total, Detected = detected.Total, Absorbed = absorbed.Total, Escaped = escaped.Total,
             Thresholded = thresholded.Total, NotTraced = notTraced.Total, LimitTerminated = limit.Total, Errors = errors.Total,
+            ScatterNotTraced = scatterNotTraced.Total,   // OP-80
             Rays = rays, Segments = segments, ThresholdedRays = thresholdedRays, LimitTerminatedRays = limitRays, ErrorRays = errorRays,
             DetectedByObject = byObject.ToDictionary(p => p.Key, p => p.Value.Total),
         };

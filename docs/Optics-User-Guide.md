@@ -2622,6 +2622,43 @@ Not built: scattering in NSTR, LightningTrace (NSLT), the ray-database rows (NPA
 mode (NSST), roadway lighting (NSRW, NSTW), FREZ, NSRA phases and fields, solves and pickups on
 object cells, the wizards' saved settings, preview picture and terminate button, JPG pictures.
 
+## Surface scattering
+
+Rough, painted and polished faces of non-sequential objects can scatter light
+(docs/Optics-Conventions.md §74). A face's scatter model is set in the Non-Sequential Component
+Editor's "Coat/Scatter, Scatter To and ABg catalog" panel: choose the face number, press Read,
+edit, press Apply.
+
+- **Models.** Lambertian (BSDF 1/π times the scatter fraction), Gaussian (σ from 0 to 5), ABg
+  (A/(B + |x|^g) from a profile of the project's ABg catalog, separately for the reflected and the
+  transmitted ray; its scatter fraction is its own total integrated scatter, which must stay below
+  1), ABg File (a weighted sum of catalog profiles from an .ABGF file) and BSDF (a Zemax tabular
+  .BSDF file; the scattered power is the fraction times the file's TIS). Files are given by full
+  path. User Defined (DLL) scattering is refused.
+- **Number of rays and splitting.** Without ray splitting each ray scatters with probability equal
+  to the fraction and keeps all its energy; with splitting the specular ray keeps 1 − f and the
+  scatter rays (up to 300) share the rest. Thin Window Scattering limits scattering to reflection
+  on entering and transmission on leaving a volume.
+- **Scatter To.** A Scatter To list keeps only scattered rays that reach the listed objects.
+  Importance sampling aims scattered ray k at target sphere k (an object's origin, a radius in lens
+  units, a solid-angle limit) and corrects its energy by BSDF·cos θ·Ω/TIS, so a small detector far
+  from the scatterer receives many rays. Energy not traced either way is listed in the energy
+  ledger as "Scattered, not traced".
+- **Turning it on.** Scattering happens only when the trace scatters: the single-ray trace's
+  "Scatter NSC rays" setting, or `scatter: true` on a source trace. It is off by default, so
+  existing traces are unchanged.
+- **ABg catalog.** Typed in the panel as one row per line, `NAME wavelength angle A B g`
+  (upper-case names, wavelength in µm or 0 for no scaling, up to 10 angles per name), and saved
+  with the project.
+- **Scatter function viewer** (Non-sequential analyses): BSDF against |x| on log–log axes for a
+  specular ray given by Alpha X and Y, with the TIS. **Scatter polar plot**: the BSDF over the
+  hemisphere for an incident angle, as a map, with the TIS.
+
+Not built: User Defined scatter, scatter profiles, the IS/ISX catalogs, sequential surface
+scattering, OpticStudio's ABG_DATA.DAT and data folders, a "Scatter NSC Rays" box on a Ray Trace
+control (the detector viewer traces without scattering), interpolation between BSDF sample
+rotations. Readings not yet checked against OpticStudio: Conventions §10 item 70.
+
 ## Coming
 
 Not built yet, and not to be relied on until they appear in this guide:

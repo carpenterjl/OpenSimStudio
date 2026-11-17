@@ -4,6 +4,7 @@ using OpenSim.Core.Geometry;
 using OpenSim.Core.Numerics;
 using OpenSim.Optics.Coatings;
 using OpenSim.Optics.NonSequential.Detectors;   // OP-79
+using OpenSim.Optics.NonSequential.Scattering;  // OP-80
 using OpenSim.Optics.Polarization;
 using OpenSim.Optics.Sequential;
 
@@ -62,6 +63,7 @@ public sealed class NscTracer
     private readonly CoatingCatalog _catalog;
     private readonly double _backgroundIndex;
     private readonly double _primaryMicrometers;
+    private readonly NscScatterer? _scatter;   // OP-80: null when no face scatters
 
     public NscScene Scene { get; }
     public NscTraceSettings Settings { get; }
@@ -127,6 +129,7 @@ public sealed class NscTracer
         if (settings.AccountsEnergy && AlphaOf(scene.Background, "The background medium") != 0)
             throw new NotSupportedException("The background medium absorbs; an absorbing background (rays that escape through it) is not built. Use a non-absorbing background and put the absorbing medium in an object.");
         _bvh = new BoundingVolumeHierarchy(boxes);
+        _scatter = NscScatterer.For(_objects, _global, airMicrometers);   // OP-80
     }
 
     private double IndexOf(Paraxial.ParaxialMedium medium, string where)
@@ -276,8 +279,15 @@ public sealed class NscTracer
             $"Glue distance {s.GlueDistance.ToString("g6", CultureInfo.InvariantCulture)} m; maximum {s.MaxIntersectionsPerRay} intersections and {s.MaxSegmentsPerRay} segments per ray, {s.MaxNestedObjects} nested objects; minimum relative intensity {s.MinimumRelativeIntensity.ToString("g6", CultureInfo.InvariantCulture)}, absolute {s.MinimumAbsoluteIntensity.ToString("g6", CultureInfo.InvariantCulture)}.",
             // OP-79: detectors are built; Detector Surface, Detector Volume and objects as detectors are not.
             // wire-15: sources are built (OP-77, traced through NscSourceRun).
-            "Not built: scattering (OP-80), volume physics (OP-81), diffraction and gradient index in objects (OP-82), Detector Surface, Detector Volume and objects as detectors (OP-79 builds Detector Rectangle, Color and Polar), Consider/Ignore Objects lists.",
+            "Not built: user-defined (DLL) scattering, sequential surface scattering and the IS/ISX scatter catalogs (OP-80 builds Lambertian, Gaussian, ABg, ABg File and tabular BSDF scattering), volume physics (OP-81), diffraction and gradient index in objects (OP-82), Detector Surface, Detector Volume and objects as detectors (OP-79 builds Detector Rectangle, Color and Polar), Consider/Ignore Objects lists.",
         };
+        // OP-80
+        if (_scatter is not null)
+            notes.Add(s.ScatterRays
+                ? "Scattering on (Scatter NSC Rays): " + string.Join("; ", _scatter.Describe()) + ". " + (s.Splitting == NscSplitting.Split
+                    ? "With ray splitting the specular ray keeps 1 − f of the energy and the scatter rays share the rest."
+                    : "Without ray splitting each specular ray scatters with probability f and the scattered ray takes all the energy.")
+                : "Scattering is defined on some faces but Scatter NSC Rays is off: no ray scatters.");
         return notes;
     }
 
@@ -292,6 +302,8 @@ public sealed class NscTracer
         public int Level, Parent;
         public double Optical;
         public bool Ghost, Launch;
+        public bool Scattered;      // OP-80: scattered from the parent's hit (event F)
+        public int[]? ScatterTo;    // OP-80: the only objects (0-based, ascending) this scattered ray may meet
     }
 
     private readonly record struct GlobalHit(int Object, double T, Vector3D LocalPoint, Vector3D Point, Vector3D Normal, int Face);
@@ -302,6 +314,7 @@ public sealed class NscTracer
         public readonly List<GlobalHit> Hits = new();
         public readonly List<GlobalHit> Group = new();
         public readonly Stack<Pending> Stack = new();
+        public readonly List<(Vector3D Direction, double Power)> Scattered = new();   // OP-80
     }
 
     private struct HitVisitor : IBvhRayVisitor
@@ -310,9 +323,11 @@ public sealed class NscTracer
         public Workspace Work;
         public Vector3D Origin, Direction;
         public double TMin, Best;
+        public int[]? Only;   // OP-80: a Scatter To list
 
         public void Visit(int primitive, ref double tMax)
         {
+            if (Only is not null && Array.BinarySearch(Only, primitive) < 0) return;   // OP-80
             var t = Tracer._global[primitive];
             var lo = t.InverseApply(Origin);
             var ld = t.InverseApplyDirection(Direction);
@@ -428,17 +443,22 @@ public sealed class NscTracer
             {
                 Tracer = this, Work = work, Origin = r.Origin, Direction = r.Direction,
                 TMin = r.Launch ? 0 : s.GlueDistance, Best = double.PositiveInfinity,
+                Only = r.ScatterTo,   // OP-80
             };
             _bvh.Traverse(r.Origin, r.Direction, visitor.TMin, double.PositiveInfinity, ref visitor);
             if (work.Hits.Count == 0)
             {
-                ledger.Escaped.Add(intensity);
+                // OP-80: a scattered ray that meets none of its Scatter To objects is not traced.
+                if (r.ScatterTo is not null) ledger.ScatterNotTraced.Add(intensity);
+                else ledger.Escaped.Add(intensity);
                 segments?.Add(new NscSegment
                 {
                     Number = number, Parent = r.Parent, Level = r.Level + 1, Inside = medium.Object, Hit = 0, Face = 0,
                     Position = r.Origin, Direction = r.Direction, Intensity = intensity, Index = medium.Index,
-                    OpticalPath = r.Optical, Events = NscEvents.Terminated | (r.Ghost ? NscEvents.Ghost : 0),
-                    Fate = "escaped (no object hit); the position is the segment's start",
+                    OpticalPath = r.Optical, Events = NscEvents.Terminated | (r.Ghost ? NscEvents.Ghost : 0)
+                        | (r.Scattered ? NscEvents.ScatteredFromParent : 0),   // OP-80
+                    Fate = r.ScatterTo is not null ? "scattered ray meets none of the Scatter To objects: not traced; the position is the segment's start"
+                        : "escaped (no object hit); the position is the segment's start",
                 });
                 continue;
             }
@@ -487,7 +507,7 @@ public sealed class NscTracer
                     Number = number, Parent = r.Parent, Level = level, Inside = medium.Object, Hit = obj + 1, Face = hit.Face,
                     Position = hit.Point, Direction = r.Direction, Normal = hit.Normal, Intensity = intensity,
                     PathLength = length, OpticalPath = optical, Index = medium.Index,
-                    Events = r.Ghost ? NscEvents.Ghost : NscEvents.None,
+                    Events = (r.Ghost ? NscEvents.Ghost : NscEvents.None) | (r.Scattered ? NscEvents.ScatteredFromParent : 0),   // OP-80: F
                 };
                 segments.Add(seg);
             }
@@ -547,14 +567,57 @@ public sealed class NscTracer
 
             var spawnScale = Math.Abs(hit.Point.X) + Math.Abs(hit.Point.Y) + Math.Abs(hit.Point.Z) + length;
 
-            void Spawn(Vector3D direction, double power, CoherencyMatrix? state, int[] inside, bool ghost)
+            void Spawn(Vector3D direction, double power, CoherencyMatrix? state, int[] inside, bool ghost,
+                bool scattered = false, int[]? scatterTo = null)   // OP-80: scattered, scatterTo
             {
                 var origin = RobustRayOrigin.Offset(hit.Point, RobustRayOrigin.ErrorBox(spawnScale), hit.Normal, direction);
                 stack.Push(new Pending
                 {
                     Origin = origin, Direction = direction, Intensity = power, Phi = state, Inside = inside,
                     Level = level, Parent = segIndex, Optical = optical, Ghost = ghost,
+                    Scattered = scattered, ScatterTo = scatterTo,   // OP-80
                 });
+            }
+
+            // OP-80: a specular child of the face interaction, scattered by the face's model
+            // (docs/Optics-Conventions.md §74) when Scatter NSC Rays is on; otherwise spawned as is.
+            var scatterFace = _scatter is not null && s.ScatterRays && decider >= 0 ? _scatter.Face(obj, hit.Face) : null;
+            void Emit(Vector3D direction, double power, CoherencyMatrix? state, int[] inside, bool ghost, bool reflectedRay)
+            {
+                var model = scatterFace is null ? null : reflectedRay ? scatterFace.Reflect : scatterFace.Transmit;
+                // Thin window: on a volume, scatter in reflection only when entering, in transmission only when leaving.
+                if (model is not null && scatterFace!.ThinWindow && objRecord.Geometry.IsVolume && reflectedRay != (Array.IndexOf(r.Inside, obj) < 0))
+                    model = null;
+                if (model is null || !(power > 0)) { Spawn(direction, power, state, inside, ghost); return; }
+                rng ??= SplitMix64.ForStream(s.Seed, rayNumber);
+                var list = work.Scattered;
+                list.Clear();
+                NscScatterOutcome outcome;
+                try
+                {
+                    outcome = _scatter!.Scatter(model, scatterFace!, obj, hit.Point, hit.Normal, r.Direction, direction, power,
+                        s.Splitting == NscSplitting.Split, rng, list);
+                }
+                catch (InvalidOperationException e)
+                {
+                    ledger.Errors.Add(power);
+                    ledger.ErrorRays++;
+                    errors.Add($"{Where()}: scattering: {e.Message}");
+                    if (seg is not null) { seg.Events |= NscEvents.Error; seg.Fate += $" (scatter error: {e.Message})"; }
+                    return;
+                }
+                if (!outcome.Scattered) { Spawn(direction, power, state, inside, ghost); return; }
+                ledger.Absorbed.Add(outcome.Absorbed);
+                ledger.ScatterNotTraced.Add(outcome.NotTraced);
+                if (seg is not null)
+                {
+                    seg.Events |= NscEvents.Scattered;
+                    seg.Fate += $"; the {(reflectedRay ? "reflected" : "transmitted")} ray scattered into {list.Count} ray{(list.Count == 1 ? "" : "s")}{(outcome.Specular > 0 ? " and the specular ray" : "")}";
+                }
+                if (outcome.Specular > 0) Spawn(direction, outcome.Specular, state?.Scaled(outcome.Specular / power), inside, ghost);
+                var to = _scatter.ScatterToList(obj);
+                foreach (var (d, p) in list)
+                    Spawn(d, p, state is null ? null : RotatedState(state, direction, d).Scaled(p / power), inside, ghost, scattered: true, scatterTo: to);
             }
 
             if (decider < 0)
@@ -596,7 +659,7 @@ public sealed class NscTracer
             if (!mirror && n1 == n2 && coating is null)
             {
                 if (seg is not null) { seg.Events |= NscEvents.Transmitted; seg.Fate = Crossing(before, after) + " (same index: no interface)"; }
-                Spawn(r.Direction, intensity, phi, after, false);
+                Emit(r.Direction, intensity, phi, after, false, reflectedRay: false);   // OP-80
                 continue;
             }
             Vector3D refracted = default;
@@ -607,12 +670,12 @@ public sealed class NscTracer
                 if (mirror || tir)
                 {
                     if (seg is not null) { seg.Events |= NscEvents.Reflected | (tir ? NscEvents.TotalInternalReflection : 0); seg.Fate = tir ? "total internal reflection" : "reflected by a mirror"; }
-                    Spawn(reflected, intensity, null, before, false);
+                    Emit(reflected, intensity, null, before, false, reflectedRay: true);   // OP-80
                 }
                 else
                 {
                     if (seg is not null) { seg.Events |= NscEvents.Transmitted; seg.Fate = "refracted: " + Crossing(before, after); }
-                    Spawn(refracted, intensity, null, after, false);
+                    Emit(refracted, intensity, null, after, false, reflectedRay: false);   // OP-80
                 }
                 continue;
             }
@@ -669,15 +732,15 @@ public sealed class NscTracer
             if (mirror || tir)
             {
                 if (seg is not null) { seg.Events |= NscEvents.Reflected | (tir ? NscEvents.TotalInternalReflection : 0); seg.Fate = tir ? "total internal reflection" : "reflected by a mirror"; }
-                Spawn(reflected, powerR, phiR, before, false);
+                Emit(reflected, powerR, phiR, before, false, reflectedRay: true);   // OP-80
                 continue;
             }
             switch (s.Splitting)
             {
                 case NscSplitting.Split:
                     if (seg is not null) { seg.Events |= NscEvents.Reflected | NscEvents.Transmitted; seg.Fate = "split: refracted (" + crossing + ") and reflected"; }
-                    Spawn(reflected, powerR, phiR, before, true);   // popped second
-                    Spawn(refracted, powerT, phiT, after, false);   // popped first
+                    Emit(reflected, powerR, phiR, before, true, reflectedRay: true);   // popped second (OP-80: Emit)
+                    Emit(refracted, powerT, phiT, after, false, reflectedRay: false);   // popped first
                     break;
                 case NscSplitting.Simple:
                 {
@@ -692,19 +755,19 @@ public sealed class NscTracer
                     if (reflect)
                     {
                         if (seg is not null) { seg.Events |= NscEvents.Reflected; seg.Fate = "reflected (simple ray splitting)"; }
-                        Spawn(reflected, both, phiR.Scaled(both / powerR), before, true);
+                        Emit(reflected, both, phiR.Scaled(both / powerR), before, true, reflectedRay: true);   // OP-80
                     }
                     else
                     {
                         if (seg is not null) { seg.Events |= NscEvents.Transmitted; seg.Fate = "refracted (simple ray splitting): " + crossing; }
-                        Spawn(refracted, both, phiT!.Scaled(both / powerT), after, false);
+                        Emit(refracted, both, phiT!.Scaled(both / powerT), after, false, reflectedRay: false);   // OP-80
                     }
                     break;
                 }
                 default:
                     ledger.NotTraced.Add(powerR);
                     if (seg is not null) { seg.Events |= NscEvents.Transmitted; seg.Fate = "refracted: " + crossing; }
-                    Spawn(refracted, powerT, phiT, after, false);
+                    Emit(refracted, powerT, phiT, after, false, reflectedRay: false);   // OP-80
                     break;
             }
         }
@@ -786,4 +849,40 @@ public sealed class NscTracer
     }
 
     private static Vector3D Unit(Vector3D v) => v / v.Length;
+
+    // OP-80
+    /// <summary>A scattered ray's coherency matrix: the specular ray's, turned by the rotation
+    /// about a × b that takes the specular direction a to the scattered direction b (Rodrigues'
+    /// formula, R = I + [k]ₓ + [k]ₓ²(1 − c)/s², k = a × b, s = |k|, c = a·b; derived), so a
+    /// transverse field stays transverse and keeps its power and degree of polarization. OpticStudio
+    /// lets a scatter DLL return the new field and otherwise "will make a reasonable guess"
+    /// (help, "Available Scatter Models"); this rotation is this program's choice.</summary>
+    private static CoherencyMatrix RotatedState(CoherencyMatrix state, Vector3D a, Vector3D b)
+    {
+        var k = Vector3D.Cross(a, b);
+        double s = k.Length, c = Vector3D.Dot(a, b);
+        var m = new double[9];
+        if (s < 1e-12)
+        {
+            if (c > 0) return state;
+            // Opposite: a half turn about any axis at right angles to a, R = 2ppᵀ − I.
+            var t = Math.Abs(a.X) < 0.9 ? Vector3D.UnitX : Vector3D.UnitY;
+            var p = Unit(t - a * Vector3D.Dot(t, a));
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++) m[3 * i + j] = 2 * p[i] * p[j] - (i == j ? 1 : 0);
+        }
+        else
+        {
+            double f = (1 - c) / (s * s);
+            double[,] kx = { { 0, -k.Z, k.Y }, { k.Z, 0, -k.X }, { -k.Y, k.X, 0 } };
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                {
+                    double k2 = 0;
+                    for (int l = 0; l < 3; l++) k2 += kx[i, l] * kx[l, j];
+                    m[3 * i + j] = (i == j ? 1 : 0) + kx[i, j] + f * k2;
+                }
+        }
+        return state.Transformed(PolarizationMatrix.FromRowMajor(m.Select(v => new Complex(v, 0)).ToArray()));
+    }
 }

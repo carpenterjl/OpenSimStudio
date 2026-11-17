@@ -30,6 +30,41 @@ public sealed record OpticsNonSequentialSettings
     /// <summary>OpticStudio's named filters (System Explorer, "Named Filters"): one
     /// "filtername; filterstring" line each, usable wherever a filter string is.</summary>
     public List<string>? NamedFilters { get; init; }
+
+    // OP-80
+    /// <summary>The project's ABg scatter catalog (OpticStudio's ABg Scatter Data Catalog,
+    /// saved here rather than in ABG_DATA.DAT).</summary>
+    public List<OpticsAbgProfileSettings>? AbgCatalog { get; init; }
+}
+
+// OP-80
+/// <summary>One saved ABg profile: an upper-case name, the reference wavelength (µm, 0 or null
+/// for no scaling) and its rows.</summary>
+public sealed record OpticsAbgProfileSettings
+{
+    public string? Name { get; init; }
+    public double? Wavelength { get; init; }
+    public List<OpticsAbgRowSettings>? Rows { get; init; }
+}
+
+// OP-80
+/// <summary>One saved ABg row: angle of incidence (degrees), A, B, g.</summary>
+public sealed record OpticsAbgRowSettings
+{
+    public double? Angle { get; init; }
+    public double? A { get; init; }
+    public double? B { get; init; }
+    public double? G { get; init; }
+}
+
+// OP-80
+/// <summary>One saved importance-sampling target sphere: the object it is centred on, its
+/// radius (lens units) and the largest solid angle (steradians) it may subtend.</summary>
+public sealed record OpticsNscScatterTargetSettings
+{
+    public int? Object { get; init; }
+    public double? Size { get; init; }
+    public double? Limit { get; init; }
 }
 
 /// <summary>One saved object row.</summary>
@@ -86,6 +121,16 @@ public sealed record OpticsNscObjectSettings
     /// "TiltX", "TiltY", "TiltZ" or "Par1", "Par2", ... and <see cref="OpticsCellFlagSettings.Kind"/>
     /// "Variable". Null for none. Solves and pickups on object cells are not built.</summary>
     public List<OpticsCellFlagSettings>? Flags { get; init; }
+
+    // OP-80: the Scatter To section.
+    /// <summary>"None", "Scatter To List" or "Importance Sampling".</summary>
+    public string? ScatterToMethod { get; init; }
+
+    /// <summary>The Scatter To list: object numbers separated by spaces ("3 4").</summary>
+    public string? ScatterToList { get; init; }
+
+    /// <summary>Importance-sampling targets, ray 1 first (at most 6).</summary>
+    public List<OpticsNscScatterTargetSettings>? ScatterTargets { get; init; }
 }
 
 // OP-77
@@ -135,4 +180,28 @@ public sealed record OpticsNscFaceSettings
     public string? FaceIs { get; init; }
 
     public string? Coating { get; init; }
+
+    // OP-80: the face's scattering (Coat/Scatter section).
+    /// <summary>"None", "Lambertian", "Gaussian", "ABg", "ABg File", "BSDF" or "User Defined".</summary>
+    public string? ScatterModel { get; init; }
+
+    /// <summary>"Number Of Rays" (0–300).</summary>
+    public int? ScatterRays { get; init; }
+
+    /// <summary>"Scatter Fraction" (Lambertian, Gaussian, BSDF).</summary>
+    public double? ScatterFraction { get; init; }
+
+    /// <summary>Gaussian σ.</summary>
+    public double? ScatterSigma { get; init; }
+
+    /// <summary>Reflect and transmit data: an ABg catalog name (ABg), the full path of an ABGF
+    /// file (ABg File) or of a BSDF file (BSDF).</summary>
+    public string? ScatterReflect { get; init; }
+    public string? ScatterTransmit { get; init; }
+
+    /// <summary>BSDF "Angle", degrees.</summary>
+    public double? ScatterAngle { get; init; }
+
+    /// <summary>"Thin Window Scattering".</summary>
+    public bool? ThinWindowScattering { get; init; }
 }

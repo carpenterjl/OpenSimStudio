@@ -127,7 +127,11 @@ public static class ProjectNonSequential
                 var other => (NscFaceBehaviour)(-1),
             };
             if ((int)behaviour < 0) { problems.Add($"{where}, face {f.Face ?? 0}: \"Face Is\" '{f.FaceIs}' is not Object Default, Reflective or Absorbing."); continue; }
-            faces[f.Face ?? 0] = new NscFace { FaceIs = behaviour, Coating = string.IsNullOrWhiteSpace(f.Coating) ? null : f.Coating.Trim() };
+            faces[f.Face ?? 0] = new NscFace
+            {
+                FaceIs = behaviour, Coating = string.IsNullOrWhiteSpace(f.Coating) ? null : f.Coating.Trim(),
+                Scatter = Scattering.ProjectNscScatter.Face(f, context, $"{where}, face {f.Face ?? 0}", problems),   // OP-80
+            };
         }
         return new NscObject
         {
@@ -141,6 +145,7 @@ public static class ProjectNonSequential
             FaceProperties = faces,
             IsDetectingStandIn = row.DetectingStandIn ?? false,
             Comment = row.Comment ?? "",
+            ScatterTo = Scattering.ProjectNscScatter.ScatterTo(row, unit, where, problems),   // OP-80
         };
 
         bool Need(int count)

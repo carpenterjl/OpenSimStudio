@@ -26,6 +26,11 @@ public sealed record NscSingleRayTraceSettings
     [Description("Split rays at refractive interfaces (simple ray splitting when the system setting says so).")]
     public bool SplitRays { get; init; }
 
+    // OP-80
+    [DisplayName("Scatter NSC rays")]
+    [Description("Scatter rays by the faces' scatter models (the random choices use seed 1 and ray number 0).")]
+    public bool ScatterRays { get; init; }
+
     [DisplayName("Wavelength")]
     [Description("Row of the wavelength table, 1 for the first; 0 for the primary.")]
     public int Wavelength { get; init; }
@@ -88,6 +93,7 @@ public sealed class NscSingleRayTraceAnalysis : OpticsAnalysis<NscSingleRayTrace
         {
             UsePolarization = settings.UsePolarization,
             Splitting = splitting,
+            ScatterRays = settings.ScatterRays,   // OP-80
             Environment = system.Environment,
             Coatings = CoatingCatalogSettings.FromSettings(context.System.Coatings, notes),
             PrimaryMicrometers = system.Wavelengths.Primary.Micrometers,
@@ -142,7 +148,7 @@ public sealed class NscSingleRayTraceAnalysis : OpticsAnalysis<NscSingleRayTrace
                 Lines = new[]
                 {
                     "Segment 0 is the source point. Every other segment's position, normal and intensity are at its end, on the object hit, before the interaction there; L, M, N are the segment's own direction.",
-                    "Letters: X terminated, R reflected, T transmitted, G ghost (reflected from a refractive face at its start), Z error, I total internal reflection. 'In' is the object the segment runs through (0 the background); 'Hit' 0 is a miss.",
+                    "Letters: X terminated, R reflected, T transmitted, G ghost (reflected from a refractive face at its start), Z error, I total internal reflection, S scattered at the end, F scattered from the parent's hit (OP-80). 'In' is the object the segment runs through (0 the background); 'Hit' 0 is a miss.",
                     "Path is the geometric length from the parent's end; the optical path is from the source point, relative to the system's air.",
                 }
             },
