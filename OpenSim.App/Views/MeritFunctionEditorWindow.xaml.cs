@@ -34,6 +34,11 @@ public partial class MeritFunctionEditorWindow : Window
     private void OnWizard(object sender, RoutedEventArgs e) =>
         new MeritWizardWindow(_editor.CreateWizard()) { Owner = this }.ShowDialog();
 
+    // OP-88
+    /// <summary>Opens the non-sequential Optimization and Bitmap Wizards on this editor.</summary>
+    private void OnNscWizard(object sender, RoutedEventArgs e) =>
+        new NscMeritWizardWindow(_editor.CreateNscWizard()) { Owner = this }.ShowDialog();
+
     private void OnEditorChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(OpticsMeritEditorViewModel.CurrentRow) || _syncing) return;

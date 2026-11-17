@@ -225,6 +225,9 @@ public sealed class MeritOperandRegistry
 
         // OP-50
         foreach (var definition in Catalogue.FiberOperands.Definitions()) r.Register(definition);
+
+        // OP-88: the non-sequential trace, detector and object operands (Catalogue/NscOperands.cs).
+        foreach (var definition in Catalogue.NscOperands.Definitions()) r.Register(definition);
         return r;
     }
 

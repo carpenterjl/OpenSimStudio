@@ -1,0 +1,99 @@
+<Window x:Class="OpenSim.App.Views.NscMeritWizardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OpenSim.App.Controls"
+        Title="Non-Sequential Wizards" Width="560" Height="760" MinWidth="420" MinHeight="400"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource PanelBgBrush}">
+    <!-- OP-88: the non-sequential Optimization Wizard and Bitmap Wizard. DataContext is the
+         OpticsNscMeritWizardViewModel. Apply writes the rows into the Merit Function Editor at
+         Start At (one undo step) and turns the clear-data and raytrace rows off for the next
+         Apply, as the help describes; OK applies and closes. -->
+    <DockPanel Margin="8">
+        <WrapPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <Button Content="OK" Command="{Binding OkCommand}" Margin="0,0,4,4" MinWidth="70" IsDefault="True"
+                    AutomationProperties.AutomationId="NscWizardOkButton"/>
+            <Button Content="Apply" Command="{Binding ApplyCommand}" Margin="0,0,4,4" MinWidth="70"
+                    AutomationProperties.AutomationId="NscWizardApplyButton"/>
+            <Button Content="Close" IsCancel="True" Margin="0,0,4,4" MinWidth="70"/>
+            <Button Content="Refresh objects" Command="{Binding RefreshObjectsCommand}" Margin="12,0,4,4"
+                    ToolTip="Read the detectors, sources and configurations again."/>
+        </WrapPanel>
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <controls:FormGrid>
+                    <Label Content="Wizard"/>
+                    <ComboBox ItemsSource="{Binding Modes}" SelectedValue="{Binding IsBitmap}" SelectedValuePath="Value" DisplayMemberPath="Label"
+                              AutomationProperties.AutomationId="NscWizardModeCombo"
+                              ToolTip="Optimization Wizard: a criterion on a detector. Bitmap Wizard: an image as the target distribution."/>
+                </controls:FormGrid>
+
+                <TextBlock Text="Clear data and start" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                <controls:FormGrid>
+                    <Label Content="Clear and trace rows"/>
+                    <CheckBox IsChecked="{Binding IncludeClearAndTrace}" VerticalAlignment="Center"
+                              ToolTip="Write the row clearing every detector and the NSTR row. Turned off after the first Apply."/>
+                    <Label Content="Clear detector (0: All)"/>
+                    <TextBox Text="{Binding ClearDetector}" ToolTip="A row clearing every detector is always written; a detector number here is cleared as well."/>
+                    <Label Content="Start at (0: the end)"/>
+                    <TextBox Text="{Binding StartAt}"/>
+                    <Label Content="Overwrite"/>
+                    <CheckBox IsChecked="{Binding Overwrite}" VerticalAlignment="Center" ToolTip="Delete every row from Start At on first."/>
+                    <Label Content="Overall weight"/>
+                    <TextBox Text="{Binding OverallWeight}"/>
+                    <Label Content="Configuration"/>
+                    <ComboBox ItemsSource="{Binding ConfigurationChoices}" SelectedValue="{Binding Configuration}" SelectedValuePath="Value" DisplayMemberPath="Label"/>
+                </controls:FormGrid>
+
+                <TextBlock Text="Raytrace" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                <controls:FormGrid>
+                    <Label Content="Source"/>
+                    <ComboBox ItemsSource="{Binding Sources}" SelectedValue="{Binding Source}" SelectedValuePath="Value" DisplayMemberPath="Label"/>
+                    <Label Content="Split rays"/>
+                    <CheckBox IsChecked="{Binding SplitRays}" VerticalAlignment="Center"/>
+                    <Label Content="Scatter rays"/>
+                    <CheckBox IsChecked="{Binding ScatterRays}" VerticalAlignment="Center" ToolTip="Not built here (plan items OP-80 and OP-81): refused."/>
+                    <Label Content="Use polarization"/>
+                    <CheckBox IsChecked="{Binding UsePolarization}" VerticalAlignment="Center"/>
+                    <Label Content="Ignore errors"/>
+                    <CheckBox IsChecked="{Binding IgnoreErrors}" VerticalAlignment="Center"/>
+                    <Label Content="Use LightningTrace"/>
+                    <CheckBox IsChecked="{Binding UseLightningTrace}" VerticalAlignment="Center" ToolTip="Not built (plan item OP-85): refused."/>
+                </controls:FormGrid>
+
+                <TextBlock Text="Detector" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                <controls:FormGrid>
+                    <Label Content="Detector"/>
+                    <ComboBox ItemsSource="{Binding Detectors}" SelectedValue="{Binding Detector}" SelectedValuePath="Value" DisplayMemberPath="Label"
+                              AutomationProperties.AutomationId="NscWizardDetectorCombo"/>
+                </controls:FormGrid>
+
+                <TextBlock Text="Criterion (Optimization Wizard)" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                <controls:FormGrid IsEnabled="{Binding IsOptimization}">
+                    <Label Content="Criterion"/>
+                    <ComboBox ItemsSource="{Binding Criteria}" SelectedValue="{Binding Criterion}" SelectedValuePath="Value" DisplayMemberPath="Label"
+                              ToolTip="The criteria the detector's type offers; the Detector Rectangle offers them all."/>
+                    <Label Content="Held"/>
+                    <ComboBox ItemsSource="{Binding Comparisons}" SelectedValue="{Binding Comparison}" SelectedValuePath="Value" DisplayMemberPath="Label"/>
+                    <Label Content="Target"/>
+                    <TextBox Text="{Binding Target}" ToolTip="Flux in source units; positions in lens units; angles in degrees; flux/area per square meter; uniformity as standard deviation / mean."/>
+                    <Label Content="Minimum flux (0: none)"/>
+                    <TextBox Text="{Binding MinimumFlux}" ToolTip="A lower bound on the detector's total flux, so the optimizer cannot lose every ray."/>
+                </controls:FormGrid>
+
+                <TextBlock Text="Target image (Bitmap Wizard)" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                <controls:FormGrid IsEnabled="{Binding IsBitmap}">
+                    <Label Content="Image file (BMP or PNG)"/>
+                    <TextBox Text="{Binding ImagePath}" ToolTip="A 24- or 32-bit BMP, or an 8-bit PNG. JPG is not read."/>
+                    <Label Content="Total flux"/>
+                    <TextBox Text="{Binding TotalFlux}" ToolTip="The image gives the relative distribution; this the total, in source units."/>
+                    <Label Content="Color targets"/>
+                    <CheckBox IsChecked="{Binding ColorTargets}" VerticalAlignment="Center" ToolTip="Detector Color only: target X, Y and Z per pixel."/>
+                    <Label Content="Resample detector"/>
+                    <CheckBox IsChecked="{Binding ResampleDetector}" VerticalAlignment="Center" ToolTip="Give the detector the image's pixel counts instead of scaling the image."/>
+                </controls:FormGrid>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

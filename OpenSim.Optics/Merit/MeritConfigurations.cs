@@ -41,6 +41,14 @@ public interface IMeritConfigurations
     /// used with (the project's saved analysis settings), for the operands that read an analysis's
     /// saved settings (POPD, POPI); null when there are none (the analysis's defaults are used).</summary>
     System.Text.Json.JsonElement? AnalysisSettings(string analysisId) => null;
+
+    // OP-88
+    /// <summary>The optics record of configuration <paramref name="configuration"/> (the project's
+    /// settings with that configuration's multi-configuration values applied), which the
+    /// non-sequential rows (NSTR, NSDD, the object operands) build their scene from; null when
+    /// these configurations carry no project (a lens was given), and those rows then fail naming
+    /// why. May throw <see cref="ArgumentException"/> naming why the configuration cannot be built.</summary>
+    OpticsSettings? SettingsFor(int configuration) => null;
 }
 
 /// <summary>One configuration: a lens and its system data.</summary>
@@ -111,12 +119,15 @@ public sealed class ProjectMeritConfigurations : IMeritConfigurations
         _catalogs = catalogs;   // OP-55B
         int count = MultiConfig.MultiConfiguration.ConfigurationCount(optics);
         _built = new Lazy<(SequentialLens, OpticalSystemData)>[count];
+        _settings = new Lazy<OpticsSettings>[count];   // OP-88
         for (int k = 1; k <= count; k++)
         {
             int configuration = k;
+            _settings[k - 1] = new Lazy<OpticsSettings>(() => MultiConfig.MultiConfiguration.SettingsFor(optics, configuration, catalogs),   // OP-88
+                LazyThreadSafetyMode.ExecutionAndPublication);
             _built[k - 1] = new Lazy<(SequentialLens, OpticalSystemData)>(() =>
             {
-                var settings = MultiConfig.MultiConfiguration.SettingsFor(optics, configuration, catalogs);   // OP-91: thermal pickups need the glasses
+                var settings = _settings[configuration - 1].Value;   // OP-91: thermal pickups need the glasses (OP-88: built once, shared with SettingsFor)
                 var lens = ProjectLens.From(settings, catalogs)
                     ?? throw new ArgumentException($"Configuration {configuration} has no sequential surfaces: add them in the Lens Data Editor, so there is something to evaluate.");
                 return (lens, SystemDataSettings.FromSettings(settings.SystemData, new List<string>()));
@@ -125,6 +136,18 @@ public sealed class ProjectMeritConfigurations : IMeritConfigurations
     }
 
     public int Count => _built.Length;
+
+    // OP-88
+    private readonly Lazy<OpticsSettings>[] _settings;
+
+    /// <summary>Configuration <paramref name="configuration"/>'s optics record
+    /// (<see cref="MultiConfig.MultiConfiguration.SettingsFor"/>), built once.</summary>
+    public OpticsSettings SettingsFor(int configuration)
+    {
+        if (configuration < 1 || configuration > _settings.Length)
+            throw new ArgumentOutOfRangeException(nameof(configuration), configuration, $"There are {_settings.Length} configurations, numbered from 1.");
+        return _settings[configuration - 1].Value;
+    }
 
     // OP-49
     /// <summary>The project's last-used settings of an analysis (<see cref="OpticsAnalysesSettings.LastSettings"/>).</summary>

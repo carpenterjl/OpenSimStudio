@@ -319,7 +319,7 @@ public sealed partial class OpticsNonSequentialEditorViewModel : ObservableObjec
             }
             if (edited is not null) faces = edited;
         }
-        return s with { Faces = faces };
+        return s with { Faces = faces, Flags = ReadFlags(row, b.Flags) };   // OP-88: Variable cells
     }
 
     private static int ShownParameters(NscObjectTypeDescriptor? d) => d is null ? S.ParameterSlots : Math.Min(d.Parameters.Count, S.ParameterSlots);
@@ -372,6 +372,7 @@ public sealed partial class OpticsNonSequentialEditorViewModel : ObservableObjec
                 Note(doc.SetProperty(index, S.FaceIsProperty(face), DisplayFaceIs(entry)));
                 Note(doc.SetProperty(index, S.CoatingProperty(face), entry?.Coating ?? ""));
             }
+        WriteFlags(index, s, where, notes);   // OP-88: Variable cells
         _base[row.Id] = s;
 
         void Note(SheetEditResult result)

@@ -1830,6 +1830,37 @@ single place in the code, so a correction is one line and its test.
       with non-zero lumens, as the help says, and exclude unlit pixels from −1 and −2.
     Check: trace a point source onto a Detector Rectangle and a Detector Polar here and in
     OpticStudio, and compare a DDR file saved there with one read here.
+72. **Illumination optimization readings** (OP-88, section 76). From the help pages under
+    `plans/sources/optics/op-55b-help/` and `op-88-help/`; nothing has been compared with
+    OpticStudio's output.
+    - *Columns.* The help names each non-sequential operand's arguments but not their columns;
+      Int1 is Surf, Int2 the object (Det#, Src#, Object), and the rest fill Data1 on in the order
+      the help names them (§76 lists them), the pattern OP-54 read from "Defining complex
+      operands". Surf must be 1 (mixed mode is OP-86).
+    - *Ref? 2* (the global coordinate reference surface) is the same frame as Ref? 1 in a pure
+      non-sequential system. NTxV with Ref? 1 or 2 returns the angles that rebuild the object's
+      rotation in its own rotation order with −90° ≤ tilt about y ≤ 90° (tilt about z 0 at
+      ±90°); NSRM's R maps local to origin coordinates, R[i][j] the i-th component of local
+      axis j.
+    - *Normalisation groups.* NSDD Data 3 and NSDE Data 14–16 normalise over the maximal run of
+      consecutive rows of the same code, Surf and Det# with a positive Pix# (and Data 3, or Data
+      14–16 with Angle? 0); a run whose peak is zero fails.
+    - *Detectors per configuration.* Each configuration keeps its own detector data within an
+      evaluation; NSTR needs an earlier clear-every-detector row in the same configuration.
+    - *NSRA.* Segments are numbered in trace order (the help says its order differs from the
+      ZRD's without giving it); Source # 0 is the first element; Data 31–39 equal 1–9 in a pure
+      non-sequential system; 10 is the segment's own length, 16 the sum along its parents.
+    - *Random streams.* The help says only that NSTR reseeds "with the identical value every time
+      the merit function is evaluated"; here the k-th NSTR row evaluated uses
+      SplitMix64.ForStream(1, k).
+    - *Wizards.* Which operand and code each Optimization Wizard criterion becomes (uniformity as
+      σ/μ of the non-zero pixels, Pix# −4 over −5; greater or less than as OPGT or OPLT on a
+      weight-0 row; the minimum flux target as OPGT on the total flux); the Bitmap Wizard's flux
+      as the sRGB relative luminance over the brightest pixel's, area-weighted scaling, the
+      image's top row at the detector's +y edge, a total-flux row, NSDD Data 3 per pixel on a
+      Detector Rectangle and NSDE Data 15 (or 14–16 with Color Targets) on a Detector Color.
+    Check: build the same merit function with OpticStudio's wizards and compare the rows and their
+    values on one scene.
 
 71. **Ray database and filter readings** (OP-83, section 75). From the help pages under
     `plans/sources/optics/op-83-help/` ("The Filter String", "Filter String Examples", "Named
@@ -6311,10 +6342,11 @@ cannot be computed fails naming the surface and the reason.
 **Not-built table.** `NotBuiltOperands` lists every summary-table code this build does not
 register, with the help's description, the reason and the plan item it waits for: DCRV, DSAG,
 DSLP, DPHS, QSLP, TSAG, GOPT, IMSF, PRIM, SVIG, CVIG, FDMO, FDRE, EQUA, the skew Gaussian beam
-operands, the gradient-index operands, UDOC, the non-sequential operands,
+operands, the gradient-index operands, UDOC, the non-sequential operands other than those OP-88
+built (§76),
 CMFV, the coating operands and CODA, and the obsolete PnGT, PnLT, PnVA. OP-55A's not-built codes
 join through its `Imaging` hook. `MeritOperandCatalogue.Describe` and `Unknown` turn a code into
-"NSDD (OpticStudio: …) is not built yet: needs OP-88: …"; the merit function editor's operand
+"NSLT (OpticStudio: …) is not built yet: needs OP-85: …"; the merit function editor's operand
 column, `MeritEvaluator.Validate` and `MeritFunctionSettings.FromSettings` (and so the command line
 and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
 
@@ -6738,6 +6770,8 @@ failure test, fiber modes from DLLs or multimode files, polarized POP coupling, 
 fiber coupling. Readings in §10 item 64.
 
 ## 69. Non-sequential ray tracing core
+
+(Optimizing non-sequential systems against detector data: §76.)
 
 OP-70 builds the second engine: rays that find their own path through objects placed in space
 (`OpenSim.Optics/NonSequential/`). The tests are in `OpenSim.Tests/Optics/NonSequentialTests.cs`
@@ -7288,9 +7322,7 @@ say whether it sums intensities or divides by the solid angle). SAVEDETECTOR wri
 LOADDETECTOR reads, the formats below; a name without a folder is in the lens file's folder; a
 loaded file must be of the object's type, pixel counts and size (sizes and angles to 1e-9
 relative, as the file holds them in its lens unit). The merit operands NSTR, NSDD, NSDE, NSDP and
-NSDC are not built: the merit function evaluates a sequential lens per configuration, and these
-rows need the project's scene per configuration and the detector data kept in row order (plan item
-OP-88). Readings in §10 item 69.
+NSDC are OP-88's (§76), which also builds NSDD Data 3 and NSDE Data 14–16. Readings in §10 item 69.
 
 **Save/Load Detector Data** (`NscDetectorFile`) follows OpticStudio's binary layout: the header
 `int version, type, lens_units, source_units, source_multiplier; int i_data[50]; double
@@ -7410,3 +7442,142 @@ xybin/lmbin, phase and electric field in the files; the merit operand NSRD; a Na
 in the app (the list is saved in the project file); the ZPL keywords ZRDPLAYBACK, ZRDFILTER,
 ZRDSUM, ZRDAPPEND, ZRDSAVERAYS and NSTR's save arguments are not bound yet (the library calls they
 need exist).
+
+maps, contrast enhancement, image-file output; SETDETECTOR. (The merit operands that read
+detectors are OP-88's, §76.) Readings in §10 item 69.
+
+## 76. Illumination optimization
+
+OP-88 makes the merit function and the optimizer work on non-sequential systems: rows that trace
+the project's sources into its detectors and read them, rows on object positions and parameters,
+variables on object cells, the non-sequential Optimization and Bitmap Wizards, and Orthogonal
+Descent on a merit function with fixed random streams. Code:
+`OpenSim.Optics/Merit/Catalogue/NscOperands.cs` and `NscMeritSession.cs`,
+`OpenSim.Optics/Merit/NscMeritWizards.cs`, `OpenSim.Optics/Optimization/NscVariables.cs`; tests in
+`OpenSim.Tests/Optics/NscOptimizationTests.cs` and
+`OpenSim.App.Tests/ViewModels/OpticsNscOptimizationTests.cs`. Sources: OpticStudio 2025 R2 help,
+"Non-sequential Ray Tracing and Detector Operands" and "Constraints on Non-sequential Object
+Data" (`plans/sources/optics/op-55b-help/`), "NSC Operands", "Optimization Wizard (optimize tab,
+non-sequential)", "Bitmap Wizard (optimize tab, non-sequential)" and "High Resolution Images and
+Detectors" (`plans/sources/optics/op-88-help/`). Readings in §10 item 72.
+
+**Evaluation.** A definition with `NonSequential` set reads its configuration's optics record
+(`IMeritConfigurations.SettingsFor`; `ProjectMeritConfigurations` builds it once per
+configuration) and runs even when the configuration has no sequential lens, so a pure
+non-sequential project has a merit function. Rows run in row order on one thread (pass 3 of
+`MeritEvaluator`); a `MeritEvaluationState` made for each evaluation holds, per configuration, the
+data on each detector object (`NscMeritSession`). Nothing carries from one evaluation to the next.
+Configurations given as a lens (`SingleMeritConfiguration`, the tolerancing wrappers) carry no
+project, and these rows fail saying so.
+
+**Columns.** Int1 Surf (must be 1: a pure non-sequential system; mixed mode is OP-86), Int2 the
+object. NSTR: Data1 Splt?, Data2 Scat?, Data3 Pol?, Data4 IgEr?. NSDD: Data1 Pix#, Data2 Data,
+Data3 # Ignored. NSDE: Data1 Pix#, Data2 Angle?, Data3 Data, Data4 # Ignored. NSDP and NSDC: Data1
+Pix#, Data2 Data. NSRA: Data1 Splt?, Data2 Pol?, Data3 Seg#, Data4 Data, Data5 Source #. NPxV/G/L
+and NTxV/G/L: Data1 Ref?. NSRM: Data1 Ref?, Data2 Data. NPVA, NPGT, NPLT: Data1 Param.
+
+**Traces and detectors.** NSDD, NSDE and NSDP with Det# 0 clear every detector, with −n detector
+n, and return 0. NSTR traces source Src# (0: all) through `ProjectNscSources.Trace` (OP-77's
+runner: the analysis ray counts, the project's wavelengths, coatings and non-sequential
+controls), splitting as Splt?, polarization as Pol? or whenever splitting is on, Ignore Errors as
+IgEr?, and adds every detector's data to what it holds; it returns 0. It fails unless a row with
+Det# 0 has cleared the detectors earlier in the configuration ("An NSDD, NSDE, or NSDP operand
+with Det# set equal to 0 must be included in the merit function prior to this operand"); Scat? is
+refused (scattering is OP-80 and OP-81). NSDD, NSDE, NSDP and NSDC read the held data through
+OP-79's `NscDetectorQueries` (§73: pixel, total, extremes, rays, mean and standard deviation of
+the non-zero pixels, centroids and RMS sizes; flux/area per m²). Built here: NSDD Data 3, a
+pixel's flux over the peak flux of the consecutive NSDD Data 3 rows of the same Surf and Det#,
+and NSDE Data 14–16, a pixel's tristimulus X, Y or Z over the peak Y of the consecutive NSDE
+Data 14–16 rows ("all consecutive NSDD operands ... which refer to the same surface and
+detector").
+
+**Fixed random streams.** "When launching rays with the NSTR operand, OpticStudio seeds the
+random number generator with the identical value every time the merit function is evaluated"
+(help, "NSC Operands"). Here the k-th NSTR row evaluated (k = 0, 1, ..., counted over the
+evaluation) traces with the seed SplitMix64.ForStream(1, k) (`NscMeritRandom`; 1 is
+`NscTraceSettings`' default seed). The source emission and the tracer draw from that seed only
+(ray k from Sobol point k + 1 or its own stream, §72), so two evaluations of one design agree to
+the bit at any thread count, and nearby designs are traced with the same random numbers. The
+optimizer so compares designs with common random numbers: the Monte Carlo noise is the same at
+every design instead of a fresh draw at each, and what remains is a merit function that steps
+when a ray changes path.
+
+**NSRA** traces the one analysis ray of a source with # Analysis Rays 1 (refused otherwise; an
+array's element Source #, 0 the first) at its own wavelength without scattering, and fails if the
+ray has an error ("Errors are always considered"). Data 1–9: position, cosines and the normal of
+the object hit at the segment's end; 10 the segment's length; 11 intensity; 14 index; 16 the path
+from the source; 17 the optical path; lengths in lens units; 31–39 as 1–9. Seg# −1 is the last.
+Data 12, 13, 15 (phases) and 21–29 (fields) are refused: the segments record neither.
+
+**Object data.** Read from the saved objects, without building shapes. NPxV (x, y, z) with Ref? 0
+is the position cell; with Ref? 1 or 2 the object's origin in the non-sequential frame through its
+chain of reference objects (`NscObjectFrames.Global`, as `NscScene.GlobalPlacements`). NTxV with
+Ref? 0 is the tilt cell; with 1 or 2 the angles that rebuild the global rotation in the object's
+own rotation order (`NscObjectFrames.Tilts`; by default R = Rx(a)Ry(b)Rz(c), so
+b = atan2(R13, √(R11² + R12²)), a = atan2(−R23, R33), c = atan2(−R12, R11); in the global order
+R = Rz(c)Ry(b)Rx(a), b = atan2(−R31, √(R32² + R33²)), a = atan2(R32, R33), c = atan2(R21, R11);
+derived from the matrix products). NSRM returns R[i][j] (Data = 3(i − 1) + j), the identity for
+Ref? 0 as the help says. NPVA is parameter Param (a parameter not saved is the type's default).
+The G and L forms are bounds (§31).
+
+**Variables.** `OpticsNscObjectSettings.Flags` (`Column` "X", "Y", "Z", "TiltX", "TiltY",
+"TiltZ", "Par n"; `Kind` "Variable") make object cells variables (`LensVariableKind.NscPosition`,
+`NscTilt`, `NscParameter`; `LensVariable.NscObject`), listed after the surface cells and before
+the multi-configuration cells. Parameters of Integer or Flag kind and unbuilt types are refused,
+and so are solves and pickups on object cells. `LensVariables.Apply` writes them; every
+evaluation builds the scene again from the record, so the optimizer moves objects.
+
+**Optimizing.** `LocalOptimizer` runs unchanged on such a merit function. Damped least squares
+differentiates by finite differences, which see the steps of a Monte Carlo merit function (zero or
+huge derivatives); its log says so for a merit function with NSTR rows. Orthogonal Descent (§35)
+uses no derivatives and moves on the trial steps' merit alone; with the fixed streams it settles
+on the step of the sampled merit function that holds the optimum.
+
+**Optimization Wizard** (`NscMeritWizards.Optimization`). Rows: NSDD Det# 0 (always: "The
+Optimization Wizard will add an operand to clear all detectors regardless of the clear detectors
+setting"), NSDD Det# −n when Clear Detectors names one, NSTR with the raytrace settings, then the
+criterion. Detector Rectangle: RMS spot radius, x, y are NSDD Pix# −9, −10, −11 with Data 0 (lens
+units); RMS angular radius, x, y the same with Data 2 (degrees); centroid x, y Pix# −6, −7 with
+Data 0, the angular centroids with Data 2; total flux Pix# 0, Data 0; spatial and angular
+uniformity σ/μ of the non-zero pixels' flux/area or flux/solid angle (NSDD −4 and −5 and a DIVI
+row; 0 is uniform). Detector Color: total power (NSDE Pix# 0, Data 1). Detector Polar: total power
+(NSDP Pix# 0, Data 1) and RMS angular radius (NSDP −4, Data 1). Equal targets the value row;
+greater or less than gives the value row weight 0 and adds OPGT or OPLT on it. A non-zero minimum
+flux adds the detector's total flux (weight 0) and an OPGT on it. With several configurations the
+rows are written for each chosen configuration after a CONF. Start At, Overwrite and the overall
+weight as in OP-56; `NextStartAt` is the next Apply's start. LightningTrace (OP-85) and Scatter
+Rays are refused.
+
+**Bitmap Wizard** (`NscMeritWizards.Bitmap`). A BMP or PNG (OP-42's first-party readers; JPG is
+refused) onto a Detector Rectangle or Color. The image is scaled to the detector's pixels by area
+(each pixel the mean of the image area it covers), or with Resample Detector the detector takes
+the image's pixel counts (written into its parameters 3 and 4). The picture's top row lies along
+the detector's +y edge and its left column along −x. A pixel's flux is its sRGB relative
+luminance (CSS Color 4 §19: lin_sRGB, then the Y row of lin_sRGB_to_XYZ) over the brightest
+pixel's. Rows: clear and trace as above, one total-flux row targeting Total Flux (NSDD Pix# 0,
+Data 0; NSDE Pix# 0, Data 1), then one row per pixel in the detector's numbering (pixel =
+ix + iy·Nx + 1, iy 0 at −y): NSDD Data 3 on a Detector Rectangle, NSDE Data 15 on a Detector
+Color, or with Color Targets NSDE Data 14, 15, 16 targeting X, Y, Z over the image's peak Y. As
+the help warns, that is one row (or three) per pixel.
+
+**App.** The Non-Sequential Component Editor's X, Y, Z, tilt and real parameter cells take the
+Variable flag (saved as above); the Optimize window applies an optimized object back to the
+editor as one undo step. The Merit Function Editor's "NSC wizards" button opens both wizards
+(FormGrid); Apply writes the rows as one undo step and turns off the clear and trace rows for the
+next Apply, as the help says the dialog does.
+
+**ZPL.** The macro functions NSTR, NSDD, NSDE, NSDP and NSDC (wave 15) are unchanged. ZPL's merit
+access (OPEV, operand data by row) reaches these operands through the registry like any other.
+
+**Gate.** `NscOptimizationTests.Gate_SourceDistance_OptimisesToTheClosedFormPositionForATargetIrradiance`
+(Slow): a 1 W Source Point (90° semi-cone, 50 000 random rays) is moved along z by Orthogonal
+Descent until a ±20 mm Detector Rectangle's average irradiance meets its value at 20 mm,
+PΩ/(2π·4a²) with Ω = 4 arctan(a²/(d√(2a² + d²))) (derived in the test and checked by quadrature);
+the distance reached is within five binomial standard deviations plus one 1/N step of the
+closed-form 20 mm.
+
+**Not built:** scattering in NSTR (OP-80, OP-81); NSLT (LightningTrace, OP-85); NPAF and NSRD
+(the ray database, OP-83); NSST (mixed mode, OP-86); NSRW and NSTW (roadway lighting, OP-89);
+FREZ (Freeform Z, OP-72); NSDD Data 4 and 5 and Pix# −13 to −15, NSDE Data 12, 13 and 17–21 (as
+§73); NSRA phases and fields; Surf other than 1; solves and pickups on object cells; the wizards'
+Save/Load Settings, preview drawing and terminate button; a user-set NSTR seed; JPG images.

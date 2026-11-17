@@ -124,7 +124,8 @@ public sealed class OperandCatalogueCoverageTests
     [Fact]
     public void NotBuiltLookup_FindsCodesAndNumberedFamilies()
     {
-        Assert.Equal("OP-88", NotBuiltOperands.Find("nsdd")!.WaitsFor);   // wire-15: the merit function's non-sequential rows
+        Assert.Equal("OP-85", NotBuiltOperands.Find("nslt")!.WaitsFor);   // OP-88 built NSDD; LightningTrace (OP-85) is the probe now
+        Assert.Null(NotBuiltOperands.Find("NSDD"));                       // OP-88
         Assert.Equal("InGT", NotBuiltOperands.Find("I3GT")!.Code);
         Assert.Equal("InVA", NotBuiltOperands.Find("I6VA")!.Code);
         Assert.Null(NotBuiltOperands.Find("I7GT"));   // the help names six points
@@ -137,9 +138,10 @@ public sealed class OperandCatalogueCoverageTests
     public void Describe_NamesRegisteredNotBuiltAndUnknownCodes()
     {
         Assert.StartsWith("Edge thickness value (ETVA):", MeritOperandCatalogue.Describe("etva"));
-        string nsdd = MeritOperandCatalogue.Describe("NSDD");
-        Assert.StartsWith("NSDD (OpticStudio: Non-sequential incoherent detector data", nsdd);
-        Assert.Contains("is not built yet: needs OP-88", nsdd);
+        string nslt = MeritOperandCatalogue.Describe("NSLT");   // OP-88 built NSDD; NSLT waits for OP-85
+        Assert.StartsWith("NSLT (OpticStudio: Non-sequential LightningTrace", nslt);
+        Assert.Contains("is not built yet: needs OP-85", nslt);
+        Assert.StartsWith("Non-sequential incoherent detector data (NSDD):", MeritOperandCatalogue.Describe("NSDD"));
         Assert.Equal("there is no operand 'QQQQ'.", MeritOperandCatalogue.Describe("QQQQ"));
         Assert.Contains("needs OP-28", MeritOperandCatalogue.Unknown("I2LT"));
     }

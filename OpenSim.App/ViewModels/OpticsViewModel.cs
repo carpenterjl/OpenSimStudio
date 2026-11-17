@@ -40,6 +40,7 @@ public partial class OpticsViewModel : ObservableObject
         MeritEditor = new OpticsMeritEditorViewModel(PublishFromLensEditor,
             () => new OpenSim.Optics.Merit.ProjectMeritConfigurations(ToSettings(), BuildLensEditContext().Catalogs),
             currentConfiguration: () => MultiConfig?.CurrentConfiguration ?? 1);   // OP-56: the wizard's current configuration
+        MeritEditor.ResampleNscDetector = (number, x, y) => NonSequentialEditor.SetDetectorPixels(number, x, y);   // OP-88: Bitmap Wizard
         // OP-63: the tolerance data editor; Update validates against the project's record.
         ToleranceEditor = new OpticsToleranceEditorViewModel(PublishFromLensEditor, ToSettings, () => BuildLensEditContext().Catalogs);   // OP-64: catalogs for the tolerance run
         // OP-30: the multi-configuration editor, applied to the entered system.
@@ -126,6 +127,9 @@ public partial class OpticsViewModel : ObservableObject
     private string? ApplyOptimization(OpticsSettings settings, bool table, string description)
     {
         if (settings.Surfaces is { } surfaces && LensEditor.Apply(surfaces, description) is { } refusal) return refusal;
+        // OP-88: variables on non-sequential object cells go back through the Non-Sequential Component Editor.
+        if (settings.NonSequential?.Objects is { } objects && !ReferenceEquals(objects, _nonSequential?.Objects)
+            && NonSequentialEditor.ApplyObjectValues(objects, description) is { } nscRefusal) return nscRefusal;
         if (!table) return null;
         var notes = new List<string>();
         MultiConfig.LoadSettings(settings.MultiConfiguration, notes);

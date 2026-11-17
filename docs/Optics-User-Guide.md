@@ -2183,7 +2183,7 @@ built: see Physical optics propagation; FICL and FICP: see Fiber coupling.)
 
 When you type or load an OpticStudio operand this version does not have, whether from the imaging
 or the constraint half, the message says what it computes and why it is not built, for example
-"NSDD (OpticStudio: Non-sequential incoherent detector data…) is not built yet: needs OP-88". A
+"NSLT (OpticStudio: Non-sequential LightningTrace…) is not built yet: needs OP-85". A
 loaded row with such a code becomes OOFF. The same message answers SETOPERAND in a ZPL macro, and
 OPEV evaluates any operand listed here by its OCOD number. (The Zemax lens file import reads no
 merit rows: it refuses them all, so it never meets an operand code.)
@@ -2586,6 +2586,41 @@ Path Analysis and the Sequence Selector filters (OP-84), diffraction-order filte
 NSRD operand, a Named Filters editor, and the ZRD macro keywords (ZRDPLAYBACK, ZRDFILTER, ZRDSUM,
 ZRDAPPEND, ZRDSAVERAYS, NSTR's save arguments). The readings not yet checked against OpticStudio
 are listed in docs/Optics-Conventions.md §10 item 71.
+
+IES/LDT export, LightningTrace, ray-database playback, image-file output, SETDETECTOR. (The
+merit operands that read detectors are under Illumination optimization.) The readings not yet checked against OpticStudio are listed in
+docs/Optics-Conventions.md §10 item 69.
+
+## Illumination optimization
+
+Optimizing a non-sequential system against what its detectors record
+(docs/Optics-Conventions.md §76).
+
+- **Merit rows** (Merit Function Editor): NSDD with Det# 0 clears every detector; NSTR traces the
+  sources (all, or one) into the detectors, with splitting, polarization and Ignore Errors;
+  NSDD, NSDE, NSDP and NSDC then read the detectors (a pixel, the total, extremes, centroid, RMS
+  size, standard deviation and mean, and normalised flux for bitmap targets). NSRA reads one
+  segment of a single-ray source's ray. NPXV to NTZL, NPVA, NPGT, NPLT and NSRM read and bound
+  object positions, tilts, parameters and rotations. They work in a pure non-sequential project
+  (no sequential surfaces needed). Use Surf 1.
+- **Repeatable merit function**: every evaluation traces with the same random numbers, so the
+  same design always gives the same merit, and nearby designs are compared on the same rays.
+- **Variables on objects**: flag an object's X, Y, Z, tilt or parameter cell Variable in the
+  Non-Sequential Component Editor (the grid's flag editor); the Optimize window then moves it and
+  writes the result back as one undo step. Choose Orthogonal Descent: a ray-traced merit
+  function steps as rays change path, which damped least squares' derivatives cannot follow (its
+  log says so).
+- **NSC wizards** (button in the Merit Function Editor): the Optimization Wizard writes the
+  clear, trace and criterion rows for total flux, uniformity, centroid or RMS size (spatial or
+  angular) on a detector, equal to, above or below a target, with an optional minimum flux; the
+  Bitmap Wizard turns a BMP or PNG picture into per-pixel targets on a Detector Rectangle or
+  Color (and colour targets on a Detector Color), with the total flux you give, scaling the
+  picture to the detector or the detector to the picture. Apply adds rows and keeps the dialog
+  open for more criteria.
+
+Not built: scattering in NSTR, LightningTrace (NSLT), the ray-database rows (NPAF, NSRD), mixed
+mode (NSST), roadway lighting (NSRW, NSTW), FREZ, NSRA phases and fields, solves and pickups on
+object cells, the wizards' saved settings, preview picture and terminate button, JPG pictures.
 
 ## Coming
 

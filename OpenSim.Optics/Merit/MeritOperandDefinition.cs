@@ -95,6 +95,14 @@ public sealed class MeritOperandDefinition
     /// naming why; null for control rows.</summary>
     public Func<MeritRowContext, double>? Compute { get; init; }
 
+    // OP-88
+    /// <summary>True for a non-sequential row (NSTR, NSDD, the object operands...): it reads the
+    /// configuration's non-sequential system (<see cref="IMeritConfigurations.SettingsFor"/>), not
+    /// its sequential lens, so it is evaluated also when the configuration has no sequential
+    /// surfaces (a pure non-sequential system); its context's <see cref="MeritRowContext.Lens"/>
+    /// may then be missing.</summary>
+    public bool NonSequential { get; init; }
+
     /// <summary>The label of Data<paramref name="k"/> (1 to 6), or null when unused.</summary>
     public string? DataLabel(int k) => k >= 1 && k <= Data.Count ? Data[k - 1] : null;
 
@@ -121,14 +129,14 @@ public sealed class MeritRowContext
     private readonly Func<MeritRayRequest, RayPath> _ray;
     private readonly Func<int, ParaxialSystem> _paraxial;
 
-    internal MeritRowContext(MeritOperandRow row, int number, int configuration, SequentialLens lens, OpticalSystemData system,
+    internal MeritRowContext(MeritOperandRow row, int number, int configuration, SequentialLens? lens, OpticalSystemData? system,
         Func<int, double> valueOf, Func<MeritRayRequest, RayPath> ray, Func<int, ParaxialSystem> paraxial)
     {
         Row = row;
         Number = number;
         Configuration = configuration;
-        Lens = lens;
-        System = system;
+        _lens = lens;       // OP-88: null only for a non-sequential row of a configuration without a sequential lens
+        _system = system;
         _valueOf = valueOf;
         _ray = ray;
         _paraxial = paraxial;
@@ -142,9 +150,30 @@ public sealed class MeritRowContext
     /// <summary>The configuration (1 = the first) the row is evaluated in.</summary>
     public int Configuration { get; }
 
-    public SequentialLens Lens { get; }
+    // OP-88: a non-sequential row of a configuration that has no sequential lens has neither.
+    private readonly SequentialLens? _lens;
+    private readonly OpticalSystemData? _system;
 
-    public OpticalSystemData System { get; }
+    public SequentialLens Lens => _lens
+        ?? throw new MeritOperandException($"configuration {Configuration} has no sequential lens to read (it has no sequential surfaces, or they cannot be built).");
+
+    public OpticalSystemData System => _system
+        ?? throw new MeritOperandException($"configuration {Configuration} has no sequential system data to read.");
+
+    // OP-88
+    /// <summary>The whole merit function, for rows that read their neighbours (NSDD Data 3 and
+    /// NSDE Data 14–16 normalise over consecutive rows); null when not supplied.</summary>
+    public MeritFunction? Function { get; internal init; }
+
+    /// <summary>State shared by the rows of one evaluation, in row order (the non-sequential
+    /// detectors NSTR fills and NSDD reads); null when not supplied.</summary>
+    public MeritEvaluationState? State { get; internal init; }
+
+    /// <summary>The evaluation's cancellation.</summary>
+    public CancellationToken Cancellation { get; internal init; }
+
+    /// <summary>The evaluation's thread limit (null: none); results do not depend on it.</summary>
+    public int? MaxDegreeOfParallelism { get; internal init; }
 
     public LensUnit Unit => System.Units.LensUnit;
 
@@ -190,5 +219,29 @@ public sealed class MeritRowContext
         if (wavelength < 1 || wavelength > count)
             throw new MeritOperandException($"{label} {wavelength} is not a wavelength; the system has wavelengths 1 to {count}.");
         return wavelength;
+    }
+}
+
+// OP-88
+/// <summary>
+/// State that lives for one merit function evaluation and is shared by its rows, which run in
+/// row order on one thread (pass 3 of <see cref="MeritEvaluator"/>): the non-sequential
+/// detectors that NSTR rows fill and NSDD rows read and clear. A fresh state is made for every
+/// evaluation, so nothing carries over from one evaluation to the next.
+/// </summary>
+public sealed class MeritEvaluationState
+{
+    private readonly Dictionary<string, object> _items = new(StringComparer.Ordinal);
+
+    /// <summary>The item stored under <paramref name="key"/>, made by <paramref name="create"/> on first use.</summary>
+    public T GetOrAdd<T>(string key, Func<T> create) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(create);
+        if (_items.TryGetValue(key, out var item))
+            return item as T ?? throw new InvalidOperationException($"Merit evaluation state '{key}' holds a {item.GetType().Name}, not a {typeof(T).Name}.");
+        var made = create();
+        _items[key] = made;
+        return made;
     }
 }

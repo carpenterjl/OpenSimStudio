@@ -42,6 +42,23 @@ public static class OpticsNonSequentialEditorSchema
     /// <summary>The flyout key of face <paramref name="face"/>'s coating.</summary>
     public static string CoatingProperty(int face) => $"Face{face}.Coating";
 
+    // OP-88
+    /// <summary>The saved flag column of a sheet slot ("X", "TiltY", "Par3"; <c>NscVariables</c>), or null for a slot that takes no flag.</summary>
+    public static string? FlagColumn(int slot) => slot switch
+    {
+        XSlot => "X", YSlot => "Y", ZSlot => "Z", TiltXSlot => "TiltX", TiltYSlot => "TiltY", TiltZSlot => "TiltZ",
+        >= FirstParameterSlot and < FirstParameterSlot + ParameterSlots => "Par" + (slot - FirstParameterSlot + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        _ => null,
+    };
+
+    /// <summary>The sheet slot of a saved flag column, or null.</summary>
+    public static int? FlagSlot(string? column)
+    {
+        for (int slot = XSlot; slot < FirstParameterSlot + ParameterSlots; slot++)
+            if (FlagColumn(slot) is { } c && c == column) return slot;
+        return null;
+    }
+
     /// <summary>The key of parameter column <paramref name="number"/> (1-based).</summary>
     public static string ParameterKey(int number) => $"Par {number}";
 
@@ -60,12 +77,12 @@ public static class OpticsNonSequentialEditorSchema
             Kind = CellKind.Integer,
             ToolTip = "The volume this object is placed inside: 0 none; positive absolute; negative relative. It must come earlier (help, \"Placing Sources Inside Objects\").",
         },
-        new("X", "X Position") { ToolTip = "Lens units, in the reference object's frame." },
-        new("Y", "Y Position") { ToolTip = "Lens units, in the reference object's frame." },
-        new("Z", "Z Position") { ToolTip = "Lens units, in the reference object's frame." },
-        new("TiltX", "Tilt About X") { ToolTip = "Degrees; about x, then the new y, then the new z, unless the object uses the global XYZ rotation order." },
-        new("TiltY", "Tilt About Y") { ToolTip = "Degrees." },
-        new("TiltZ", "Tilt About Z") { ToolTip = "Degrees." },
+        new("X", "X Position") { ToolTip = "Lens units, in the reference object's frame.", Flags = CellFlagSupport.Variable },   // OP-88: Variable
+        new("Y", "Y Position") { ToolTip = "Lens units, in the reference object's frame.", Flags = CellFlagSupport.Variable },   // OP-88: Variable
+        new("Z", "Z Position") { ToolTip = "Lens units, in the reference object's frame.", Flags = CellFlagSupport.Variable },   // OP-88: Variable
+        new("TiltX", "Tilt About X") { ToolTip = "Degrees; about x, then the new y, then the new z, unless the object uses the global XYZ rotation order.", Flags = CellFlagSupport.Variable },   // OP-88
+        new("TiltY", "Tilt About Y") { ToolTip = "Degrees.", Flags = CellFlagSupport.Variable },   // OP-88
+        new("TiltZ", "Tilt About Z") { ToolTip = "Degrees.", Flags = CellFlagSupport.Variable },   // OP-88
         new("Material", "Material") { Kind = CellKind.Text, ToolTip = "Blank (air), MIRROR, ABSORB, a glass name or an index." },
     };
 
@@ -107,6 +124,7 @@ public static class OpticsNonSequentialEditorSchema
             Default = CellValue.Of(p.Default),
             ResetOnRetype = true,
             ToolTip = p.Description,
+            Flags = p.Kind is NscParameterKind.Integer or NscParameterKind.Flag ? CellFlagSupport.None : CellFlagSupport.Variable,   // OP-88: Variable on object cells
         })).ToArray();
         return new SheetRowType(d.TypeName, columns)
         {

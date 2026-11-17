@@ -245,6 +245,7 @@ public static class MeritEvaluator
 
         // ---- Pass 3: the rows in order. ----
         var results = new MeritRowResult[count];
+        var shared = new MeritEvaluationState();   // OP-88: the non-sequential detectors, for this evaluation only
         for (int n = 1; n <= count; n++)
         {
             cancellation.ThrowIfCancellationRequested();
@@ -265,13 +266,18 @@ public static class MeritEvaluator
             try
             {
                 var state = State(c);
-                if (state.Error is { } error) throw new MeritOperandException(error);
-                var context = new MeritRowContext(row, n, c, state.Lens!, state.System!,
+                // OP-88: a non-sequential row reads the configuration's non-sequential system and runs without a sequential lens.
+                if (state.Error is { } error && !d.NonSequential) throw new MeritOperandException(error);
+                var context = new MeritRowContext(row, n, c, state.Lens, state.System,
                     number => ValueOf(results, number),
                     request => keyIndex.TryGetValue((c, request), out int i)
                         ? traced[i].Path ?? throw new MeritOperandException(traced[i].Error!)
                         : throw new InvalidOperationException($"{at}: its ray was not collected for tracing."),
-                    state.Paraxial) { Catalogs = configurations.Catalogs, Configurations = configurations };   // OP-59: the catalogs for RGLA; OP-55B: the configurations
+                    state.Paraxial)
+                {
+                    Catalogs = configurations.Catalogs, Configurations = configurations,   // OP-59: the catalogs for RGLA; OP-55B: the configurations
+                    Function = function, State = shared, Cancellation = cancellation, MaxDegreeOfParallelism = options.MaxDegreeOfParallelism,   // OP-88
+                };
                 double value = d.Compute!(context);
                 if (!double.IsFinite(value)) throw new MeritOperandException($"the value is {value.ToString(CultureInfo.InvariantCulture)}.");
                 results[n - 1] = new MeritRowResult { Number = n, Row = row, Status = MeritRowStatus.Evaluated, Configuration = c, Value = value };

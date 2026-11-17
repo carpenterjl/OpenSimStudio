@@ -79,6 +79,13 @@ public sealed record OpticsNscObjectSettings
     // OP-77
     /// <summary>A source object's Sources tab (null for a non-source or the defaults).</summary>
     public OpticsNscSourceSettings? Source { get; init; }
+
+    // OP-88
+    /// <summary>Cells flagged for the optimizer (OpticStudio's Variable on object cells), as the
+    /// Lens Data Editor saves its flags: <see cref="OpticsCellFlagSettings.Column"/> "X", "Y", "Z",
+    /// "TiltX", "TiltY", "TiltZ" or "Par1", "Par2", ... and <see cref="OpticsCellFlagSettings.Kind"/>
+    /// "Variable". Null for none. Solves and pickups on object cells are not built.</summary>
+    public List<OpticsCellFlagSettings>? Flags { get; init; }
 }
 
 // OP-77

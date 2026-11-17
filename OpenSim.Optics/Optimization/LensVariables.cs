@@ -34,6 +34,14 @@ public enum LensVariableKind
     ModelAbbe,
     /// <summary>A model glass's ΔP_g,F.</summary>
     ModelPartialDispersion,
+
+    // OP-88: non-sequential object cells (NscVariables).
+    /// <summary>A non-sequential object's X, Y or Z position (lens units).</summary>
+    NscPosition,
+    /// <summary>A non-sequential object's tilt about X, Y or Z (degrees).</summary>
+    NscTilt,
+    /// <summary>A non-sequential object's parameter, in its column's unit.</summary>
+    NscParameter,
 }
 
 /// <summary>One variable cell: a cell of the Lens Data Editor flagged Variable
@@ -52,6 +60,11 @@ public sealed record LensVariable
 
     /// <summary>The multi-configuration cell, or null for a surface cell.</summary>
     public MultiConfigCell? Cell { get; init; }
+
+    // OP-88
+    /// <summary>The non-sequential object (1-based) of an object cell (<see cref="Column"/> "X",
+    /// "TiltY", "Par3", ...); 0 for a surface or multi-configuration cell.</summary>
+    public int NscObject { get; init; }
 
     /// <summary>"Surface 2 curvature", "Configuration 2, operand 1 (THIC)".</summary>
     public required string Label { get; init; }
@@ -99,6 +112,7 @@ public static class LensVariables
                 });
             }
         }
+        NscVariables.Find(optics, variables, problems);   // OP-88: non-sequential object cells, after the surfaces
         var table = optics.MultiConfiguration;
         foreach (var cell in MultiConfiguration.Variables(optics))
         {
@@ -167,6 +181,7 @@ public static class LensVariables
         {
             var v = variables[i];
             if (v.Cell is { } cell) { values[i] = MultiConfiguration.ValueOf(optics, cell); continue; }
+            if (v.NscObject > 0) { values[i] = NscVariables.Value(optics, v); continue; }   // OP-88
             var s = SurfaceAt(optics, v);
             values[i] = v.Kind switch
             {
@@ -200,6 +215,7 @@ public static class LensVariables
             double x = values[i];
             if (!double.IsFinite(x)) throw new ArgumentException($"{v.Label}: the value {x.ToString(CultureInfo.InvariantCulture)} is not finite.", nameof(values));
             if (v.Cell is { } cell) { result = MultiConfiguration.WithValue(result, cell, x); continue; }
+            if (v.NscObject > 0) { result = NscVariables.Apply(result, v, x); continue; }   // OP-88
             // Read the surface from the record as edited so far, so two variables on one surface both apply.
             var s = SurfaceAt(result, v);
             var surfaces = result.Surfaces!.ToList();
@@ -232,6 +248,7 @@ public static class LensVariables
         foreach (var v in variables)
         {
             if (v.Cell is { } cell) { result = MultiConfiguration.WithValue(result, cell, MultiConfiguration.ValueOf(from, cell)); continue; }
+            if (v.NscObject > 0) { result = NscVariables.Copy(from, result, v); continue; }   // OP-88
             var source = SurfaceAt(from, v);
             var s = SurfaceAt(result, v);
             var surfaces = result.Surfaces!.ToList();

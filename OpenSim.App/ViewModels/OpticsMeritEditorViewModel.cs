@@ -267,6 +267,24 @@ public sealed partial class OpticsMeritEditorViewModel : ObservableObject
     /// <summary>A new Optimization Wizard dialog on this editor.</summary>
     public OpticsMeritWizardViewModel CreateWizard() => new(this);
 
+    // OP-88: the non-sequential Optimization and Bitmap Wizards.
+    /// <summary>Sets detector object n's pixel counts for the Bitmap Wizard's Resample Detector
+    /// (the workspace routes it to the Non-Sequential Component Editor); null refuses it.</summary>
+    public Func<int, int, int, string?>? ResampleNscDetector { get; set; }
+
+    /// <summary>A new non-sequential Optimization / Bitmap Wizard dialog on this editor, reading
+    /// the project's objects through the configurations (configuration 1's objects).</summary>
+    public OpticsNscMeritWizardViewModel CreateNscWizard() => new(this, () =>
+    {
+        try
+        {
+            var c = _configurations();
+            IReadOnlyList<OpticsNscObjectSettings> rows = c.SettingsFor(1)?.NonSequential?.Objects ?? new List<OpticsNscObjectSettings>();
+            return (rows, c.Count);
+        }
+        catch (ArgumentException) { return (Array.Empty<OpticsNscObjectSettings>(), 1); }
+    }, ResampleNscDetector);
+
     /// <summary>
     /// Generates the default merit function (<see cref="DefaultMeritWizard.Generate"/>) on the
     /// project's configurations and inserts it at <see cref="DefaultMeritOptions.StartAt"/> (null:

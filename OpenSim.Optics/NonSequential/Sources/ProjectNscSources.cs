@@ -104,7 +104,8 @@ public static class ProjectNscSources
     /// </summary>
     public static NscSourceRunResult Trace(OpticsAnalysisContext context, IReadOnlyList<int>? sources = null, bool split = false,
         bool usePolarization = false, bool ignoreErrors = false, long? seed = null, CancellationToken cancellation = default,
-        RayDatabase.NscRayRecorder? recorder = null)   // OP-83: Save Rays (docs/Optics-Conventions.md §75)
+        RayDatabase.NscRayRecorder? recorder = null,   // OP-83: Save Rays (docs/Optics-Conventions.md §75)
+        int? maxDegreeOfParallelism = null)   // OP-88: the merit evaluator's thread limit (the result does not depend on it)
     {
         ArgumentNullException.ThrowIfNull(context);
         var notes = new List<string>();
@@ -123,6 +124,7 @@ public static class ProjectNscSources
             PrimaryMicrometers = system.Wavelengths.Primary.Micrometers,
         };
         if (seed is long s) baseline = baseline with { Seed = s };
+        if (maxDegreeOfParallelism is int dop) baseline = baseline with { MaxDegreeOfParallelism = dop };   // OP-88
         var settings = ProjectNonSequential.Settings(saved, unit, baseline);
         var run = NscSourceRun.Run(scene, settings, EmitOptions(context, NscEmissionPurpose.Analysis), sources, cancellation, recorder);   // OP-83: recorder
         return notes.Count == 0 ? run : run with { Notes = notes.Concat(run.Notes).ToArray() };

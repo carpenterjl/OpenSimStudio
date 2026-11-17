@@ -236,7 +236,7 @@ public static class LocalOptimizer
         if (options.MaxEvaluations < 1) throw new ArgumentException("The evaluation limit must be at least 1.");
         var variables = LensVariables.Find(optics);
         if (variables.Count == 0)
-            throw new ArgumentException("There are no variables: flag cells Variable in the Lens Data Editor or the Multi-Configuration Editor.");
+            throw new ArgumentException("There are no variables: flag cells Variable in the Lens Data Editor, the Multi-Configuration Editor or the Non-Sequential Component Editor.");   // OP-88: object cells
 
         var token = options.CancellationToken;
         var meritOptions = (options.Merit ?? new MeritEvaluationOptions()) with { MaxDegreeOfParallelism = options.MaxDegreeOfParallelism };
@@ -307,6 +307,10 @@ public static class LocalOptimizer
             + $"{(options.Cycles switch { LocalOptimizationCycles.Fixed => $"{options.CycleCount} cycles", LocalOptimizationCycles.Infinite => "infinite cycles", _ => "automatic cycles" })}, "
             + $"{n} variable{(n == 1 ? "" : "s")}, {rows} rows{(lagrange.Length > 0 ? $" ({lagrange.Length} with negative weight: exact constraints)" : "")}, {configurations} configuration{(configurations == 1 ? "" : "s")}.");
         log.Add($"Merit function before: {Format(startMerit)}.");
+        // OP-88: a merit function that traces non-sequential rays is a Monte Carlo estimate (help, "NSC Operands").
+        if (options.Algorithm == LocalOptimizationAlgorithm.DampedLeastSquares
+            && function.Rows.Any(r => string.Equals(r.Code, "NSTR", StringComparison.OrdinalIgnoreCase)))
+            log.Add("The merit function traces non-sequential rays (NSTR): its value is a Monte Carlo estimate that steps as rays change paths, so finite-difference derivatives are unreliable; Orthogonal Descent does not use them (help, \"NSC Operands\").");
 
         LocalOptimizationStop stop = LocalOptimizationStop.Converged;
         double previousViolation = double.PositiveInfinity;
