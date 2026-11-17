@@ -48,8 +48,12 @@ public static class NscSourceRun
 {
     /// <param name="sources">The source objects to trace (1-based); null for every source in the
     /// scene (ZPL NSTR's "If source is zero, all sources will be traced").</param>
+    /// <param name="recorder">OP-83: when given, every ray tree is saved into it (the Ray Trace
+    /// control's Save Rays), one database run per wavelength with each ray's source object and
+    /// wavelength number (docs/Optics-Conventions.md §75).</param>
     public static NscSourceRunResult Run(NscScene scene, NscTraceSettings settings, NscSourceEmitOptions options,
-        IReadOnlyList<int>? sources = null, CancellationToken cancellation = default)
+        IReadOnlyList<int>? sources = null, CancellationToken cancellation = default,
+        RayDatabase.NscRayRecorder? recorder = null)   // OP-83
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(settings);
@@ -90,7 +94,8 @@ public static class NscSourceRun
             try
             {
                 var tracer = new NscTracer(scene, wavelength, traceSettings);
-                result = tracer.Run(group.Rays, cancellation);
+                recorder?.PrepareRun(group.Objects, WavelengthNumber(options, byWavelength.Keys, wavelength));   // OP-83
+                result = tracer.Run(group.Rays, recorder, cancellation);   // OP-83: recorder null is the plain run
             }
             catch (ArgumentException e)
             {
@@ -113,6 +118,26 @@ public static class NscSourceRun
             Notes = notes,
             Detectors = NscDetectorResults.Combine(runs.Select(r => r.Result)),
         };
+    }
+
+    // OP-83
+    /// <summary>A run's wavelength number for the ray database (the W filter flag): the system
+    /// wavelength row (1-based) whose wavelength equals the run's exactly; otherwise the number
+    /// after the system rows, counting the run wavelengths that are not system wavelengths in
+    /// ascending order.</summary>
+    internal static int WavelengthNumber(NscSourceEmitOptions options, IEnumerable<double> runWavelengths, double wavelength)
+    {
+        var system = options.SystemWavelengths;
+        for (int i = 0; i < system.Count; i++)
+            if (system[i].Micrometers == wavelength) return i + 1;
+        int k = system.Count;
+        foreach (double w in runWavelengths)
+        {
+            if (system.Any(l => l.Micrometers == w)) continue;
+            k++;
+            if (w == wavelength) return k;
+        }
+        return k;
     }
 
     /// <summary>Appends which source and source ray the tracer's "Ray i" is: the tracer numbers

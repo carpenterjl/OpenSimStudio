@@ -51,6 +51,7 @@ public sealed class OpticsSettingsFileTests : IDisposable
         Assert.Equal(2, optics.NonSequential!.Objects![0].Faces!.Count);     // OP-70: the non-sequential objects
         Assert.Equal(2, optics.NonSequential.Objects[0].Source!.SpectrumWeights!.Count);   // OP-77: a source's Sources tab
         Assert.NotNull(optics.NonSequential.Objects[0].Source!.ArrayType);
+        Assert.Equal(2, optics.NonSequential.NamedFilters!.Count);            // OP-83: the named filters
         var project = new SimProject { Name = "Lens", AnalysisType = "Optics", Optics = optics };
         string path = PathFor("lens.ossproj");
 

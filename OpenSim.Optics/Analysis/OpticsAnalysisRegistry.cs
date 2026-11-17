@@ -196,6 +196,9 @@ public sealed class OpticsAnalysisRegistry
 
         // OP-79: the Detector Viewer (saved detector data until OP-77's sources are joined).
         registry.Register(new NonSequential.Detectors.NscDetectorViewerAnalysis());
+
+        // OP-83: the Ray Database Viewer (playback onto detectors is the Detector Viewer's "Playback ZRD").
+        registry.Register(new NonSequential.RayDatabase.NscRayDatabaseViewerAnalysis());
         return registry;
     }
 }

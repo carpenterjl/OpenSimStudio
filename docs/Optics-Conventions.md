@@ -1831,6 +1831,44 @@ single place in the code, so a correction is one line and its test.
     Check: trace a point source onto a Detector Rectangle and a Detector Polar here and in
     OpticStudio, and compare a DDR file saved there with one read here.
 
+71. **Ray database and filter readings** (OP-83, section 75). From the help pages under
+    `plans/sources/optics/op-83-help/` ("The Filter String", "Filter String Examples", "Named
+    Filters", "Ray Database (ZRD) Files", "ZRD Format And Version Numbers", "The ZRD Uncompressed
+    Full Data Format (UFD)"), `op-70-help/Ray_Database_Viewer`, `op-79-help/Playback_ZRD_on_Detector`
+    and the ZRD keyword pages in `op-99-help`; nothing has been compared with OpticStudio's output.
+    - *Branches.* The help says each flag is evaluated "for each ray traced" and that the flags
+      say whether "one segment within a ray" hit, missed, and so on. A ray is read as a branch of
+      the tree (source to one terminating segment, the viewer's "Expand into Branches"): the J
+      flag's description ("segments prior to the ghost reflection point") and Ln ("the last
+      segment of a ray branch") only make sense per branch. A tree passes when any branch passes;
+      a segment passes when it lies on a passing branch.
+    - *Precedence.* The help lists &, |, ^ and ! and says parentheses "may also be used to set
+      operator precedence", but not what the precedence is: mixing &, | and ^ without parentheses
+      is refused. ! applies to the flag or group to its right. Flags are read without regard to
+      case.
+    - *Object 0.* The help gives n = 0 a meaning ("any object") for B, F, G, O, W, X_GHOST and
+      X_SCATTER only; H, M, L, R, T, S, D, E and the other X_ flags refuse 0.
+    - *Ghosts and TIR.* Gn is the G mark (a segment reflected from a refractive face when the ray
+      splits). X_GHOST and X_GHOSTN count G marks plus total internal reflections the branch
+      continues from, as the help says "rays which TIR from refractive surfaces are considered
+      ghosts"; the help's remark on third-generation ghosts ending in TIR is not modelled further.
+    - *Counts.* X_SEGMENTS counts the segments after segment 0; X_HITS counts segments whose hit
+      object is not 0. X_SEQ and the path filters start from the source object; the path filters
+      drop misses and merge consecutive hits on one object, X_SEQ keeps every hit.
+    - *Angles and local data.* X_AXYG/L, X_AXZG/L and X_AYZG/L take the angle of the segment's
+      direction projected on the plane, from the reference axis (+y, +z, +z) "without regard to
+      the direction of propagation": atan2(|other|, |reference|), 0 to 90 degrees. The local x, y,
+      z thresholds are in lens units; the direction cosines are the segment's own (incident)
+      direction in the object's frame.
+    - *{#n}.* Counts ray trees that pass, in database order; it may only lead the whole filter.
+    - *UFD.* The structure the help prints adds up to 232 bytes, the size it states; its worked
+      example's 208 bytes is not used. Segment 0's nx is read as the wavelength in µm (the help
+      gives no unit). Lengths are written and read in the system's lens unit (the file does not
+      say which). Our TIR, which UFD has no bit for, is written as reflected.
+    - *Named filters.* Names are matched without regard to case and may not read as a flag.
+    Check: save a UFD file of a split trace in OpticStudio, read it here and compare the filters'
+    selections branch by branch.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6825,6 +6863,8 @@ Sources as scene objects, and the run over several wavelengths, are in section 7
 
 Detector objects, photometry and the Detector Viewer (OP-79) are in section 73.
 
+The ray database, filter strings and Playback ZRD on Detector (OP-83) are in section 75.
+
 ## 70. CAD export
 
 OP-96 writes a sequential lens's elements, mirrors and rays as files a mechanical designer can
@@ -7266,3 +7306,107 @@ flags 1–9; per-pixel spectra and CRI/CCT; LightningTrace; ray-database playbac
 strings (OP-83); the polar directivity plots and IES/LDT export; grey-scale and inverse colour
 maps, contrast enhancement, image-file output; SETDETECTOR; the
 merit operands that read detectors (OP-88). Readings in §10 item 69.
+
+## 75. Ray database and filter strings
+
+Plan item OP-83 (`OpenSim.Optics/NonSequential/RayDatabase/`). Help pages: "Ray Database (ZRD)
+Files", "ZRD Format And Version Numbers", "The ZRD Uncompressed Full Data Format (UFD)", "The
+Filter String", "Filter String Examples", "Named Filters", "Ray Database Viewer", "Playback ZRD on
+Detector", "Ray Trace" (Save Rays, Filter), "NSC 3D Layout" (Filter, Ray Database) and the ZPL
+pages NSTR, ZRDPLAYBACK, ZRDFILTER, ZRDSUM, ZRDAPPEND, ZRDSAVERAYS. Readings in §10 item 71.
+
+**Recording.** `NscRayRecorder` is handed to `NscTracer.Run(rays, recorder)`,
+`NscSourceRun.Run(..., recorder: r)` or `ProjectNscSources.Trace(..., recorder: r)`. With a
+recorder each 64-ray chunk of `Run` keeps the trees it traces through the same segment path as
+`TraceSingle`, and once the run has succeeded the chunks reach the recorder in chunk order, so the
+database is the same at any thread count; without one `Run` is unchanged. Recording changes
+neither the ledger nor the detector data (the gate test checks both to the bit). Each segment
+(`NscSegment`) carries `DetectorHits`: every `NscDetectorHit` the tracer handed a detector at its
+end, as handed. `NscSourceRun` gives one database run per wavelength (`NscRayDatabaseRun`: the
+wavelength in µm in air, its wavelength number, the rays launched) and each ray its source object.
+The wavelength number is the system wavelength row whose wavelength equals the run's exactly, else
+the next numbers after the system rows in ascending wavelength order. An optional save filter
+keeps only trees with a passing branch (the Ray Trace control's Filter: "Only if the ray tree
+passes the filter will the ray tree be saved"); {#n} counts passing trees over the whole trace.
+
+**Files** (`NscZrdFile`). The format is told by the first 32-bit record: 2003 Uncompressed Full
+Data (UFD), 12003 and 22003 the compressed CBD and CFD (refused by name: the help says they are
+compressed "in a way that makes the file unsuitable for read/write operations outside of
+OpticStudio"), 0x4452534F ("OSRD" in file order) this program's format; anything else is refused
+naming the record.
+- *UFD*, as the help prints it: version 2003; the maximum segments per ray; then per ray a 32-bit
+  segment count and that many 232-byte RAYPATH records (ten int32: status, level, hit_object,
+  hit_face, unused, in_object, parent, storage, xybin, lmbin; 23 doubles: index, starting_phase,
+  x, y, z, l, m, n, nx, ny, nz, path_to, intensity, phase_of, phase_at, exr, exi, eyr, eyi, ezr, ezi,
+  optical_path_w, optical_path_lu; int32 order_x, order_y), little-endian, lengths in lens units.
+  Status bits as the help lists them (1 terminated, 2 reflected, 4 refracted, 8 scattered,
+  16 diffracted, 32 ghost, 64 diffracted from previous, 128 scattered from previous, 256 error,
+  512 bulk scattered); other bits are refused on reading. Segment 0 holds the source object in
+  hit_object, parent 0, the wavelength number in storage and the wavelength (µm) in nx. Written as
+  zero because the trace does not have them: xybin, lmbin, starting_phase, phase_of, phase_at, the
+  electric field (the trace carries coherency matrices), order_x, order_y. optical_path_w is the
+  optical path over the wavelength in the system's air. A UFD file read back has no detector hits.
+- *OpenSim full*, version 1, little-endian: int32 magic, int32 version, int32 run count; per run
+  double wavelength (µm in air), int32 wavelength number, int64 rays launched; then per ray until
+  the end of the file int32 run, int64 ray number, int32 source object, int32 segment count; per
+  segment int32 parent, level, inside, hit, face, event flags (`NscEvents`), doubles position (3),
+  direction (3), normal (3), intensity, path length, optical path, index (meters), int32 hit count;
+  per hit int32 object, doubles local point (3), local direction (3), power, optical path, medium
+  index, byte ghost, byte has-polarization and then the 3 × 3 coherency matrix as 9 (real,
+  imaginary) pairs, row-major. Every field is kept to the bit; the tracer's sentence (Fate) is not.
+- `Subset` keeps the rays in a first/last range that pass a filter, each with the segments on its
+  passing branches renumbered in order with their parents (ZRDFILTER, the viewer's Save Subset
+  Data As). `Join` appends a database's runs and rays to another's (ZRDSUM, ZRDAPPEND).
+
+**Filter strings** (`NscRayFilter.Parse(text, named)`). Flags joined by & (and), | (or),
+^ (exclusive or), ! (not) and parentheses; mixing &, | and ^ without parentheses is refused. A
+leading {#n} or {#n1-n2} keeps the first n, or the n1-th to n2-th, passing trees. Each flag is
+evaluated on one branch; `NscRayFilter.Not(f)` passes exactly the branches f does not, so a filter
+and its complement partition every tree's branches. Built (n.f: object n, face f; .f optional):
+Hn.f hit, Mn.f missed (no segment hit), Ln.f the branch's last segment hit, Rn.f reflected,
+Tn.f transmitted, Sn.f scattered, Dn.f diffracted (at the segment's end on object n), Gn.f ghost,
+Fn.f scattered and En.f diffracted from the parent's object (G and F with n = 0: any object),
+Bn bulk scattered inside object n (0: any), On source object (0: any), Wn wavelength number
+(0: any), Z error, the path filters ~nnn…[#] and $nn…[#], and X_HIT, X_HITS, X_HITFACE,
+X_HITFACE2, X_SEGMENTS, X_GHOST, X_GHOSTN, X_TIR, X_SCATTER, X_SCATTERF, X_NDIF, X_IAGT, X_IALT,
+X_IRGT, X_IRLT, X_WAVERANGE, X_SEQ (without diffraction orders) and, with the scene's placements
+(`NscRayFilterFrame`), X_XGT/LT, X_YGT/LT, X_ZGT/LT (lens units), X_LGT/LT, X_MGT/LT, X_NGT/LT
+and X_AXYG/L, X_AXZG/L, X_AYZG/L (degrees). The S and F marks are set by scattering (OP-80); D, E
+(OP-82) and B (OP-81) are parsed and read from the segment flags, which nothing sets yet. Refused
+by name: Jn.f (its detector-only zeroing), _n and {@n} (Path Analysis, OP-84), SEQ[a:b] (Sequence
+Selector, OP-84), X_DIFF and orders in X_SEQ (OP-82), X_EXT and X_ORD (birefringence), X_WAVESHIFT
+(OP-81). The help's 260-character limit is not imposed.
+
+**Named filters** (`NscNamedFilters`; saved as `OpticsNonSequentialSettings.NamedFilters`, one
+"filtername; filterstring" line each). A name is letters, digits and underscores, matched without
+regard to case, and may not read as a flag; a named filter may use others, a cycle is refused.
+The expanded filter (`NscRayFilter.Expanded`) writes each one out in parentheses.
+
+**Playback ZRD on Detector** (`NscRayPlayback.Play(database, scene, filter, detector)`; the
+Detector Viewer's "Playback ZRD" and "Playback filter" settings). The recorded hits of the
+segments that pass are handed to fresh detector accumulators of the scene, repeating the trace's
+reduction: per run in database order, rays grouped into the tracer's 64-ray chunks by ray number,
+each ray closed (`EndRay`), the chunks added in chunk order, each run built with its launched-ray
+count and the runs combined in order. A whole database played back unfiltered therefore gives the
+traced detectors to the bit. A hit on an object that is not a detector of the scene is refused
+(the database must come from the scene it is played onto). UFD files are refused: they lack the
+hits in each detector's frame.
+
+**Ray Database Viewer** (`NscRayDatabaseViewerAnalysis`, id `NscRayDatabaseViewer`). A ZRD file
+(UFD or OpenSim), or with no file the project's sources traced now (Split, Use Polarization,
+Ignore Errors; optionally saved with Save Rays As, Save Filter and ZRD Format). Lists the rays in
+the First/Last range (Last −1: the whole file, no listing) that pass the filter (Apply Filter):
+Seg#, Prnt, Levl, In, Hit (segment 0: the source object), Face, the letters XRTS DGEF BZI,
+optionally XYZ, LMN, Normal and Path (optical path in waves and lens units, Path To), intensity and
+the tracer's sentence. Show Unprocessed Data off lists only passing segments; Expand into Branches
+lists each branch. Save Subset Data As writes the passing rays of the range. File paths are full
+paths (the help's "no path, the lens file's folder" needs a lens folder this build does not have
+for analyses).
+
+**Not built:** layout filters and drawing rays from a database (no NSC layout drawing exists);
+Save Rays on Object and saving rays as source files (DAT, SDF, TM25RAY); the CBD and CFD formats;
+playback of UFD files; PAF files and Path Analysis (OP-84); the J flag; diffraction orders,
+xybin/lmbin, phase and electric field in the files; the merit operand NSRD; a Named Filters editor
+in the app (the list is saved in the project file); the ZPL keywords ZRDPLAYBACK, ZRDFILTER,
+ZRDSUM, ZRDAPPEND, ZRDSAVERAYS and NSTR's save arguments are not bound yet (the library calls they
+need exist).

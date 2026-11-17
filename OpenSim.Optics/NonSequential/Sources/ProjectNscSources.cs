@@ -103,7 +103,8 @@ public static class ProjectNscSources
     /// sources.
     /// </summary>
     public static NscSourceRunResult Trace(OpticsAnalysisContext context, IReadOnlyList<int>? sources = null, bool split = false,
-        bool usePolarization = false, bool ignoreErrors = false, long? seed = null, CancellationToken cancellation = default)
+        bool usePolarization = false, bool ignoreErrors = false, long? seed = null, CancellationToken cancellation = default,
+        RayDatabase.NscRayRecorder? recorder = null)   // OP-83: Save Rays (docs/Optics-Conventions.md §75)
     {
         ArgumentNullException.ThrowIfNull(context);
         var notes = new List<string>();
@@ -123,7 +124,7 @@ public static class ProjectNscSources
         };
         if (seed is long s) baseline = baseline with { Seed = s };
         var settings = ProjectNonSequential.Settings(saved, unit, baseline);
-        var run = NscSourceRun.Run(scene, settings, EmitOptions(context, NscEmissionPurpose.Analysis), sources, cancellation);
+        var run = NscSourceRun.Run(scene, settings, EmitOptions(context, NscEmissionPurpose.Analysis), sources, cancellation, recorder);   // OP-83: recorder
         return notes.Count == 0 ? run : run with { Notes = notes.Concat(run.Notes).ToArray() };
     }
 

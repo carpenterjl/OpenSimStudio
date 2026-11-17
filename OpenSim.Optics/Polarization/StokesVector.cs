@@ -111,6 +111,16 @@ public sealed class CoherencyMatrix
     /// <summary>tr Φ, the power.</summary>
     public double Power => _m[0].Real + _m[4].Real + _m[8].Real;
 
+    // OP-83
+    /// <summary>The matrix of nine elements in row-major order, as read back from a ray database
+    /// file (the elements are taken as they are, to the bit).</summary>
+    public static CoherencyMatrix FromElements(IReadOnlyList<Complex> rowMajor)
+    {
+        ArgumentNullException.ThrowIfNull(rowMajor);
+        if (rowMajor.Count != 9) throw new ArgumentException($"A coherency matrix has 9 elements; {rowMajor.Count} were given.");
+        return new CoherencyMatrix(rowMajor.ToArray());
+    }
+
     /// <summary>E E^H.</summary>
     public static CoherencyMatrix FromField(RayField e)
     {

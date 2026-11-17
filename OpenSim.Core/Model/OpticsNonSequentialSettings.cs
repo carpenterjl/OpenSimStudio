@@ -25,6 +25,11 @@ public sealed record OpticsNonSequentialSettings
 
     /// <summary>The material outside every object: blank (air), a glass name or an index.</summary>
     public string? BackgroundMaterial { get; init; }
+
+    // OP-83
+    /// <summary>OpticStudio's named filters (System Explorer, "Named Filters"): one
+    /// "filtername; filterstring" line each, usable wherever a filter string is.</summary>
+    public List<string>? NamedFilters { get; init; }
 }
 
 /// <summary>One saved object row.</summary>

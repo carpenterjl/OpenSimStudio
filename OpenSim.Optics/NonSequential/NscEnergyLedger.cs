@@ -204,6 +204,13 @@ public sealed record NscSegment
     public NscEvents Events { get; set; }
     /// <summary>A plain sentence of what happened at the end ("refracted into object 2", "escaped").</summary>
     public string Fate { get; set; } = "";
+
+    // OP-83
+    /// <summary>What the segment left on detector objects at its end, each hit exactly as the
+    /// tracer handed it to the detector (several when detectors touch other objects there); null
+    /// for none. The ray database keeps these so a saved trace replays onto the detectors to the
+    /// bit (docs/Optics-Conventions.md §75).</summary>
+    public IReadOnlyList<global::OpenSim.Optics.NonSequential.Detectors.NscDetectorHit>? DetectorHits { get; set; }
 }
 
 /// <summary>One launched ray's whole tree: its segments in the order traced, its ledger and its

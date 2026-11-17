@@ -197,7 +197,19 @@ public sealed class NscTracer
     /// first trace error (by ray number) throws <see cref="InvalidOperationException"/> naming the
     /// ray, segment, object and cause.
     /// </summary>
-    public NscRunResult Run(IReadOnlyList<NscLaunchRay> rays, CancellationToken cancellation = default)
+    public NscRunResult Run(IReadOnlyList<NscLaunchRay> rays, CancellationToken cancellation = default) =>
+        Run(rays, null, cancellation);
+
+    // OP-83
+    /// <summary>
+    /// <see cref="Run(IReadOnlyList{NscLaunchRay}, CancellationToken)"/> that also records every
+    /// segment of every ray tree into <paramref name="recorder"/> (the ray database,
+    /// docs/Optics-Conventions.md §75): each chunk keeps its trees through the same segment path
+    /// as <see cref="TraceSingle"/>, and the chunks reach the recorder in chunk order after the
+    /// run succeeds, so the database is the same at any thread count. Recording changes nothing
+    /// else: the ledger and the detector data are the same to the bit with or without it.
+    /// </summary>
+    public NscRunResult Run(IReadOnlyList<NscLaunchRay> rays, RayDatabase.NscRayRecorder? recorder, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(rays);
         for (int i = 0; i < rays.Count; i++) CheckLaunch(rays[i], i);
@@ -209,18 +221,21 @@ public sealed class NscTracer
             var errors = new List<string>();
             var work = new Workspace();
             var detectors = NscDetectorSet.For(_objects, AirMicrometers);   // OP-79: per-chunk detector sums
+            var trees = recorder is null ? null : new List<(long, List<NscSegment>)>();   // OP-83
             int end = Math.Min(rays.Count, (c + 1) * RaysPerChunk);
             for (int i = c * RaysPerChunk; i < end; i++)
             {
-                TraceTree(rays[i], i, ledger, null, errors, work, detectors);
+                var segments = trees is null ? null : new List<NscSegment>();   // OP-83
+                TraceTree(rays[i], i, ledger, segments, errors, work, detectors);
                 detectors?.EndRay();
+                trees?.Add((i, segments!));   // OP-83
             }
-            return (ledger, errors, detectors);
+            return (ledger, errors, detectors, trees);
         }, cancellation);
         var total = new NscLedgerBuilder();
         var allErrors = new List<string>();
         var allDetectors = NscDetectorSet.For(_objects, AirMicrometers);    // OP-79: chunks added in chunk order
-        foreach (var (ledger, errors, detectors) in parts)
+        foreach (var (ledger, errors, detectors, _) in parts)
         {
             total.Add(ledger);
             if (detectors is not null) allDetectors!.Add(detectors);
@@ -230,6 +245,13 @@ public sealed class NscTracer
         if (!Settings.IgnoreErrors && allErrors.Count > 0)
             throw new InvalidOperationException(
                 $"Non-sequential ray trace error (turn Ignore Errors on to count such rays as lost energy and go on): {allErrors[0]}");
+        if (recorder is not null)   // OP-83: the trees in chunk order, once the run has succeeded
+        {
+            recorder.BeginRun(AirMicrometers, rays.Count);
+            foreach (var (_, _, _, trees) in parts)
+                foreach (var (number, segments) in trees!)
+                    recorder.Add(number, segments);
+        }
         var built = total.Build();
         return new NscRunResult { Ledger = built, Errors = allErrors, Notes = Notes(), Detectors = allDetectors?.Build(built.Rays) };
     }
@@ -516,9 +538,11 @@ public sealed class NscTracer
             {
                 if (_objects[h.Object].Geometry is not INscDetector) continue;
                 detectorHere = true;
-                detectors?.Record(h.Object, new NscDetectorHit(h.Object + 1, rayNumber, h.LocalPoint,
+                var detectorHit = new NscDetectorHit(h.Object + 1, rayNumber, h.LocalPoint,
                     _global[h.Object].InverseApplyDirection(r.Direction), intensity, r.Optical + medium.Index * h.T,
-                    medium.Index, AirMicrometers, phi, r.Ghost));
+                    medium.Index, AirMicrometers, phi, r.Ghost);
+                detectors?.Record(h.Object, detectorHit);
+                if (seg is not null) seg.DetectorHits = RayDatabase.NscRayRecorder.Append(seg.DetectorHits, detectorHit);   // OP-83
             }
 
             var spawnScale = Math.Abs(hit.Point.X) + Math.Abs(hit.Point.Y) + Math.Abs(hit.Point.Z) + length;

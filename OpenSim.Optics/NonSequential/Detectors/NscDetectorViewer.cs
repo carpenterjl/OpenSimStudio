@@ -85,6 +85,13 @@ public sealed record NscDetectorViewerSettings
 
     [DisplayName("Photometric"), Description("Lumens instead of watts: illuminance, luminous intensity and luminance (683·V(λ) per watt).")]
     public bool Photometric { get; init; }
+
+    // OP-83: Playback ZRD on Detector (docs/Optics-Conventions.md §75)
+    [DisplayName("Playback ZRD"), Description("The full path of a ray database (OpenSim format) traced with this system: its saved rays are played back onto the detector instead of tracing (Playback ZRD on Detector).")]
+    public string PlaybackZrd { get; init; } = "";
+
+    [DisplayName("Playback filter"), Description("With a playback ZRD: only segments that pass this filter string (or named filter) reach the detector.")]
+    public string PlaybackFilter { get; init; } = "";
 }
 
 /// <summary>
@@ -600,6 +607,8 @@ public sealed class NscDetectorViewerAnalysis : OpticsAnalysis<NscDetectorViewer
                 result.Assumptions.Concat(notes).Prepend($"Data read from {Path.GetFileName(settings.File)}.").ToArray(), result.Plots);
         }
 
+        if (!string.IsNullOrWhiteSpace(settings.PlaybackZrd))   // OP-83
+            return RayDatabase.NscRayPlaybackViewer.Show(context, settings, Name, unit, notes);
         var scene = ProjectNonSequential.Scene(context, unit)
             ?? throw new ArgumentException($"{Name}: the system has no non-sequential objects; add sources and a detector, or give a detector data file (.DDR, .DDC or .DDP).");
         var detectors = Enumerable.Range(1, scene.Objects.Count).Where(i => scene.Objects[i - 1].Geometry is INscDetector).ToArray();

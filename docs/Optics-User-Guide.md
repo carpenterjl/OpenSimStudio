@@ -2542,10 +2542,50 @@ lists it as detected.
 
 Not built: Detector Surface, Detector Volume and objects as detectors (refused by name), PSF mode,
 polarization-filtered detector data, per-pixel spectra, CRI and CCT, the polar directivity plots,
-IES/LDT export, LightningTrace, ray-database playback, image-file output. SETDETECTOR, and
+IES/LDT export, LightningTrace, image-file output (ray-database playback: see Ray databases and filter strings). SETDETECTOR, and
 the merit operands NSTR, NSDD, NSDE, NSDP and NSDC (the merit function evaluates sequential
 lenses; plan item OP-88). The readings not yet checked against OpticStudio are listed in
 docs/Optics-Conventions.md §10 item 69.
+
+## Ray databases and filter strings
+
+Saving every segment of every ray and asking questions afterwards (docs/Optics-Conventions.md §75).
+
+- **Ray database viewer** (analysis group "Non-sequential", also `optics analyse` with id
+  `NscRayDatabaseViewer`): reads a ZRD file, or with no file traces the project's sources (Split,
+  Use Polarization, Ignore Errors) and can save that trace (Save Rays As, Save Filter, ZRD Format).
+  It lists the rays in the First/Last range segment by segment: segment, parent, level, the object
+  the segment runs in, the object and face it hits, the event letters XRTS DGEF BZI, and on request
+  the position, direction, normal and optical path. Apply Filter keeps the rays and segments a
+  filter string passes; Expand into Branches lists each path from the source to a ray's end; Save
+  Subset Data As writes the passing rays as a new ZRD file. File names are full paths.
+- **ZRD files**: OpticStudio's Uncompressed Full Data format (UFD), written and read, for other
+  programs; and this program's own full-data format, which keeps every number to the bit and the
+  hits on detectors, so a saved trace can be played back. The compressed CBD and CFD formats are
+  refused.
+- **Filter strings**: OpticStudio's flags (H hit, M missed, L hit last, R reflected,
+  T transmitted, S scattered, D diffracted, G ghost, F and E scattered and diffracted from the
+  previous object, B bulk scattered, O source, W wavelength, Z error), the path filters ~ and $,
+  most X_ flags (hit counts, ghost and scatter counts, TIR, intensity, wavelength range, sequences,
+  local coordinates, direction cosines and angles), {#n} ray ranges, and & | ^ ! with parentheses.
+  Mixing &, | and ^ needs parentheses, as OpticStudio's help does not say which comes first. A
+  filter is tested on each branch of a ray (one path from the source to a termination). Scattering,
+  diffraction and bulk scatter flags select nothing until those physics are built.
+- **Named filters**: "name; filter" lines in the project's non-sequential settings
+  (`NamedFilters`); the name can stand wherever a filter string goes.
+- **Playback ZRD on Detector**: the Detector Viewer's Playback ZRD setting replays a saved trace
+  (this program's format) onto the system's detectors instead of tracing, optionally through a
+  filter (Playback filter). An unfiltered playback gives exactly the traced detector.
+- **Library API**: `NscRayRecorder` with `NscTracer.Run`, `NscSourceRun.Run` or
+  `ProjectNscSources.Trace`; `NscZrdFile` (read, write, subset, join); `NscRayFilter`,
+  `NscNamedFilters`; `NscRayPlayback.Play`.
+
+Not built: layout filters and drawing rays from a database (there is no non-sequential layout
+drawing yet), saving rays as source files (DAT, SDF, TM25RAY), playback of UFD files, the J flag,
+Path Analysis and the Sequence Selector filters (OP-84), diffraction-order filters (OP-82), the
+NSRD operand, a Named Filters editor, and the ZRD macro keywords (ZRDPLAYBACK, ZRDFILTER, ZRDSUM,
+ZRDAPPEND, ZRDSAVERAYS, NSTR's save arguments). The readings not yet checked against OpticStudio
+are listed in docs/Optics-Conventions.md §10 item 71.
 
 ## Coming
 
