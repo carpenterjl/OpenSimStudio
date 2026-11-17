@@ -97,6 +97,7 @@ public sealed class NscSingleRayTraceAnalysis : OpticsAnalysis<NscSingleRayTrace
             Environment = system.Environment,
             Coatings = CoatingCatalogSettings.FromSettings(context.System.Coatings, notes),
             PrimaryMicrometers = system.Wavelengths.Primary.Micrometers,
+            SystemWavelengths = system.Wavelengths.Wavelengths.Select(w => w.Micrometers).ToArray(),   // wave 17 (OP-81): wavelength shifts number them
         });
         var tracer = new NscTracer(scene, micrometers, traceSettings);
         cancellation.ThrowIfCancellationRequested();
@@ -113,7 +114,10 @@ public sealed class NscSingleRayTraceAnalysis : OpticsAnalysis<NscSingleRayTrace
             start = placement.Apply(start);
             direction = placement.ApplyDirection(direction);
         }
-        var tree = tracer.TraceSingle(new NscLaunchRay { Position = start, Direction = direction, InsideOf = settings.InsideOf });
+        // Wave 17 (OP-81): the source default, Bulk Scatter Many; volume events run whatever Scatter NSC
+        // Ray says (the help ties that box to "the scatter properties of the interface"), as in the
+        // source trace; the random choices use the trace seed and ray number 0.
+        var tree = tracer.TraceSingle(new NscLaunchRay { Position = start, Direction = direction, InsideOf = settings.InsideOf, BulkScatter = Sources.NscSourceBulkScatter.Many });
 
         string u = ParaxialReport.UnitName(unit);
         string Len(double meters) => StudyReport.Number(OpticsConventions.FromMeters(meters, unit), "g10");

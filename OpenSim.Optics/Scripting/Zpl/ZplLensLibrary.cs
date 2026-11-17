@@ -1235,7 +1235,7 @@ public static partial class ZplLibrary
         NotBound("SETDETECTOR", "Not bound: setting one pixel's data by hand is not built (NSTR, LOADDETECTOR and the NSDD family are).");
         NotBound("GETNSCMTF", "Not bound: the geometric MTF on a Detector Rectangle is not built (the non-sequential image-quality analyses are plan item OP-87).");
         NotBound("MAKEFACETLIST", "Not bound: imported CAD parts are plan item OP-75.");
-        NotBound("NSLT", "Not bound: Lightning Trace is plan item OP-85.");
+        // wire-17: NSLT is bound in ZplNscTraceLibrary.cs (OP-85's LightningTrace).
         NotBound("RELOADOBJECTS", "Not bound: objects read from files (polygon objects, CAD parts) are plan items OP-74 and OP-75; OP-70's objects are parametric, so there is nothing to reload.");
         // wire-16: ZRDPLAYBACK, ZRDFILTER, ZRDSUM and ZRDAPPEND are bound in ZplNscTraceLibrary.cs (OP-83's ray database).
         NotBound("ZRDSAVERAYS", "Not bound: it writes the rays that strike an object to a source file (DAT or SDF), and writing source files is not built (OP-83's ray database is; Conventions §75).");

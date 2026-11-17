@@ -2428,8 +2428,8 @@ and one analysis; the editor, the sources and the detectors follow in their own 
 NSDE, NSDP and NSDC read them (see Detectors and the detector viewer).
 
 Not built: the rest of the object library (OP-72 to OP-75), User Defined scattering and scatter
-profiles (the other scatter models are built: see Surface scattering), volume physics (OP-81),
-diffraction, gradient index and coating plots in objects (OP-82), Consider/Ignore Objects, mixed mode with ports, a layout of traced
+profiles (the other scatter models are built: see Surface scattering; volume physics is under
+Volume scattering and fluorescence), diffraction, gradient index and coating plots in objects (OP-82), Consider/Ignore Objects, mixed mode with ports, a layout of traced
 non-sequential rays. The readings not yet checked against OpticStudio are
 listed in docs/Optics-Conventions.md §10 item 65.
 
@@ -2483,8 +2483,9 @@ the number of rays, and an array of sources multiplies the power.
 - Units: the system's source unit. Watts and joules are traced as stated. Lumens are converted to
   watts with the CIE photopic luminous efficiency V(λ) and 683 lm/W.
 - Sources tab: random polarization or a Jones vector, pre-propagation, reverse rays, Sobol or
-  random sampling, and rectangular, circular or hexapolar arrays. Initial phase, coherence length
-  and bulk scatter are saved but have no effect yet.
+  random sampling, and rectangular, circular or hexapolar arrays. Bulk scatter (Many, Once,
+  Never) limits volume events (see Volume scattering and fluorescence). Initial phase and
+  coherence length are saved but have no effect yet.
 - Inside Of: a source inside a glass object must name it, as OpticStudio requires; a ray that
   starts inside an object its source does not name stops the run with a message naming the
   source and the ray.
@@ -2616,8 +2617,9 @@ Saving every segment of every ray and asking questions afterwards (docs/Optics-C
   most X_ flags (hit counts, ghost and scatter counts, TIR, intensity, wavelength range, sequences,
   local coordinates, direction cosines and angles), {#n} ray ranges, and & | ^ ! with parentheses.
   Mixing &, | and ^ needs parentheses, as OpticStudio's help does not say which comes first. A
-  filter is tested on each branch of a ray (one path from the source to a termination). Scattering,
-  diffraction and bulk scatter flags select nothing until those physics are built.
+  filter is tested on each branch of a ray (one path from the source to a termination). The
+  scattering flags (S, F) and the bulk scatter flag (B) select surface and volume scattering;
+  the diffraction flags (D, E) select nothing until diffraction is built.
 - **Named filters**: "name; filter" lines in the project's non-sequential settings
   (`NamedFilters`); the name can stand wherever a filter string goes.
 - **Playback ZRD on Detector**: the Detector Viewer's Playback ZRD setting replays a saved trace
@@ -2628,7 +2630,8 @@ Saving every segment of every ray and asking questions afterwards (docs/Optics-C
   format; the compressed 1 and 2 are refused); ZRDPLAYBACK replays a file in this program's
   format onto the detectors (optionally filtered, optionally clearing them first); ZRDFILTER
   writes the filtered subset of a file; ZRDSUM joins two files into a third and ZRDAPPEND
-  appends one file to another.
+  appends one file to another. The project's named filters, path filters (_1, _2, ...) and
+  sequences work in these filters too.
 - **Library API**: `NscRayRecorder` with `NscTracer.Run`, `NscSourceRun.Run` or
   `ProjectNscSources.Trace`; `NscZrdFile` (read, write, subset, join); `NscRayFilter`,
   `NscNamedFilters`; `NscRayPlayback.Play`.
@@ -2668,7 +2671,7 @@ Optimizing a non-sequential system against what its detectors record
   open for more criteria. Scatter Rays turns surface scattering on in the trace row (NSTR's
   Scat?).
 
-Not built: bulk scattering, the file-naming rows NPAF and NSRD (a merit
+Not built: the file-naming rows NPAF and NSRD (a merit
 row has no text cell for a file name), mixed
 mode (NSST), roadway lighting (NSRW, NSTW), FREZ, NSRA phases and fields, solves and pickups on
 object cells, the wizards' saved settings, preview picture and terminate button, JPG pictures.
@@ -2699,9 +2702,54 @@ glass material only.
   bins), and ray databases record it; the filter `X_WAVESHIFT(i,j)` finds rays shifted from
   wavelength i to j. The trace report's ledger lists what photoluminescence lost, what it
   re-emitted, and the number of volume events.
+- The NSC single ray trace shows volume events (letter B). LightningTrace and the Critical Ray
+  Tracer pass through volume physics without events (they use no scattering), and reverse
+  radiance refuses a scene with volume physics, naming the object.
+- **Macros**: SETNSCPROPERTY and NPRO codes 81 (model: 0 none, 1 Angle Scattering, 2 DLL
+  Defined Scattering), 82 (mean path), 83 (angle), 84 (DLL name), 85 (DLL parameter, numbered by
+  the face argument from 1) and 86 (wavelength shift string). Phosphors and Fluorescence has no
+  code in the help and is set in the editor.
 
 Not built: other bulk-scatter DLLs, the Mie threshold, excitation (.ZEX) files, absorbing Mie
 particles, polarization-dependent scattering.
+
+## Stray-light tools
+
+Finding where unwanted light comes from (docs/Optics-Conventions.md §78). All are analyses in the
+group "Non-sequential" (also `optics analyse` with their ids).
+
+- **Path analysis** (`NscPathAnalysis`): reads a ZRD file, or traces the project's sources, and
+  groups the ray branches by the sequence of object faces they met ("1.0, 2.1, 2.2, 4.0": source 1,
+  object 2 face 1, ...), with each path's flux, its share of the launched flux and its branch count,
+  sorted as you choose. Faint branches (Relative Minimum Flux) go to an uncategorized sum. Set
+  Detector to a detector object to rank the paths by the flux they deliver to that detector: the
+  paths then add up to the detector's total. Generate Path Filters lists the filters _1, _2, ...
+  Scattering inside an object (volume physics) is not a step of a path: only face hits are.
+- **Path filters and sequences**: in the Non-Sequential Component Editor, under "Path filters and
+  sequences", Generate path filters runs Path Analysis and saves its paths as _1, _2, ...;
+  Generate sequences adds sequences (SEQ1, SEQ2, ...) from the straight-through path of each
+  source, from the path filters, or from a ZRD file; the boxes edit both lists ("name; sequence"
+  per line). Anywhere a filter string goes, _3 selects path 3, a sequence's name selects its path
+  and SEQ[1:5] selects sequences 1 to 5.
+- **Sequence selector** (`NscSequenceSelector`): lists the saved sequences and what a generation
+  method would add.
+- **Critical rayset generator** (`NscCriticalRaysetGenerator`): from the sequential lens, writes a
+  CRS file of chief and marginal rays, fans, a ring or a grid, for each field and wavelength, with
+  where each ray must end on the image. It needs ray aiming and a Float By Stop Size, object NA or
+  object cone angle aperture.
+- **Critical ray tracer** (`NscCriticalRayTracer`): traces a CRS file's rays through the
+  non-sequential objects and marks each pass or FAIL by whether it ends at its target within the
+  position and angle tolerances; useful after adding baffles or mounts to a converted lens.
+- **Reverse radiance** (`NscReverseRadiance`): estimates one detector pixel's flux by tracing rays
+  backwards from the pixel to the sources, with its standard error, and (by default) the forward
+  trace's value beside it. It works with Source Ellipse and Source Rectangle in the cosine mode.
+
+Not built: PAF path files (and so the NPAF operand and NSTR's savepaths), drawing a path or
+sequence on a layout, diffraction orders in paths, the generator's List pattern, reading a CRS
+file as a Source File, OpticStudio's ReverseRadiance detector and target objects (its help has no
+page for them), and surface or volume scattering in the backward trace (reverse radiance refuses a
+scene with volume physics). The readings not yet checked against
+OpticStudio are listed in docs/Optics-Conventions.md §10 item 74.
 
 ## Fast illumination solve (LightningTrace)
 
@@ -2727,6 +2775,10 @@ Monte Carlo rays (docs/Optics-Conventions.md §79).
   LightningTrace (Src#, Ray Samp 0–5, Edge Samp 0–4), and the NSDD, NSDE and NSDP rows after it
   read them; RT? 1 traces conventionally instead (NSTR with splitting, scattering and polarization
   off). The NSC wizards' Use LightningTrace writes an NSLT row instead of NSTR.
+- **Macros**: NSLT surf, source, ray_sampling (0–5), edge_sampling (0–4) runs the same trace and
+  adds its detector data to what the detectors hold, as NSTR does.
+- Mesh rays cross objects with volume physics without scattering (the report says which objects),
+  so the result leaves volume scattering and fluorescence out.
 - **Source illumination map** (analysis, Non-sequential): the true-colour illumination pattern of
   up to 8 of the project's sources on a screen at the origin facing +z, each source's far field
   only (the other objects are left out); screen half widths and pixel counts as in OpticStudio.
@@ -2735,45 +2787,8 @@ Monte Carlo rays (docs/Optics-Conventions.md §79).
 
 Not built: OpticStudio's automatic mesh refinement around small objects (an object smaller than a
 mesh cell can be missed), LightningTrace on Detector Polar and angular data, spectral detail per
-mesh ray, source files in the Source Illumination Map, drawing the mesh in a layout, and the ZPL
-keyword NSLT. The readings not yet checked against OpticStudio are in docs/Optics-Conventions.md
+mesh ray, source files in the Source Illumination Map, and drawing the mesh in a layout. The readings not yet checked against OpticStudio are in docs/Optics-Conventions.md
 §10 item 75.
-
-## Stray-light tools
-
-Finding where unwanted light comes from (docs/Optics-Conventions.md §78). All are analyses in the
-group "Non-sequential" (also `optics analyse` with their ids).
-
-- **Path analysis** (`NscPathAnalysis`): reads a ZRD file, or traces the project's sources, and
-  groups the ray branches by the sequence of object faces they met ("1.0, 2.1, 2.2, 4.0": source 1,
-  object 2 face 1, ...), with each path's flux, its share of the launched flux and its branch count,
-  sorted as you choose. Faint branches (Relative Minimum Flux) go to an uncategorized sum. Set
-  Detector to a detector object to rank the paths by the flux they deliver to that detector: the
-  paths then add up to the detector's total. Generate Path Filters lists the filters _1, _2, ...
-- **Path filters and sequences**: in the Non-Sequential Component Editor, under "Path filters and
-  sequences", Generate path filters runs Path Analysis and saves its paths as _1, _2, ...;
-  Generate sequences adds sequences (SEQ1, SEQ2, ...) from the straight-through path of each
-  source, from the path filters, or from a ZRD file; the boxes edit both lists ("name; sequence"
-  per line). Anywhere a filter string goes, _3 selects path 3, a sequence's name selects its path
-  and SEQ[1:5] selects sequences 1 to 5.
-- **Sequence selector** (`NscSequenceSelector`): lists the saved sequences and what a generation
-  method would add.
-- **Critical rayset generator** (`NscCriticalRaysetGenerator`): from the sequential lens, writes a
-  CRS file of chief and marginal rays, fans, a ring or a grid, for each field and wavelength, with
-  where each ray must end on the image. It needs ray aiming and a Float By Stop Size, object NA or
-  object cone angle aperture.
-- **Critical ray tracer** (`NscCriticalRayTracer`): traces a CRS file's rays through the
-  non-sequential objects and marks each pass or FAIL by whether it ends at its target within the
-  position and angle tolerances; useful after adding baffles or mounts to a converted lens.
-- **Reverse radiance** (`NscReverseRadiance`): estimates one detector pixel's flux by tracing rays
-  backwards from the pixel to the sources, with its standard error, and (by default) the forward
-  trace's value beside it. It works with Source Ellipse and Source Rectangle in the cosine mode.
-
-Not built: PAF path files (and so the NPAF operand and NSTR's savepaths), drawing a path or
-sequence on a layout, diffraction orders in paths, the generator's List pattern, reading a CRS
-file as a Source File, OpticStudio's ReverseRadiance detector and target objects (its help has no
-page for them), and scattering in the backward trace. The readings not yet checked against
-OpticStudio are listed in docs/Optics-Conventions.md §10 item 74.
 
 ## Coming
 

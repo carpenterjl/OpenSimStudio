@@ -379,7 +379,7 @@ public static class NscZrdFile
                 w.Write(0.0);                                // phase_of: no phase objects
                 w.Write(0.0);                                // phase_at: not computed
                 for (int i = 0; i < 6; i++) w.Write(0.0);    // exr .. ezi: the trace carries coherency matrices, not fields
-                w.Write(s.OpticalPath / waveMeters);         // optical_path_w (waves in the system's air)
+                w.Write(s.OpticalPath / (s.AirMicrometers is double su ? OpticsConventions.MicrometersToMeters(su) : waveMeters));   // optical_path_w: waves in air at the segment's own wavelength (wave 17, OP-81)
                 w.Write(L(s.OpticalPath));                   // optical_path_lu
                 w.Write(0);                                  // order_x
                 w.Write(0);                                  // order_y

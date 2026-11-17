@@ -277,6 +277,7 @@ public static class NscCriticalRayTracer
         var traceSettings = settings with
         {
             Splitting = NscSplitting.None, UsePolarization = false, ScatterRays = false, IgnoreErrors = true,
+            SystemWavelengths = settings.SystemWavelengths ?? systemWavelengths.ToArray(),   // wave 17: wavelength shifts are checked against them
         };
         var normal = rayset.TargetRotation.ApplyDirection(Vector3D.UnitZ);
         double size = SceneSize(scene);
@@ -313,7 +314,12 @@ public static class NscCriticalRayTracer
                 NscRayTree tree;
                 try
                 {
-                    tree = tracer.TraceSingle(new NscLaunchRay { Position = ray.Start, Direction = ray.StartDirection, Intensity = ray.Intensity > 0 ? ray.Intensity : 1 }, i);
+                    // Wave 17 (OP-81): "scattering [is] not used", so no volume events either: Bulk Scatter Never.
+                    tree = tracer.TraceSingle(new NscLaunchRay
+                    {
+                        Position = ray.Start, Direction = ray.StartDirection, Intensity = ray.Intensity > 0 ? ray.Intensity : 1,
+                        BulkScatter = Sources.NscSourceBulkScatter.Never, FixedWavelength = true,
+                    }, i);
                 }
                 catch (ArgumentException e)
                 {
@@ -420,7 +426,7 @@ public sealed class NscCriticalRayTracerAnalysis : OpticsAnalysis<NscCriticalRay
         var outcomes = NscCriticalRayTracer.Trace(scene, trace, rayset, system.Wavelengths.Wavelengths.Select(w => w.Micrometers).ToArray(),
             OpticsConventions.ToMeters(settings.PositionTolerance, unit), settings.AngleTolerance, cancellation);
         return OpticsAnalysisResult.FromSections(Name, Report(outcomes, settings, unit, rayset), notes.Append(
-            "Errors are ignored; polarization, splitting and scattering are not used (help, \"Critical Ray Tracer\"). The target is an absorbing plane through each target point with the file's tilts.").ToArray());
+            "Errors are ignored; polarization, splitting and scattering (surface and volume) are not used (help, \"Critical Ray Tracer\"). The target is an absorbing plane through each target point with the file's tilts.").ToArray());
     }
 
     public static IReadOnlyList<ReportSection> Report(IReadOnlyList<NscCriticalRayOutcome> outcomes, NscCriticalRayTracerSettings s, LensUnit unit,

@@ -3,6 +3,7 @@ using System.Globalization;
 using OpenSim.Core.Numerics;
 using OpenSim.Optics.NonSequential.Detectors;
 using OpenSim.Optics.NonSequential.Sources;
+using OpenSim.Optics.NonSequential.Volume;   // wave 17
 using OpenSim.Optics.Photometry;
 
 namespace OpenSim.Optics.NonSequential.Lightning;
@@ -149,6 +150,9 @@ public static class NscLightningTrace
         if (trace.UsePolarization)
             notes.Add("Polarization (and with it Fresnel and coating losses and bulk absorption) is off for the mesh rays: \"Polarization effects are also not accounted for in tracing the mesh rays\" (help).");
         var traceSettings = trace with { UsePolarization = false, Splitting = NscSplitting.None, ScatterRays = false };
+        // Wave 17 join (OP-81): the tracer checks wavelength shifts against the system wavelengths
+        // even though mesh rays never undergo volume events (launch rays carry Bulk Scatter Never).
+        traceSettings = traceSettings with { SystemWavelengths = traceSettings.SystemWavelengths ?? options.SystemWavelengths.Select(l => l.Micrometers).ToArray() };
         if (settings.MaxDegreeOfParallelism is int dop) traceSettings = traceSettings with { MaxDegreeOfParallelism = dop };
 
         var placements = scene.GlobalPlacements();
@@ -166,6 +170,10 @@ public static class NscLightningTrace
             if (scene.Objects[i].Geometry is NscFlatDetector f) grids[i] = new Grid(f);
         if (scene.Objects.Any(o => o.FaceProperties?.Values.Any(face => face.Scatter is not null) == true))
             notes.Add("Some faces scatter; mesh rays follow the specular path only, so the result leaves the scattered light out (\"LightningTrace will not be accurate for systems containing diffusers\"; help).");
+        // Wave 17 join (OP-81): volume scattering and photoluminescence are scattering too; the help's
+        // "Mesh rays may only follow the specular ray path" means mesh rays pass volumes unscattered.
+        if (scene.Objects.Select((o, i) => (o, i)).Where(x => x.o.VolumePhysics is { Model: not NscVolumeModel.None }).Select(x => $"{x.i + 1} ({x.o.Geometry.TypeName})").ToList() is { Count: > 0 } volumes)
+            notes.Add($"Object{(volumes.Count > 1 ? "s" : "")} {string.Join(", ", volumes)} {(volumes.Count > 1 ? "have" : "has")} volume physics; mesh rays are launched with Bulk Scatter Never and follow the specular path only (\"splitting and scattering of these rays is not supported\"; help), so the result leaves volume scattering, absorption by volume events and wavelength conversion out.");
 
         var tracers = new Dictionary<double, NscTracer>();
         var summaries = new List<NscLightningSourceSummary>();
@@ -370,7 +378,7 @@ public static class NscLightningTrace
         var p = e.Chart.Center + e.Offset;
         if (e.PrePropagation != 0) p += d * e.PrePropagation;
         if (e.Reverse) d = -d;
-        var launch = new NscLaunchRay { Position = e.Transform.Apply(p), Direction = e.Transform.ApplyDirection(d), Intensity = 1, InsideOf = e.InsideOf };
+        var launch = new NscLaunchRay { Position = e.Transform.Apply(p), Direction = e.Transform.ApplyDirection(d), Intensity = 1, InsideOf = e.InsideOf, BulkScatter = NscSourceBulkScatter.Never, FixedWavelength = true };   // wave 17: deterministic, no volume events
         var tree = e.Tracer.TraceSingle(launch);
         chunk.Rays++;
         var node = new Node { Error = tree.Errors.Count > 0 };

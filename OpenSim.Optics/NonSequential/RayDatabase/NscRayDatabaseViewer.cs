@@ -228,7 +228,7 @@ public sealed class NscRayDatabaseViewerAnalysis : OpticsAnalysis<NscRayDatabase
                         if (s.Lmn) row.AddRange(new[] { Num(sg.Direction.X), Num(sg.Direction.Y), Num(sg.Direction.Z) });
                         if (s.Normal) row.AddRange(sg.Number == 0 || sg.Hit == 0 ? new[] { "—", "—", "—" } : new[] { Num(sg.Normal.X), Num(sg.Normal.Y), Num(sg.Normal.Z) });
                         row.Add(Num(sg.Intensity));
-                        if (s.Path) row.AddRange(new[] { Num(sg.OpticalPath / waveMeters), Len(sg.OpticalPath), Len(sg.PathLength) });
+                        if (s.Path) row.AddRange(new[] { Num(sg.OpticalPath / (sg.AirMicrometers is double su ? OpticsConventions.MicrometersToMeters(su) : waveMeters)), Len(sg.OpticalPath), Len(sg.PathLength) });   // wave 17 (OP-81): waves at the segment's own wavelength
                         row.Add(sg.Number == 0 ? $"source object {ray.SourceObject}, wavelength {db.Runs[ray.Run].WavelengthNumber}" : sg.Fate);
                         rows.Add(row);
                     }

@@ -46,7 +46,7 @@ public static class NscSourceStandIn
             double sinT = Math.Sqrt(Math.Max(0, 1 - cosT * cosT));
             double phi = 2 * Math.PI * b;
             var d = w * cosT + u * (sinT * Math.Cos(phi)) + v * (sinT * Math.Sin(phi));
-            list[k] = new NscLaunchRay { Position = position, Direction = d, Intensity = power / rays, InsideOf = insideOf };
+            list[k] = new NscLaunchRay { Position = position, Direction = d, Intensity = power / rays, InsideOf = insideOf, BulkScatter = Sources.NscSourceBulkScatter.Many };   // wave 17: the source default
         }
         return list;
     }
@@ -70,7 +70,7 @@ public static class NscSourceStandIn
             var (a, b) = sample(k);
             double r = radius * Math.Sqrt(a), phi = 2 * Math.PI * b;
             var p = center + u * (r * Math.Cos(phi)) + v * (r * Math.Sin(phi));
-            list[k] = new NscLaunchRay { Position = p, Direction = w, Intensity = power / rays, InsideOf = insideOf };
+            list[k] = new NscLaunchRay { Position = p, Direction = w, Intensity = power / rays, InsideOf = insideOf, BulkScatter = Sources.NscSourceBulkScatter.Many };   // wave 17: the source default
         }
         return list;
     }

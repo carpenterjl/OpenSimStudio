@@ -87,6 +87,10 @@ public static class NscReverseRadiance
         const string who = "Reverse radiance";
         if (settings.ScatterRays)
             throw new NotSupportedException($"{who}: scattering in the backward trace is not built (importance sampling and Scatter To lists are not reciprocal); trace with scattering off.");
+        // Wave 17 (OP-81): volume events are not reciprocal in this estimator either; refuse up front,
+        // by name, rather than only when a backward ray happens to scatter.
+        if (scene.Objects.Select((o, i) => (o, i)).Where(x => x.o.VolumePhysics is { Model: not Volume.NscVolumeModel.None }).Select(x => $"{x.i + 1} ({x.o.Geometry.TypeName})").ToList() is { Count: > 0 } volumes)
+            throw new NotSupportedException($"{who}: object{(volumes.Count > 1 ? "s" : "")} {string.Join(", ", volumes)} {(volumes.Count > 1 ? "have" : "has")} volume physics; volume scattering and photoluminescence in the backward trace are not built. Set the Volume Physics model to None or use the forward trace.");
         if (options.Rays < 2) throw new ArgumentException($"{who}: at least 2 backward rays are needed for an error estimate (it is {options.Rays}).");
         int n = scene.Objects.Count;
         if (options.Detector < 1 || options.Detector > n || scene.Objects[options.Detector - 1].Geometry is not NscFlatDetector det)
@@ -131,7 +135,7 @@ public static class NscReverseRadiance
                 var local = new Vector3D(sn * Math.Cos(phi), sn * Math.Sin(phi), side * c);
                 var d = detPlacement.ApplyDirection(local);
                 var p = detPlacement.Apply(new Vector3D(x, y, 0)) + d * offset;
-                rays[k] = new NscLaunchRay { Position = p, Direction = d, Intensity = 1, InsideOf = inside };
+                rays[k] = new NscLaunchRay { Position = p, Direction = d, Intensity = 1, InsideOf = inside, BulkScatter = NscSourceBulkScatter.Many };   // wave 17: deliberate; volume physics is refused above, and any B segment is refused below
             }
             var tracer = new NscTracer(scene, wave, settings with { Seed = unchecked((long)SplitMix64.ForStream(settings.Seed, -1L - g).Next()) });
             var alpha = new double[n];

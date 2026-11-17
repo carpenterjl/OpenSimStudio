@@ -189,7 +189,8 @@ internal sealed class NscLedgerBuilder
 /// reflection, Z error; G marks a ghost (reflected from a refractive interface at its start).
 /// S scattered, D diffracted and B bulk scattered happen at the end of the segment; F and E mark a
 /// segment scattered or diffracted from its parent's hit object, at its start. The tracer sets
-/// S and F once scattering (OP-80) is built; D, E (OP-82) and B (OP-81) are not set yet.</summary>
+/// S and F for surface scattering (OP-80) and B at a volume event (bulk scatter or
+/// photoluminescence, OP-81); D and E (diffraction, OP-82) are not set yet.</summary>
 [Flags]
 public enum NscEvents
 {

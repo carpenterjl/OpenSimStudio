@@ -107,8 +107,8 @@ public sealed partial class ZplConformanceTests
         Near(nonZero.Average(), r[12]);                         // Pix# −5: the mean of the non-zero pixels
 
         string Fails(string macro) => Assert.Throws<ZplException>(() => Run(macro, PointOnRectangle())).Message;
-        // wire-16: scatter and save are built (ZplConformanceTests.RayDatabase.cs); PAF files are not.
-        Assert.Contains("OP-84", Fails("NSTR2 1, 0, 0, 0, 0, 0, 7, 0, \"\", \"\", 0, 1, \"a.PAF\""));
+        // wire-16: scatter and save are built (ZplConformanceTests.RayDatabase.cs); PAF files are not (wire-17: still refused, by name).
+        Assert.Contains("PAF path files are not built", Fails("NSTR2 1, 0, 0, 0, 0, 0, 7, 0, \"\", \"\", 0, 1, \"a.PAF\""));
         Assert.Contains("OP-86", Fails("NSTR 2, 0, 0, 0, 0, 0, 7"));
         Assert.Contains("Bitmap", Fails("x = NSDD(1, 2, 0, 3)"));
         Assert.Contains("NSDE reads Detector Color", Fails("x = NSDE(1, 2, 0, 0, 1, 0)"));

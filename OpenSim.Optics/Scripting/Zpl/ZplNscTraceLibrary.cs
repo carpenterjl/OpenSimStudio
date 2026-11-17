@@ -1,6 +1,7 @@
 using OpenSim.Optics.Analysis;
 using OpenSim.Optics.NonSequential;
 using OpenSim.Optics.NonSequential.Detectors;
+using OpenSim.Optics.NonSequential.Lightning;   // wire-17
 using OpenSim.Optics.NonSequential.RayDatabase;
 using OpenSim.Optics.NonSequential.Sources;
 
@@ -18,6 +19,9 @@ namespace OpenSim.Optics.Scripting.Zpl;
 // wire-16: NSTR's scatter flag reaches OP-80's surface scattering and its save arguments OP-83's
 // recorder and ZRD files; ZRDPLAYBACK, ZRDFILTER, ZRDSUM and ZRDAPPEND follow their help pages
 // (op-99-help/) onto OP-83's NscZrdFile.Read/Subset/Join/Write and NscRayPlayback.Play (§75).
+// wire-17: NSLT onto OP-85's ProjectNscLightning.Trace (§79); the filters of NSTR's save,
+// ZRDPLAYBACK and ZRDFILTER come through NscRayDatabaseProject.Filter, so OP-84's path filters _n
+// and saved sequences work from macros (§78).
 
 public static partial class ZplLibrary
 {
@@ -75,7 +79,7 @@ public static partial class ZplLibrary
         bool ignoreErrors = a.Num(m, 5, "ignore_errors") != 0;
         int seed = a.Int(m, 6, $"{who}: the random seed");
         if (paths && a.Has(11) && a.Num(m, 11, "savepaths") != 0)
-            throw new ZplRuntimeException($"{who}: savepaths is on; PAF path files are not built (Path Analysis is plan item OP-84).");
+            throw new ZplRuntimeException($"{who}: savepaths is on; PAF path files are not built (Path Analysis runs on a saved ray database instead: NSTR's save arguments, then the Path Analysis analysis).");
         var context = NscContext(m);
         // wire-16: save, savefilename, filter and zrd_format (OP-83's recorder and ZRD files).
         var save = a.Has(7) && a.Num(m, 7, "save") != 0 ? NscSaveTarget(m, a, who, context) : null;
@@ -306,8 +310,27 @@ public static partial class ZplLibrary
     private static void RegisterNscTrace()
     {
         RegisterNscRayDatabase();   // wire-16
-        Kw("NSTR", "Traces the system's sources (source 0: all; surface 1) through OP-77's runner with the analysis ray counts, splitting, scattering (OP-80's surface scattering; bulk scattering, OP-81, is not built), polarization (on whenever splitting is), Ignore Errors and the seed (0: one drawn from the macro's RAND generator); the detector data is added to what each detector holds (clear it with NSDD(1, 0, 0, 0)). With save on, the ray trees that pass the filter string or named filter are written to savefilename (.ZRD, in the lens file's folder) in zrd_format 0 (uncompressed full data, also when omitted) or 3 (this program's full data, which ZRDPLAYBACK replays); 1 and 2 (compressed) and source files (DAT, SDF, TM25RAY) are refused by name.", (m, a) => NscTrace(m, a, "NSTR", paths: false));
-        Kw("NSTR2", "As NSTR, with NSTR2's arguments; savepaths (PAF files, Path Analysis: OP-84) is refused by name.", (m, a) => NscTrace(m, a, "NSTR2", paths: true));
+        Kw("NSTR", "Traces the system's sources (source 0: all; surface 1) through OP-77's runner with the analysis ray counts, splitting, scattering (OP-80's surface scattering; volume physics, OP-81, runs by each source's Bulk Scatter whatever the flag says), polarization (on whenever splitting is), Ignore Errors and the seed (0: one drawn from the macro's RAND generator); the detector data is added to what each detector holds (clear it with NSDD(1, 0, 0, 0)). With save on, the ray trees that pass the filter string or named filter are written to savefilename (.ZRD, in the lens file's folder) in zrd_format 0 (uncompressed full data, also when omitted) or 3 (this program's full data, which ZRDPLAYBACK replays); 1 and 2 (compressed) and source files (DAT, SDF, TM25RAY) are refused by name.", (m, a) => NscTrace(m, a, "NSTR", paths: false));
+        Kw("NSTR2", "As NSTR, with NSTR2's arguments; savepaths is refused by name (PAF path files are not built; Path Analysis itself is, OP-84).", (m, a) => NscTrace(m, a, "NSTR2", paths: true));
+        // wire-17: NSLT (help, op-99-help/NSLT) onto OP-85's ProjectNscLightning.Trace.
+        Kw("NSLT", "Runs a LightningTrace (OP-85) of the system's sources (surface 1; source 0: all) with ray_sampling 0 (Low, 1X) to 5 (1024X) and edge_sampling 0 to 4 (256X); the detector data is added to what each detector holds, as NSTR's is (clear it with NSDD(1, 0, 0, 0)). Splitting, scattering and polarization are not used (help, \"Lightning Trace\"); LOST still reads the last NSTR trace.", (m, a) =>
+        {
+            const string who = "NSLT";
+            a.Exactly(4, who);
+            NscSurface(a.Num(m, 0, "the surface"), who);
+            int source = a.Int(m, 1, $"{who}: the source");
+            if (source < 0) throw new ZplRuntimeException($"{who}: the source is {source}; it must be 0 (every source) or a source object's number.");
+            int ray = a.Int(m, 2, $"{who}: ray_sampling");
+            if (ray < 0 || ray > NscLightningSettings.MaxLevel)
+                throw new ZplRuntimeException($"{who}: ray_sampling is {ray}; \"valid values being between 0 ... and 5\" (help, NSLT).");
+            int edge = a.Int(m, 3, $"{who}: edge_sampling");
+            if (edge < 0 || edge > 4)
+                throw new ZplRuntimeException($"{who}: edge_sampling is {edge}; \"valid values being between 0 ... and 4\" (help, NSLT).");
+            NscLightningResult result;
+            try { result = ProjectNscLightning.Trace(NscContext(m), ray, edge, source == 0 ? null : new[] { source }, cancellation: m.Session.CancellationToken); }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or NotSupportedException) { throw NscFailed(e, who); }
+            NscKeep(m, result.Detectors, who);
+        });
         Kw("SAVEDETECTOR", "Writes the data on a detector object (surface 1) to a DDR, DDC or DDP file (OP-79's format, Conventions §73); a name without a folder is in the lens file's folder.", (m, a) =>
         {
             a.Exactly(3, "SAVEDETECTOR");

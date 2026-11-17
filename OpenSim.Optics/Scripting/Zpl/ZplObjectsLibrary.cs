@@ -257,7 +257,7 @@ public static partial class ZplLibrary
     }
 
     /// <summary>SETNSCPROPERTY's codes that the saved objects hold.</summary>
-    private const string NscPropertyCodesNote = "0 type (the help's NSC_ codes of the built types: NSC_SPHE, NSC_RECT, NSC_SLEN, the sources and NSC_DETE, NSC_DETC, NSC_DETP), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 20 \"Use Pixel Interpolation\" (Detector Rectangle and Color), 29 \"Face Is\" (0 Object Default, 1 Reflective, 2 Absorbing); on source objects the Sources tab: 101 random polarization, 102 reverse rays, 103 Jones x, 104 Jones y, 105 phase x, 106 phase y, 107 initial phase (degrees), 108 coherence length, 109 pre-propagation (lens units), 110 sampling (0 random, 1 Sobol), 111 bulk scatter (0 many, 1 once, 2 never), 112 array mode (0 none, 1 rectangular, 2 circular, 3 hexapolar, 4 hexagonal), 114 spectrum steps, 115 start and 116 end wavelength (µm), 161 and 162 the array integers, 165 and 166 the array sizes; " + ScatterCodesNote;
+    private const string NscPropertyCodesNote = "0 type (the help's NSC_ codes of the built types: NSC_SPHE, NSC_RECT, NSC_SLEN, the sources and NSC_DETE, NSC_DETC, NSC_DETP), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 20 \"Use Pixel Interpolation\" (Detector Rectangle and Color), 29 \"Face Is\" (0 Object Default, 1 Reflective, 2 Absorbing); on source objects the Sources tab: 101 random polarization, 102 reverse rays, 103 Jones x, 104 Jones y, 105 phase x, 106 phase y, 107 initial phase (degrees), 108 coherence length, 109 pre-propagation (lens units), 110 sampling (0 random, 1 Sobol), 111 bulk scatter (0 many, 1 once, 2 never), 112 array mode (0 none, 1 rectangular, 2 circular, 3 hexapolar, 4 hexagonal), 114 spectrum steps, 115 start and 116 end wavelength (µm), 161 and 162 the array integers, 165 and 166 the array sizes; on refractive volumes the Volume Physics tab (wire-17, OP-81): 81 model (0 none, 1 Angle Scattering, 2 DLL Defined Scattering; Phosphors and Fluorescence has no number in the help and is refused), 82 mean path (lens units), 83 angle (degrees), 84 DLL name (text), 85 DLL parameter (the face argument numbers it, from 1), 86 wavelength shift string (text); " + ScatterCodesNote;
 
     private static ZplRuntimeException NscPropertyNotBound(int code, string who)
     {
@@ -268,7 +268,6 @@ public static partial class ZplLibrary
             >= 21 and <= 28 => "user defined scattering loads a scatter DLL, and no DLLs are loaded",   // wire-16
             13 or 14 => "user defined apertures on objects are plan item OP-72",
             16 or 18 or 19 or 30 => "Consider Objects, Ignore Objects and \"Rays Ignore This Object\" are not built (Conventions §69)",
-            >= 81 and <= 86 => "volume physics is plan item OP-81",
             >= 91 and <= 96 or >= 121 and <= 124 => "diffraction and gradient index in objects are plan item OP-82",
             113 => "the source colour mode is numbered by the dialog's list, which the help does not print",
             117 => "this build saves a source spectrum as a table, not a spectrum file name (spectrum files are plan item OP-78)",
@@ -377,6 +376,92 @@ public static partial class ZplLibrary
         return o with { Source = s };
     }
 
+    // wire-17: the Volume Physics tab (SETNSCPROPERTY codes 81–86 as the help lists them) on
+    // OP-81's saved OpticsNscVolumePhysicsSettings.
+
+    private static bool IsVolumeCode(int code) => code is >= 81 and <= 86;
+
+    private static readonly string[] VolumeModelCodes = { "None", "Angle Scattering", "DLL Defined Scattering" };
+
+    private static int VolumeParameterIndex(double face, string who)
+    {
+        int i = Int(face, $"{who}: the DLL parameter number (the face argument)");
+        if (i < 1) throw new ZplRuntimeException($"{who}: code 85 numbers the DLL parameter with the face argument, \"The first parameter is 1\" (help, SETNSCPROPERTY); it is {i}.");
+        return i;
+    }
+
+    /// <summary>NPRO's codes 81–86: numbers, or a string in $BUFFER() with 0 returned.</summary>
+    private static ZplValue VolumeProperty(ZplInterpreter m, OpticsNscObjectSettings o, int number, int code, double face)
+    {
+        const string who = "NPRO";
+        var v = o.VolumePhysics;
+        ZplValue Text(string t) { m.Session.Buffer = t; return N(0); }
+        switch (code)
+        {
+            case 81:
+            {
+                string model = (v?.Model ?? "").Trim();
+                if (model.Length == 0) return N(0);
+                int i = Array.FindIndex(VolumeModelCodes, n => string.Equals(n, model, StringComparison.OrdinalIgnoreCase));
+                if (i >= 0) return N(i);
+                throw new ZplRuntimeException($"{who}: object {number}'s Volume Physics model is '{model}'; code 81 numbers only 0 (No Bulk Scattering), 1 (Angle Scattering) and 2 (DLL Defined Scattering) (help, SETNSCPROPERTY).");
+            }
+            case 82: return N(v?.MeanPath ?? 0);
+            case 83: return N(v?.Angle ?? 0);
+            case 84: return Text(v?.Dll ?? "");
+            case 85:
+            {
+                int i = VolumeParameterIndex(face, who);
+                var list = v?.DllParameters;
+                return N(list is not null && i <= list.Count ? list[i - 1] : 0);
+            }
+            default: return Text(v?.WavelengthShift ?? "");
+        }
+    }
+
+    private static OpticsNscObjectSettings WithVolumeProperty(OpticsNscObjectSettings o, int code, double face, ZplValue value)
+    {
+        const string who = "SETNSCPROPERTY";
+        var v = o.VolumePhysics ?? new OpticsNscVolumePhysicsSettings();
+        double Number(string what) => value.IsString ? throw new ZplRuntimeException($"{who}: {what} must be a number, not \"{value.Text}\".") : value.Number;
+        string Text() => value.IsString ? value.Text! : ZplInterpreter.Num(value.Number);
+        switch (code)
+        {
+            case 81:
+            {
+                int i = Int(Number("the Volume Physics model"), $"{who}: the Volume Physics model");
+                if (i < 0 || i >= VolumeModelCodes.Length)
+                    throw new ZplRuntimeException($"{who}: the Volume Physics model is {i}; \"Use 0 for 'No Bulk Scattering', 1 for 'Angle Scattering', and 2 for 'DLL Defined Scattering'\" (help, SETNSCPROPERTY). Phosphors and Fluorescence has no code.");
+                v = v with { Model = VolumeModelCodes[i] };
+                break;
+            }
+            case 82: v = v with { MeanPath = Number("the mean free path") }; break;
+            case 83: v = v with { Angle = Number("the angle") }; break;
+            case 84: { string t = Text().Trim(); v = v with { Dll = t.Length == 0 ? null : t }; break; }
+            case 85:
+            {
+                int i = VolumeParameterIndex(face, who);
+                var list = new List<double>(v.DllParameters ?? new List<double>());
+                while (list.Count < i) list.Add(0);
+                list[i - 1] = Number("the DLL parameter");
+                v = v with { DllParameters = list };
+                break;
+            }
+            default:
+            {
+                string t = Text().Trim();
+                if (t.Length > 0)
+                {
+                    try { OpenSim.Optics.NonSequential.Volume.NscWavelengthShift.Parse(t); }
+                    catch (FormatException e) { throw new ZplRuntimeException($"{who}: the wavelength shift string \"{t}\": {e.Message}"); }
+                }
+                v = v with { WavelengthShift = t.Length == 0 ? null : t };
+                break;
+            }
+        }
+        return o with { VolumePhysics = v };
+    }
+
     private static void RegisterNonSequentialObjects()
     {
         Fn("NOBJ", 1, 1, "The number of non-sequential objects; the surface must be 1 (the system's objects, as in non-sequential mode; mixed mode is OP-86).", (m, v) =>
@@ -419,6 +504,7 @@ public static partial class ZplLibrary
                 case 20: DetectorFlat(o, number, "NPRO"); return N(o.DetectorPixelInterpolation == true ? 1 : 0);   // wire-15
                 case var c when ScatterFaceCodes.Contains(c) || ScatterToCodes.Contains(c): return ScatterProperty(m, o, number, c, Num(v, 3, "the face"));   // wire-16
                 case var c when SourceCodes.Contains(c): return N(SourceProperty(o, number, c, "NPRO"));   // wire-15
+                case var c when IsVolumeCode(c): return VolumeProperty(m, o, number, c, Num(v, 3, "the face"));   // wire-17
                 case 29:
                 {
                     int f = NscFace(o, number, Num(v, 3, "the face"), "NPRO");
@@ -518,6 +604,9 @@ public static partial class ZplLibrary
                     break;
                 case var c when SourceCodes.Contains(c):   // wire-15
                     changed = WithSourceProperty(o, number, c, value.IsString ? throw new ZplRuntimeException($"SETNSCPROPERTY: code {c} takes a number, not \"{value.Text}\".") : value.Number);
+                    break;
+                case var c when IsVolumeCode(c):   // wire-17
+                    changed = WithVolumeProperty(o, c, a.Num(m, 3, "the face"), value);
                     break;
                 case 29:
                 {

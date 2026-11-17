@@ -309,8 +309,9 @@ public static class LocalOptimizer
         log.Add($"Merit function before: {Format(startMerit)}.");
         // OP-88: a merit function that traces non-sequential rays is a Monte Carlo estimate (help, "NSC Operands").
         if (options.Algorithm == LocalOptimizationAlgorithm.DampedLeastSquares
-            && function.Rows.Any(r => string.Equals(r.Code, "NSTR", StringComparison.OrdinalIgnoreCase)))
-            log.Add("The merit function traces non-sequential rays (NSTR): its value is a Monte Carlo estimate that steps as rays change paths, so finite-difference derivatives are unreliable; Orthogonal Descent does not use them (help, \"NSC Operands\").");
+            && function.Rows.Any(r => string.Equals(r.Code, "NSTR", StringComparison.OrdinalIgnoreCase)
+                || (string.Equals(r.Code, "NSLT", StringComparison.OrdinalIgnoreCase) && r.DataAt(3) == 1)))   // wire-17: NSLT with RT? 1 traces conventionally
+            log.Add("The merit function traces non-sequential rays (NSTR, or NSLT with RT? 1): its value is a Monte Carlo estimate that steps as rays change paths, so finite-difference derivatives are unreliable; Orthogonal Descent does not use them (help, \"NSC Operands\").");
 
         LocalOptimizationStop stop = LocalOptimizationStop.Converged;
         double previousViolation = double.PositiveInfinity;
