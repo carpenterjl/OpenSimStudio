@@ -155,10 +155,14 @@ public sealed class MeritRowContext
     private readonly OpticalSystemData? _system;
 
     public SequentialLens Lens => _lens
-        ?? throw new MeritOperandException($"configuration {Configuration} has no sequential lens to read (it has no sequential surfaces, or they cannot be built).");
+        ?? throw new MeritOperandException(LensError ?? $"configuration {Configuration} has no sequential lens to read (it has no sequential surfaces, or they cannot be built).");
 
     public OpticalSystemData System => _system
-        ?? throw new MeritOperandException($"configuration {Configuration} has no sequential system data to read.");
+        ?? throw new MeritOperandException(LensError ?? $"configuration {Configuration} has no sequential system data to read.");
+
+    /// <summary>Why the configuration has no sequential lens (its build error), the message a row
+    /// that reads <see cref="Lens"/> or <see cref="System"/> fails with; null when it has one.</summary>
+    internal string? LensError { get; init; }
 
     // OP-88
     /// <summary>The whole merit function, for rows that read their neighbours (NSDD Data 3 and

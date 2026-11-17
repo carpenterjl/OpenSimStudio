@@ -266,19 +266,30 @@ public static class MeritEvaluator
             try
             {
                 var state = State(c);
-                // OP-88: a non-sequential row reads the configuration's non-sequential system and runs without a sequential lens.
-                if (state.Error is { } error && !d.NonSequential) throw new MeritOperandException(error);
+                // OP-88: a row runs even when the configuration has no sequential lens (a pure
+                // non-sequential system): the non-sequential rows read the project's objects, and the
+                // math, bound and constant rows only other rows. A row that does read the lens, its
+                // system data or its paraxial model fails there with the configuration's error; one
+                // that traces a real ray fails here, as its ray was never collected.
+                if (state.Error is { } error && d.Ray is not null) throw new MeritOperandException(error);
                 var context = new MeritRowContext(row, n, c, state.Lens, state.System,
                     number => ValueOf(results, number),
                     request => keyIndex.TryGetValue((c, request), out int i)
                         ? traced[i].Path ?? throw new MeritOperandException(traced[i].Error!)
                         : throw new InvalidOperationException($"{at}: its ray was not collected for tracing."),
-                    state.Paraxial)
+                    state.Error is { } noLens ? _ => throw new MeritOperandException(noLens) : state.Paraxial)   // OP-88
                 {
+                    LensError = state.Error,   // OP-88
                     Catalogs = configurations.Catalogs, Configurations = configurations,   // OP-59: the catalogs for RGLA; OP-55B: the configurations
                     Function = function, State = shared, Cancellation = cancellation, MaxDegreeOfParallelism = options.MaxDegreeOfParallelism,   // OP-88
                 };
-                double value = d.Compute!(context);
+                double value;
+                try { value = d.Compute!(context); }
+                catch (Exception e) when (state.Error is { } broken && !d.NonSequential && e is ArgumentException or InvalidOperationException)
+                {
+                    // OP-88: a row of a configuration without a lens that reached for one another way (another configuration's lens): it fails with this configuration's error.
+                    throw new MeritOperandException(broken);
+                }
                 if (!double.IsFinite(value)) throw new MeritOperandException($"the value is {value.ToString(CultureInfo.InvariantCulture)}.");
                 results[n - 1] = new MeritRowResult { Number = n, Row = row, Status = MeritRowStatus.Evaluated, Configuration = c, Value = value };
             }
