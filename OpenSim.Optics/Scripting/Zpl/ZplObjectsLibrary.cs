@@ -91,7 +91,7 @@ public static partial class ZplLibrary
         Kw("EXPORTCAD", "Writes the sequential lens as IGES (VEC1(1) = 0), STEP (1) or STL (3) through OP-96's CAD export, with the help's VEC1(1) to VEC1(24); a name without a folder is in the macro folder. Read: the file type, the spline points (16 to 512; checked, not used: the writers fit to the tolerance), first and last surface, surfaces as solids (1 for STEP, 0 for IGES), the ray pattern (XY, X, Y, ring, none, grid), number of rays, wavelength and field (0 all), delete vignetted, the tolerance code. Refused by name: SAT (OP-76); layers, dummy surfaces and their thickness, the list and solid-beam patterns, the NSC trace flags, chosen or all configurations, mixed-mode object ranges, footprints and the chief ray when not 0; a filter string; a system in non-sequential mode.", (m, a) =>
         {
             if (a.Count is < 1 or > 2) throw new ZplRuntimeException("EXPORTCAD takes filename [, filter string].");
-            if (a.Has(1)) throw new ZplRuntimeException("EXPORTCAD: the filter string (non-sequential rays) is not bound: non-sequential export is not built and filter strings are plan item OP-83.");
+            if (a.Has(1)) throw new ZplRuntimeException("EXPORTCAD: the filter string (non-sequential rays) is not bound: non-sequential export is not built (filter strings themselves are, OP-83).");
             if (OpticsModes.TryParseSavedName(m.Session.System.Mode, out var mode) && mode == OpticsMode.NonSequential)
                 throw new ZplRuntimeException("EXPORTCAD: the system is in non-sequential mode; exporting non-sequential objects is not built (OP-96 exports the sequential lens).");
             string path = ZplSession.Resolve(a.FileName(m, 0, "the CAD file name"), m.Session.MacroFolder, "macro folder");
@@ -257,14 +257,15 @@ public static partial class ZplLibrary
     }
 
     /// <summary>SETNSCPROPERTY's codes that the saved objects hold.</summary>
-    private const string NscPropertyCodesNote = "0 type (the help's NSC_ codes of the built types: NSC_SPHE, NSC_RECT, NSC_SLEN, the sources and NSC_DETE, NSC_DETC, NSC_DETP), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 20 \"Use Pixel Interpolation\" (Detector Rectangle and Color), 29 \"Face Is\" (0 Object Default, 1 Reflective, 2 Absorbing); on source objects the Sources tab: 101 random polarization, 102 reverse rays, 103 Jones x, 104 Jones y, 105 phase x, 106 phase y, 107 initial phase (degrees), 108 coherence length, 109 pre-propagation (lens units), 110 sampling (0 random, 1 Sobol), 111 bulk scatter (0 many, 1 once, 2 never), 112 array mode (0 none, 1 rectangular, 2 circular, 3 hexapolar, 4 hexagonal), 114 spectrum steps, 115 start and 116 end wavelength (µm), 161 and 162 the array integers, 165 and 166 the array sizes";
+    private const string NscPropertyCodesNote = "0 type (the help's NSC_ codes of the built types: NSC_SPHE, NSC_RECT, NSC_SLEN, the sources and NSC_DETE, NSC_DETC, NSC_DETP), 1 comment, 2 reference object, 3 inside of, 4 material, 5 face coating, 15 global XYZ rotation order, 20 \"Use Pixel Interpolation\" (Detector Rectangle and Color), 29 \"Face Is\" (0 Object Default, 1 Reflective, 2 Absorbing); on source objects the Sources tab: 101 random polarization, 102 reverse rays, 103 Jones x, 104 Jones y, 105 phase x, 106 phase y, 107 initial phase (degrees), 108 coherence length, 109 pre-propagation (lens units), 110 sampling (0 random, 1 Sobol), 111 bulk scatter (0 many, 1 once, 2 never), 112 array mode (0 none, 1 rectangular, 2 circular, 3 hexapolar, 4 hexagonal), 114 spectrum steps, 115 start and 116 end wavelength (µm), 161 and 162 the array integers, 165 and 166 the array sizes; " + ScatterCodesNote;
 
     private static ZplRuntimeException NscPropertyNotBound(int code, string who)
     {
         string why = code switch
         {
             17 => "\"Object Is A Detector\" (objects as detectors) is not built; OP-79 built the detector objects Detector Rectangle, Color and Polar, and OP-70's detecting stand-in is not that checkbox",
-            >= 6 and <= 12 or >= 21 and <= 28 or >= 31 and <= 34 or 37 or >= 151 and <= 153 => "scattering is plan item OP-80",
+            6 => "scatter profiles (named sets of Coat/Scatter settings) are not built; set the face's scatter codes 7 to 12 instead",   // wire-16
+            >= 21 and <= 28 => "user defined scattering loads a scatter DLL, and no DLLs are loaded",   // wire-16
             13 or 14 => "user defined apertures on objects are plan item OP-72",
             16 or 18 or 19 or 30 => "Consider Objects, Ignore Objects and \"Rays Ignore This Object\" are not built (Conventions §69)",
             >= 81 and <= 86 => "volume physics is plan item OP-81",
@@ -416,6 +417,7 @@ public static partial class ZplLibrary
                 }
                 case 15: return N(o.GlobalXyzRotationOrder == true ? 1 : 0);
                 case 20: DetectorFlat(o, number, "NPRO"); return N(o.DetectorPixelInterpolation == true ? 1 : 0);   // wire-15
+                case var c when ScatterFaceCodes.Contains(c) || ScatterToCodes.Contains(c): return ScatterProperty(m, o, number, c, Num(v, 3, "the face"));   // wire-16
                 case var c when SourceCodes.Contains(c): return N(SourceProperty(o, number, c, "NPRO"));   // wire-15
                 case 29:
                 {
@@ -510,6 +512,9 @@ public static partial class ZplLibrary
                 case 20:   // wire-15
                     DetectorFlat(o, number, "SETNSCPROPERTY");
                     changed = o with { DetectorPixelInterpolation = Flag(value.IsString ? double.NaN : value.Number, "SETNSCPROPERTY: the \"Use Pixel Interpolation\" flag") };
+                    break;
+                case var c when ScatterFaceCodes.Contains(c) || ScatterToCodes.Contains(c):   // wire-16
+                    changed = WithScatterProperty(o, number, c, a.Num(m, 3, "the face"), value);
                     break;
                 case var c when SourceCodes.Contains(c):   // wire-15
                     changed = WithSourceProperty(o, number, c, value.IsString ? throw new ZplRuntimeException($"SETNSCPROPERTY: code {c} takes a number, not \"{value.Text}\".") : value.Number);

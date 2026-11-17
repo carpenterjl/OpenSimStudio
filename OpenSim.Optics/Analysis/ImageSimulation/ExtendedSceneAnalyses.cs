@@ -330,7 +330,7 @@ public sealed record GeometricImageSettings
     [DisplayName("Use polarization"), Description("Not built: refused.")]
     public bool UsePolarization { get; init; }
 
-    [DisplayName("Scatter rays"), Description("Not built: refused.")]
+    [DisplayName("Scatter rays"), Description("Not built (sequential surface scattering): refused.")]
     public bool ScatterRays { get; init; }
 
     [DisplayName("Wavelength"), Description("Wavelength row, 1 for the first; 0 for all (rays shared by the wavelength weights).")]
@@ -402,7 +402,7 @@ public sealed class GeometricImageAnalysis : WavefrontAnalysisBase<GeometricImag
         GeometricImageSettings settings, CancellationToken cancellation)
     {
         Check(!settings.UsePolarization, $"{Name}: polarization is not built; turn \"Use polarization\" off.");
-        Check(!settings.ScatterRays, $"{Name}: ray scattering is not built; turn \"Scatter rays\" off.");
+        Check(!settings.ScatterRays, $"{Name}: sequential surface scattering is not built (OP-80 built scattering in the non-sequential trace only); turn \"Scatter rays\" off.");
         Check(settings.FieldSize > 0 && double.IsFinite(settings.FieldSize), $"{Name}: the field size must be positive.");
         Check(settings.ImageSize > 0 && double.IsFinite(settings.ImageSize), $"{Name}: the image size must be positive.");
         Check(settings.RaysThousands >= 1 && settings.RaysThousands <= 10000, $"{Name}: Rays x 1000 must be 1 to 10000.");

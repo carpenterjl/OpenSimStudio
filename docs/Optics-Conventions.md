@@ -1830,38 +1830,35 @@ single place in the code, so a correction is one line and its test.
       with non-zero lumens, as the help says, and exclude unlit pixels from −1 and −2.
     Check: trace a point source onto a Detector Rectangle and a Detector Polar here and in
     OpticStudio, and compare a DDR file saved there with one read here.
-72. **Illumination optimization readings** (OP-88, section 76). From the help pages under
-    `plans/sources/optics/op-55b-help/` and `op-88-help/`; nothing has been compared with
-    OpticStudio's output.
-    - *Columns.* The help names each non-sequential operand's arguments but not their columns;
-      Int1 is Surf, Int2 the object (Det#, Src#, Object), and the rest fill Data1 on in the order
-      the help names them (§76 lists them), the pattern OP-54 read from "Defining complex
-      operands". Surf must be 1 (mixed mode is OP-86).
-    - *Ref? 2* (the global coordinate reference surface) is the same frame as Ref? 1 in a pure
-      non-sequential system. NTxV with Ref? 1 or 2 returns the angles that rebuild the object's
-      rotation in its own rotation order with −90° ≤ tilt about y ≤ 90° (tilt about z 0 at
-      ±90°); NSRM's R maps local to origin coordinates, R[i][j] the i-th component of local
-      axis j.
-    - *Normalisation groups.* NSDD Data 3 and NSDE Data 14–16 normalise over the maximal run of
-      consecutive rows of the same code, Surf and Det# with a positive Pix# (and Data 3, or Data
-      14–16 with Angle? 0); a run whose peak is zero fails.
-    - *Detectors per configuration.* Each configuration keeps its own detector data within an
-      evaluation; NSTR needs an earlier clear-every-detector row in the same configuration.
-    - *NSRA.* Segments are numbered in trace order (the help says its order differs from the
-      ZRD's without giving it); Source # 0 is the first element; Data 31–39 equal 1–9 in a pure
-      non-sequential system; 10 is the segment's own length, 16 the sum along its parents.
-    - *Random streams.* The help says only that NSTR reseeds "with the identical value every time
-      the merit function is evaluated"; here the k-th NSTR row evaluated uses
-      SplitMix64.ForStream(1, k).
-    - *Wizards.* Which operand and code each Optimization Wizard criterion becomes (uniformity as
-      σ/μ of the non-zero pixels, Pix# −4 over −5; greater or less than as OPGT or OPLT on a
-      weight-0 row; the minimum flux target as OPGT on the total flux); the Bitmap Wizard's flux
-      as the sRGB relative luminance over the brightest pixel's, area-weighted scaling, the
-      image's top row at the detector's +y edge, a total-flux row, NSDD Data 3 per pixel on a
-      Detector Rectangle and NSDE Data 15 (or 14–16 with Color Targets) on a Detector Color.
-    Check: build the same merit function with OpticStudio's wizards and compare the rows and their
-    values on one scene.
-
+70. **Scattering readings** (OP-80, section 74). From the help pages under
+    `plans/sources/optics/op-80-help/` and the two Knowledge Base articles recorded there; nothing
+    has been compared with OpticStudio's output.
+    - *Simple ray splitting* is treated like no splitting for scattering (one random choice, one
+      scattered ray with all the energy); the help speaks only of splitting on and off.
+    - *ABg rows.* "Angle of incidence" is the incoming ray's angle to the normal; the BSDF, not A,
+      B and g, is interpolated linearly in its cosine.
+    - *Importance sampling energy.* E in E′ = E·(BSDF/TIS)·Ω·cos θ is read as the whole scattered
+      energy, not one ray's share, with the balance heuristic for overlapping cones and dropped
+      BSDF draws inside aimed cones (section 74); the help calls the normalisation with unequal
+      numbers of rays and targets "complex" and does not give it.
+    - *Scatter To List.* A listed scattered ray is traced among the listed objects and the
+      scatterer only ("scattered rays will miss any object not explicitly listed"); its later
+      segments see every object.
+    - *Tabular BSDF.* Nearest rotation rather than interpolation between rotations; the cell model
+      (constant per cell, cos θ_s at the cell centre for the data set's angle); azimuth 0 toward the
+      normal with e₂ = r × e₁ for "counter-clockwise"; the sample rotation of a hit is the incident
+      ray's direction along the face, counter-clockwise from local +x, less 90° (a ray in the YZ
+      plane is 0°), less the face's Angle.
+    - *Scatter Polar Plot.* "Radial Bins ... covering 180 degrees" is read as across the diameter
+      (−90° to 90°).
+    - *Defaults.* Scatter NSC Rays off and one scatter ray are this program's; the help gives none.
+    - *Macro codes (wave 16 wiring).* SETNSCPROPERTY's code 10 is the σ on a Gaussian face and the
+      sample orientation angle on a BSDF face, refused on others; codes 11, 12 and 31–34 are
+      refused on a face of another model (the help gives one field per code, this program saves
+      one reflect and one transmit field per face); codes 31–34 take full paths; NPRO 151 reads
+      "None" as 0, the help's off state of a blank Scatter To list.
+    Check: a Lambertian and an ABg face onto a Detector Polar here and in OpticStudio, with and
+    without splitting and with one importance-sampling target.
 71. **Ray database and filter readings** (OP-83, section 75). From the help pages under
     `plans/sources/optics/op-83-help/` ("The Filter String", "Filter String Examples", "Named
     Filters", "Ray Database (ZRD) Files", "ZRD Format And Version Numbers", "The ZRD Uncompressed
@@ -1897,33 +1894,44 @@ single place in the code, so a correction is one line and its test.
       gives no unit). Lengths are written and read in the system's lens unit (the file does not
       say which). Our TIR, which UFD has no bit for, is written as reflected.
     - *Named filters.* Names are matched without regard to case and may not read as a flag.
+    - *Macros (wave 16 wiring).* NSTR's zrd_format omitted is read as 0; zrd_format 3 (this
+      program's format) is an addition, the only format ZRDPLAYBACK can replay. NSTR, ZRDFILTER,
+      ZRDSUM and ZRDAPPEND take a name without a folder in the lens file's folder (the help
+      wants no path for NSTR and ZRDPLAYBACK, a full path for the others). ZRDPLAYBACK's clear
+      with detector 0 clears every detector.
     Check: save a UFD file of a split trace in OpticStudio, read it here and compare the filters'
     selections branch by branch.
-
-70. **Scattering readings** (OP-80, section 74). From the help pages under
-    `plans/sources/optics/op-80-help/` and the two Knowledge Base articles recorded there; nothing
-    has been compared with OpticStudio's output.
-    - *Simple ray splitting* is treated like no splitting for scattering (one random choice, one
-      scattered ray with all the energy); the help speaks only of splitting on and off.
-    - *ABg rows.* "Angle of incidence" is the incoming ray's angle to the normal; the BSDF, not A,
-      B and g, is interpolated linearly in its cosine.
-    - *Importance sampling energy.* E in E′ = E·(BSDF/TIS)·Ω·cos θ is read as the whole scattered
-      energy, not one ray's share, with the balance heuristic for overlapping cones and dropped
-      BSDF draws inside aimed cones (section 74); the help calls the normalisation with unequal
-      numbers of rays and targets "complex" and does not give it.
-    - *Scatter To List.* A listed scattered ray is traced among the listed objects and the
-      scatterer only ("scattered rays will miss any object not explicitly listed"); its later
-      segments see every object.
-    - *Tabular BSDF.* Nearest rotation rather than interpolation between rotations; the cell model
-      (constant per cell, cos θ_s at the cell centre for the data set's angle); azimuth 0 toward the
-      normal with e₂ = r × e₁ for "counter-clockwise"; the sample rotation of a hit is the incident
-      ray's direction along the face, counter-clockwise from local +x, less 90° (a ray in the YZ
-      plane is 0°), less the face's Angle.
-    - *Scatter Polar Plot.* "Radial Bins ... covering 180 degrees" is read as across the diameter
-      (−90° to 90°).
-    - *Defaults.* Scatter NSC Rays off and one scatter ray are this program's; the help gives none.
-    Check: a Lambertian and an ABg face onto a Detector Polar here and in OpticStudio, with and
-    without splitting and with one importance-sampling target.
+72. **Illumination optimization readings** (OP-88, section 76). From the help pages under
+    `plans/sources/optics/op-55b-help/` and `op-88-help/`; nothing has been compared with
+    OpticStudio's output.
+    - *Columns.* The help names each non-sequential operand's arguments but not their columns;
+      Int1 is Surf, Int2 the object (Det#, Src#, Object), and the rest fill Data1 on in the order
+      the help names them (§76 lists them), the pattern OP-54 read from "Defining complex
+      operands". Surf must be 1 (mixed mode is OP-86).
+    - *Ref? 2* (the global coordinate reference surface) is the same frame as Ref? 1 in a pure
+      non-sequential system. NTxV with Ref? 1 or 2 returns the angles that rebuild the object's
+      rotation in its own rotation order with −90° ≤ tilt about y ≤ 90° (tilt about z 0 at
+      ±90°); NSRM's R maps local to origin coordinates, R[i][j] the i-th component of local
+      axis j.
+    - *Normalisation groups.* NSDD Data 3 and NSDE Data 14–16 normalise over the maximal run of
+      consecutive rows of the same code, Surf and Det# with a positive Pix# (and Data 3, or Data
+      14–16 with Angle? 0); a run whose peak is zero fails.
+    - *Detectors per configuration.* Each configuration keeps its own detector data within an
+      evaluation; NSTR needs an earlier clear-every-detector row in the same configuration.
+    - *NSRA.* Segments are numbered in trace order (the help says its order differs from the
+      ZRD's without giving it); Source # 0 is the first element; Data 31–39 equal 1–9 in a pure
+      non-sequential system; 10 is the segment's own length, 16 the sum along its parents.
+    - *Random streams.* The help says only that NSTR reseeds "with the identical value every time
+      the merit function is evaluated"; here the k-th NSTR row evaluated uses
+      SplitMix64.ForStream(1, k).
+    - *Wizards.* Which operand and code each Optimization Wizard criterion becomes (uniformity as
+      σ/μ of the non-zero pixels, Pix# −4 over −5; greater or less than as OPGT or OPLT on a
+      weight-0 row; the minimum flux target as OPGT on the total flux); the Bitmap Wizard's flux
+      as the sRGB relative luminance over the brightest pixel's, area-weighted scaling, the
+      image's top row at the detector's +y edge, a total-flux row, NSDD Data 3 per pixel on a
+      Detector Rectangle and NSDE Data 15 (or 14–16 with Color Targets) on a Detector Color.
+    Check: build the same merit function with OpticStudio's wizards and compare the rows and their
+    values on one scene.
 
 ## 11. Paraxial optics
 
@@ -5646,7 +5654,10 @@ not print; 117 names a spectrum file, and this build saves the spectrum as a tab
 Temperature no code. NSTR, NSTR2, LOST, NSDD, NSDE, NSDP, NSDC, SAVEDETECTOR and LOADDETECTOR are in
 section 73 ("Macros"). INSERTOBJECT and DELETEOBJECT are not bound: the help does not say what type
 a new object is, nor what becomes of objects that refer to a deleted one. SETDETECTOR and GETNSCMTF
-are not bound; the ZRD keywords wait for the ray database (OP-83). Readings in §10 item 52.
+are not bound. ZRDPLAYBACK, ZRDFILTER, ZRDSUM and ZRDAPPEND are in section 75 ("Macros");
+ZRDSAVERAYS is not bound (it writes a source file, which is not built). The Coat/Scatter and
+Scatter To codes of SETNSCPROPERTY and NPRO are in section 74 ("Macros and merit"). Readings in
+§10 item 52.
 
 **Calling macros.** CALLMACRO runs a macro of the macro folder as a child with its own variables;
 the call buffers (51 numbers and 51 strings), the lens, the vectors, OPTRETURN and SOLVERETURN are
@@ -6911,8 +6922,9 @@ code for NSC Single Ray Trace, so GETTEXTFILE does not reach it.
 
 **Not built:** the object library (OP-72) and illumination, constructive and CAD objects
 (OP-73 to OP-75); Detector Surface, Detector Volume and objects as detectors (section 73);
-scattering (OP-80); volume physics (OP-81); diffraction and gradient index in objects (OP-82); the
-ray database and filters (OP-83); Consider Objects, Ignore Objects and "Rays Ignore Object"; mixed
+user-defined (DLL) scattering, scatter profiles and the IS/ISX catalogs (section 74 builds the
+other scatter models); volume physics (OP-81); diffraction and gradient index in objects (OP-82);
+Consider Objects, Ignore Objects and "Rays Ignore Object"; mixed
 mode (NSC groups in a sequential lens with ports); several wavelengths in one tracer (section 72's
 runner uses one tracer per wavelength); an absorbing background medium.
 
@@ -6922,9 +6934,9 @@ Sources as scene objects, and the run over several wavelengths, are in section 7
 
 Detector objects, photometry and the Detector Viewer (OP-79) are in section 73.
 
-The ray database, filter strings and Playback ZRD on Detector (OP-83) are in section 75.
-
 Surface scattering and importance sampling (OP-80) are in section 74.
+
+The ray database, filter strings and Playback ZRD on Detector (OP-83) are in section 75.
 
 ## 70. CAD export
 
@@ -7314,8 +7326,9 @@ largest value. The text has the detector, the Beam Info (centroid, RMS widths an
 incoherent flux over pixel centres), the noise, the colour totals, and the pixel table for up to
 1024 pixels. True colour is drawn as its R, G and B channel maps, as no colour-picture plot kind
 exists. With a file the analysis shows that data. Without one it traces the
-project's sources (`ProjectNscSources.Trace`: every source, the analysis ray counts, no splitting,
-scattering or polarization, the default seed) and shows the detector its Detector setting names
+project's sources (`ProjectNscSources.Trace`: every source, the analysis ray counts, no splitting
+or polarization, scattering as its "Scatter NSC rays" setting (the Ray Trace control's; off by
+default; section 74), the default seed) and shows the detector its Detector setting names
 (0: the first), its data summed over the wavelengths, with the energy ledger in the notes.
 
 **Macros** (`Scripting/Zpl/ZplNscTraceLibrary.cs`, the values in `NscDetectorQueries`; help
@@ -7323,8 +7336,9 @@ pages NSTR, NSTR2, SAVEDETECTOR, LOADDETECTOR, Numeric Functions and, for the pi
 codes, "Non-sequential Ray Tracing and Detector Operands"). NSTR surf, source, split, scatter,
 usepolar, ignore_errors, random_seed (and NSTR2's longer list) runs `ProjectNscSources.Trace`:
 source 0 is every source; polarization is on whenever splitting is, as the help says; a seed of 0
-draws one from the macro's RAND generator. Scatter is refused (OP-80, OP-81), and so are saving
-rays (ZRD, DAT, SDF) and PAF files (OP-83). The data each detector receives is added to what it
+draws one from the macro's RAND generator. Scatter turns on surface scattering (section 74; bulk
+scattering, OP-81, is not built); saving rays is section 75's ("Macros"); PAF files are refused
+(Path Analysis, OP-84). The data each detector receives is added to what it
 holds in the macro's session; NSDD, NSDE and NSDP with object 0 clear every detector and with −n
 detector n, returning 0; a detector never traced or cleared reads zero. LOST(1) and LOST(2) are the
 last trace's energy lost to errors and below the thresholds. NSDD reads a Detector Rectangle: pixel
@@ -7361,10 +7375,138 @@ with watts (0) and multiplier 5 (no prefix); other source units are refused on r
 not built.
 
 **Not built:** Detector Surface, Detector Volume, objects as detectors; PSF mode; polarization
-flags 1–9; per-pixel spectra and CRI/CCT; LightningTrace; ray-database playback and filter
-strings (OP-83); the polar directivity plots and IES/LDT export; grey-scale and inverse colour
-maps, contrast enhancement, image-file output; SETDETECTOR; the
-merit operands that read detectors (OP-88). Readings in §10 item 69.
+flags 1–9; per-pixel spectra and CRI/CCT; LightningTrace; the polar directivity plots and
+IES/LDT export; grey-scale and inverse colour maps, contrast enhancement, image-file output;
+SETDETECTOR. (Playback ZRD on Detector and filter strings are OP-83's, §75; the merit operands
+that read detectors are OP-88's, §76.) Readings in §10 item 69.
+
+## 74. Scattering
+
+OP-80 builds surface scattering in the non-sequential engine and importance sampling
+(`OpenSim.Optics/NonSequential/Scattering/`, the face interaction in `NscTracer.TraceTree`).
+Tests: `OpenSim.Tests/Optics/NscScatteringTests.cs`, `OpenSim.App.Tests/ViewModels/OpticsNscScatterEditorTests.cs`.
+OpticStudio's behaviour is read from its 2025 R2 help pages saved under
+`plans/sources/optics/op-80-help/` ("Scattering Models", "Scatter Models", "Bi-Directional Scatter
+Distribution Function", "Available Scatter Models", "Fraction to Scatter and Number of Scatter
+Rays", "Thin Window Scattering", "How to Model Scattering Efficiently", "Scatter To", "The Scatter
+To List", "Importance Sampling", "ABg Scatter Data Catalogs", "Scatter Function Viewer", "Scatter
+Polar Plot"; the help's equations are images, transcribed in `README-op80.txt` there) and two
+Knowledge Base articles on tabular BSDF data (the file format, R. Rykowski; its use,
+S. Gangadhara), whose content is recorded in the same note. Stover's *Optical Scattering* and the
+ABg papers of Freniere and Harvey were not available; the ABg formula is the help's.
+
+**Geometry.** At a face the specular ray (reflected or refracted) has projection β₀ on the face's
+tangent plane, |β₀| = sin θ_r; a scattered direction has projection β, and x = β − β₀ ("Scatter
+Models"). The tangent frame is (u, v, n): n the face normal on the specular ray's side, u the
+object's local +x projected onto the face (its local +y if +x is nearly normal), v = n × u. Since
+dβ_x dβ_y = cos θ dΩ, the BSDF's TIS integral ∫∫ BSDF cos θ sin θ dθ dφ is the integral of the
+BSDF over the unit disk of β (`NscScatterMath`). For a BSDF that depends on |x| only, that
+integral is ∮ F(ρ(φ)) dφ with F(R) = ∫₀^R f(r) r dr and ρ(φ) = −b cos φ + √(1 − b² sin² φ) the
+distance from β₀ to the unit circle (b = |β₀|), by a doubling trapezoidal rule to 1e-14
+(`DiskIntegral`; it refuses after 2¹⁸ points, near-grazing specular rays).
+
+**Models** (`NscScatterDistributions.cs`). Each gives the fraction f that leaves the specular ray,
+the weight w of it that scattered rays carry, and a normalised density p of β over the unit disk
+with an exact sampler; BSDF = f·w·p and TIS = f·w.
+
+- **Lambertian**: p = 1/π, β uniform in the disk; f the fraction to scatter.
+- **Gaussian**: BSDF ∝ exp(−|x|²/σ²) restricted to the disk and normalised so the TIS is the
+  fraction ("For all scatter models other than ABg, the BSDF is normalized to yield a TIS equal to
+  the fraction to scatter"); the normaliser depends on |β₀|. 0 < σ ≤ 5. Draws: a 2-D normal of
+  standard deviation σ/√2 per axis about β₀, kept inside the disk.
+- **ABg**: BSDF = A/(B + |x|^g), its own TIS the fraction ("the TIS indicates the total fraction
+  of energy that scatters"); A ≥ 0, B > 1e-12 unless g = 0. A TIS of 1 or more is a trace error
+  naming the profile. F(R) is closed for g = 0 and 2 and otherwise tabulated in ln r (step 0.01,
+  10-point Gauss–Legendre per step, cubic Hermite with the exact derivative). Draws: |x| by
+  rejection from piecewise envelopes on geometric cells (exact), φ uniform, kept inside the disk.
+  Profiles come from the project's ABg catalog (up to 100 profiles of up to 10 rows by angle of
+  incidence, upper-case names, a reference wavelength); between rows the BSDF is interpolated
+  linearly in the cosine of the angle of incidence (a mixture, exact), and A′ = A(λ/λ_ref)^(g−4),
+  B′ = B(λ/λ_ref)^g. ABG_DATA.DAT is not read (the help does not give its layout); the catalog is
+  saved with the project (`OpticsNonSequentialSettings.AbgCatalog`) and edited as text, one row per
+  line: `NAME wavelength angle A B g`.
+- **ABg File**: an ABGF file (count, optional absolute flag, then name and weight lines; at most
+  20 profiles, upper-case names from the catalog): BSDF = Σ c_i BSDF_i with c_i = w_i/Σw (relative)
+  or w_i (absolute); a mixture, its TIS below 1.
+- **BSDF** (tabular, `NscBsdfTable`): the Knowledge Base file layout (PlaneSymmetrical,
+  Asymmetrical, Asymmetrical4D; Monochrome or XYZ, of which the Y group is read). The data set of
+  the nearest sample rotation and nearest angle of incidence (the specular angle) is used; within
+  it the BSDF is constant per cell between neighbouring azimuths and radial angles (the mean of
+  the four corners); nothing outside the tabulated angles scatters. Directions have density
+  ∝ BSDF·cos θ_s per steradian, cos θ_s at the cell centre for the data set's own angle, about the
+  actual specular ray (a draw below the surface is redrawn). f is the fraction to scatter and w the
+  file's TIS for that data set: the scattered power is fraction × TIS and the rest of the fraction
+  is absorbed ("Power that is not scattered is assumed to be lost at the surface").
+- **User Defined** (scatter DLLs) is refused by name.
+
+**The event** (`NscScatterer.Scatter`, called by `TraceTree` for every specular child of a face
+interaction when `NscTraceSettings.ScatterRays` is on: mirror and TIR reflections, split and
+unsplit refraction and reflection, and a same-index crossing of a scattering face). Lambertian and
+Gaussian scatter both specular rays; ABg, ABg File and BSDF use their reflect or transmit data.
+Without ray splitting (and with simple splitting) one random number decides: with probability f
+the ray scatters and one scattered ray carries all its energy times w. With splitting the specular
+ray keeps E(1 − f) and n scatter rays (0–300; 0 means no scattering) share E·f·w equally. Thin
+window scattering, on a volume, scatters a reflected ray only when the ray was entering and a
+refracted one only when it was leaving. The segment where a ray scatters carries the S event and
+its scattered children the F event (`NscEvents`); the scattered ray's coherency matrix is the
+specular ray's turned by the rotation from the specular to the scattered direction (this
+program's choice). The ray stream is the ray's own (SplitMix64.ForStream(seed, ray number)), so a
+run is the same to the bit at any thread count.
+
+**Scatter To** (per object, `NscObject.ScatterTo`). *Scatter To List*: a scattered ray meets only
+the listed objects and the scatterer; one that meets none is not traced and its energy goes to the
+ledger line `ScatterNotTraced`; a blank list traces every scattered ray ("To turn off the Scatter
+To feature, leave the list blank", help "The Scatter To List"). *Importance Sampling*: up to 6 target spheres (an object's origin,
+a radius, a solid-angle limit); scattered ray k aims at target k when the sphere's solid angle Ω_k
+at the scatter point is at most its limit (otherwise, and for rays beyond the targets, it scatters
+by the BSDF). An aimed ray is uniform in the cone and carries E′ = E_s·p(β)·cos θ·Ω_k, i.e. the
+help's E′ = E·(BSDF/TIS)·Ω·cos θ with E the whole scattered energy E_s; where aimed cones overlap
+Ω_k is replaced by 1/Σ_j(1/Ω_j) over the cones holding the direction. A BSDF-sampled ray that
+falls inside an aimed cone is dropped. Each region's energy is then an unbiased estimate, and the
+difference E_s − ΣE′ (negative for some events) goes to `ScatterNotTraced`, so the ledger closes.
+
+**Settings and files.** Per face (`OpticsNscFaceSettings`): ScatterModel ("None", "Lambertian",
+"Gaussian", "ABg", "ABg File", "BSDF", "User Defined"), ScatterRays, ScatterFraction,
+ScatterSigma, ScatterReflect and ScatterTransmit (an ABg name, or the full path of an .ABGF or
+.BSDF file: this program has no data folder), ScatterAngle (BSDF), ThinWindowScattering. Per
+object (`OpticsNscObjectSettings`): ScatterToMethod ("None", "Scatter To List", "Importance
+Sampling"), ScatterToList ("3 4"), ScatterTargets (object, size in lens units, limit in sr; object
+0 is None). Trace level: `NscTraceSettings.ScatterRays` ("Scatter NSC Rays"; the help gives no
+default, this program's is off), `ProjectNscSources.Trace(..., scatter: true)`, and the single-ray
+trace's "Scatter NSC rays" setting. The editor shows the current object's fields in its
+"Coat/Scatter, Scatter To and ABg catalog" panel (Apply is not an undo step).
+
+**Macros and merit** (wave 16 wiring). The trace flag reaches every caller of
+`ProjectNscSources.Trace`: ZPL NSTR and NSTR2's scatter argument, the merit operand NSTR's Scat?
+(Data2), the non-sequential Optimization and Bitmap Wizards' Scatter Rays (written to that Scat?),
+the Detector Viewer's "Scatter NSC rays" setting (off by default) and the single-ray trace's
+setting. SETNSCPROPERTY and NPRO read and set the saved fields by the help's code table: 7 scatter
+mode (0 none, 1 Lambertian, 2 Gaussian, 3 ABg, 5 BSDF, 6 ABg File; 4 User Defined is refused),
+8 fraction, 9 number of rays (0 to 300), 10 the Gaussian σ or the BSDF sample orientation angle by
+the face's model, 11 and 12 the reflect and transmit ABg names (an ABg face), 31 and 32 the BSDF
+files and 33 and 34 the ABGF files (full paths: the help's "no path" needs a data folder this
+program does not have), 37 Thin Window Scattering, 151 the Scatter To method (0 scatter to list,
+1 importance sampling; NPRO reads 0 for "None"), 152 one importance-sampling target "ray object size
+limit" (SETNSCPROPERTY only; the help does not say how NPRO picks a ray) and 153 the Scatter To
+list. Codes 10–12 and 31–34 are refused on a face of another model. Refused by name: 6 (scatter
+profiles), 21–28 (the scatter DLL and its data).
+
+**Analyses.** *Scatter function viewer* (`NscScatterFunctionViewer`): BSDF against |x| on log–log
+axes for the specular ray of Alpha X and Y (n = 1/√(1 + tan²α_x + tan²α_y), l = n tan α_x,
+m = n tan α_y), the analytic models evaluated along x toward the disk's centre, a BSDF file
+histogrammed from scattered rays (rays in bin/rays × TIS / the projected area of the bin's annulus
+inside the disk), with the TIS. *Scatter polar plot* (`NscScatterPolarPlot`): the traced BSDF over
+the hemisphere for an incident angle in the X–Z plane, on a map of (θ cos φ, θ sin φ) whose nodes
+take the value at the centre of their radial (across the 180° diameter) and azimuthal bin, with
+the TIS. Both refuse User Defined.
+
+**Not built:** User Defined (DLL) scatter; scatter profiles (SCATTER_PROFILE.DAT) and the
+Profile list; the IS/ISX scatter catalogs; sequential surface scattering (it needs
+`SequentialTrace.cs`); reading ABG_DATA.DAT; data folders (files are full paths); interpolation
+between BSDF sample rotations; the closest-system-wavelength rule for ABg with source colour
+spectra (each wavelength scales the data itself); per-ray polarization from a scatter model;
+the Scatter Function Viewer's and Polar Plot's ray count for user-defined models; layouts of
+scattered rays. Readings in §10 item 70.
 
 ## 75. Ray database and filter strings
 
@@ -7462,16 +7604,28 @@ lists each branch. Save Subset Data As writes the passing rays of the range. Fil
 paths (the help's "no path, the lens file's folder" needs a lens folder this build does not have
 for analyses).
 
+**Macros** (wave 16 wiring, `Scripting/Zpl/ZplNscTraceLibrary.cs`; help pages NSTR, NSTR2,
+ZRDPLAYBACK, ZRDFILTER, ZRDSUM, ZRDAPPEND, ZRDSAVERAYS). NSTR's save, savefilename, filter and
+zrd_format: with save non-zero a recorder (the filter string or named filter as its save filter)
+goes to `ProjectNscSources.Trace` and the database is written to savefilename, which must end in
+.ZRD (DAT, SDF and TM25RAY source files are refused) and, without a folder, is in the lens file's
+folder. zrd_format 0 (also when omitted) is UFD, 1 and 2 (CBD, CFD) are refused, and 3 is this
+program's format, the only one ZRDPLAYBACK can replay. ZRDPLAYBACK file, surface, detector, clear,
+filter reads the file, plays it back onto detector n (0: every detector) through
+`NscRayPlayback.Play` and adds the data to what the macro's detectors hold, clearing them first
+when clear is non-zero. ZRDFILTER in, out, filter writes `NscZrdFile.Subset` of the input in its
+format; ZRDSUM in1, in2, out writes `Join(in1, in2)`; ZRDAPPEND in, out rewrites out as
+`Join(out, in)`. Both inputs of ZRDSUM and ZRDAPPEND must be of one format, and input and output
+names must differ. Their help says file names "must include the full path name"; a name without a
+folder is taken in the lens file's folder, as ZRDPLAYBACK's is. ZRDSAVERAYS is not bound (it writes
+a source file).
+
 **Not built:** layout filters and drawing rays from a database (no NSC layout drawing exists);
 Save Rays on Object and saving rays as source files (DAT, SDF, TM25RAY); the CBD and CFD formats;
 playback of UFD files; PAF files and Path Analysis (OP-84); the J flag; diffraction orders,
-xybin/lmbin, phase and electric field in the files; the merit operand NSRD; a Named Filters editor
-in the app (the list is saved in the project file); the ZPL keywords ZRDPLAYBACK, ZRDFILTER,
-ZRDSUM, ZRDAPPEND, ZRDSAVERAYS and NSTR's save arguments are not bound yet (the library calls they
-need exist).
-
-maps, contrast enhancement, image-file output; SETDETECTOR. (The merit operands that read
-detectors are OP-88's, §76.) Readings in §10 item 69.
+xybin/lmbin, phase and electric field in the files; the merit operand NSRD (a merit row has no
+text cell for its file name); a Named Filters editor in the app (the list is saved in the project
+file); ZRDSAVERAYS (a source file).
 
 ## 76. Illumination optimization
 
@@ -7509,8 +7663,8 @@ runner: the analysis ray counts, the project's wavelengths, coatings and non-seq
 controls), splitting as Splt?, polarization as Pol? or whenever splitting is on, Ignore Errors as
 IgEr?, and adds every detector's data to what it holds; it returns 0. It fails unless a row with
 Det# 0 has cleared the detectors earlier in the configuration ("An NSDD, NSDE, or NSDP operand
-with Det# set equal to 0 must be included in the merit function prior to this operand"); Scat? is
-refused (scattering is OP-80 and OP-81). NSDD, NSDE, NSDP and NSDC read the held data through
+with Det# set equal to 0 must be included in the merit function prior to this operand"); Scat?
+turns surface scattering on (section 74). NSDD, NSDE, NSDP and NSDC read the held data through
 OP-79's `NscDetectorQueries` (§73: pixel, total, extremes, rays, mean and standard deviation of
 the non-zero pixels, centroids and RMS sizes; flux/area per m²). Built here: NSDD Data 3, a
 pixel's flux over the peak flux of the consecutive NSDD Data 3 rows of the same Surf and Det#,
@@ -7572,8 +7726,8 @@ row; 0 is uniform). Detector Color: total power (NSDE Pix# 0, Data 1). Detector 
 greater or less than gives the value row weight 0 and adds OPGT or OPLT on it. A non-zero minimum
 flux adds the detector's total flux (weight 0) and an OPGT on it. With several configurations the
 rows are written for each chosen configuration after a CONF. Start At, Overwrite and the overall
-weight as in OP-56; `NextStartAt` is the next Apply's start. LightningTrace (OP-85) and Scatter
-Rays are refused.
+weight as in OP-56; `NextStartAt` is the next Apply's start. Scatter Rays sets the NSTR row's
+Scat?; LightningTrace (OP-85) is refused.
 
 **Bitmap Wizard** (`NscMeritWizards.Bitmap`). A BMP or PNG (OP-42's first-party readers; JPG is
 refused) onto a Detector Rectangle or Color. The image is scaled to the detector's pixels by area
@@ -7603,120 +7757,8 @@ PΩ/(2π·4a²) with Ω = 4 arctan(a²/(d√(2a² + d²))) (derived in the test 
 the distance reached is within five binomial standard deviations plus one 1/N step of the
 closed-form 20 mm.
 
-**Not built:** scattering in NSTR (OP-80, OP-81); NSLT (LightningTrace, OP-85); NPAF and NSRD
-(the ray database, OP-83); NSST (mixed mode, OP-86); NSRW and NSTW (roadway lighting, OP-89);
+**Not built:** bulk scattering (OP-81); NSLT (LightningTrace, OP-85); NPAF (PAF files, OP-84) and
+NSRD (a merit row has no text cell for the file name they take); NSST (mixed mode, OP-86); NSRW and NSTW (roadway lighting, OP-89);
 FREZ (Freeform Z, OP-72); NSDD Data 4 and 5 and Pix# −13 to −15, NSDE Data 12, 13 and 17–21 (as
 §73); NSRA phases and fields; Surf other than 1; solves and pickups on object cells; the wizards'
 Save/Load Settings, preview drawing and terminate button; a user-set NSTR seed; JPG images.
-
-## 74. Scattering
-
-OP-80 builds surface scattering in the non-sequential engine and importance sampling
-(`OpenSim.Optics/NonSequential/Scattering/`, the face interaction in `NscTracer.TraceTree`).
-Tests: `OpenSim.Tests/Optics/NscScatteringTests.cs`, `OpenSim.App.Tests/ViewModels/OpticsNscScatterEditorTests.cs`.
-OpticStudio's behaviour is read from its 2025 R2 help pages saved under
-`plans/sources/optics/op-80-help/` ("Scattering Models", "Scatter Models", "Bi-Directional Scatter
-Distribution Function", "Available Scatter Models", "Fraction to Scatter and Number of Scatter
-Rays", "Thin Window Scattering", "How to Model Scattering Efficiently", "Scatter To", "The Scatter
-To List", "Importance Sampling", "ABg Scatter Data Catalogs", "Scatter Function Viewer", "Scatter
-Polar Plot"; the help's equations are images, transcribed in `README-op80.txt` there) and two
-Knowledge Base articles on tabular BSDF data (the file format, R. Rykowski; its use,
-S. Gangadhara), whose content is recorded in the same note. Stover's *Optical Scattering* and the
-ABg papers of Freniere and Harvey were not available; the ABg formula is the help's.
-
-**Geometry.** At a face the specular ray (reflected or refracted) has projection β₀ on the face's
-tangent plane, |β₀| = sin θ_r; a scattered direction has projection β, and x = β − β₀ ("Scatter
-Models"). The tangent frame is (u, v, n): n the face normal on the specular ray's side, u the
-object's local +x projected onto the face (its local +y if +x is nearly normal), v = n × u. Since
-dβ_x dβ_y = cos θ dΩ, the BSDF's TIS integral ∫∫ BSDF cos θ sin θ dθ dφ is the integral of the
-BSDF over the unit disk of β (`NscScatterMath`). For a BSDF that depends on |x| only, that
-integral is ∮ F(ρ(φ)) dφ with F(R) = ∫₀^R f(r) r dr and ρ(φ) = −b cos φ + √(1 − b² sin² φ) the
-distance from β₀ to the unit circle (b = |β₀|), by a doubling trapezoidal rule to 1e-14
-(`DiskIntegral`; it refuses after 2¹⁸ points, near-grazing specular rays).
-
-**Models** (`NscScatterDistributions.cs`). Each gives the fraction f that leaves the specular ray,
-the weight w of it that scattered rays carry, and a normalised density p of β over the unit disk
-with an exact sampler; BSDF = f·w·p and TIS = f·w.
-
-- **Lambertian**: p = 1/π, β uniform in the disk; f the fraction to scatter.
-- **Gaussian**: BSDF ∝ exp(−|x|²/σ²) restricted to the disk and normalised so the TIS is the
-  fraction ("For all scatter models other than ABg, the BSDF is normalized to yield a TIS equal to
-  the fraction to scatter"); the normaliser depends on |β₀|. 0 < σ ≤ 5. Draws: a 2-D normal of
-  standard deviation σ/√2 per axis about β₀, kept inside the disk.
-- **ABg**: BSDF = A/(B + |x|^g), its own TIS the fraction ("the TIS indicates the total fraction
-  of energy that scatters"); A ≥ 0, B > 1e-12 unless g = 0. A TIS of 1 or more is a trace error
-  naming the profile. F(R) is closed for g = 0 and 2 and otherwise tabulated in ln r (step 0.01,
-  10-point Gauss–Legendre per step, cubic Hermite with the exact derivative). Draws: |x| by
-  rejection from piecewise envelopes on geometric cells (exact), φ uniform, kept inside the disk.
-  Profiles come from the project's ABg catalog (up to 100 profiles of up to 10 rows by angle of
-  incidence, upper-case names, a reference wavelength); between rows the BSDF is interpolated
-  linearly in the cosine of the angle of incidence (a mixture, exact), and A′ = A(λ/λ_ref)^(g−4),
-  B′ = B(λ/λ_ref)^g. ABG_DATA.DAT is not read (the help does not give its layout); the catalog is
-  saved with the project (`OpticsNonSequentialSettings.AbgCatalog`) and edited as text, one row per
-  line: `NAME wavelength angle A B g`.
-- **ABg File**: an ABGF file (count, optional absolute flag, then name and weight lines; at most
-  20 profiles, upper-case names from the catalog): BSDF = Σ c_i BSDF_i with c_i = w_i/Σw (relative)
-  or w_i (absolute); a mixture, its TIS below 1.
-- **BSDF** (tabular, `NscBsdfTable`): the Knowledge Base file layout (PlaneSymmetrical,
-  Asymmetrical, Asymmetrical4D; Monochrome or XYZ, of which the Y group is read). The data set of
-  the nearest sample rotation and nearest angle of incidence (the specular angle) is used; within
-  it the BSDF is constant per cell between neighbouring azimuths and radial angles (the mean of
-  the four corners); nothing outside the tabulated angles scatters. Directions have density
-  ∝ BSDF·cos θ_s per steradian, cos θ_s at the cell centre for the data set's own angle, about the
-  actual specular ray (a draw below the surface is redrawn). f is the fraction to scatter and w the
-  file's TIS for that data set: the scattered power is fraction × TIS and the rest of the fraction
-  is absorbed ("Power that is not scattered is assumed to be lost at the surface").
-- **User Defined** (scatter DLLs) is refused by name.
-
-**The event** (`NscScatterer.Scatter`, called by `TraceTree` for every specular child of a face
-interaction when `NscTraceSettings.ScatterRays` is on: mirror and TIR reflections, split and
-unsplit refraction and reflection, and a same-index crossing of a scattering face). Lambertian and
-Gaussian scatter both specular rays; ABg, ABg File and BSDF use their reflect or transmit data.
-Without ray splitting (and with simple splitting) one random number decides: with probability f
-the ray scatters and one scattered ray carries all its energy times w. With splitting the specular
-ray keeps E(1 − f) and n scatter rays (0–300; 0 means no scattering) share E·f·w equally. Thin
-window scattering, on a volume, scatters a reflected ray only when the ray was entering and a
-refracted one only when it was leaving. The segment where a ray scatters carries the S event and
-its scattered children the F event (`NscEvents`); the scattered ray's coherency matrix is the
-specular ray's turned by the rotation from the specular to the scattered direction (this
-program's choice). The ray stream is the ray's own (SplitMix64.ForStream(seed, ray number)), so a
-run is the same to the bit at any thread count.
-
-**Scatter To** (per object, `NscObject.ScatterTo`). *Scatter To List*: a scattered ray meets only
-the listed objects and the scatterer; one that meets none is not traced and its energy goes to the
-ledger line `ScatterNotTraced`. *Importance Sampling*: up to 6 target spheres (an object's origin,
-a radius, a solid-angle limit); scattered ray k aims at target k when the sphere's solid angle Ω_k
-at the scatter point is at most its limit (otherwise, and for rays beyond the targets, it scatters
-by the BSDF). An aimed ray is uniform in the cone and carries E′ = E_s·p(β)·cos θ·Ω_k, i.e. the
-help's E′ = E·(BSDF/TIS)·Ω·cos θ with E the whole scattered energy E_s; where aimed cones overlap
-Ω_k is replaced by 1/Σ_j(1/Ω_j) over the cones holding the direction. A BSDF-sampled ray that
-falls inside an aimed cone is dropped. Each region's energy is then an unbiased estimate, and the
-difference E_s − ΣE′ (negative for some events) goes to `ScatterNotTraced`, so the ledger closes.
-
-**Settings and files.** Per face (`OpticsNscFaceSettings`): ScatterModel ("None", "Lambertian",
-"Gaussian", "ABg", "ABg File", "BSDF", "User Defined"), ScatterRays, ScatterFraction,
-ScatterSigma, ScatterReflect and ScatterTransmit (an ABg name, or the full path of an .ABGF or
-.BSDF file: this program has no data folder), ScatterAngle (BSDF), ThinWindowScattering. Per
-object (`OpticsNscObjectSettings`): ScatterToMethod ("None", "Scatter To List", "Importance
-Sampling"), ScatterToList ("3 4"), ScatterTargets (object, size in lens units, limit in sr; object
-0 is None). Trace level: `NscTraceSettings.ScatterRays` ("Scatter NSC Rays"; the help gives no
-default, this program's is off), `ProjectNscSources.Trace(..., scatter: true)`, and the single-ray
-trace's "Scatter NSC rays" setting. The editor shows the current object's fields in its
-"Coat/Scatter, Scatter To and ABg catalog" panel (Apply is not an undo step).
-
-**Analyses.** *Scatter function viewer* (`NscScatterFunctionViewer`): BSDF against |x| on log–log
-axes for the specular ray of Alpha X and Y (n = 1/√(1 + tan²α_x + tan²α_y), l = n tan α_x,
-m = n tan α_y), the analytic models evaluated along x toward the disk's centre, a BSDF file
-histogrammed from scattered rays (rays in bin/rays × TIS / the projected area of the bin's annulus
-inside the disk), with the TIS. *Scatter polar plot* (`NscScatterPolarPlot`): the traced BSDF over
-the hemisphere for an incident angle in the X–Z plane, on a map of (θ cos φ, θ sin φ) whose nodes
-take the value at the centre of their radial (across the 180° diameter) and azimuthal bin, with
-the TIS. Both refuse User Defined.
-
-**Not built:** User Defined (DLL) scatter; scatter profiles (SCATTER_PROFILE.DAT) and the
-Profile list; the IS/ISX scatter catalogs; sequential surface scattering (it needs
-`SequentialTrace.cs`); reading ABG_DATA.DAT; data folders (files are full paths); interpolation
-between BSDF sample rotations; the closest-system-wavelength rule for ABg with source colour
-spectra (each wavelength scales the data itself); per-ray polarization from a scatter model;
-the Scatter Function Viewer's and Polar Plot's ray count for user-defined models; layouts of
-scattered rays. Readings in §10 item 70.

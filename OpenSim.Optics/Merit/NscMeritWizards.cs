@@ -250,7 +250,7 @@ public static class NscMeritWizards
     /// <summary>
     /// The non-sequential Optimization Wizard on <paramref name="existing"/>. Throws
     /// <see cref="ArgumentException"/> naming the setting when one is wrong (a detector that is
-    /// not a detector, a criterion its type does not offer, LightningTrace, scattering).
+    /// not a detector, a criterion its type does not offer, LightningTrace).
     /// </summary>
     /// <param name="rows">The project's non-sequential objects (object 1 first).</param>
     public static NscWizardResult Optimization(MeritFunction existing, IReadOnlyList<OpticsNscObjectSettings> rows, int configurations,
@@ -471,7 +471,6 @@ public static class NscMeritWizards
     private static void Common(NscWizardCommonOptions o, IReadOnlyList<OpticsNscObjectSettings> rows, int configurations, string who)
     {
         if (o.UseLightningTrace) throw new ArgumentException($"{who}: LightningTrace is not built (plan item OP-85); use conventional raytracing.");
-        if (o.ScatterRays) throw new ArgumentException($"{who}: Scatter Rays is not built here (surface scattering is plan item OP-80, bulk scattering OP-81).");
         if (!(o.OverallWeight >= 0) || !double.IsFinite(o.OverallWeight)) throw new ArgumentException($"{who}: the overall weight must be zero or positive.");
         if (o.Configuration < 0 || o.Configuration > configurations) throw new ArgumentException($"{who}: configuration {o.Configuration} is not one of the {configurations} (0 for All).");
         if (o.Source < 0 || o.Source > rows.Count) throw new ArgumentException($"{who}: source {o.Source} is not an object (0 for every source).");
@@ -490,7 +489,7 @@ public static class NscMeritWizards
         yield return new MeritOperandRow
         {
             Code = "NSTR", Int1 = 1, Int2 = o.Source, Comment = o.Source == 0 ? "Trace every source" : $"Trace source {o.Source}",
-            Data = new double[] { o.SplitRays ? 1 : 0, 0, o.UsePolarization ? 1 : 0, o.IgnoreErrors ? 1 : 0 },
+            Data = new double[] { o.SplitRays ? 1 : 0, o.ScatterRays ? 1 : 0, o.UsePolarization ? 1 : 0, o.IgnoreErrors ? 1 : 0 },   // wire-16: Scat?
         };
     }
 

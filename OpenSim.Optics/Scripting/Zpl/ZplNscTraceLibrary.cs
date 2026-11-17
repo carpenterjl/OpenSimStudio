@@ -1,6 +1,7 @@
 using OpenSim.Optics.Analysis;
 using OpenSim.Optics.NonSequential;
 using OpenSim.Optics.NonSequential.Detectors;
+using OpenSim.Optics.NonSequential.RayDatabase;
 using OpenSim.Optics.NonSequential.Sources;
 
 namespace OpenSim.Optics.Scripting.Zpl;
@@ -14,6 +15,9 @@ namespace OpenSim.Optics.Scripting.Zpl;
 // LOADDETECTOR (keywords), Numeric Functions) and, for the pixel and data codes the functions
 // share with the operands, op-55b-help/ "Non-sequential Ray Tracing and Detector Operands"
 // (docs/Optics-Conventions.md §56 and §73).
+// wire-16: NSTR's scatter flag reaches OP-80's surface scattering and its save arguments OP-83's
+// recorder and ZRD files; ZRDPLAYBACK, ZRDFILTER, ZRDSUM and ZRDAPPEND follow their help pages
+// (op-99-help/) onto OP-83's NscZrdFile.Read/Subset/Join/Write and NscRayPlayback.Play (§75).
 
 public static partial class ZplLibrary
 {
@@ -66,15 +70,15 @@ public static partial class ZplLibrary
         int source = a.Int(m, 1, $"{who}: the source");
         if (source < 0) throw new ZplRuntimeException($"{who}: the source is {source}; it must be 0 (every source) or a source object's number.");
         bool split = a.Num(m, 2, "split") != 0;
-        if (a.Num(m, 3, "scatter") != 0)
-            throw new ZplRuntimeException($"{who}: scatter is on; surface and volume scattering are not built (plan items OP-80 and OP-81). Use 0.");
+        bool scatter = a.Num(m, 3, "scatter") != 0;   // wire-16: OP-80's surface scattering ("If Scatter is non-zero, then scattering is on")
         bool polar = a.Num(m, 4, "usepolar") != 0 || split;   // "If splitting is on polarization is automatically selected."
         bool ignoreErrors = a.Num(m, 5, "ignore_errors") != 0;
         int seed = a.Int(m, 6, $"{who}: the random seed");
-        if (a.Has(7) && a.Num(m, 7, "save") != 0)
-            throw new ZplRuntimeException($"{who}: save is on; saving rays to ZRD, DAT or SDF files is not built (the ray database is plan item OP-83).");
         if (paths && a.Has(11) && a.Num(m, 11, "savepaths") != 0)
-            throw new ZplRuntimeException($"{who}: savepaths is on; PAF path files are not built (plan item OP-83).");
+            throw new ZplRuntimeException($"{who}: savepaths is on; PAF path files are not built (Path Analysis is plan item OP-84).");
+        var context = NscContext(m);
+        // wire-16: save, savefilename, filter and zrd_format (OP-83's recorder and ZRD files).
+        var save = a.Has(7) && a.Num(m, 7, "save") != 0 ? NscSaveTarget(m, a, who, context) : null;
         // "If random_seed is zero, then the random number generator will be seeded with a random
         // value": the macro's own generator (RANDOMIZE seeds it) draws one.
         long traceSeed = seed != 0 ? seed : m.Session.Random.NextInt64(1, long.MaxValue);
@@ -82,11 +86,20 @@ public static partial class ZplLibrary
         NscSourceRunResult run;
         try
         {
-            run = ProjectNscSources.Trace(NscContext(m), source == 0 ? null : new[] { source }, split, polar, ignoreErrors, traceSeed, m.Session.CancellationToken);
+            run = ProjectNscSources.Trace(context, source == 0 ? null : new[] { source }, split, polar, ignoreErrors, traceSeed, m.Session.CancellationToken,
+                recorder: save?.Recorder, scatter: scatter);
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or NotSupportedException) { throw NscFailed(e, who); }
         m.Session.NscLedger = run.Ledger;
-        foreach (var d in run.Detectors ?? Array.Empty<NscDetectorData>())
+        if (save is { } target)
+            NscZrd(() => { NscZrdFile.Write(target.Path, target.Recorder.Database, target.Format, m.Session.Unit); return 0; }, who);
+        NscKeep(m, run.Detectors ?? Array.Empty<NscDetectorData>(), who);
+    }
+
+    /// <summary>Adds detector data to what each detector holds (NSTR, NSTR2, ZRDPLAYBACK).</summary>
+    private static void NscKeep(ZplInterpreter m, IEnumerable<NscDetectorData> detectors, string who)
+    {
+        foreach (var d in detectors)
         {
             if (m.Session.NscDetectors.TryGetValue(d.ObjectNumber, out var held))
             {
@@ -98,6 +111,165 @@ public static partial class ZplLibrary
             }
             else m.Session.NscDetectors[d.ObjectNumber] = d;
         }
+    }
+
+    // ================================================================ wire-16: ray databases
+
+    private sealed record NscSave(string Path, NscZrdFormat Format, NscRayRecorder Recorder);
+
+    /// <summary>NSTR's save arguments (help, NSTR and NSTR2): savefilename (a .ZRD name; "no path
+    /// should be specified", so it is in the lens file's folder, help "Ray Trace", "Saving ray data
+    /// to a file"), the filter string or named filter applied to each tree before it is saved, and
+    /// zrd_format 0 (uncompressed full data, also when omitted); 1 and 2 (compressed) are refused
+    /// by name, and 3 is this program's full-data format, which ZRDPLAYBACK can replay
+    /// (Conventions §75).</summary>
+    private static NscSave NscSaveTarget(ZplInterpreter m, ZplArgs a, string who, OpticsAnalysisContext context)
+    {
+        string name = a.FileName(m, 8, $"{who}: savefilename");
+        string extension = Path.GetExtension(name).ToUpperInvariant();
+        if (extension is ".DAT" or ".SDF" or ".TM25RAY")
+            throw new ZplRuntimeException($"{who}: '{name}' names a source file ({extension[1..]}); saving the rays that strike an object as a source file is not built. Give a .ZRD name for the ray database.");
+        if (extension != ".ZRD")
+            throw new ZplRuntimeException($"{who}: savefilename '{name}' must end in .ZRD (a ray database; help, \"Saving ray data to a file\").");
+        string path = ZplSession.Resolve(name, NscFolder(m), "lens folder");
+        string filterText = a.Has(9) ? a.Str(m, 9, $"{who}: the filter") : "";
+        int zrd = a.Int(m, 10, $"{who}: zrd_format", 0);
+        var format = zrd switch
+        {
+            0 => NscZrdFormat.UncompressedFullData,
+            3 => NscZrdFormat.OpenSimFull,
+            1 or 2 => throw new ZplRuntimeException($"{who}: zrd_format {zrd} ({(zrd == 1 ? "compressed basic data" : "compressed full data")}) is not built: the help says the compressed formats are unsuitable for reading or writing outside OpticStudio. Use 0 (uncompressed full data) or 3 (this program's full data, which ZRDPLAYBACK replays)."),
+            _ => throw new ZplRuntimeException($"{who}: zrd_format is {zrd}; it must be 0 (uncompressed full data), 1 or 2 (compressed, not built) or 3 (this program's full data)."),
+        };
+        var filter = NscZrd(() => NscRayDatabaseProject.Filter(context, filterText), who);
+        NscRayFilterFrame? frame = null;
+        if (filter?.NeedsFrame == true)
+            frame = NscRayFilterFrame.For(NscSceneOf(m, context, who), m.Session.Unit);
+        return new NscSave(path, format, NscZrd(() => new NscRayRecorder(filter, frame), who));
+    }
+
+    private static NscScene NscSceneOf(ZplInterpreter m, OpticsAnalysisContext context, string who)
+    {
+        NscScene? scene;
+        try { scene = ProjectNonSequential.Scene(context, m.Session.Unit); }
+        catch (ArgumentException e) { throw NscFailed(e, who); }
+        return scene ?? throw new ZplRuntimeException($"{who}: the system has no non-sequential objects.");
+    }
+
+    /// <summary>Runs a ray-database call, turning its refusals into the keyword's error.</summary>
+    private static T NscZrd<T>(Func<T> call, string who)
+    {
+        try { return call(); }
+        catch (Exception e) when (e is ArgumentException or IOException or InvalidDataException or NotSupportedException
+                                       or InvalidOperationException or FormatException or UnauthorizedAccessException)
+        {
+            throw NscFailed(e, who);
+        }
+    }
+
+    /// <summary>A ZRD file argument: a name without a folder is in the lens file's folder.</summary>
+    private static string NscZrdPath(ZplInterpreter m, ZplArgs a, int i, string what) =>
+        ZplSession.Resolve(a.FileName(m, i, what), NscFolder(m), "lens folder");
+
+    private static void NscDistinct(string input, string output, string who)
+    {
+        if (string.Equals(Path.GetFullPath(input), Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
+            throw new ZplRuntimeException($"{who}: the input and output files are both '{output}'; \"The input and output file names must be distinct\" (help, {who}).");
+    }
+
+    private static NscZrdFormat NscSameFormat(string first, string second, string who)
+    {
+        var f1 = NscZrd(() => NscZrdFile.Detect(first), who);
+        var f2 = NscZrd(() => NscZrdFile.Detect(second), who);
+        if (f1 != f2)
+            throw new ZplRuntimeException($"{who}: '{Path.GetFileName(first)}' is {NscFormatName(f1)} and '{Path.GetFileName(second)}' is {NscFormatName(f2)}; the files must use the same ZRD format (help, {who}).");
+        return f1;
+    }
+
+    private static string NscFormatName(NscZrdFormat f) => f switch
+    {
+        NscZrdFormat.UncompressedFullData => "uncompressed full data",
+        NscZrdFormat.CompressedBasicData => "compressed basic data",
+        NscZrdFormat.CompressedFullData => "compressed full data",
+        _ => "OpenSim full data",
+    };
+
+    private static void RegisterNscRayDatabase()
+    {
+        Kw("ZRDPLAYBACK", "Reads a ZRD file (a name without a folder is in the lens file's folder) and adds its recorded detector hits to detector object n (0: every detector) of the system (surface 1), clearing that detector (or every detector) first when clear is non-zero, optionally only the segments that pass the filter string or named filter (OP-83's playback repeats the trace's reduction, so an unfiltered replay gives the traced data to the bit). Only this program's full-data format (NSTR zrd_format 3) holds the hits; uncompressed full data (UFD) files are refused.", (m, a) =>
+        {
+            const string who = "ZRDPLAYBACK";
+            if (a.Count < 4 || a.Count > 5) throw new ZplRuntimeException($"{who} takes zrdfilename, surface, detector, clear [, filterstring]; {a.Count} arguments given.");
+            string path = NscZrdPath(m, a, 0, $"{who}: the ZRD file");
+            NscSurface(a.Num(m, 1, "the surface"), who);
+            int detector = a.Int(m, 2, $"{who}: the detector");
+            if (detector < 0) throw new ZplRuntimeException($"{who}: the detector is {detector}; it must be 0 (every detector) or a detector object's number.");
+            bool clear = a.Num(m, 3, "clear") != 0;
+            string filterText = a.Has(4) ? a.Str(m, 4, $"{who}: the filter") : "";
+            var context = NscContext(m);
+            var scene = NscSceneOf(m, context, who);
+            var data = NscZrd(() =>
+            {
+                var db = NscZrdFile.Read(path, m.Session.Unit);
+                var filter = NscRayDatabaseProject.Filter(context, filterText);
+                var frame = filter?.NeedsFrame == true ? NscRayFilterFrame.For(scene, m.Session.Unit) : null;
+                return NscRayPlayback.Play(db, scene, filter, detector, frame, m.Session.CancellationToken);
+            }, who);
+            if (clear)
+            {
+                if (detector == 0) m.Session.NscDetectors.Clear();
+                else m.Session.NscDetectors.Remove(detector);
+            }
+            NscKeep(m, data, who);
+        });
+        Kw("ZRDFILTER", "Reads a ZRD file, keeps the rays and segments that pass the filter string or named filter (OP-83's subset: each tree's passing branches, renumbered) and writes them to a new file in the input's format; names without a folder are in the lens file's folder, and the two must differ.", (m, a) =>
+        {
+            const string who = "ZRDFILTER";
+            a.Exactly(3, who);
+            string input = NscZrdPath(m, a, 0, $"{who}: the input file"), output = NscZrdPath(m, a, 1, $"{who}: the output file");
+            NscDistinct(input, output, who);
+            string filterText = a.Str(m, 2, $"{who}: the filter");
+            var context = NscContext(m);
+            var filter = NscZrd(() => NscRayDatabaseProject.Filter(context, filterText), who);
+            var frame = filter?.NeedsFrame == true ? NscRayFilterFrame.For(NscSceneOf(m, context, who), m.Session.Unit) : null;
+            NscZrd(() =>
+            {
+                var format = NscZrdFile.Detect(input);
+                var subset = NscZrdFile.Subset(NscZrdFile.Read(input, m.Session.Unit), filter, frame);
+                NscZrdFile.Write(output, subset, format, m.Session.Unit);
+                return 0;
+            }, who);
+        });
+        Kw("ZRDSUM", "Writes the rays of two ZRD files of the same format, the first's then the second's, to a third file in that format (OP-83's join; no object numbers or coordinates are changed); names without a folder are in the lens file's folder, and the output must differ from both inputs.", (m, a) =>
+        {
+            const string who = "ZRDSUM";
+            a.Exactly(3, who);
+            string first = NscZrdPath(m, a, 0, $"{who}: the first input file"), second = NscZrdPath(m, a, 1, $"{who}: the second input file");
+            string output = NscZrdPath(m, a, 2, $"{who}: the output file");
+            NscDistinct(first, output, who);
+            NscDistinct(second, output, who);
+            var format = NscSameFormat(first, second, who);
+            NscZrd(() =>
+            {
+                var joined = NscZrdFile.Join(NscZrdFile.Read(first, m.Session.Unit), NscZrdFile.Read(second, m.Session.Unit));
+                NscZrdFile.Write(output, joined, format, m.Session.Unit);
+                return 0;
+            }, who);
+        });
+        Kw("ZRDAPPEND", "Appends the rays of the first ZRD file to the end of the second, which must exist and use the same format; the first is left unaltered (OP-83's join). Names without a folder are in the lens file's folder, and the two must differ.", (m, a) =>
+        {
+            const string who = "ZRDAPPEND";
+            a.Exactly(2, who);
+            string input = NscZrdPath(m, a, 0, $"{who}: the input file"), output = NscZrdPath(m, a, 1, $"{who}: the output file");
+            NscDistinct(input, output, who);
+            var format = NscSameFormat(input, output, who);
+            NscZrd(() =>
+            {
+                var joined = NscZrdFile.Join(NscZrdFile.Read(output, m.Session.Unit), NscZrdFile.Read(input, m.Session.Unit));
+                NscZrdFile.Write(output, joined, format, m.Session.Unit);
+                return 0;
+            }, who);
+        });
     }
 
     private static string NscFolder(ZplInterpreter m) =>
@@ -133,8 +305,9 @@ public static partial class ZplLibrary
 
     private static void RegisterNscTrace()
     {
-        Kw("NSTR", "Traces the system's sources (source 0: all; surface 1) through OP-77's runner with the analysis ray counts, splitting, polarization (on whenever splitting is), Ignore Errors and the seed (0: one drawn from the macro's RAND generator); the detector data is added to what each detector holds (clear it with NSDD(1, 0, 0, 0)). Refused by name: scatter (OP-80, OP-81) and saving rays (ZRD, DAT, SDF: OP-83).", (m, a) => NscTrace(m, a, "NSTR", paths: false));
-        Kw("NSTR2", "As NSTR, with NSTR2's arguments; savepaths (PAF files) is refused as saving rays is (OP-83).", (m, a) => NscTrace(m, a, "NSTR2", paths: true));
+        RegisterNscRayDatabase();   // wire-16
+        Kw("NSTR", "Traces the system's sources (source 0: all; surface 1) through OP-77's runner with the analysis ray counts, splitting, scattering (OP-80's surface scattering; bulk scattering, OP-81, is not built), polarization (on whenever splitting is), Ignore Errors and the seed (0: one drawn from the macro's RAND generator); the detector data is added to what each detector holds (clear it with NSDD(1, 0, 0, 0)). With save on, the ray trees that pass the filter string or named filter are written to savefilename (.ZRD, in the lens file's folder) in zrd_format 0 (uncompressed full data, also when omitted) or 3 (this program's full data, which ZRDPLAYBACK replays); 1 and 2 (compressed) and source files (DAT, SDF, TM25RAY) are refused by name.", (m, a) => NscTrace(m, a, "NSTR", paths: false));
+        Kw("NSTR2", "As NSTR, with NSTR2's arguments; savepaths (PAF files, Path Analysis: OP-84) is refused by name.", (m, a) => NscTrace(m, a, "NSTR2", paths: true));
         Kw("SAVEDETECTOR", "Writes the data on a detector object (surface 1) to a DDR, DDC or DDP file (OP-79's format, Conventions §73); a name without a folder is in the lens file's folder.", (m, a) =>
         {
             a.Exactly(3, "SAVEDETECTOR");

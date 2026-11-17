@@ -282,4 +282,7 @@ internal sealed class FocusedConfigurations : IMeritConfigurations
     public SequentialLens LensFor(int configuration) => RmsCore.Focused(_inner.LensFor(configuration), _shifts[configuration - 1]);
 
     public OpticalSystemData SystemFor(int configuration) => _inner.SystemFor(configuration);
+
+    // wire-16: the non-sequential rows (OP-88) build their scene from the trial project.
+    public OpticsSettings? SettingsFor(int configuration) => _inner.SettingsFor(configuration);
 }

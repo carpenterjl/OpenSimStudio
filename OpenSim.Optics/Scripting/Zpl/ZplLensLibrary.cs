@@ -1100,7 +1100,7 @@ public static partial class ZplLibrary
         for (int k = 0; k < dataCount; k++) data[k] = Num(v, 3 + k, $"data{k + 1}");
         var row = MeritOperandRow.Of(code, Int(v, 1, "int1"), Int(v, 2, "int2"), 0, 0, data);
         var sys = m.Session.System;
-        if (sys.Surfaces is not { Count: > 0 }) throw new ZplRuntimeException("the lens has no surfaces.");
+        if (!def.NonSequential && sys.Surfaces is not { Count: > 0 }) throw new ZplRuntimeException("the lens has no surfaces.");   // wire-16: the object operands (OP-88) read the non-sequential objects
         var configs = new ProjectMeritConfigurations(sys, m.Session.Catalogs);
         var e = MeritEvaluator.Evaluate(new MeritFunction(new[] { row }), configs, Registry.Value,
             new MeritEvaluationOptions { StartConfiguration = MultiConfiguration.CurrentConfiguration(sys) });
@@ -1237,8 +1237,8 @@ public static partial class ZplLibrary
         NotBound("MAKEFACETLIST", "Not bound: imported CAD parts are plan item OP-75.");
         NotBound("NSLT", "Not bound: Lightning Trace is plan item OP-85.");
         NotBound("RELOADOBJECTS", "Not bound: objects read from files (polygon objects, CAD parts) are plan items OP-74 and OP-75; OP-70's objects are parametric, so there is nothing to reload.");
-        foreach (var k in new[] { "ZRDAPPEND", "ZRDFILTER", "ZRDPLAYBACK", "ZRDSAVERAYS", "ZRDSUM" })
-            NotBound(k, "Not bound: the ray database (ZRD) files and filter strings are plan item OP-83.");
+        // wire-16: ZRDPLAYBACK, ZRDFILTER, ZRDSUM and ZRDAPPEND are bound in ZplNscTraceLibrary.cs (OP-83's ray database).
+        NotBound("ZRDSAVERAYS", "Not bound: it writes the rays that strike an object to a source file (DAT or SDF), and writing source files is not built (OP-83's ray database is; Conventions §75).");
         // wire-13: POP, the ZBF keywords, IMA, IMASHOW, IMASUM, XDIFFIA and IMAE are in ZplBeamLibrary.cs.
         NotBound("DEFAULTMERIT", "Not bound: its arguments map onto the Optimization Wizard (OpticsScripting.WithDefaultMerit), but \"any existing default merit function will be deleted\" needs the help's rule for which rows are the old default, which it does not give.");
         NotBound("HAMMER", "Not bound: the Hammer search (OP-58) runs by time, not by cycles.");

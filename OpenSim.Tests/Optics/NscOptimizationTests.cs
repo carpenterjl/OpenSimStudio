@@ -155,8 +155,11 @@ public class NscOptimizationTests
 
         var surf = Evaluate(optics, new MeritFunction(new[] { Row("NSDD", 2, 0) }));
         Assert.Contains("OP-86", surf.Rows[0].Error);
-        var scatter = Evaluate(optics, new MeritFunction(new[] { Row("NSDD", 1, 0), Row("NSTR", 1, 0, 0, 0, 0, 1) }));
-        Assert.Contains("OP-80", scatter.Rows[1].Error);
+        // wire-16: Scat? (Data2) turns OP-80's surface scattering on. No face of this scene scatters,
+        // so the tracer draws no scatter numbers and the trace is the same as with Scat? 0.
+        var scatter = Evaluate(optics, new MeritFunction(new[] { Row("NSDD", 1, 0), Row("NSTR", 1, 0, 0, 0, 0, 1), Row("NSDD", 1, 2, 0, 0, 0, 0) }));
+        Assert.False(scatter.HasFailures, string.Join("; ", scatter.Errors));
+        Assert.Equal(cleared.Rows[2].Value, scatter.Rows[2].Value);
         var notDetector = Evaluate(optics, new MeritFunction(new[] { Row("NSDD", 1, 1, 0, 0, 0, 0) }));
         Assert.Contains("not a detector object", notDetector.Rows[0].Error);
     }

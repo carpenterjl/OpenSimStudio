@@ -92,6 +92,10 @@ public sealed record NscDetectorViewerSettings
 
     [DisplayName("Playback filter"), Description("With a playback ZRD: only segments that pass this filter string (or named filter) reach the detector.")]
     public string PlaybackFilter { get; init; } = "";
+
+    // wire-16: the Ray Trace control's "Scatter NSC Rays" (help, "Ray Trace"), default off.
+    [DisplayName("Scatter NSC rays"), Description("When tracing the project: rays scatter according to the scatter properties of the faces (OP-80's surface scattering). Off by default.")]
+    public bool ScatterRays { get; init; }
 }
 
 /// <summary>
@@ -620,7 +624,7 @@ public sealed class NscDetectorViewerAnalysis : OpticsAnalysis<NscDetectorViewer
         if (!detectors.Contains(number))
             throw new ArgumentException($"{Name}: object {settings.Detector} is not a detector; the detectors are object{(detectors.Length == 1 ? "" : "s")} {string.Join(", ", detectors)}.");
 
-        var run = Sources.ProjectNscSources.Trace(context, cancellation: cancellation);
+        var run = Sources.ProjectNscSources.Trace(context, cancellation: cancellation, scatter: settings.ScatterRays);   // wire-16: Scatter NSC Rays
         var traced = run.Detectors?.FirstOrDefault(d => d.ObjectNumber == number)
             ?? throw new InvalidOperationException($"{Name}: the source run returned no data for detector object {number}.");
         var shown = NscDetectorViewer.Render(traced, settings, unit, Name);

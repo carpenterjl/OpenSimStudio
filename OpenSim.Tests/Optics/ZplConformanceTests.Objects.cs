@@ -91,7 +91,7 @@ public sealed partial class ZplConformanceTests
         Assert.Contains("16, 32, 64", Fails("VEC1 2, 20"));
         Assert.Contains("not built", Fails("VEC1 9, 7"));            // solid beams
         Assert.Contains("SETCONFIG", Fails("VEC1 18, 1"));
-        Assert.Contains("OP-83", Assert.Throws<ZplException>(() => Run(ExportCadMacro + ", \"h2\"")).Message);
+        Assert.Contains("non-sequential export is not built", Assert.Throws<ZplException>(() => Run(ExportCadMacro + ", \"h2\"")).Message);   // wire-16
     }
 
     // ================================================================ Non-sequential objects

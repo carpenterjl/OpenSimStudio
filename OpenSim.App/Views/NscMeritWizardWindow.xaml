@@ -53,7 +53,7 @@
                     <Label Content="Split rays"/>
                     <CheckBox IsChecked="{Binding SplitRays}" VerticalAlignment="Center"/>
                     <Label Content="Scatter rays"/>
-                    <CheckBox IsChecked="{Binding ScatterRays}" VerticalAlignment="Center" ToolTip="Not built here (plan items OP-80 and OP-81): refused."/>
+                    <CheckBox IsChecked="{Binding ScatterRays}" VerticalAlignment="Center" ToolTip="Sets Scat? on the NSTR row: surface scattering (OP-80) on in the trace. Bulk scattering (OP-81) is not built."/>
                     <Label Content="Use polarization"/>
                     <CheckBox IsChecked="{Binding UsePolarization}" VerticalAlignment="Center"/>
                     <Label Content="Ignore errors"/>

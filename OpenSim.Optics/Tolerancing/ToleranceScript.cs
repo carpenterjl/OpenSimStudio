@@ -585,6 +585,9 @@ internal sealed class ToleranceScriptRunner
             public OpticalSystemData SystemFor(int configuration) => _inner.SystemFor(configuration);
 
             public IReadOnlyList<OpticalCatalog>? Catalogs => _inner.Catalogs;
+
+            // wire-16: the non-sequential rows (OP-88) build their scene from the trial project.
+            public OpticsSettings? SettingsFor(int configuration) => _inner.SettingsFor(configuration);
         }
 
         // -------------------------------------------------------------- merit function

@@ -75,7 +75,9 @@ public sealed class NscScatterer
             _targets[i] = to is { Method: NscScatterToMethod.ImportanceSampling }
                 ? to.Targets.Select(t => (t.Object > 0 ? global[t.Object - 1].Translation : default, t.Radius, t.Limit, t.Object)).ToArray()
                 : Array.Empty<(Vector3D, double, double, int)>();
-            if (to is { Method: NscScatterToMethod.List })
+            // wire-16: "To turn off the Scatter To feature, leave the list blank. In this case, all
+            // scattered rays will be traced" (help, "The Scatter To List"): a blank list restricts nothing.
+            if (to is { Method: NscScatterToMethod.List } && to.Objects.Count > 0)
                 _scatterTo[i] = to.Objects.Select(k => k - 1).Append(i).Distinct().OrderBy(k => k).ToArray();
         }
     }

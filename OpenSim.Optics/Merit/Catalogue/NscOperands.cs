@@ -46,7 +46,7 @@ public static class NscOperands
     {
         // ---- traces and detectors ----
         yield return Trace("NSTR", "Non-sequential trace",
-            "Traces the analysis rays of source Src# (0: every source) into the detectors, adding to what they hold; splitting (Splt?), polarization (Pol?, on whenever splitting is) and Ignore Errors (IgEr?) as set. Always 0. A row with Det# 0 (NSDD, NSDE or NSDP) must clear the detectors before it. Each evaluation traces with the same random numbers.",
+            "Traces the analysis rays of source Src# (0: every source) into the detectors, adding to what they hold; splitting (Splt?), surface scattering (Scat?), polarization (Pol?, on whenever splitting is) and Ignore Errors (IgEr?) as set. Always 0. A row with Det# 0 (NSDD, NSDE or NSDP) must clear the detectors before it. Each evaluation traces with the same random numbers.",
             "Src#", new[] { "Splt?", "Scat?", "Pol?", "IgEr?" }, Nstr);
         yield return Trace("NSDD", "Non-sequential incoherent detector data",
             "Det# 0 clears every detector, −n detector n (value 0). Otherwise Detector Rectangle data: Pix# > 0 that pixel; 0 the total (Data 0 flux, 1 average flux/area, 2 angle-space flux); −1/−2 maximum/minimum; −3 rays; −4/−5 standard deviation/mean of the non-zero pixels; −6 to −8 centroid; −9 to −12 RMS about it; Data 3 the pixel's flux over the peak of the consecutive NSDD Data 3 rows of the detector. Flux/area per m².",
@@ -161,8 +161,6 @@ public static class NscOperands
         var s = NscMeritSession.Of(c);
         if (!s.ClearedAll)
             throw new MeritOperandException("no row before it clears every detector: \"An NSDD, NSDE, or NSDP operand with Det# set equal to 0 must be included in the merit function prior to this operand\" (help, NSTR). Add one above this row.");
-        if (Flag(c, 2))
-            throw new MeritOperandException("Scat? is on; scattering is not built here (surface scattering is plan item OP-80, bulk scattering OP-81). Use 0.");
         int source = c.Row.Int2;
         if (source < 0) throw new MeritOperandException($"Src# is {source}; it must be 0 (every source) or a source object's number.");
         if (source > 0)
@@ -174,9 +172,10 @@ public static class NscOperands
         bool split = Flag(c, 1);
         bool polar = Flag(c, 3) || split;   // help: "If splitting is on polarization is automatically selected."
         bool ignore = Flag(c, 4);
+        bool scatter = Flag(c, 2);   // wire-16: "If Scat? is non-zero, then scattering is on" (OP-80's surface scattering)
         long seed = NscMeritRandom.SeedOf(NscMeritSession.NextTrace(c));
         var run = ProjectNscSources.Trace(s.Context, source == 0 ? null : new[] { source }, split, polar, ignore, seed,
-            c.Cancellation, maxDegreeOfParallelism: c.MaxDegreeOfParallelism);
+            c.Cancellation, maxDegreeOfParallelism: c.MaxDegreeOfParallelism, scatter: scatter);
         s.Ledger = run.Ledger;
         s.Add(run.Detectors);
         return 0;
@@ -338,7 +337,7 @@ public static class NscOperands
     {
         if (data is >= 1 and <= 11 or 14 or 16 or 17 or >= 31 and <= 39) return;
         if (data is 12 or 13 or 15)
-            throw new MeritOperandException($"Data {data} (a phase) is not built: the tracer's segments record no phase (the ray database is plan item OP-83).");
+            throw new MeritOperandException($"Data {data} (a phase) is not built: the tracer's segments record no phase (nor do OP-83's ray database files: phase is not built there).");
         if (data is >= 21 and <= 29)
             throw new MeritOperandException($"Data {data} (an electric field component or its phase) is not built: the tracer's segments record no field.");
         throw new MeritOperandException($"Data is {data}; the help defines 1–17, 21–29 and 31–39.");
