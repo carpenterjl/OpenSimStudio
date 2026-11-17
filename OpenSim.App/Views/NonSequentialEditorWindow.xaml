@@ -191,6 +191,10 @@
                             <Button Content="Read" Command="{Binding ReadVolumeCommand}" Margin="0,0,4,0" ToolTip="Load the current object's saved fields."/>
                             <Button Content="Apply" Command="{Binding ApplyVolumeCommand}" ToolTip="Write the Volume Physics fields into the current object."/>
                         </WrapPanel>
+                    </StackPanel>
+                </GroupBox>
+            </WrapPanel>
+        </Expander>
 
         <!-- OP-84: Path Analysis's path filters and the Sequence Selector's sequences (project). -->
         <Expander DockPanel.Dock="Top" Header="Path filters and sequences (stray light)" Margin="0,0,0,4">
