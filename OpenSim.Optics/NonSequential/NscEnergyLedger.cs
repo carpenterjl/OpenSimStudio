@@ -146,7 +146,9 @@ internal sealed class NscLedgerBuilder
 /// <summary>What happened at the end of a segment, as OpticStudio's ray database letters it
 /// (help, "Ray Database Viewer"): X terminated, R reflected, T transmitted, I total internal
 /// reflection, Z error; G marks a ghost (reflected from a refractive interface at its start).
-/// Scattering (S, F), diffraction (D, E) and bulk scattering (B) are OP-80, OP-82 and OP-81.</summary>
+/// S scattered, D diffracted and B bulk scattered happen at the end of the segment; F and E mark a
+/// segment scattered or diffracted from its parent's hit object, at its start. The tracer sets
+/// S and F once scattering (OP-80) is built; D, E (OP-82) and B (OP-81) are not set yet.</summary>
 [Flags]
 public enum NscEvents
 {
@@ -157,6 +159,16 @@ public enum NscEvents
     TotalInternalReflection = 8,
     Error = 16,
     Ghost = 32,
+    /// <summary>S: scattered at the end of the segment.</summary>
+    Scattered = 64,
+    /// <summary>F: scattered from the parent segment's hit object (at the start).</summary>
+    ScatteredFromParent = 128,
+    /// <summary>D: diffracted at the end of the segment.</summary>
+    Diffracted = 256,
+    /// <summary>E: diffracted from the parent segment's hit object (at the start).</summary>
+    DiffractedFromParent = 512,
+    /// <summary>B: bulk scattered.</summary>
+    BulkScattered = 1024,
 }
 
 /// <summary>
