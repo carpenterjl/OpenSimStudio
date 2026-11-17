@@ -203,6 +203,10 @@ public sealed class OpticsAnalysisRegistry
         // OP-80: the scatter models' plots.
         registry.Register(new NonSequential.Scattering.NscScatterFunctionViewerAnalysis());
         registry.Register(new NonSequential.Scattering.NscScatterPolarPlotAnalysis());
+
+        // OP-85: LightningTrace and the Source Illumination Map (NonSequential/Lightning).
+        registry.Register(new NonSequential.Lightning.NscLightningTraceAnalysis());
+        registry.Register(new NonSequential.Lightning.NscSourceIlluminationMapAnalysis());
         return registry;
     }
 }

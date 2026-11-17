@@ -180,10 +180,10 @@ public sealed class OpticsMeritEditorTests : IDisposable
         var m = WithSinglet();
         var doc = m.Document;
         m.InsertOperandCommand.Execute(null);
-        var result = doc.SetText(0, 0, "NSLT");   // OP-88 built NSDD; NSLT (LightningTrace) waits for OP-85
+        var result = doc.SetText(0, 0, "NSRW");   // OP-85 built NSLT; NSRW (roadway lighting) waits for OP-89
         Assert.False(result.Succeeded);
-        Assert.StartsWith("Row 1: NSLT (OpticStudio:", result.Message);
-        Assert.Contains("needs OP-85", result.Message);
+        Assert.StartsWith("Row 1: NSRW (OpticStudio:", result.Message);
+        Assert.Contains("needs OP-89", result.Message);
         var unknown = doc.SetText(0, 0, "QQQQ");
         Assert.False(unknown.Succeeded);
         Assert.Contains("there is no row type 'QQQQ'", unknown.Message);

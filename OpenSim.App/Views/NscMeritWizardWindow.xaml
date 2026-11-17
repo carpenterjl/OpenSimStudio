@@ -59,7 +59,7 @@
                     <Label Content="Ignore errors"/>
                     <CheckBox IsChecked="{Binding IgnoreErrors}" VerticalAlignment="Center"/>
                     <Label Content="Use LightningTrace"/>
-                    <CheckBox IsChecked="{Binding UseLightningTrace}" VerticalAlignment="Center" ToolTip="Not built (plan item OP-85): refused."/>
+                    <CheckBox IsChecked="{Binding UseLightningTrace}" VerticalAlignment="Center" ToolTip="Writes an NSLT (LightningTrace) row instead of NSTR: mesh rays, no splitting or scattering (OP-85)."/>
                 </controls:FormGrid>
 
                 <TextBlock Text="Detector" FontWeight="SemiBold" Margin="0,8,0,4"/>

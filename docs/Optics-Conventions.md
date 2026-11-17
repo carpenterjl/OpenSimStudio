@@ -1933,6 +1933,33 @@ single place in the code, so a correction is one line and its test.
     Check: build the same merit function with OpticStudio's wizards and compare the rows and their
     values on one scene.
 
+75. **Fast illumination solve readings** (OP-85, section 79). From the help pages under
+    `plans/sources/optics/op-85-help/` ("Lightning Trace", "The LightningTrace Control", "Source
+    Illumination Map") and `op-55b-help/` (NSLT); nothing has been compared with OpticStudio's
+    output, and OpticStudio's interpolation is unpublished ("patent pending"), so its numbers are
+    not expected to match ours to the last digit.
+    - *Mesh size.* The help gives the levels (1X to 1024X, the rays quadrupling per step) but not
+      the base mesh; here level 0 is 32 × 32 chart cells per source element.
+    - *Edge Sampling* is read as the number of times a cell whose corner rays disagree (or whose
+      image folds) may be halved; the help says only that it sets "the accuracy with which the
+      mesh resolves the edges of objects". OpticStudio's automatic refinement "to ensure that a
+      sufficient number of rays pass through each object" is not reproduced: an object smaller
+      than a cell that no corner ray meets is missed.
+    - *Source centre*: the centre of the source's local bounding box ("the center position of the
+      corresponding source"); array elements are each traced from their own centre.
+    - *Average wavelength*: the weight average of the source's spectral lines; its colour is the
+      weight average of 683·V(λ) and of the CIE 1931 tristimulus values per watt.
+    - *Detectors*: data on Detector Rectangle and Color are filled whether or not the detector is
+      terminal or ABSORB (the help asks for one or the other); every detector a mesh ray passes
+      records it.
+    - *NSLT columns*: Int1 Surf, Int2 Src#, Data1 Ray Samp, Data2 Edge Samp, Data3 RT? (OP-88's
+      pattern). RT? 1 draws the next NSTR random stream.
+    - *Source Illumination Map*: the help's sources are IES, LDT or SDF files; with no readers
+      (OP-78) the sources are the project's source objects, each at its own place and with its own
+      spectrum, and the other objects are left out.
+    Check: trace one LED-like scene with LightningTrace in OpticStudio and here at equal sampling,
+    and compare detector totals and profiles.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6382,7 +6409,7 @@ operands, the gradient-index operands, UDOC, the non-sequential operands other t
 built (§76),
 CMFV, the coating operands and CODA, and the obsolete PnGT, PnLT, PnVA. OP-55A's not-built codes
 join through its `Imaging` hook. `MeritOperandCatalogue.Describe` and `Unknown` turn a code into
-"NSLT (OpticStudio: …) is not built yet: needs OP-85: …"; the merit function editor's operand
+"NSRW (OpticStudio: …) is not built yet: needs OP-89: …"; the merit function editor's operand
 column, `MeritEvaluator.Validate` and `MeritFunctionSettings.FromSettings` (and so the command line
 and the saved-file reader) use it. `MeritOperandRegistry.Find` is unchanged.
 
@@ -6808,6 +6835,7 @@ fiber coupling. Readings in §10 item 64.
 ## 69. Non-sequential ray tracing core
 
 (Optimizing non-sequential systems against detector data: §76.)
+(Noise-free LightningTrace and the Source Illumination Map, OP-85: §79.)
 
 OP-70 builds the second engine: rays that find their own path through objects placed in space
 (`OpenSim.Optics/NonSequential/`). The tests are in `OpenSim.Tests/Optics/NonSequentialTests.cs`
@@ -7727,7 +7755,8 @@ greater or less than gives the value row weight 0 and adds OPGT or OPLT on it. A
 flux adds the detector's total flux (weight 0) and an OPGT on it. With several configurations the
 rows are written for each chosen configuration after a CONF. Start At, Overwrite and the overall
 weight as in OP-56; `NextStartAt` is the next Apply's start. Scatter Rays sets the NSTR row's
-Scat?; LightningTrace (OP-85) is refused.
+Scat?; Use LightningTrace writes NSLT (Ray Samp 0, Edge Samp 0, RT? 0) in place of NSTR and
+refuses splitting or scattering with it (OP-85, §79).
 
 **Bitmap Wizard** (`NscMeritWizards.Bitmap`). A BMP or PNG (OP-42's first-party readers; JPG is
 refused) onto a Detector Rectangle or Color. The image is scaled to the detector's pixels by area
@@ -7757,8 +7786,113 @@ PΩ/(2π·4a²) with Ω = 4 arctan(a²/(d√(2a² + d²))) (derived in the test 
 the distance reached is within five binomial standard deviations plus one 1/N step of the
 closed-form 20 mm.
 
-**Not built:** bulk scattering (OP-81); NSLT (LightningTrace, OP-85); NPAF (PAF files, OP-84) and
+**Not built:** bulk scattering (OP-81); NPAF (PAF files, OP-84) and
 NSRD (a merit row has no text cell for the file name they take); NSST (mixed mode, OP-86); NSRW and NSTW (roadway lighting, OP-89);
 FREZ (Freeform Z, OP-72); NSDD Data 4 and 5 and Pix# −13 to −15, NSDE Data 12, 13 and 17–21 (as
 §73); NSRA phases and fields; Surf other than 1; solves and pickups on object cells; the wizards'
 Save/Load Settings, preview drawing and terminate button; a user-set NSTR seed; JPG images.
+
+## 79. Fast illumination solve
+
+OP-85 builds OpticStudio's LightningTrace, the NSLT merit operand and the Source Illumination
+Map: noise-free irradiance from a deterministic mesh of rays instead of Monte Carlo. Code:
+`OpenSim.Optics/NonSequential/Lightning/` (`NscLightningChart.cs`, `NscLightningTrace.cs`,
+`ProjectNscLightning.cs`, `NscLightningAnalyses.cs`) and
+`OpenSim.Optics/Merit/Catalogue/NscLightningOperand.cs`; tests in
+`OpenSim.Tests/Optics/NscLightningTests.cs`. Sources: OpticStudio 2025 R2 help, "Lightning
+Trace", "The LightningTrace Control", "Source Illumination Map" (`plans/sources/optics/op-85-help/`)
+and NSLT in "Non-sequential Ray Tracing and Detector Operands" (`op-55b-help/`). OpticStudio's
+method is "an advanced ray interpolation technology (patent pending)" and is not published; the
+method here is ray mapping with flux tubes, whose energy balance is the Jacobian equation
+det(∇u)·I_T(u) = I_S (C. Bösel and H. Gross, "Single freeform surface design for prescribed input
+wavefront and target irradiance", arXiv:1705.04540v2 (2017), Eq. (2);
+`plans/sources/optics/op-85-help/arxiv-1705.04540v2.pdf`). Closed-access papers on flux-tube
+irradiance and OpticStudio's patent filing were not consulted. Readings in §10 item 75.
+
+**Far-field chart** (`NscLightningChart`). "All rays launched from each mesh start at the same
+position, corresponding to the center position of the corresponding source. Thus, LightningTrace
+neglects the size and spatial distribution of each source, and represents each source by its
+far-field description." OP-77's sources sample by inversion (§72): two of each type's uniform
+numbers set the direction, so the unit square of those two numbers, through the type's own
+sampler, is a chart of its far field with the power spread uniformly over it. A warp u = w(s) of
+the first number (θ = sα for Source Point; θ = πs for the isotropic volume, tube and filament
+sources; θ = sπ/2 for a cosine-exponent emitter; u = s² where an inverse CDF has a √u pole) keeps
+the polar angle close to linear in the mesh coordinate, and the power of the cell
+[s0, s1] × [b0, b1] is exactly P·(w(s1) − w(s0))·(b1 − b0). Refused by name: Source Ray and
+collimated modes ("LightningTrace cannot be used to model perfectly collimated beams"), any chart
+spanning no solid angle, Source Gaussian, a Gaussian far field and an annular point-mode emitter
+of Source Ellipse/Rectangle (drawn by rejection). Every ray starts at the centre of the source's
+local box (plus the array offset of its element, pre-propagation and reversal as OP-77 applies
+them); polarization is ignored.
+
+**Mesh and deposit** (`NscLightningTrace.Run`). Ray Sampling k gives 32·2^k cells per side (the
+help: "as the mesh size doubles, the number of mesh rays quadruples"; 32 is this build's choice).
+The corner rays are traced with `NscTracer.TraceSingle` at the source's weight-averaged
+wavelength, with polarization off ("Polarization effects are also not accounted for"), no
+splitting and no scattering (ray splitting and Scatter NSC Rays are refused by name). A ray's path
+is its sequence of (object, face, reflected / transmitted / TIR / terminated); a cell whose four
+corners share the path (and no corner has a trace error) maps, on each detector the path records,
+to the quadrilateral of the corners' hit points; its two triangles (00, 10, 11) and (00, 11, 01)
+take the cell's power in proportion to their image areas, times the mean of their corners' powers
+at the hit, spread uniformly over the triangle, and each pixel receives the exact area of the
+triangle inside it (Sutherland–Hodgman clipping). The irradiance is so the cell's power over its
+mapped area, the Jacobian of the piecewise-linear map; overlapping images (a fold of the map
+between cells) add, which is the correct sum over branches. A cell whose corners disagree or whose
+triangles' images have opposite orientation (a caustic inside the cell) is halved in s and b, up
+to Edge Sampling times; at the finest level a disagreeing cell's power is reported as unresolved
+and each corner ray takes a quarter of it to the pixel where it lands (nothing for a ray with a
+trace error, reported); a folded cell is counted and deposited as it is. Cells whose agreeing
+corners reach no detector are reported as missed. Emitted = Σ cell powers exactly, and
+emitted − missed − unresolved ≤ detected ≤ emitted − missed for one absorbing detector.
+**Convergence:** a pixel's flux error is O(h²) in the chart cell size (second order) away from
+unresolved cells; the error from unresolved cells is at most their power.
+
+**Detectors.** Detector Rectangle and Detector Color receive spatial data: flux, lumens
+(683·V(λ) averaged over the source's spectrum, per watt) and for Detector Color the tristimulus
+values per watt averaged likewise ("the overall color ... of each source will be retained");
+angle-space arrays are zero ("only the spatial data will be available"), the noise sums are NaN
+(no Monte Carlo noise), the coherent sums are absent, the mirroring flag is honoured, pixel
+interpolation and Record Spectral Data are not used. `LaunchedRays` is the number of mesh rays
+traced, `SpatialHits` the mesh rays that landed. A mesh ray reaching a Detector Polar is refused.
+
+**Determinism.** The mesh is cut into bands of 4 rows (each traces its 5 rows of corner rays, so
+the shared row twice), traced in parallel in waves of 64 bands, and deposited in band order: the
+same bits at any thread count.
+
+**Project and NSLT.** `ProjectNscLightning.Trace` reads the scene, the non-sequential controls,
+environment, coatings and emission options as OP-77's `ProjectNscSources.Trace` does. NSLT: Int1
+Surf (1), Int2 Src# (0 every source), Data1 Ray Samp 0–5, Data2 Edge Samp 0–4 (the help: "inputs
+only going from 0 to 4"), Data3 RT?. It needs an earlier clear-every-detector row (as NSTR) and
+adds the mesh rays' detector data to what the evaluation's detectors hold (`NscMeritSession`);
+RT? 1 is NSTR with splitting, scattering, polarization and Ignore Errors off, on the next NSTR
+random stream. Returns 0. The Optimization and Bitmap Wizards' Use LightningTrace writes NSLT
+(0, 0, 0) instead of NSTR and refuses Split Rays or Scatter Rays with it.
+
+**Analyses.** *Lightning trace* (`NscLightningTraceAnalysis`): Ray and Edge Sampling, the source,
+the detector shown through the Detector Viewer (image, contours, cross sections, true colour,
+chromaticity; scale, smoothing, photometric) and a table of the mesh statistics. *Source
+illumination map* (`NscSourceIlluminationMapAnalysis`): "The far-field luminous intensity data
+... along with the solid angle subtended by each pixel on the screen, determines the luminous
+flux for each pixel" on a screen at the global origin with normal (0, 0, 1), its half widths and
+pixel counts as the help's; 1 to 8 sources. IES, LDT and SDF files are refused (readers are
+OP-78); the sources are the project's source objects, each with its own position, orientation
+and spectrum; the map is LightningTrace on a scene that keeps only those sources (other objects
+replaced by an object no ray meets, so numbering and references hold) and an absorbing Detector
+Color as the screen. True colour is the default display. Suppress Frame is stored and has no
+effect. Defaults (screen ±1000 lens units, 100 × 100 pixels, sampling 16X) are this build's own.
+
+**Gate.** `NscLightningTests.Gate_OnASmoothLens_LightningTraceEqualsTheConvergedMonteCarloIrradiance`
+(Slow): a 20° Source Point through a biconvex Standard Lens (index 1.5) onto a 10 × 10 Detector
+Rectangle; LightningTrace at 256 cells per side agrees with 2,000,000 Sobol Monte Carlo rays
+within 5 binomial σ on every pixel, and the 32- and 64-cell results' distances from it fall by at
+least 2.5 (4.2 expected at second order). Also: the 30° cone on a detector against the closed form
+IΩ at second order with the total exact to 10⁻¹²; edge refinement bounded by the unresolved
+power; bitwise thread independence; NSLT against the project trace and RT? 1 against NSTR; the
+Source Illumination Map against IΩ per pixel.
+
+**Not built:** OpticStudio's automatic refinement around small objects; LightningTrace onto
+Detector Polar, Detector Surface, Detector Volume and objects as detectors; angular data on
+Detector Rectangle and Color; spectral distribution of the mesh rays (one average wavelength per
+source); Source Gaussian, Source Ray and the rejection-sampled modes; IES, LDT and SDF files in
+the Source Illumination Map (OP-78); the initial mesh drawn in the NSC 3D Layout and Shaded
+Model (no non-sequential layout plot yet); ZPL NSLT (bound by the wiring).

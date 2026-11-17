@@ -2184,7 +2184,7 @@ built: see Physical optics propagation; FICL and FICP: see Fiber coupling.)
 
 When you type or load an OpticStudio operand this version does not have, whether from the imaging
 or the constraint half, the message says what it computes and why it is not built, for example
-"NSLT (OpticStudio: Non-sequential LightningTrace…) is not built yet: needs OP-85". A
+"NSRW (OpticStudio: Non-sequential roadway lighting data…) is not built yet: needs OP-89". A
 loaded row with such a code becomes OOFF. The same message answers SETOPERAND in a ZPL macro, and
 OPEV evaluates any operand listed here by its OCOD number. (The Zemax lens file import reads no
 merit rows: it refuses them all, so it never meets an operand code.)
@@ -2547,7 +2547,7 @@ lists it as detected.
 
 Not built: Detector Surface, Detector Volume and objects as detectors (refused by name), PSF mode,
 polarization-filtered detector data, per-pixel spectra, CRI and CCT, the polar directivity plots,
-IES/LDT export, LightningTrace, image-file output, SETDETECTOR. (Ray-database playback is under
+IES/LDT export, image-file output, SETDETECTOR (LightningTrace is under Fast illumination solve). (Ray-database playback is under
 Ray databases and filter strings; the merit operands that read detectors are under Illumination
 optimization.) The readings not yet checked against OpticStudio are listed in
 docs/Optics-Conventions.md §10 item 69.
@@ -2668,10 +2668,46 @@ Optimizing a non-sequential system against what its detectors record
   open for more criteria. Scatter Rays turns surface scattering on in the trace row (NSTR's
   Scat?).
 
-Not built: bulk scattering, LightningTrace (NSLT), the file-naming rows NPAF and NSRD (a merit
+Not built: bulk scattering, the file-naming rows NPAF and NSRD (a merit
 row has no text cell for a file name), mixed
 mode (NSST), roadway lighting (NSRW, NSTW), FREZ, NSRA phases and fields, solves and pickups on
 object cells, the wizards' saved settings, preview picture and terminate button, JPG pictures.
+
+## Fast illumination solve (LightningTrace)
+
+A noise-free irradiance estimate for iterating an illumination design without millions of
+Monte Carlo rays (docs/Optics-Conventions.md §79).
+
+- **Lightning trace** (analysis, Non-sequential): traces a fixed mesh of rays over each source's
+  far field from the source's centre and spreads each mesh cell's power over the area its corner
+  rays outline on the detector. Ray Sampling sets the mesh (Low 1X = 32 × 32 cells per source,
+  each step doubles the cells per side); Edge Sampling sets how often a cell is halved where its
+  rays part ways at an object's or detector's edge. The result is shown on a Detector Rectangle or
+  Detector Color through the Detector Viewer's displays, with a table of the mesh: rays traced,
+  cells refined, and the power that reached no detector or was left unresolved at edges (the
+  bound on the edge error). The result has no noise: the same design always gives the same
+  numbers.
+- As the help says, each source counts as a point at its centre with its far-field distribution,
+  traced at its average wavelength with its colour kept; rays do not split, scatter or carry
+  polarization. Use it for small sources far from the optics (LEDs, luminaires), not for imaging
+  a source or for collimated beams. Source Ray, Source Gaussian and the collimated, Gaussian and
+  annular point modes of Source Ellipse/Rectangle are refused, as is a Detector Polar reached by
+  mesh rays.
+- **NSLT** (Merit Function Editor): after an NSDD row with Det# 0, NSLT fills the detectors by
+  LightningTrace (Src#, Ray Samp 0–5, Edge Samp 0–4), and the NSDD, NSDE and NSDP rows after it
+  read them; RT? 1 traces conventionally instead (NSTR with splitting, scattering and polarization
+  off). The NSC wizards' Use LightningTrace writes an NSLT row instead of NSTR.
+- **Source illumination map** (analysis, Non-sequential): the true-colour illumination pattern of
+  up to 8 of the project's sources on a screen at the origin facing +z, each source's far field
+  only (the other objects are left out); screen half widths and pixel counts as in OpticStudio.
+  IES, LDT and SDF source files are not read yet (plan item OP-78): list the source objects
+  instead.
+
+Not built: OpticStudio's automatic mesh refinement around small objects (an object smaller than a
+mesh cell can be missed), LightningTrace on Detector Polar and angular data, spectral detail per
+mesh ray, source files in the Source Illumination Map, drawing the mesh in a layout, and the ZPL
+keyword NSLT. The readings not yet checked against OpticStudio are in docs/Optics-Conventions.md
+§10 item 75.
 
 ## Coming
 

@@ -124,7 +124,8 @@ public sealed class OperandCatalogueCoverageTests
     [Fact]
     public void NotBuiltLookup_FindsCodesAndNumberedFamilies()
     {
-        Assert.Equal("OP-85", NotBuiltOperands.Find("nslt")!.WaitsFor);   // OP-88 built NSDD; LightningTrace (OP-85) is the probe now
+        Assert.Equal("OP-89", NotBuiltOperands.Find("nsrw")!.WaitsFor);   // OP-85 built NSLT; roadway lighting (OP-89) is the probe now
+        Assert.Null(NotBuiltOperands.Find("NSLT"));                       // OP-85
         Assert.Null(NotBuiltOperands.Find("NSDD"));                       // OP-88
         Assert.Equal("InGT", NotBuiltOperands.Find("I3GT")!.Code);
         Assert.Equal("InVA", NotBuiltOperands.Find("I6VA")!.Code);
@@ -138,9 +139,10 @@ public sealed class OperandCatalogueCoverageTests
     public void Describe_NamesRegisteredNotBuiltAndUnknownCodes()
     {
         Assert.StartsWith("Edge thickness value (ETVA):", MeritOperandCatalogue.Describe("etva"));
-        string nslt = MeritOperandCatalogue.Describe("NSLT");   // OP-88 built NSDD; NSLT waits for OP-85
-        Assert.StartsWith("NSLT (OpticStudio: Non-sequential LightningTrace", nslt);
-        Assert.Contains("is not built yet: needs OP-85", nslt);
+        string nsrw = MeritOperandCatalogue.Describe("NSRW");   // OP-85 built NSLT; NSRW waits for OP-89
+        Assert.StartsWith("NSRW (OpticStudio: Non-sequential roadway lighting data", nsrw);
+        Assert.Contains("is not built yet: needs OP-89", nsrw);
+        Assert.StartsWith("Non-sequential LightningTrace (NSLT):", MeritOperandCatalogue.Describe("NSLT"));   // OP-85
         Assert.StartsWith("Non-sequential incoherent detector data (NSDD):", MeritOperandCatalogue.Describe("NSDD"));
         Assert.Equal("there is no operand 'QQQQ'.", MeritOperandCatalogue.Describe("QQQQ"));
         Assert.Contains("needs OP-28", MeritOperandCatalogue.Unknown("I2LT"));

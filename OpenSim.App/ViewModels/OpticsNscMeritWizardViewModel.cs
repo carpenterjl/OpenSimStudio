@@ -21,7 +21,7 @@ public sealed record NscWizardChoice<T>(string Label, T Value);
 /// rows into the Merit Function Editor as one undo step (<see cref="NscMeritWizards"/>) and, as
 /// the help's dialog does, turns the clear-data and raytrace rows off for the next Apply and moves
 /// Start At past what it wrote; OK applies and closes. Scatter Rays sets the NSTR row's Scat?
-/// (OP-80's surface scattering); LightningTrace is refused by name; JPG images are refused (only
+/// (OP-80's surface scattering); Use LightningTrace writes an NSLT row instead (OP-85); JPG images are refused (only
 /// BMP and PNG are read first-party).
 /// </summary>
 public sealed partial class OpticsNscMeritWizardViewModel : ObservableObject

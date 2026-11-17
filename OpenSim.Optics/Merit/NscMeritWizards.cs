@@ -66,7 +66,7 @@ public abstract record NscWizardCommonOptions
     public bool UsePolarization { get; init; }
     public bool IgnoreErrors { get; init; }
 
-    /// <summary>"Use LightningTrace": refused (plan item OP-85).</summary>
+    /// <summary>"Use LightningTrace" (OP-85): the trace row is NSLT (Ray Samp 0, Edge Samp 0, RT? 0) instead of NSTR.</summary>
     public bool UseLightningTrace { get; init; }
 }
 
@@ -470,7 +470,9 @@ public static class NscMeritWizards
 
     private static void Common(NscWizardCommonOptions o, IReadOnlyList<OpticsNscObjectSettings> rows, int configurations, string who)
     {
-        if (o.UseLightningTrace) throw new ArgumentException($"{who}: LightningTrace is not built (plan item OP-85); use conventional raytracing.");
+        // OP-85: LightningTrace writes an NSLT row; its mesh rays neither split nor scatter.
+        if (o.UseLightningTrace && (o.SplitRays || o.ScatterRays))
+            throw new ArgumentException($"{who}: LightningTrace mesh rays neither split nor scatter (help, \"Lightning Trace\"); turn Split Rays and Scatter Rays off, or use conventional raytracing.");
         if (!(o.OverallWeight >= 0) || !double.IsFinite(o.OverallWeight)) throw new ArgumentException($"{who}: the overall weight must be zero or positive.");
         if (o.Configuration < 0 || o.Configuration > configurations) throw new ArgumentException($"{who}: configuration {o.Configuration} is not one of the {configurations} (0 for All).");
         if (o.Source < 0 || o.Source > rows.Count) throw new ArgumentException($"{who}: source {o.Source} is not an object (0 for every source).");
@@ -486,6 +488,15 @@ public static class NscMeritWizards
     {
         yield return new MeritOperandRow { Code = "NSDD", Int1 = 1, Int2 = 0, Comment = "Clear every detector" };
         if (o.ClearDetector > 0) yield return new MeritOperandRow { Code = "NSDD", Int1 = 1, Int2 = -o.ClearDetector, Comment = $"Clear detector {o.ClearDetector}" };
+        if (o.UseLightningTrace)   // OP-85
+        {
+            yield return new MeritOperandRow
+            {
+                Code = "NSLT", Int1 = 1, Int2 = o.Source, Comment = o.Source == 0 ? "LightningTrace every source" : $"LightningTrace source {o.Source}",
+                Data = new double[] { 0, 0, 0 },
+            };
+            yield break;
+        }
         yield return new MeritOperandRow
         {
             Code = "NSTR", Int1 = 1, Int2 = o.Source, Comment = o.Source == 0 ? "Trace every source" : $"Trace source {o.Source}",

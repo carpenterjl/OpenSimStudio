@@ -385,8 +385,12 @@ public class NscOptimizationTests
 
         Assert.Contains("is not offered for a Detector Polar", Assert.Throws<ArgumentException>(() =>
             NscMeritWizards.CriterionRows(3, "Detector Polar", NscWizardCriterion.CentroidX, NscWizardComparison.Equal, 0, 1, 1)).Message);
-        Assert.Contains("OP-85", Assert.Throws<ArgumentException>(() => NscMeritWizards.Optimization(existing, rows, 1,
-            new NscOptimizationWizardOptions { Detector = 2, UseLightningTrace = true })).Message);
+        // OP-85: Use LightningTrace writes NSLT (Ray Samp 0, Edge Samp 0, RT? 0) instead of NSTR, and refuses splitting with it.
+        Assert.Contains("neither split nor scatter", Assert.Throws<ArgumentException>(() => NscMeritWizards.Optimization(existing, rows, 1,
+            new NscOptimizationWizardOptions { Detector = 2, UseLightningTrace = true, SplitRays = true })).Message);
+        var lightning = NscMeritWizards.Optimization(existing, rows, 1, new NscOptimizationWizardOptions { Detector = 2, UseLightningTrace = true });
+        Assert.Equal(new[] { "BLNK", "NSDD", "NSLT", "NSDD" }, lightning.Function.Rows.Select(r => r.Code));
+        Assert.Equal((0.0, 0.0, 0.0), (lightning.Function.Row(3).DataAt(1), lightning.Function.Row(3).DataAt(2), lightning.Function.Row(3).DataAt(3)));
         Assert.Contains("not a Detector Rectangle", Assert.Throws<ArgumentException>(() => NscMeritWizards.Optimization(existing, rows, 1,
             new NscOptimizationWizardOptions { Detector = 1 })).Message);
         // Overwrite from row 1 replaces the BLNK.
