@@ -74,7 +74,9 @@ public static class NscRayDatabaseProject
 {
     /// <summary>The project's named filters (<see cref="OpenSim.Core.Model.OpticsNonSequentialSettings.NamedFilters"/>).</summary>
     public static NscNamedFilters NamedFilters(OpticsAnalysisContext context) =>
-        NscNamedFilters.Parse(context.System.NonSequential?.NamedFilters);
+        NscNamedFilters.Parse(context.System.NonSequential?.NamedFilters)
+            .WithStrayLight(StrayLight.NscSequenceNames.PathFilters(context.System.NonSequential),   // OP-84: _n and the sequences
+                StrayLight.NscSequenceNames.Sequences(context.System.NonSequential));
 
     /// <summary>A filter string parsed with the project's named filters; null for blank.</summary>
     public static NscRayFilter? Filter(OpticsAnalysisContext context, string? text) =>

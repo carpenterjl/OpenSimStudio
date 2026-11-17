@@ -129,7 +129,7 @@ public static class NotBuiltOperands
         // OP-88: NSTR, NSDD, NSDE, NSDP, NSDC and NSRA are built (NscOperands). wire-16: OP-83 built the
         // ray database, but the file-naming rows NPAF and NSRD hold a file name, and a merit row has
         // no text cell for one.
-        Add("NPAF", nsr, "Names a PAF file for the NSTR trace to save.", "PAF path files (Path Analysis) are not built, and a merit row has no text cell for the file name", "OP-84");
+        Add("NPAF", nsr, "Names a PAF file for the NSTR trace to save.", "PAF path files are not built (OP-84's Path Analysis reads ZRD files), and a merit row has no text cell for the file name", "OP-84");   // OP-84: Path Analysis built, PAF not
         // OP-85: NSLT is built (NscLightningOperand).
         Add("NSRW", nsr, "Non-sequential roadway lighting data, after an NSTW trace.", "roadway lighting is not built", "OP-89");
         Add("NSST", nsr, "Traces one sequential ray into a non-sequential surface and returns data about it there.", "mixed mode (non-sequential surfaces in a sequential system) is not built", "OP-86");

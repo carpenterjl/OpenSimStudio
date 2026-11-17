@@ -1990,6 +1990,36 @@ single place in the code, so a correction is one line and its test.
     Check: trace one LED-like scene with LightningTrace in OpticStudio and here at equal sampling,
     and compare detector totals and profiles.
 
+74. **Stray-light tool readings** (OP-84, section 78). From the help pages under
+    `plans/sources/optics/op-84-help/` ("Path Analysis", "Sequence Selector", "Critical Ray Tracer
+    (analyze tab, non-sequential)", "Critical Rayset Generator") and `op-83-help/The_Filter_String`;
+    nothing has been compared with OpticStudio's output.
+    - *Paths.* A branch's path is its source object (face 0) then the object and face of every
+      segment that hit something, the steps X_SEQ compares; a miss is not an entry. The 100-entry
+      limit counts the source; every longer branch is one overflow path ("> 100"). A branch's flux
+      is its last segment's intensity (at its end, before the interaction there).
+    - *Sort Paths By.* The help names the keys, not their direction: total ending flux and number
+      of branches sort largest first, the others smallest first; ties by flux, then by first
+      appearance.
+    - *Path Analysis by detector* is an addition: the detector's recorded hits grouped by the path
+      from the source to the hitting segment, as prefix paths (" #").
+    - *Path filters and sequences.* _n and a sequence name select the branches whose path is the
+      saved one (a prefix path: branches that start with it). SEQ[a:b] with b − a ≥ 100 is refused
+      (the help returns no sequences for it). A user's sequence name may be any SEQ&lt;n&gt; (the
+      original number is not tracked), and the single-letter rule applies in either case.
+      "Straight-through paths" take, per source, the unsplit, unscattered path carrying the most
+      flux (with "Paths must end in a detector": whose last entry is a detector).
+    - *CRS files.* Numbers separated by spaces, tabs or commas; a non-numeric line after the header
+      is the column line; a header with four tilts has the mirror-space 180° first; tilts in the
+      object tilt order of §69. The Critical Ray Tracer's wavelength match is within 10⁻⁶
+      relative, and any unmatched ray aborts.
+    - *Critical Rayset Generator.* The pupil points of each pattern and the edge margin (every
+      pupil coordinate scaled by 1 − 50·g/R, or 1 − 10⁻⁶ for NA and cone apertures, g = 10⁻⁶ lens
+      units); the start and end frame is the launch frame; in mirror space the targets turn 180°
+      about their own x axis.
+    Check: run Path Analysis and the Critical Ray Tracer on one system in OpticStudio and compare
+    the path list and the pass/fail table.
+
 ## 11. Paraxial optics
 
 The paraxial engine (OP-19, `OpenSim.Optics/Paraxial/ParaxialSystem.cs`) traces y-nu rays
@@ -6998,6 +7028,8 @@ Surface scattering and importance sampling (OP-80) are in section 74.
 
 The ray database, filter strings and Playback ZRD on Detector (OP-83) are in section 75.
 
+Stray-light tools on the traced rays (Path Analysis, sequences, critical rays, reverse radiance): §78 (OP-84).
+
 ## 70. CAD export
 
 OP-96 writes a sequential lens's elements, mirrors and rays as files a mechanical designer can
@@ -7633,10 +7665,10 @@ X_HITFACE2, X_SEGMENTS, X_GHOST, X_GHOSTN, X_TIR, X_SCATTER, X_SCATTERF, X_NDIF,
 X_IRGT, X_IRLT, X_WAVERANGE, X_SEQ (without diffraction orders) and, with the scene's placements
 (`NscRayFilterFrame`), X_XGT/LT, X_YGT/LT, X_ZGT/LT (lens units), X_LGT/LT, X_MGT/LT, X_NGT/LT
 and X_AXYG/L, X_AXZG/L, X_AYZG/L (degrees). The S and F marks are set by scattering (OP-80); D, E
-(OP-82) and B (OP-81) are parsed and read from the segment flags, which nothing sets yet. Refused
-by name: Jn.f (its detector-only zeroing), _n and {@n} (Path Analysis, OP-84), SEQ[a:b] (Sequence
-Selector, OP-84), X_DIFF and orders in X_SEQ (OP-82), X_EXT and X_ORD (birefringence), X_WAVESHIFT
-(OP-81). The help's 260-character limit is not imposed.
+(OP-82) and B (OP-81) are parsed and read from the segment flags, which nothing sets yet. _n,
+SEQ[a:b] and sequence names are built by OP-84 (§78). Refused by name: Jn.f (its detector-only
+zeroing), {@n} (PAF files), X_DIFF and orders in X_SEQ (OP-82), X_EXT and X_ORD (birefringence),
+X_WAVESHIFT (OP-81). The help's 260-character limit is not imposed.
 
 **Named filters** (`NscNamedFilters`; saved as `OpticsNonSequentialSettings.NamedFilters`, one
 "filtername; filterstring" line each). A name is letters, digits and underscores, matched without
@@ -7682,7 +7714,7 @@ a source file).
 
 **Not built:** layout filters and drawing rays from a database (no NSC layout drawing exists);
 Save Rays on Object and saving rays as source files (DAT, SDF, TM25RAY); the CBD and CFD formats;
-playback of UFD files; PAF files and Path Analysis (OP-84); the J flag; diffraction orders,
+playback of UFD files; PAF files (Path Analysis is §78); the J flag; diffraction orders,
 xybin/lmbin, phase and electric field in the files; the merit operand NSRD (a merit row has no
 text cell for its file name); a Named Filters editor in the app (the list is saved in the project
 file); ZRDSAVERAYS (a source file).
@@ -8033,3 +8065,113 @@ Detector Rectangle and Color; spectral distribution of the mesh rays (one averag
 source); Source Gaussian, Source Ray and the rejection-sampled modes; IES, LDT and SDF files in
 the Source Illumination Map (OP-78); the initial mesh drawn in the NSC 3D Layout and Shaded
 Model (no non-sequential layout plot yet); ZPL NSLT (bound by the wiring).
+
+## 78. Stray-light tools
+
+Plan item OP-84 (`OpenSim.Optics/NonSequential/StrayLight/`; tests in
+`OpenSim.Tests/Optics/NscStrayLightTests.cs` and
+`OpenSim.App.Tests/ViewModels/OpticsNscStrayLightEditorTests.cs`). Help pages (2025 R2, under
+`plans/sources/optics/op-84-help/`): "Path Analysis", "Sequence Selector", "Critical Ray Tracer
+(analyze tab, non-sequential)", "Critical Rayset Generator", and "The Filter String" (`op-83-help`).
+The public help has no page for OpticStudio's ReverseRadiance detector, target or analysis (the
+2025 R2 table of contents was searched); the reverse-radiance estimate below is this program's
+own. Readings in §10 item 74.
+
+**Paths** (`NscPathSequence`). The path of a branch (the segments from the source to one
+terminating segment, §75) is its source object with face 0 followed by the object and face of every
+segment that hit an object, written "1.0, 2.1, 2.2, 5.0, 4.0" (n.f, the help's format). These are
+the steps X_SEQ compares, so a path, its X_SEQ, a path filter and a sequence of the same entries
+select the same branches. A prefix path (" #") selects every branch that starts with it; the
+overflow path ("> 100") is the one path of every branch with more than 100 entries ("All paths with
+more than this number of object interactions are considered to have the same path"). A hand-written
+entry "n" without a face matches any face. Diffraction orders ("/(x,y)") are refused (OP-82).
+
+**Path Analysis** (`NscPathAnalysis.Analyse`; analysis `NscPathAnalysis`). The rays First to Last
+of a ray database (a ZRD file, or the project's sources traced now with Split, Scatter, Use
+Polarization, Ignore Errors) are read; each branch passing the filter is grouped by its path and its
+flux (the last segment's intensity) summed. A branch below Relative Minimum Flux (end flux over
+launch flux), or one whose path would be the 10 001st, goes to the uncategorized sum. The report
+lists path number, flux out, flux out as a percentage of the flux launched by the rays read, the
+branch count and the sequence, sorted as Sort Paths By says (§10 item 74). Each path also carries
+its objects struck, unique objects, last object, mean end optical path and diffraction events
+(always 0 until OP-82). With **Detector** n (an addition) every hit the database recorded on
+detector n, on a segment lying on a passing branch, is grouped by the path from the source to the
+segment that made it (a prefix path) and its power summed: the paths and the uncategorized sum then
+add up to the detector's total flux from the same hits. Sums are compensated, in database order.
+Generate Path Filters lists "_n: sequence"; an analysis does not change the project, so the
+Non-Sequential Component Editor's Generate path filters (or its Path filters box) saves them.
+
+**Path filters and sequences** (saved as `OpticsNonSequentialSettings.PathFilters`, line k the path
+of _k, and `.Sequences`, `OpticsNscSequenceSettings` Name, Sequence, Enabled). `NscRayDatabaseProject.NamedFilters`
+carries both on `NscNamedFilters` (`WithStrayLight`), so every filter parsed with the project's
+names (the Detector Viewer's playback, the Ray Database Viewer, Path Analysis) reads _n ("must not
+have any leading zeros"; an undefined n is refused naming the defined range), a sequence by its name
+(any case; "The SEQ5, or a given filter string will equate to X_SEQ(...)") and SEQ[a:b]
+(sequences a to b of the list, a and b optional, b ≥ a, b − a below 100). Sequence names follow the
+help's rules (`NscSequenceNames.Problem`): a letter first, then letters, digits and underscores; not
+starting with X; not a single letter followed by digits; not Z; not a named filter's name; no two
+sequences with one path. A new sequence takes the smallest free SEQ#.
+
+**Sequence Selector** (`NscSequenceGenerator`; analysis `NscSequenceSelector`). Methods:
+straight-through paths for all sources (each source's analysis rays traced unsplit, unscattered,
+unpolarized; per source the path carrying the most end flux, optionally only paths ending on a
+detector), path filters from Path Analysis (all, the first 3, 5 or 10, or one), or a ZRD file's
+paths as Path Analysis groups them (filter, Relative Minimum Flux, Sort Paths By). The analysis
+lists the project's sequences with the generated ones appended (duplicates skipped); the editor's
+Generate sequences saves them; its Sequences box ("name; sequence", "-" for an unchecked one) is
+the Sequence Builder's role.
+
+**CRS files** (`NscCriticalRayset`). As the help describes: a header line N, units flag (0 m, 1 in,
+2 cm, 3 ft, 4 mm), date YYYYMMDD, rayset flag (0 XY fan, 1 X fan, 2 Y fan, 3 chief and ring, 4 list,
+6 grid, 8 chief and marginals) and the x, y, z tilts of the target detectors; an optional column
+line; N rows of start X Y Z L M N, wavelength (µm), intensity, field, ray flag (0 chief, 1
+marginal, 2 grid, 3 ring, 4 Y fan, 5 X fan, 6 XY fan, 7 list), end X Y Z L M N; "!" comment lines.
+Lengths are held in meters (the foot is 12 inches). The writer writes the column line as a comment
+and folds a mirror-space turn into the three tilts.
+
+**Critical Ray Tracer** (`NscCriticalRayTracer.Trace`; analysis `NscCriticalRayTracer`). Each ray is
+traced from its start without splitting, scattering or polarization, errors ignored, through the
+scene plus an inserted absorbing plane (a Rectangle as the last object) through its target point
+with the header's tilts. It passes when its last segment ends on that plane within the position
+tolerance (lens units) of the target and the angle tolerance (degrees) of the target direction;
+otherwise it fails, with the termination object (0 none, "Target Location" for the plane). The
+report gives the pass and fail percentages and, as chosen, the start, actual and target end data
+(XYZ, LMN or both), for all, failed or passing rays. More than 127 008 rays, or a ray whose
+wavelength matches no system wavelength, aborts.
+
+**Critical Rayset Generator** (`NscCriticalRaysetGenerator.Generate`; analysis
+`NscCriticalRaysetGenerator`). From the sequential lens: refused for an aperture other than Float By
+Stop Size, Object Space NA or Object Cone Angle, ray aiming off, a zero semi-diameter (other than
+coordinate breaks), more than one configuration, and the List pattern. Rays for each field (or the
+on-axis one) and wavelength (or the primary) at the pattern's pupil points (§10 item 74), launched
+by `RayLauncher` and traced by `SequentialTrace`; vignetted rays are dropped. The start is the object
+point, or for an object at infinity the launch point moved along the ray to the plane z = −d (d the
+Effective Input Distance, at least 10 default glue distances); the end is the image-surface hit and
+the incoming direction; both in the launch frame (§13). The target tilts rebuild the image
+surface's orientation. Written to a CRS file when Output File is given.
+
+**Reverse radiance** (`NscReverseRadiance.Estimate`; analysis `NscReverseRadiance`). The flux of one
+pixel of a Detector Rectangle or Color, Φ = ∫_A ∫ L_in |cos θ| dω dA, estimated by backward rays:
+start uniform on the pixel (offset by the glue distance), direction cosine-weighted over the
+hemisphere(s) the detector receives from (both, each with probability ½, unless Front Only), so a
+ray samples A·π·s·L_in (s = 2 or 1). Rays start with intensity 1 in the detector's Inside Of and are
+traced by `NscTracer.Run` (reversibility: refraction, TIR, mirrors, Fresnel power transmittance and
+Beer–Lambert absorption are the same both ways), recorded, and every segment crossing a source's
+emitting face against its emission adds T·L_s·(n_d/n_s)², T the segment's intensity at the crossing
+(its end intensity times exp(α·(L − t)) in an absorbing medium), L_s the source radiance there, n_d
+and n_s the indices at the pixel and the crossing. Sources: Source Ellipse and Source Rectangle in
+the cosine mode, L = P·(Cn + 1)·cos^(Cn−1) θ / (2π·S) over the emitting area S (the annulus's with
+Min half widths), P at each wavelength the source power times that line's weight over its spectrum's
+total (lumens converted as the emitter does). Refused by name: scattering in the backward trace,
+bulk scattering, mirrored detectors, pixel interpolation, Detector Polar, point and collimated
+modes (backward rays reach them with probability zero), the Gaussian mode, arrays, pre-propagation,
+reversed rays and other source types. Ray k of wavelength g draws from SplitMix64 stream g·N + k of
+the seed; the standard error is the samples' standard deviation over √N; the analysis can trace the
+sources forward too and shows both estimates and their difference in combined standard errors.
+
+**Not built:** PAF path files (their format is not in the help; {@n} and NSTR's savepaths stay
+refused, and so does the NPAF operand), the Sequence Selector's embedded layout plot and the path
+filter keyboard shortcuts (there is no non-sequential layout drawing), diffraction orders in paths,
+the List pattern and the curved dummy surface of the Critical Rayset Generator, reading a CRS file
+as a Source File (Source File is OP-78), OpticStudio's ReverseRadiance detector and target objects
+and its analysis settings (no help page), scattering in the backward trace.

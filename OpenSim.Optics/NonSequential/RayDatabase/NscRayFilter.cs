@@ -69,6 +69,36 @@ public sealed class NscNamedFilters
 
     internal bool TryGet(string name, out string filter) => _byName.TryGetValue(name, out filter!);
 
+    // OP-84: Path Analysis's path filters _1, _2, ... and the Sequence Selector's sequences
+    // (docs/Optics-Conventions.md §78), carried with the named filters so every place that parses
+    // a filter with the project's names sees them.
+    private IReadOnlyList<StrayLight.NscPathSequence> _paths = Array.Empty<StrayLight.NscPathSequence>();
+    private IReadOnlyList<StrayLight.NscSequence> _sequences = Array.Empty<StrayLight.NscSequence>();
+
+    /// <summary>OP-84: the path filters; element k − 1 is _k.</summary>
+    public IReadOnlyList<StrayLight.NscPathSequence> PathFilters => _paths;
+
+    /// <summary>OP-84: the sequences in list order (the order SEQ[a:b] counts).</summary>
+    public IReadOnlyList<StrayLight.NscSequence> Sequences => _sequences;
+
+    /// <summary>OP-84: these named filters with <paramref name="pathFilters"/> and
+    /// <paramref name="sequences"/>; a sequence name that is also a named filter, or an invalid
+    /// list, is refused (<see cref="ArgumentException"/>).</summary>
+    public NscNamedFilters WithStrayLight(IReadOnlyList<StrayLight.NscPathSequence>? pathFilters, IReadOnlyList<StrayLight.NscSequence>? sequences)
+    {
+        var seq = sequences ?? Array.Empty<StrayLight.NscSequence>();
+        StrayLight.NscSequenceNames.Validate(seq, _list.Select(f => f.Name));
+        var r = new NscNamedFilters();
+        foreach (var (k, v) in _byName) r._byName[k] = v;
+        r._list.AddRange(_list);
+        r._paths = pathFilters?.ToArray() ?? Array.Empty<StrayLight.NscPathSequence>();
+        r._sequences = seq.ToArray();
+        return r;
+    }
+
+    internal StrayLight.NscSequence? FindSequence(string name) =>
+        _sequences.FirstOrDefault(q => string.Equals(q.Name, name, StringComparison.OrdinalIgnoreCase));
+
     internal static bool LooksLikeFlag(string name) =>
         Regex.IsMatch(name, @"^([BDEFGHJLMORSTW]\d+|Z|X_.*|SEQ|_\d*)$", RegexOptions.IgnoreCase);
 }
@@ -85,9 +115,9 @@ public sealed class NscNamedFilters
 /// <para>
 /// The help does not state the precedence of &amp;, | and ^, so a filter that mixes them without
 /// parentheses is refused ("H1 &amp; H2 | H3" must be written "(H1 &amp; H2) | H3"). Built flags:
-/// B, D, E, F, G, H, L, M, O, R, S, T, W, Z, the path filters ~ and $, and the X_ flags listed in
-/// §75. Refused by name: J (its detector-only zeroing is not built), _n and {@n} (Path Analysis,
-/// OP-84), SEQ[a:b] (Sequence Selector, OP-84), X_DIFF and diffraction orders in X_SEQ (OP-82),
+/// B, D, E, F, G, H, L, M, O, R, S, T, W, Z, the path filters ~ and $, the X_ flags listed in
+/// §75 and (OP-84, §78) the path filters _n, SEQ[a:b] and sequences by name. Refused by name: J
+/// (its detector-only zeroing is not built), {@n} (PAF files), X_DIFF and diffraction orders in X_SEQ (OP-82),
 /// X_EXT and X_ORD (birefringence). X_WAVESHIFT is built (OP-81).
 /// </para>
 /// </summary>
@@ -311,8 +341,8 @@ public sealed class NscRayFilter
             {
                 _i++;
                 Ws();
-                if (At('@'))
-                    throw Fail("{@n} (the first n rays per path per core) works only with Path Analysis data (PAF files), which is plan item OP-84; not built.");
+                if (At('@'))   // OP-84: Path Analysis is built; PAF files are not
+                    throw Fail("{@n} (the first n rays per path per core) works only with Path Analysis data in PAF files, and PAF files are not built (Path Analysis reads ZRD files).");
                 if (!At('#')) throw Fail("expected {#n} or {#n1-n2}.");
                 _i++;
                 long a = Integer("the ray count"), b = a;
@@ -388,16 +418,17 @@ public sealed class NscRayFilter
                 return inner;
             }
             if (ch is '~' or '$') return PathFilter(ch == '~' ? 3 : 2);
-            if (ch == '_') throw Fail("filters _n are defined by Path Analysis (plan item OP-84); not built.");
+            if (ch == '_') return PathFilterNumber();   // OP-84
             if (!(char.IsLetter(ch))) throw Fail($"'{ch}' cannot start a flag.");
             int start = _i;
             while (_i < _s.Length && (char.IsLetterOrDigit(_s[_i]) || _s[_i] == '_')) _i++;
             string word = _s[start.._i];
+            if (_named.FindSequence(word) is { } sequence) return Sequence(sequence);   // OP-84: SEQn or a sequence's own name
             if (!NscNamedFilters.LooksLikeFlag(word) && _named.TryGet(word, out var definition))
                 return Named(word, definition);
             if (word.StartsWith("X_", StringComparison.OrdinalIgnoreCase)) return Extended(word.ToUpperInvariant());
             string upper = word.ToUpperInvariant();
-            if (upper == "SEQ") throw Fail("SEQ[a:b] selects sequences of the Sequence Selector (plan item OP-84); not built.");
+            if (upper == "SEQ") return SequenceRange();   // OP-84
             if (upper == "Z")
             {
                 _expanded.Append('Z');
@@ -517,6 +548,61 @@ public sealed class NscRayFilter
                 default:
                     throw Fail($"\"{shown}\": {flag} is not a filter flag (help, \"The Filter String\").");
             }
+        }
+
+        // ---------------------------------------------------------------- OP-84: _n and sequences
+
+        /// <summary>_n: Path Analysis's path filter n (help, "Path Analysis": "These filters must
+        /// not have any leading zeros before the path number").</summary>
+        private Node PathFilterNumber()
+        {
+            _i++;
+            int start = _i;
+            while (_i < _s.Length && char.IsDigit(_s[_i])) _i++;
+            string code = _s[start.._i];
+            if (code.Length == 0) throw Fail("a path filter is _ followed by the path number, for example _1.");
+            if (code[0] == '0') throw Fail($"the path filter _{code} has a leading zero; path filters are written without one (help, \"Path Analysis\").");
+            if (!int.TryParse(code, NumberStyles.None, CultureInfo.InvariantCulture, out int n) || n > _named.PathFilters.Count)
+                throw Fail(_named.PathFilters.Count == 0
+                    ? $"the path filter _{code} is not defined: the project has no path filters (run Path Analysis with Generate Path Filters)."
+                    : $"the path filter _{code} is not defined: the project has _1 to _{_named.PathFilters.Count}.");
+            var path = _named.PathFilters[n - 1];
+            _expanded.Append('_').Append(code);
+            return new FlagNode(c => path.Matches(c.Ray, c.B));
+        }
+
+        private Node Sequence(StrayLight.NscSequence sequence)
+        {
+            _expanded.Append(sequence.Name);
+            var path = sequence.Path;
+            return new FlagNode(c => path.Matches(c.Ray, c.B));
+        }
+
+        /// <summary>SEQ[a:b] (help, "The Filter String"): sequences a to b of the list (a, b
+        /// optional, 1 to N); b − a must be below 100. OpticStudio returns no sequences for a
+        /// wider range; here it is refused, so an empty selection is never mistaken for no rays.</summary>
+        private Node SequenceRange()
+        {
+            Ws();
+            if (!At('[')) throw Fail("SEQ selects sequences as SEQ[a:b] (a and b optional), or name one sequence (SEQ3).");
+            _i++;
+            Ws();
+            int count = _named.Sequences.Count;
+            long a = 1, b = count;
+            if (!At(':')) a = Integer("the first sequence of SEQ[a:b]");
+            if (!At(':')) throw Fail("expected ':' in SEQ[a:b].");
+            _i++;
+            Ws();
+            if (!At(']')) b = Integer("the last sequence of SEQ[a:b]");
+            if (!At(']')) throw Fail("expected ']' after SEQ[a:b].");
+            _i++;
+            if (count == 0) throw Fail("SEQ[a:b]: the project has no sequences (generate them with the Sequence Selector).");
+            if (a < 1 || b > count) throw Fail($"SEQ[{a}:{b}]: the sequences are numbered 1 to {count}.");
+            if (b < a) throw Fail($"SEQ[{a}:{b}]: b must not be below a (help, \"The Filter String\").");
+            if (b - a >= 100) throw Fail($"SEQ[{a}:{b}] spans {b - a + 1} sequences; the help limits a range to fewer than 100 (b − a below 100) and returns no sequences for a wider one.");
+            var chosen = _named.Sequences.Skip((int)a - 1).Take((int)(b - a + 1)).Select(q => q.Path).ToArray();
+            _expanded.Append($"SEQ[{a}:{b}]");
+            return new FlagNode(c => chosen.Any(p => p.Matches(c.Ray, c.B)));
         }
 
         // ---------------------------------------------------------------- path filters

@@ -2635,7 +2635,7 @@ Saving every segment of every ray and asking questions afterwards (docs/Optics-C
 
 Not built: layout filters and drawing rays from a database (there is no non-sequential layout
 drawing yet), saving rays as source files (DAT, SDF, TM25RAY), playback of UFD files, the J flag,
-Path Analysis and the Sequence Selector filters (OP-84), diffraction-order filters (OP-82), the
+diffraction-order filters (OP-82), the
 NSRD operand (a merit row has no text cell for its file name), a Named Filters editor, and the
 macro keyword ZRDSAVERAYS (it writes a source file). The readings not yet checked against
 OpticStudio are listed in docs/Optics-Conventions.md §10 item 71.
@@ -2738,6 +2738,42 @@ mesh cell can be missed), LightningTrace on Detector Polar and angular data, spe
 mesh ray, source files in the Source Illumination Map, drawing the mesh in a layout, and the ZPL
 keyword NSLT. The readings not yet checked against OpticStudio are in docs/Optics-Conventions.md
 §10 item 75.
+
+## Stray-light tools
+
+Finding where unwanted light comes from (docs/Optics-Conventions.md §78). All are analyses in the
+group "Non-sequential" (also `optics analyse` with their ids).
+
+- **Path analysis** (`NscPathAnalysis`): reads a ZRD file, or traces the project's sources, and
+  groups the ray branches by the sequence of object faces they met ("1.0, 2.1, 2.2, 4.0": source 1,
+  object 2 face 1, ...), with each path's flux, its share of the launched flux and its branch count,
+  sorted as you choose. Faint branches (Relative Minimum Flux) go to an uncategorized sum. Set
+  Detector to a detector object to rank the paths by the flux they deliver to that detector: the
+  paths then add up to the detector's total. Generate Path Filters lists the filters _1, _2, ...
+- **Path filters and sequences**: in the Non-Sequential Component Editor, under "Path filters and
+  sequences", Generate path filters runs Path Analysis and saves its paths as _1, _2, ...;
+  Generate sequences adds sequences (SEQ1, SEQ2, ...) from the straight-through path of each
+  source, from the path filters, or from a ZRD file; the boxes edit both lists ("name; sequence"
+  per line). Anywhere a filter string goes, _3 selects path 3, a sequence's name selects its path
+  and SEQ[1:5] selects sequences 1 to 5.
+- **Sequence selector** (`NscSequenceSelector`): lists the saved sequences and what a generation
+  method would add.
+- **Critical rayset generator** (`NscCriticalRaysetGenerator`): from the sequential lens, writes a
+  CRS file of chief and marginal rays, fans, a ring or a grid, for each field and wavelength, with
+  where each ray must end on the image. It needs ray aiming and a Float By Stop Size, object NA or
+  object cone angle aperture.
+- **Critical ray tracer** (`NscCriticalRayTracer`): traces a CRS file's rays through the
+  non-sequential objects and marks each pass or FAIL by whether it ends at its target within the
+  position and angle tolerances; useful after adding baffles or mounts to a converted lens.
+- **Reverse radiance** (`NscReverseRadiance`): estimates one detector pixel's flux by tracing rays
+  backwards from the pixel to the sources, with its standard error, and (by default) the forward
+  trace's value beside it. It works with Source Ellipse and Source Rectangle in the cosine mode.
+
+Not built: PAF path files (and so the NPAF operand and NSTR's savepaths), drawing a path or
+sequence on a layout, diffraction orders in paths, the generator's List pattern, reading a CRS
+file as a Source File, OpticStudio's ReverseRadiance detector and target objects (its help has no
+page for them), and scattering in the backward trace. The readings not yet checked against
+OpticStudio are listed in docs/Optics-Conventions.md §10 item 74.
 
 ## Coming
 

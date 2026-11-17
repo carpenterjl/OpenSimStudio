@@ -35,6 +35,27 @@ public sealed record OpticsNonSequentialSettings
     /// <summary>The project's ABg scatter catalog (OpticStudio's ABg Scatter Data Catalog,
     /// saved here rather than in ABG_DATA.DAT).</summary>
     public List<OpticsAbgProfileSettings>? AbgCatalog { get; init; }
+
+    // OP-84
+    /// <summary>Path Analysis's path filters (OpticStudio: "The generated path filters are
+    /// automatically saved with the lens file"): line k is the path of filter _k, written
+    /// "1.0, 2.1, 2.2, 4.0" (object.face, the source first), " #" after a prefix path, "> 100"
+    /// for the overflow path.</summary>
+    public List<string>? PathFilters { get; init; }
+
+    /// <summary>The Sequence Selector's sequences ("Sequences are persistent"), in list order
+    /// (the order SEQ[a:b] counts).</summary>
+    public List<OpticsNscSequenceSettings>? Sequences { get; init; }
+}
+
+// OP-84
+/// <summary>One saved sequence: its filter name (SEQ# or the user's), its path in the
+/// <see cref="OpticsNonSequentialSettings.PathFilters"/> form, and the list's check box (null on).</summary>
+public sealed record OpticsNscSequenceSettings
+{
+    public string? Name { get; init; }
+    public string? Sequence { get; init; }
+    public bool? Enabled { get; init; }
 }
 
 // OP-80

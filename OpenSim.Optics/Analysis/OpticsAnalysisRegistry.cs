@@ -207,6 +207,14 @@ public sealed class OpticsAnalysisRegistry
         // OP-85: LightningTrace and the Source Illumination Map (NonSequential/Lightning).
         registry.Register(new NonSequential.Lightning.NscLightningTraceAnalysis());
         registry.Register(new NonSequential.Lightning.NscSourceIlluminationMapAnalysis());
+
+        // OP-84: stray-light tools (Path Analysis, Sequence Selector, Critical Ray Tracer and
+        // Critical Rayset Generator, reverse radiance; docs/Optics-Conventions.md §78).
+        registry.Register(new NonSequential.StrayLight.NscPathAnalysisAnalysis());
+        registry.Register(new NonSequential.StrayLight.NscSequenceSelectorAnalysis());
+        registry.Register(new NonSequential.StrayLight.NscCriticalRayTracerAnalysis());
+        registry.Register(new NonSequential.StrayLight.NscCriticalRaysetGeneratorAnalysis());
+        registry.Register(new NonSequential.StrayLight.NscReverseRadianceAnalysis());
         return registry;
     }
 }

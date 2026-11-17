@@ -16,6 +16,11 @@ public partial class OpticsViewModel
             editor = new OpticsNonSequentialEditorViewModel(PublishFromNonSequentialEditor, () => BuildLensEditContext().Unit,
                 () => Coatings?.ToSettings()?.Coatings?.Select(c => c.Name ?? "").ToArray());
             _nonSequentialEditor = editor;
+            // OP-84: the project as analyses see it, for the stray-light Generate commands.
+            editor.AnalysisContext = () => new OpenSim.Optics.Analysis.OpticsAnalysisContext(_session?.Project.Name ?? "", ToSettings())
+            {
+                Catalogs = BuildLensEditContext().Catalogs,
+            };
             var notes = new List<string>();
             editor.LoadSettings(_nonSequential, notes);
             foreach (var note in notes) _log?.Append($"Non-sequential objects: {note}");

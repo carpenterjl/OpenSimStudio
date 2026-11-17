@@ -131,6 +131,7 @@ public sealed partial class OpticsNonSequentialEditorViewModel : ObservableObjec
         Load(saved?.Objects ?? new List<OpticsNscObjectSettings>(), notes);
         LoadScatterFields();   // OP-80
         LoadVolumeFields();    // OP-81
+        LoadStrayLightFields();   // OP-84
     }
 
     /// <summary>A new project: no objects.</summary>

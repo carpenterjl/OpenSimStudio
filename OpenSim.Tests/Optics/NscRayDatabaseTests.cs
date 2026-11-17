@@ -511,9 +511,9 @@ public sealed class NscRayDatabaseTests
     [Theory]
     [InlineData("H1 & H2 | H3", "parentheses")]
     [InlineData("J3", "J flag")]
-    [InlineData("_1", "OP-84")]
-    [InlineData("SEQ[1:2]", "OP-84")]
-    [InlineData("{@5}H1", "OP-84")]
+    [InlineData("_1", "no path filters")]          // OP-84: built; a project without path filters refuses _n by name
+    [InlineData("SEQ[1:2]", "no sequences")]       // OP-84: built; no sequences defined
+    [InlineData("{@5}H1", "PAF")]                  // OP-84: PAF files are not built
     [InlineData("X_DIFF(1,1,1)", "OP-82")]
     [InlineData("X_SEQ(2,4.1/(2,*),4.2)", "OP-82")]
     [InlineData("X_WAVESHIFT(1)", "2 arguments")]   // OP-81: X_WAVESHIFT is built

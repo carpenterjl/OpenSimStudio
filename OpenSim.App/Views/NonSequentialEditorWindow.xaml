@@ -191,6 +191,44 @@
                             <Button Content="Read" Command="{Binding ReadVolumeCommand}" Margin="0,0,4,0" ToolTip="Load the current object's saved fields."/>
                             <Button Content="Apply" Command="{Binding ApplyVolumeCommand}" ToolTip="Write the Volume Physics fields into the current object."/>
                         </WrapPanel>
+
+        <!-- OP-84: Path Analysis's path filters and the Sequence Selector's sequences (project). -->
+        <Expander DockPanel.Dock="Top" Header="Path filters and sequences (stray light)" Margin="0,0,0,4">
+            <WrapPanel Margin="4">
+                <GroupBox Header="Generate" Width="320" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="Ray database"/>
+                            <TextBox Text="{Binding StrayLightRayDatabase}" ToolTip="The full path of a ZRD file; blank traces the project's sources now (path filters) or is not used (straight-through sequences)."/>
+                            <Label Content="Path analysis detector"/>
+                            <TextBox Text="{Binding PathAnalysisDetector}" ToolTip="0: group every branch by its end flux; n: group the hits on detector object n."/>
+                            <Label Content="Sequence method"/>
+                            <ComboBox ItemsSource="{Binding SequenceMethods}" SelectedItem="{Binding SequenceMethod}"/>
+                        </controls:FormGrid>
+                        <WrapPanel Margin="0,4,0,0">
+                            <Button Content="Generate path filters" Command="{Binding GeneratePathFiltersCommand}" Margin="0,0,4,0" ToolTip="Run Path Analysis and save its paths as _1, _2, ... (replacing the list)."/>
+                            <Button Content="Generate sequences" Command="{Binding GenerateSequencesCommand}" ToolTip="Append the generated sequences (SEQ#) to the list, skipping duplicates."/>
+                        </WrapPanel>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="Path filters (_1, _2, ...)" Width="360" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="One path per line"/>
+                            <TextBox Text="{Binding PathFiltersText}" AcceptsReturn="True" MinHeight="80" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"
+                                     ToolTip="object.face entries, the source first: 1.0, 2.1, 2.2, 4.0; ' #' at the end selects the branches that start with the path."/>
+                        </controls:FormGrid>
+                        <Button Content="Apply path filters" Command="{Binding ApplyPathFiltersCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </GroupBox>
+                <GroupBox Header="Sequences" Width="360" Margin="0,0,8,4">
+                    <StackPanel>
+                        <controls:FormGrid>
+                            <Label Content="name; sequence"/>
+                            <TextBox Text="{Binding SequencesText}" AcceptsReturn="True" MinHeight="80" VerticalScrollBarVisibility="Auto" FontFamily="Consolas"
+                                     ToolTip="One per line, for example SEQ1; 1.0, 3.1, 3.2, 4.0. A leading '-' turns the sequence's check box off. Names follow the help's rules."/>
+                        </controls:FormGrid>
+                        <Button Content="Apply sequences" Command="{Binding ApplySequencesCommand}" HorizontalAlignment="Left" Margin="0,4,0,0"/>
                     </StackPanel>
                 </GroupBox>
             </WrapPanel>
